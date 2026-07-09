@@ -47,7 +47,7 @@ func TestHooksTracing_EmitHookSpan(t *testing.T) {
 	ctx := tracing.WithTraceID(tracing.WithCollector(tenantCtx(tenantID), c), traceID)
 
 	started := time.Now().Add(-200 * time.Millisecond)
-	hooks.EmitHookSpan(ctx, hooks.EventPreToolUse, hooks.HandlerHTTP, started, hooks.DecisionAllow, "")
+	hooks.EmitHookSpan(ctx, hooks.EventPreToolUse, hooks.HandlerHTTP, hooks.HookConfig{}, started, hooks.DecisionAllow, 200, "", "", "")
 
 	// Stop collector to flush the buffered span; Stop() drains the chan.
 	c.Stop()
@@ -161,7 +161,6 @@ func (w tracedHandler) Execute(ctx_ctx context.Context, cfg hooks.HookConfig, ev
 	if err != nil {
 		errMsg = err.Error()
 	}
-	hooks.EmitHookSpan(ctx_ctx, ev.HookEvent, cfg.HandlerType, start, dec, errMsg)
+	hooks.EmitHookSpan(ctx_ctx, ev.HookEvent, cfg.HandlerType, cfg, start, dec, int(time.Since(start).Milliseconds()), errMsg, "", "")
 	return dec, err
 }
-

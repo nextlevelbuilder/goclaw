@@ -3,6 +3,8 @@ package pipeline
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
@@ -37,6 +39,11 @@ type RunState struct {
 	Iteration int
 	RunID     string
 	ExitCode  StageResult
+
+	// CurrentLLMSpanID is the most recent LLM-call span in this run; tool spans parent to it.
+	CurrentLLMSpanID *uuid.UUID
+	// CurrentToolSpanID is the most recent tool-call span; post-tool-use hook spans parent to it.
+	CurrentToolSpanID *uuid.UUID
 }
 
 // NewRunState creates a RunState with identity fields set.

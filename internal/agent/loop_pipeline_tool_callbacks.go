@@ -13,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -33,9 +34,17 @@ func (l *Loop) makeExecuteToolCall(req *RunRequest, bridgeRS *runState) func(ctx
 			Payload: map[string]any{"name": tc.Name, "id": tc.ID, "arguments": tc.Arguments},
 		})
 
-		// Emit tool span start for tracing.
+		// Emit tool span start for tracing. Parent the tool span to the current
+		// LLM-call span so the trace tree nests tool calls under the model turn.
 		toolStart := time.Now().UTC()
-		toolSpanID := l.emitToolSpanStart(ctx, toolStart, registryName, tc.ID, string(argsJSON))
+		toolCtx := ctx
+		if state.CurrentLLMSpanID != nil {
+			toolCtx = tracing.WithParentSpanID(ctx, *state.CurrentLLMSpanID)
+		}
+		toolSpanID := l.emitToolSpanStart(toolCtx, toolStart, registryName, tc.ID, string(argsJSON))
+		if toolSpanID != uuid.Nil {
+			state.CurrentToolSpanID = &toolSpanID
+		}
 
 		// Inject agent audio snapshot so TTS tool (and any future audio consumers)
 		// can read agent-level voice/model config without an extra DB lookup.

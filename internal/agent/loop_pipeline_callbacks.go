@@ -391,6 +391,9 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 			opts = append(opts, withProvider(provider.Name()))
 		}
 		spanID := l.emitLLMSpanStart(ctx, start, state.Iteration+1, chatReq.Messages, opts...)
+		if spanID != uuid.Nil {
+			state.CurrentLLMSpanID = &spanID
+		}
 		recordUsageCapAttempt := func(reservation *usagecaps.Reservation) {
 			if reservation != nil {
 				opts = append(opts, withUsageCapMetadata(reservation.TraceMetadata()))

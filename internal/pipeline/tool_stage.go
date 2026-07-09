@@ -14,6 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 )
 
 const (
@@ -92,8 +93,12 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 		state.Tool.TotalToolCalls++
 
 		// Hook: async PostToolUse — fire and forget with detached context.
+		// Parent the hook span to the tool span so it nests under the tool call.
 		if s.deps.Hooks != nil {
 			detached := context.WithoutCancel(ctx)
+			if state.CurrentToolSpanID != nil {
+				detached = tracing.WithParentSpanID(detached, *state.CurrentToolSpanID)
+			}
 			go s.deps.FireHook(detached, hooks.Event{ //nolint:errcheck
 				EventID:   uuid.NewString(),
 				SessionID: state.Input.SessionKey,
@@ -166,7 +171,13 @@ func (s *ToolStage) preflightToolCall(ctx context.Context, state *RunState, tc p
 			}
 		}
 	}
-	r, _ := s.deps.FireHook(ctx, hooks.Event{
+	// Parent the pre_tool_use hook span to the current LLM-call span so it nests
+	// alongside the tool call it gates.
+	hookCtx := ctx
+	if state.CurrentLLMSpanID != nil {
+		hookCtx = tracing.WithParentSpanID(ctx, *state.CurrentLLMSpanID)
+	}
+	r, _ := s.deps.FireHook(hookCtx, hooks.Event{
 		EventID:   uuid.NewString(),
 		SessionID: state.Input.SessionKey,
 		TenantID:  store.TenantIDFromContext(ctx),
@@ -272,7 +283,11 @@ func (s *ToolStage) executeParallel(ctx context.Context, state *RunState, prefli
 				results[idx] = rawResult{index: item.index, tc: item.tc, err: ctx.Err()}
 				return
 			}
-			msg, rawData, err := s.deps.ExecuteToolRaw(ctx, item.tc)
+			itemCtx := ctx
+			if state.CurrentLLMSpanID != nil {
+				itemCtx = tracing.WithParentSpanID(ctx, *state.CurrentLLMSpanID)
+			}
+			msg, rawData, err := s.deps.ExecuteToolRaw(itemCtx, item.tc)
 			results[idx] = rawResult{index: item.index, tc: item.tc, msg: msg, rawData: rawData, err: err}
 		}(i, item)
 	}
@@ -311,8 +326,15 @@ func (s *ToolStage) executeParallel(ctx context.Context, state *RunState, prefli
 
 		// Hook: async PostToolUse for parallel path — fire and forget.
 		// PreToolUse already ran in preflight before any raw I/O was scheduled.
+		// The parallel tool I/O is parented to the LLM span (see ExecuteToolRaw
+		// call site above), so parent the parallel hook span there too — the
+		// per-tool span ID is not plumbed back to the pipeline from the opaque
+		// rawData payload, so the LLM span is the correct shared ancestor.
 		if s.deps.Hooks != nil {
 			detached := context.WithoutCancel(ctx)
+			if state.CurrentLLMSpanID != nil {
+				detached = tracing.WithParentSpanID(detached, *state.CurrentLLMSpanID)
+			}
 			go s.deps.FireHook(detached, hooks.Event{ //nolint:errcheck
 				EventID:   uuid.NewString(),
 				SessionID: state.Input.SessionKey,

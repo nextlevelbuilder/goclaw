@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -531,6 +532,24 @@ func (d *stdDispatcher) writeExec(ctx context.Context, cfg HookConfig, ev Event,
 	if err := d.audit.Log(ctx, exec); err != nil {
 		slog.Warn("security.hook.audit_write_failed", "err", err, "hook_id", cfg.ID)
 	}
+
+	// Emit a trace span for this hook execution so hook input/output/decision are
+	// visible alongside model and tool spans for agent troubleshooting. ctx here
+	// already carries the parent span ID set by the tool_stage wrappers
+	// (pre_tool_use → llm span; post_tool_use → tool span). For non-tool hooks
+	// (session start/stop), parent falls back to the agent span (ctx default).
+	durationMS := int(duration / time.Millisecond)
+	startedAt := time.Now().UTC().Add(-duration)
+	hookInput, _ := json.Marshal(map[string]any{
+		"event":      ev.HookEvent,
+		"tool_name":  ev.ToolName,
+		"tool_input": ev.ToolInput,
+		"raw_input":  ev.RawInput,
+		"session_id": ev.SessionID,
+		"agent_id":   ev.AgentID,
+		"depth":      ev.Depth,
+	})
+	EmitHookSpan(ctx, ev.HookEvent, cfg.HandlerType, cfg, startedAt, dec, durationMS, errMsg, string(hookInput), consoleOutput)
 }
 
 // ── circuitBreaker ───────────────────────────────────────────────────────────

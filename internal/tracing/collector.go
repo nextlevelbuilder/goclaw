@@ -78,8 +78,13 @@ type pendingUpdate struct {
 type Collector struct {
 	store store.TracingStore
 
+	// usageStore flushes usage events AFTER spans in the same flush cycle,
+	// so a usage event's referenced span row exists before the FK is checked.
+	usageStore store.UsageEventStore
+
 	spanCh       chan store.SpanData
 	spanUpdateCh chan spanUpdate // deferred span updates (two-phase tracing)
+	usageEventCh chan store.UsageEvent
 	stopCh       chan struct{}
 	wg           sync.WaitGroup
 
@@ -106,15 +111,27 @@ type Collector struct {
 
 // NewCollector creates a new tracing collector backed by the given store.
 // Set GOCLAW_TRACE_VERBOSE=1 to include full LLM input in spans.
-func NewCollector(ts store.TracingStore) *Collector {
+//
+// The optional usageStore flushes usage events AFTER spans within the same
+// flush cycle, preserving the usage_events→spans FK without a schema change.
+// When omitted (nil), EmitUsageEvent is a no-op and callers fall back to a
+// direct best-effort insert. This keeps callers that only need tracing
+// (e.g. unit/integration tests) compiling unchanged.
+func NewCollector(ts store.TracingStore, usageStore ...store.UsageEventStore) *Collector {
 	verbose := os.Getenv("GOCLAW_TRACE_VERBOSE") != ""
 	if verbose {
 		slog.Info("tracing: verbose mode enabled (GOCLAW_TRACE_VERBOSE)")
 	}
+	var us store.UsageEventStore
+	if len(usageStore) > 0 {
+		us = usageStore[0]
+	}
 	return &Collector{
 		store:        ts,
+		usageStore:   us,
 		spanCh:       make(chan store.SpanData, defaultBufferSize),
 		spanUpdateCh: make(chan spanUpdate, defaultBufferSize),
+		usageEventCh: make(chan store.UsageEvent, defaultBufferSize),
 		stopCh:       make(chan struct{}),
 		retryCh:      make(chan pendingUpdate, retryQueueCap),
 		dirtyTraces:  make(map[uuid.UUID]struct{}),
@@ -225,6 +242,21 @@ func (c *Collector) EmitSpanUpdate(spanID, traceID uuid.UUID, updates map[string
 	default:
 		slog.Warn("tracing: span update buffer full, dropping update",
 			"span_id", spanID)
+	}
+}
+
+// EmitUsageEvent buffers a usage event to be flushed AFTER spans in the same
+// flush cycle, so its referenced span row exists before the FK is checked.
+// Non-blocking: drops the event if the buffer is full. No-op when no usage
+// store is configured (e.g. tracing-only contexts).
+func (c *Collector) EmitUsageEvent(event store.UsageEvent) {
+	if c == nil || c.usageStore == nil {
+		return
+	}
+	select {
+	case c.usageEventCh <- event:
+	default:
+		slog.Debug("tracing.usage_event_dropped", "resource", event.ResourceName)
 	}
 }
 
@@ -496,6 +528,32 @@ doneUpdates:
 			}
 		}
 		slog.Debug("tracing: applied span updates", "count", len(updates))
+	}
+
+	// Drain and insert buffered usage events AFTER spans have been written in
+	// this same flush cycle. Each event carries its own TenantID (the store
+	// reads tenant from the row, not ctx), so the batch insert stays
+	// tenant-correct. Ordering here is the root-cause fix: a usage event's
+	// referenced span row now exists before the usage_events_span_id_fkey is
+	// checked, so the INSERT no longer fails and silently drops the row.
+	var usageEvents []store.UsageEvent
+	for {
+		select {
+		case ev := <-c.usageEventCh:
+			usageEvents = append(usageEvents, ev)
+		default:
+			goto doneUsage
+		}
+	}
+doneUsage:
+	if len(usageEvents) > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := c.usageStore.InsertEvents(ctx, usageEvents); err != nil {
+			slog.Warn("tracing: usage event insert failed", "count", len(usageEvents), "error", err)
+		} else {
+			slog.Debug("tracing: flushed usage events", "count", len(usageEvents))
+		}
 	}
 
 	// Update aggregates for dirty traces

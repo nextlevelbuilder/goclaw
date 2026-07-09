@@ -303,7 +303,7 @@ func wireTracingAndCron(
 ) (*tracing.Collector, *tracing.SnapshotWorker) {
 	var traceCollector *tracing.Collector
 	if stores.Tracing != nil {
-		traceCollector = tracing.NewCollector(stores.Tracing)
+		traceCollector = tracing.NewCollector(stores.Tracing, stores.UsageEvents)
 		traceCollector.OnFlush = func(traceIDs []uuid.UUID) {
 			ids := make([]string, len(traceIDs))
 			for i, id := range traceIDs {

@@ -61,7 +61,7 @@ func newRunningCollector(t *testing.T) (*tracing.Collector, *capturingTracingSto
 // TestEmitHookSpan_NoCollector_NoPanic: safe no-op when ctx has no collector.
 func TestEmitHookSpan_NoCollector_NoPanic(t *testing.T) {
 	hooks.EmitHookSpan(context.Background(), hooks.EventPreToolUse, hooks.HandlerCommand,
-		time.Now().Add(-100*time.Millisecond), hooks.DecisionAllow, "")
+		hooks.HookConfig{}, time.Now().Add(-100*time.Millisecond), hooks.DecisionAllow, 0, "", "", "")
 }
 
 // TestEmitHookSpan_NameFormat: span name = "hook.<handlerType>.<event>".
@@ -71,7 +71,7 @@ func TestEmitHookSpan_NameFormat(t *testing.T) {
 	ctx = tracing.WithTraceID(ctx, uuid.New())
 
 	hooks.EmitHookSpan(ctx, hooks.EventPreToolUse, hooks.HandlerCommand,
-		time.Now().Add(-50*time.Millisecond), hooks.DecisionAllow, "")
+		hooks.HookConfig{}, time.Now().Add(-50*time.Millisecond), hooks.DecisionAllow, 0, "", "", "")
 
 	c.Stop() // flush synchronously
 
@@ -89,7 +89,7 @@ func TestEmitHookSpan_NameFormat(t *testing.T) {
 	}
 }
 
-// TestEmitHookSpan_DurationAndStatus: duration is derived from startedAt; status
+// TestEmitHookSpan_DurationAndStatus: duration is passed explicitly; status
 // reflects error presence (completed vs error).
 func TestEmitHookSpan_DurationAndStatus(t *testing.T) {
 	c, cs := newRunningCollector(t)
@@ -97,10 +97,10 @@ func TestEmitHookSpan_DurationAndStatus(t *testing.T) {
 	ctx = tracing.WithTraceID(ctx, uuid.New())
 
 	startedOK := time.Now().Add(-42 * time.Millisecond)
-	hooks.EmitHookSpan(ctx, hooks.EventPostToolUse, hooks.HandlerHTTP, startedOK, hooks.DecisionAllow, "")
+	hooks.EmitHookSpan(ctx, hooks.EventPostToolUse, hooks.HandlerHTTP, hooks.HookConfig{}, startedOK, hooks.DecisionAllow, 42, "", "", "")
 
 	startedErr := time.Now().Add(-17 * time.Millisecond)
-	hooks.EmitHookSpan(ctx, hooks.EventPostToolUse, hooks.HandlerHTTP, startedErr, hooks.DecisionBlock, "timeout")
+	hooks.EmitHookSpan(ctx, hooks.EventPostToolUse, hooks.HandlerHTTP, hooks.HookConfig{}, startedErr, hooks.DecisionBlock, 17, "timeout", "", "")
 
 	c.Stop()
 
@@ -117,8 +117,8 @@ func TestEmitHookSpan_DurationAndStatus(t *testing.T) {
 	if okSpan.Error != "" {
 		t.Errorf("ok span should have empty error; got %q", okSpan.Error)
 	}
-	if okSpan.DurationMS < 40 {
-		t.Errorf("ok span duration_ms = %d, want >= 40", okSpan.DurationMS)
+	if okSpan.DurationMS != 42 {
+		t.Errorf("ok span duration_ms = %d, want 42", okSpan.DurationMS)
 	}
 	if errSpan.Status != store.SpanStatusError {
 		t.Errorf("err span status = %q, want %q", errSpan.Status, store.SpanStatusError)
@@ -135,7 +135,7 @@ func TestEmitHookSpan_DecisionInMetadata(t *testing.T) {
 	ctx = tracing.WithTraceID(ctx, uuid.New())
 
 	hooks.EmitHookSpan(ctx, hooks.EventUserPromptSubmit, hooks.HandlerPrompt,
-		time.Now().Add(-10*time.Millisecond), hooks.DecisionBlock, "")
+		hooks.HookConfig{}, time.Now().Add(-10*time.Millisecond), hooks.DecisionBlock, 0, "", "", "")
 
 	c.Stop()
 
@@ -169,7 +169,7 @@ func TestEmitHookSpan_PropagatesTenantAndTrace(t *testing.T) {
 	ctx = store.WithTenantID(ctx, tenantID)
 
 	hooks.EmitHookSpan(ctx, hooks.EventPreToolUse, hooks.HandlerCommand,
-		time.Now().Add(-5*time.Millisecond), hooks.DecisionAllow, "")
+		hooks.HookConfig{}, time.Now().Add(-5*time.Millisecond), hooks.DecisionAllow, 0, "", "", "")
 
 	c.Stop()
 

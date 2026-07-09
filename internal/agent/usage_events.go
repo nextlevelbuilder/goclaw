@@ -178,6 +178,20 @@ func (l *Loop) isRuntimeTool(toolName string) bool {
 }
 
 func (l *Loop) insertUsageEventBestEffort(ctx context.Context, event store.UsageEvent) {
+	// When a tracing collector is configured, buffer the event so it is flushed
+	// AFTER the referenced span row is written in the same flush cycle. This
+	// preserves the usage_events_span_id_fkey and stops rows from being dropped.
+	if l.traceCollector != nil {
+		// Ensure tenant is carried on the event: the collector flush inserts via
+		// InsertEvents, which scopes each row by the event's own TenantID field.
+		tenantID := store.TenantIDFromContext(ctx)
+		if tenantID != uuid.Nil {
+			event.TenantID = tenantID
+		}
+		l.traceCollector.EmitUsageEvent(event)
+		return
+	}
+	// Fallback for non-tracing contexts (e.g. some tests): direct best-effort insert.
 	tenantID := event.TenantID
 	go func() {
 		bgCtx, cancel := context.WithTimeout(store.WithTenantID(context.Background(), tenantID), 5*time.Second)
