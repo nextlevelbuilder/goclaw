@@ -788,6 +788,7 @@ func runGateway() {
 				pgStores.BitrixPortals,
 				pgStores.ChannelInstances,
 				server.PublicURLSnapshot().Get,
+				bitrixEncKey,
 			).Register(server.Router())
 		}
 

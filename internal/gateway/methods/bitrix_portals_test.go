@@ -217,7 +217,7 @@ func TestBitrixPortals_List_TenantIsolation(t *testing.T) {
 		TenantID: tidB, Name: "beta", Domain: "beta.bitrix24.com",
 	})
 
-	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"))
+	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"), "test-enc-key")
 
 	// Tenant A list should NOT see tenant B's portal.
 	client, ch := gateway.NewCapturingTestClient(permissions.RoleOperator, tidA, "user-A", 4)
@@ -254,7 +254,7 @@ func TestBitrixPortals_List_MasksCredentials(t *testing.T) {
 		Credentials: credsJSON,
 	})
 
-	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"))
+	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"), "test-enc-key")
 	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tid, "u", 4)
 	m.handleList(store.WithTenantID(context.Background(), tid), client, buildBitrixReq(t, protocol.MethodBitrixPortalsList, nil))
 
@@ -267,7 +267,7 @@ func TestBitrixPortals_List_MasksCredentials(t *testing.T) {
 }
 
 func TestBitrixPortals_List_RejectsMissingTenant(t *testing.T) {
-	m := NewBitrixPortalsMethods(newStubBitrixPortalStore(), newStubChannelInstanceStore(), gatewayURLFn(""))
+	m := NewBitrixPortalsMethods(newStubBitrixPortalStore(), newStubChannelInstanceStore(), gatewayURLFn(""), "test-enc-key")
 	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, uuid.Nil, "u", 4)
 	m.handleList(context.Background(), client, buildBitrixReq(t, protocol.MethodBitrixPortalsList, nil))
 
@@ -288,7 +288,7 @@ func TestBitrixPortals_List_SurfacesInstalledFromState(t *testing.T) {
 		TenantID: tid, Name: "p", Domain: "p.bitrix24.com", State: state,
 	})
 
-	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"))
+	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"), "test-enc-key")
 	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tid, "u", 4)
 	m.handleList(store.WithTenantID(context.Background(), tid), client, buildBitrixReq(t, protocol.MethodBitrixPortalsList, nil))
 
@@ -310,7 +310,7 @@ func TestBitrixPortals_List_SurfacesInstalledFromState(t *testing.T) {
 func TestBitrixPortals_Create_RBAC_OperatorDenied(t *testing.T) {
 	tid := uuid.New()
 	pStore := newStubBitrixPortalStore()
-	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"))
+	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"), "test-enc-key")
 
 	client, ch := gateway.NewCapturingTestClient(permissions.RoleOperator, tid, "u", 4)
 	m.handleCreate(store.WithTenantID(context.Background(), tid), client, buildBitrixReq(t, protocol.MethodBitrixPortalsCreate, map[string]string{
@@ -329,7 +329,7 @@ func TestBitrixPortals_Create_RBAC_OperatorDenied(t *testing.T) {
 func TestBitrixPortals_Create_HappyPath_ReturnsInstallURL(t *testing.T) {
 	tid := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	pStore := newStubBitrixPortalStore()
-	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://goclaw.tamgiac.com"))
+	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://goclaw.tamgiac.com"), "test-enc-key")
 
 	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tid, "admin", 4)
 	m.handleCreate(store.WithTenantID(context.Background(), tid), client, buildBitrixReq(t, protocol.MethodBitrixPortalsCreate, map[string]string{
@@ -364,9 +364,81 @@ func TestBitrixPortals_Create_HappyPath_ReturnsInstallURL(t *testing.T) {
 	}
 }
 
+// TestBitrixPortals_Create_RegistersInLiveRouter guards the fix for a real
+// production bug: handleCreate used to only persist the DB row, leaving the
+// process-wide bitrix24.Router unaware of the new portal until the next
+// gateway restart (the only other RegisterPortal call site is
+// bitrix24.BootstrapPortals, which runs once at boot) — so a freshly created
+// portal's install callback always 404'd with "unknown portal" until an
+// operator restarted the gateway.
+func TestBitrixPortals_Create_RegistersInLiveRouter(t *testing.T) {
+	tid := uuid.New()
+	pStore := newStubBitrixPortalStore()
+	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"), "test-enc-key")
+
+	var gotTenant uuid.UUID
+	var gotName string
+	calls := 0
+	m.registerPortal = func(_ context.Context, tenantID uuid.UUID, name string) error {
+		calls++
+		gotTenant = tenantID
+		gotName = name
+		return nil
+	}
+
+	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tid, "admin", 4)
+	m.handleCreate(store.WithTenantID(context.Background(), tid), client, buildBitrixReq(t, protocol.MethodBitrixPortalsCreate, map[string]string{
+		"name":          "myportal",
+		"domain":        "myportal.bitrix24.com",
+		"client_id":     "local.abc",
+		"client_secret": "secret123",
+	}))
+
+	resp := readResponse(t, ch)
+	if resp.Error != nil {
+		t.Fatalf("create failed: %+v", resp.Error)
+	}
+	if calls != 1 {
+		t.Fatalf("registerPortal called %d times, want 1", calls)
+	}
+	if gotTenant != tid || gotName != "myportal" {
+		t.Errorf("registerPortal called with (%s, %q), want (%s, %q)", gotTenant, gotName, tid, "myportal")
+	}
+}
+
+// TestBitrixPortals_Create_RegisterFailure_StillReturnsInstallURL confirms the
+// registerPortal call is best-effort: a failure (e.g. router not initialized)
+// must not turn a successfully persisted create into an error response — the
+// row is real, the admin just needs a gateway restart to install it (logged
+// as a warning, not returned to the caller).
+func TestBitrixPortals_Create_RegisterFailure_StillReturnsInstallURL(t *testing.T) {
+	tid := uuid.New()
+	pStore := newStubBitrixPortalStore()
+	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"), "test-enc-key")
+	m.registerPortal = func(_ context.Context, _ uuid.UUID, _ string) error {
+		return errors.New("router not initialized")
+	}
+
+	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tid, "admin", 4)
+	m.handleCreate(store.WithTenantID(context.Background(), tid), client, buildBitrixReq(t, protocol.MethodBitrixPortalsCreate, map[string]string{
+		"name":          "myportal",
+		"domain":        "myportal.bitrix24.com",
+		"client_id":     "local.abc",
+		"client_secret": "secret123",
+	}))
+
+	resp := readResponse(t, ch)
+	if resp.Error != nil {
+		t.Fatalf("create should still succeed when registerPortal fails, got: %+v", resp.Error)
+	}
+	if _, err := pStore.GetByName(context.Background(), tid, "myportal"); err != nil {
+		t.Fatalf("row should still be persisted: %v", err)
+	}
+}
+
 func TestBitrixPortals_Create_InvalidDomain(t *testing.T) {
 	tid := uuid.New()
-	m := NewBitrixPortalsMethods(newStubBitrixPortalStore(), newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"))
+	m := NewBitrixPortalsMethods(newStubBitrixPortalStore(), newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"), "test-enc-key")
 
 	cases := []struct {
 		name   string
@@ -403,7 +475,7 @@ func TestBitrixPortals_Create_InvalidDomain(t *testing.T) {
 func TestBitrixPortals_Create_SelfHostedDomain(t *testing.T) {
 	tid := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	pStore := newStubBitrixPortalStore()
-	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://goclaw.tamgiac.com"))
+	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://goclaw.tamgiac.com"), "test-enc-key")
 
 	// Use a cloud domain (bitrixCloudDomainRegex) for the happy-path test
 	// since it bypasses SSRF DNS validation. Self-hosted SSRF validation
@@ -428,7 +500,7 @@ func TestBitrixPortals_Create_SelfHostedDomain(t *testing.T) {
 
 func TestBitrixPortals_Create_InvalidName(t *testing.T) {
 	tid := uuid.New()
-	m := NewBitrixPortalsMethods(newStubBitrixPortalStore(), newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"))
+	m := NewBitrixPortalsMethods(newStubBitrixPortalStore(), newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"), "test-enc-key")
 	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tid, "u", 4)
 	// Name with uppercase + special char → rejected.
 	m.handleCreate(store.WithTenantID(context.Background(), tid), client, buildBitrixReq(t, protocol.MethodBitrixPortalsCreate, map[string]string{
@@ -450,7 +522,7 @@ func TestBitrixPortals_Create_DuplicateReturnsAlreadyExists(t *testing.T) {
 		TenantID: tid, Name: "dup", Domain: "dup.bitrix24.com",
 	})
 
-	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"))
+	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"), "test-enc-key")
 	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tid, "u", 4)
 	m.handleCreate(store.WithTenantID(context.Background(), tid), client, buildBitrixReq(t, protocol.MethodBitrixPortalsCreate, map[string]string{
 		"name":          "dup",
@@ -470,7 +542,7 @@ func TestBitrixPortals_Create_DuplicateReturnsAlreadyExists(t *testing.T) {
 func TestBitrixPortals_Create_GatewayURLUnknown_RejectsBeforePersist(t *testing.T) {
 	tid := uuid.New()
 	pStore := newStubBitrixPortalStore()
-	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("")) // empty
+	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn(""), "test-enc-key") // empty
 
 	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tid, "admin", 4)
 	m.handleCreate(store.WithTenantID(context.Background(), tid), client, buildBitrixReq(t, protocol.MethodBitrixPortalsCreate, map[string]string{
@@ -499,7 +571,7 @@ func TestBitrixPortals_GetInstallURL_TenantIsolation(t *testing.T) {
 		TenantID: tidB, Name: "secret", Domain: "secret.bitrix24.com",
 	})
 
-	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"))
+	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"), "test-enc-key")
 	// Tenant A asks for tenant B's portal → NOT_FOUND (not unauthorized — we
 	// don't want to leak existence of cross-tenant names).
 	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tidA, "u", 4)
@@ -526,7 +598,7 @@ func TestBitrixPortals_Delete_BlockedByActiveChannel(t *testing.T) {
 		{Name: "support-bot", ChannelType: "bitrix24", Config: cfg},
 	}
 
-	m := NewBitrixPortalsMethods(pStore, chStore, gatewayURLFn("https://gw.example.com"))
+	m := NewBitrixPortalsMethods(pStore, chStore, gatewayURLFn("https://gw.example.com"), "test-enc-key")
 	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tid, "u", 4)
 	m.handleDelete(store.WithTenantID(context.Background(), tid), client, buildBitrixReq(t, protocol.MethodBitrixPortalsDelete, map[string]string{"name": "p"}))
 
@@ -548,7 +620,7 @@ func TestBitrixPortals_Delete_HappyPath_RemovesRow(t *testing.T) {
 	pStore := newStubBitrixPortalStore()
 	_ = pStore.Create(context.Background(), &store.BitrixPortalData{TenantID: tid, Name: "orphan"})
 
-	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"))
+	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"), "test-enc-key")
 	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tid, "u", 4)
 	m.handleDelete(store.WithTenantID(context.Background(), tid), client, buildBitrixReq(t, protocol.MethodBitrixPortalsDelete, map[string]string{"name": "orphan"}))
 
@@ -561,12 +633,77 @@ func TestBitrixPortals_Delete_HappyPath_RemovesRow(t *testing.T) {
 	}
 }
 
+// TestBitrixPortals_Delete_UnregistersFromLiveRouter is the symmetric
+// counterpart to TestBitrixPortals_Create_RegistersInLiveRouter — without it,
+// a portal registered in the live router (at boot, or by a prior create)
+// stays routable in-memory after its DB row is deleted, until the next
+// gateway restart.
+func TestBitrixPortals_Delete_UnregistersFromLiveRouter(t *testing.T) {
+	tid := uuid.New()
+	pStore := newStubBitrixPortalStore()
+	_ = pStore.Create(context.Background(), &store.BitrixPortalData{TenantID: tid, Name: "orphan"})
+
+	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"), "test-enc-key")
+	var gotTenant uuid.UUID
+	var gotName string
+	calls := 0
+	m.unregisterPortal = func(tenantID uuid.UUID, name string) {
+		calls++
+		gotTenant = tenantID
+		gotName = name
+	}
+
+	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tid, "u", 4)
+	m.handleDelete(store.WithTenantID(context.Background(), tid), client, buildBitrixReq(t, protocol.MethodBitrixPortalsDelete, map[string]string{"name": "orphan"}))
+
+	resp := readResponse(t, ch)
+	if resp.Error != nil {
+		t.Fatalf("delete failed: %+v", resp.Error)
+	}
+	if calls != 1 {
+		t.Fatalf("unregisterPortal called %d times, want 1", calls)
+	}
+	if gotTenant != tid || gotName != "orphan" {
+		t.Errorf("unregisterPortal called with (%s, %q), want (%s, %q)", gotTenant, gotName, tid, "orphan")
+	}
+}
+
+// TestBitrixPortals_Delete_BlockedByActiveChannel_DoesNotUnregister confirms
+// unregisterPortal only fires after a successful delete — a blocked delete
+// (portal still in use) must leave the live router untouched.
+func TestBitrixPortals_Delete_BlockedByActiveChannel_DoesNotUnregister(t *testing.T) {
+	tid := uuid.New()
+	pStore := newStubBitrixPortalStore()
+	_ = pStore.Create(context.Background(), &store.BitrixPortalData{TenantID: tid, Name: "p"})
+
+	chStore := newStubChannelInstanceStore()
+	cfg, _ := json.Marshal(map[string]string{"portal": "p"})
+	chStore.instances = []store.ChannelInstanceData{
+		{Name: "in-use-channel", ChannelType: "bitrix24", Config: cfg},
+	}
+
+	m := NewBitrixPortalsMethods(pStore, chStore, gatewayURLFn("https://gw.example.com"), "test-enc-key")
+	calls := 0
+	m.unregisterPortal = func(_ uuid.UUID, _ string) { calls++ }
+
+	client, ch := gateway.NewCapturingTestClient(permissions.RoleAdmin, tid, "u", 4)
+	m.handleDelete(store.WithTenantID(context.Background(), tid), client, buildBitrixReq(t, protocol.MethodBitrixPortalsDelete, map[string]string{"name": "p"}))
+
+	resp := readResponse(t, ch)
+	if resp.Error == nil {
+		t.Fatal("expected delete to be blocked")
+	}
+	if calls != 0 {
+		t.Errorf("unregisterPortal called %d times, want 0 (delete was blocked)", calls)
+	}
+}
+
 func TestBitrixPortals_Delete_RBAC_OperatorDenied(t *testing.T) {
 	tid := uuid.New()
 	pStore := newStubBitrixPortalStore()
 	_ = pStore.Create(context.Background(), &store.BitrixPortalData{TenantID: tid, Name: "p"})
 
-	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"))
+	m := NewBitrixPortalsMethods(pStore, newStubChannelInstanceStore(), gatewayURLFn("https://gw.example.com"), "test-enc-key")
 	client, ch := gateway.NewCapturingTestClient(permissions.RoleOperator, tid, "u", 4)
 	m.handleDelete(store.WithTenantID(context.Background(), tid), client, buildBitrixReq(t, protocol.MethodBitrixPortalsDelete, map[string]string{"name": "p"}))
 

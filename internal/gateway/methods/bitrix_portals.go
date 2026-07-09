@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/channels/bitrix24"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
@@ -35,22 +36,57 @@ type BitrixPortalsMethods struct {
 	portalStore      store.BitrixPortalStore
 	channelStore     store.ChannelInstanceStore // for "portal_in_use" check on delete
 	gatewayPublicURL func() string
+	encKey           string
+
+	// registerPortal/unregisterPortal keep the process-wide bitrix24.Router
+	// (webhook install lookups) in sync with rows created/deleted through
+	// this RPC, without which a newly created portal is invisible to
+	// PortalByDomain/PortalByKey until the next full gateway restart — the
+	// only other place anything calls Router.RegisterPortal is
+	// bitrix24.BootstrapPortals, which only runs once at boot. Injected
+	// (rather than calling bitrix24.WebhookRouter() inline) so tests can
+	// stub live-router registration without touching that process-wide
+	// singleton. Defaults set in NewBitrixPortalsMethods.
+	registerPortal   func(ctx context.Context, tenantID uuid.UUID, name string) error
+	unregisterPortal func(tenantID uuid.UUID, name string)
 }
 
 // NewBitrixPortalsMethods constructs the handler. gatewayPublicURL may return
 // empty string when the gateway hasn't observed any public-URL request yet;
 // callers see an INVALID_REQUEST error with a hint to open the UI via the
-// public URL first.
+// public URL first. encKey mirrors the one used by pg.NewPGBitrixPortalStore /
+// bitrix24.BootstrapPortals — needed to construct a *bitrix24.Portal for live
+// router registration.
 func NewBitrixPortalsMethods(
 	portalStore store.BitrixPortalStore,
 	channelStore store.ChannelInstanceStore,
 	gatewayPublicURL func() string,
+	encKey string,
 ) *BitrixPortalsMethods {
-	return &BitrixPortalsMethods{
+	m := &BitrixPortalsMethods{
 		portalStore:      portalStore,
 		channelStore:     channelStore,
 		gatewayPublicURL: gatewayPublicURL,
+		encKey:           encKey,
 	}
+	m.registerPortal = func(ctx context.Context, tenantID uuid.UUID, name string) error {
+		router := bitrix24.WebhookRouter()
+		if router == nil {
+			return errors.New("bitrix24 webhook router not initialized")
+		}
+		p, err := bitrix24.NewPortal(ctx, tenantID, name, m.portalStore, m.encKey)
+		if err != nil {
+			return err
+		}
+		router.RegisterPortal(p)
+		return nil
+	}
+	m.unregisterPortal = func(tenantID uuid.UUID, name string) {
+		if router := bitrix24.WebhookRouter(); router != nil {
+			router.UnregisterPortal(tenantID, name)
+		}
+	}
+	return m
 }
 
 func (m *BitrixPortalsMethods) Register(router *gateway.MethodRouter) {
@@ -207,6 +243,17 @@ func (m *BitrixPortalsMethods) handleCreate(ctx context.Context, client *gateway
 	}
 
 	slog.Info("bitrix.portals.create", "tenant", tid, "name", name, "domain", domain)
+
+	// Best-effort: make the portal immediately installable. Failure here
+	// (router not initialized yet, decode error) is non-fatal — the row is
+	// already persisted and BootstrapPortals picks it up on the next
+	// restart — but it means the admin can't complete OAuth until then, so
+	// log loudly rather than silently.
+	if err := m.registerPortal(ctx, tid, name); err != nil {
+		slog.Warn("bitrix.portals.create: live router registration failed — portal unreachable by webhook install until gateway restart",
+			"tenant", tid, "name", name, "error", err)
+	}
+
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
 		"name":        row.Name,
 		"domain":      row.Domain,
@@ -300,6 +347,10 @@ func (m *BitrixPortalsMethods) handleDelete(ctx context.Context, client *gateway
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToDelete, "portal", err.Error())))
 		return
 	}
+	// Symmetric with registerPortal in handleCreate — otherwise a portal
+	// registered into the live router (at boot, or by a prior create) stays
+	// routable in-memory after its DB row is gone until the next restart.
+	m.unregisterPortal(tid, name)
 	slog.Info("bitrix.portals.delete", "tenant", tid, "name", name)
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"status": "deleted"}))
 }
