@@ -8,7 +8,7 @@ import noverlap from "graphology-layout-noverlap";
 import type Graph from "graphology";
 import { useUiStore } from "@/stores/use-ui-store";
 import { SIGMA_SETTINGS, getFA2WorkerSettings, ZOOM_TIERS, TIER_MIN_DEGREE, TIER_EDGE_DEGREE } from "./graph-utils";
-import { getVaultNodeColor } from "@/adapters/vault-graph-adapter";
+import { resolveGraphNodeDisplayColor } from "./graph-node-colors";
 
 export type EdgeType = "curvedArrow" | "arrow";
 
@@ -281,7 +281,7 @@ export function SigmaGraphContainer({
 
     sigma.setSetting("nodeReducer", (node, data) => {
       const docType = getNodeType(data);
-      const themedColor = getVaultNodeColor(docType, isDark);
+      const themedColor = resolveGraphNodeDisplayColor(data, isDark);
       const themedData = { ...data, color: themedColor };
 
       // Filter: hide nodes of hidden types
