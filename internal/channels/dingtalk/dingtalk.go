@@ -19,8 +19,11 @@ package dingtalk
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
+
+	"github.com/open-dingtalk/dingtalk-stream-sdk-go/chatbot"
 
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
@@ -33,7 +36,14 @@ type Channel struct {
 	*channels.BaseChannel
 
 	cfg      Config
+	client   *Client
 	audioMgr *audio.Manager
+
+	// newTransport builds the Stream-mode connection. It is a field rather
+	// than a direct call so tests can substitute a fake and drive the inbound
+	// pipeline without a socket.
+	newTransport func(h chatbot.IChatBotMessageHandler) streamTransport
+	transport    streamTransport
 
 	// dedup guards against DingTalk redelivering a message. Keyed by MsgId,
 	// which is stable across server-side resends (unlike the per-delivery
@@ -69,8 +79,12 @@ func New(cfg Config, msgBus *bus.MessageBus, pairingSvc store.PairingStore,
 	ch := &Channel{
 		BaseChannel: base,
 		cfg:         cfg,
+		client:      NewClient(cfg.ClientID, cfg.ClientSecret),
 		audioMgr:    audioMgr,
 		stopCh:      make(chan struct{}),
+	}
+	ch.newTransport = func(h chatbot.IChatBotMessageHandler) streamTransport {
+		return newSDKTransport(cfg.ClientID, cfg.ClientSecret, cfg.Endpoint, h)
 	}
 	ch.SetPairingService(pairingSvc)
 	ch.SetGroupHistory(channels.MakeHistory(channels.TypeDingtalk, pendingStore, base.TenantID()))
@@ -82,19 +96,38 @@ func New(cfg Config, msgBus *bus.MessageBus, pairingSvc store.PairingStore,
 
 // Start opens the Stream-mode connection.
 //
-// Phase 1: no transport yet. The channel reports running so the manager and the
-// dashboard treat it as live, but nothing is received or sent.
-func (c *Channel) Start(_ context.Context) error {
+// The SDK's Start dials and returns; its read and keepalive goroutines outlive
+// this call. A dial failure is returned rather than retried: the manager records
+// it as a start failure and keeps booting the other channels, so a bad AppKey
+// surfaces on the dashboard instead of hiding behind an infinite retry loop.
+func (c *Channel) Start(ctx context.Context) error {
 	c.GroupHistory().StartFlusher()
 	slog.Info("starting dingtalk bot", "channel", c.Name())
+
+	c.transport = c.newTransport(c.handleBotMessage)
+	if err := c.transport.Start(ctx); err != nil {
+		c.GroupHistory().StopFlusher()
+		// The failure kind is genuinely ambiguous: the SDK negotiates the
+		// socket endpoint with the app credentials, so a wrong AppKey and an
+		// unreachable network surface identically here. Reporting either one
+		// would mislead half the time; the detail string carries the truth.
+		c.MarkFailed("stream connect failed", err.Error(), channels.ChannelFailureKindUnknown, true)
+		return fmt.Errorf("dingtalk: start stream: %w", err)
+	}
+
 	c.SetRunning(true)
 	c.MarkHealthy("connected")
 	return nil
 }
 
-// Stop closes the connection and stops background work. Safe to call twice.
+// Stop closes the connection and stops background work. Safe to call twice, and
+// safe on a channel whose Start failed — the InstanceLoader calls Stop on a
+// partially-started channel after a start timeout.
 func (c *Channel) Stop(_ context.Context) error {
 	c.stopOnce.Do(func() { close(c.stopCh) })
+	if c.transport != nil {
+		c.transport.Close()
+	}
 	if gh := c.GroupHistory(); gh != nil {
 		gh.StopFlusher()
 	}
@@ -102,6 +135,14 @@ func (c *Channel) Stop(_ context.Context) error {
 	c.MarkStopped("stopped")
 	slog.Info("stopped dingtalk bot", "channel", c.Name())
 	return nil
+}
+
+// handleBotMessage is the SDK's inbound callback. Returning from it is the ack
+// that DingTalk waits for, so it must never block on an agent run.
+//
+// Implemented in Phase 3; for now it acks and drops.
+func (c *Channel) handleBotMessage(_ context.Context, _ *chatbot.BotCallbackDataModel) ([]byte, error) {
+	return []byte(""), nil
 }
 
 // Send delivers an outbound message. Implemented in Phase 4.

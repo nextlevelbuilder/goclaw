@@ -3,18 +3,57 @@ package dingtalk
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"sync/atomic"
 	"testing"
 
+	"github.com/open-dingtalk/dingtalk-stream-sdk-go/chatbot"
+
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 )
 
-func newTestChannel(t *testing.T) *Channel {
+// fakeTransport stands in for the Stream-mode socket. It records lifecycle
+// calls and lets a test hand a payload straight to the channel's inbound
+// handler, which is how the whole inbound pipeline is exercised without a
+// network connection.
+type fakeTransport struct {
+	startErr error
+	started  atomic.Int32
+	closed   atomic.Int32
+	handler  chatbot.IChatBotMessageHandler
+}
+
+func (f *fakeTransport) Start(context.Context) error {
+	f.started.Add(1)
+	return f.startErr
+}
+
+func (f *fakeTransport) Close() { f.closed.Add(1) }
+
+// deliver drives an inbound message through the channel exactly as the SDK would.
+func (f *fakeTransport) deliver(ctx context.Context, data *chatbot.BotCallbackDataModel) ([]byte, error) {
+	return f.handler(ctx, data)
+}
+
+// newTestChannel builds a channel wired to a fakeTransport.
+func newTestChannel(t *testing.T) (*Channel, *fakeTransport) {
 	t.Helper()
-	ch, err := New(Config{ClientID: "k", ClientSecret: "s"}, bus.New(), nil, nil, nil)
+	return newTestChannelCfg(t, Config{ClientID: "k", ClientSecret: "s"})
+}
+
+func newTestChannelCfg(t *testing.T, cfg Config) (*Channel, *fakeTransport) {
+	t.Helper()
+	ch, err := New(cfg, bus.New(), nil, nil, nil)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	return ch
+	ft := &fakeTransport{}
+	ch.newTransport = func(h chatbot.IChatBotMessageHandler) streamTransport {
+		ft.handler = h
+		return ft
+	}
+	return ch, ft
 }
 
 func TestNew_ValidatesConfig(t *testing.T) {
@@ -30,7 +69,7 @@ func TestNew_ValidatesConfig(t *testing.T) {
 // New must seed BaseChannel.requireMention from the config, or the shared
 // mention gate reads false while the config says true.
 func TestNew_SeedsRequireMention(t *testing.T) {
-	ch := newTestChannel(t)
+	ch, _ := newTestChannel(t)
 	if !ch.RequireMention() {
 		t.Error("BaseChannel.RequireMention() = false, want true (config default)")
 	}
@@ -47,7 +86,7 @@ func TestNew_SeedsRequireMention(t *testing.T) {
 }
 
 func TestStartStop_Lifecycle(t *testing.T) {
-	ch := newTestChannel(t)
+	ch, ft := newTestChannel(t)
 	ctx := context.Background()
 
 	if ch.IsRunning() {
@@ -59,18 +98,48 @@ func TestStartStop_Lifecycle(t *testing.T) {
 	if !ch.IsRunning() {
 		t.Fatal("not running after Start")
 	}
+	if got := ft.started.Load(); got != 1 {
+		t.Errorf("transport.Start called %d times, want 1", got)
+	}
 	if err := ch.Stop(ctx); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 	if ch.IsRunning() {
 		t.Fatal("still running after Stop")
 	}
+	if got := ft.closed.Load(); got != 1 {
+		t.Errorf("transport.Close called %d times, want 1", got)
+	}
+}
+
+// A dial failure must surface, not be swallowed: the manager records it as a
+// start failure and the operator sees a broken instance on the dashboard.
+// The channel must not report running, and must not leave the history flusher
+// spinning.
+func TestStart_TransportFailure(t *testing.T) {
+	ch, ft := newTestChannel(t)
+	ft.startErr = errors.New("dial tcp: connection refused")
+
+	err := ch.Start(context.Background())
+	if err == nil {
+		t.Fatal("want error from Start, got nil")
+	}
+	if ch.IsRunning() {
+		t.Error("channel reports running after a failed Start")
+	}
+	if h := ch.HealthSnapshot(); h.State != channels.ChannelHealthStateFailed {
+		t.Errorf("health state = %v, want failed", h.State)
+	}
+	// Stop after a failed Start is what the InstanceLoader does on timeout.
+	if err := ch.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop after failed Start: %v", err)
+	}
 }
 
 // The manager may Stop a channel that already stopped (shutdown races, failed
 // Start). Closing stopCh twice would panic, so Stop is guarded by sync.Once.
 func TestStop_Idempotent(t *testing.T) {
-	ch := newTestChannel(t)
+	ch, _ := newTestChannel(t)
 	ctx := context.Background()
 	if err := ch.Start(ctx); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -84,18 +153,33 @@ func TestStop_Idempotent(t *testing.T) {
 }
 
 // Stop without a preceding Start happens when Start fails partway. It must not
-// panic on the unstarted history flusher.
+// panic on the nil transport or the unstarted history flusher.
 func TestStop_WithoutStart(t *testing.T) {
-	ch := newTestChannel(t)
+	ch, _ := newTestChannel(t)
 	if err := ch.Stop(context.Background()); err != nil {
 		t.Fatalf("Stop before Start: %v", err)
 	}
 }
 
-// Phase 1 has no transport: Send is a no-op. This test pins that so Phase 4
+// Returning from the SDK callback is the ack DingTalk waits for. Phase 3 fills
+// this in; today it must at least ack rather than error.
+func TestHandleBotMessage_Acks(t *testing.T) {
+	ch, ft := newTestChannel(t)
+	if err := ch.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() { _ = ch.Stop(context.Background()) })
+
+	_, err := ft.deliver(context.Background(), &chatbot.BotCallbackDataModel{MsgId: "m1"})
+	if err != nil {
+		t.Fatalf("inbound handler returned error (DingTalk would treat this as a nack): %v", err)
+	}
+}
+
+// Phase 1 has no send path: Send is a no-op. This test pins that so Phase 4
 // replacing it is a deliberate change, not an accident.
 func TestSend_NoopUntilPhase4(t *testing.T) {
-	ch := newTestChannel(t)
+	ch, _ := newTestChannel(t)
 	err := ch.Send(context.Background(), bus.OutboundMessage{ChatID: "cid", Content: "hi"})
 	if err != nil {
 		t.Fatalf("Send: %v", err)
