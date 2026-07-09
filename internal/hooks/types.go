@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -33,6 +34,9 @@ const (
 	EventSubagentStart HookEvent = "subagent_start"
 	// EventSubagentStop fires when a sub-agent finishes.
 	EventSubagentStop HookEvent = "subagent_stop"
+	// EventPostModelResponse fires after the model generates its final response
+	// (no tool calls) but BEFORE it's delivered to the user. BLOCKING.
+	EventPostModelResponse HookEvent = "post_model_response"
 )
 
 // IsBlocking returns true when the event requires a synchronous allow/block
@@ -40,7 +44,7 @@ const (
 // timeout yield Decision=block.
 func (e HookEvent) IsBlocking() bool {
 	switch e {
-	case EventUserPromptSubmit, EventPreToolUse, EventSubagentStart:
+	case EventUserPromptSubmit, EventPreToolUse, EventSubagentStart, EventPostModelResponse:
 		return true
 	default:
 		return false
@@ -144,11 +148,13 @@ func (d Decision) IsBlock() bool {
 // UpdatedRawInput points to a string only when a builtin hook mutated
 // rawInput. Callers replace state.Input.Message with the dereferenced value.
 //
-// For non-builtin scripts returning updatedInput the dispatcher strips the
-// mutation + logs a WARN; Updated* stay nil (defense-in-depth against a
-// tenant-authored script escalating its capability tier).
+// DecisionReason carries a human-readable explanation when Decision is
+// DecisionBlock (or DecisionAsk/DecisionDefer treated as block). This is
+// injected as a user message to trigger a retry iteration.
+//
 type FireResult struct {
 	Decision         Decision
+	DecisionReason   string
 	UpdatedToolInput map[string]any
 	UpdatedRawInput  *string
 }
@@ -225,4 +231,9 @@ type Event struct {
 	Depth int
 	// HookEvent is the lifecycle event type.
 	HookEvent HookEvent
+
+	// PostModelResponse fields (populated when HookEvent == EventPostModelResponse).
+	ModelResponse string            // the generated response content
+	Thinking      string            // reasoning content (if any)
+	ToolCalls     []providers.ToolCall // empty for final response, populated if tool calls present
 }

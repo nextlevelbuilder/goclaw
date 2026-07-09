@@ -2,8 +2,13 @@ package pipeline
 
 import (
 	"context"
+	"log/slog"
 
+	"github.com/google/uuid"
+
+	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // ObserveStage runs per iteration after ToolStage. Drains InjectCh,
@@ -56,6 +61,47 @@ func (s *ObserveStage) drainInjectedMessages() []providers.Message {
 
 func (s *ObserveStage) observeFinalResponse(state *RunState, resp *providers.ChatResponse, injected []providers.Message) {
 	content, thinking := splitTaggedThinkingContent(resp.Content, resp.Thinking)
+
+	// Fire post_model_response hook for final responses (no tool calls).
+	// This is a blocking hook that can prevent user delivery and inject a retry.
+	if s.deps.Hooks != nil && len(injected) == 0 {
+		ev := hooks.Event{
+			EventID:       uuid.NewString(),
+			SessionID:     state.Input.SessionKey,
+			TenantID:      store.TenantIDFromContext(state.Ctx),
+			AgentID:       store.AgentIDFromContext(state.Ctx),
+			HookEvent:     hooks.EventPostModelResponse,
+			ModelResponse: content,
+			Thinking:      thinking,
+			ToolCalls:     resp.ToolCalls,
+		}
+		result, err := s.deps.FireHook(state.Ctx, ev)
+		if err != nil {
+			slog.Debug("post_model_response hook error", "error", err)
+		}
+		if result.Decision == hooks.DecisionBlock {
+			// Hook blocked delivery: keep assistant message in history, inject
+			// rejection reason as user message, and continue to next iteration.
+			state.Messages.AppendPending(providers.Message{
+				Role:     "assistant",
+				Content:  content,
+				Thinking: thinking,
+			})
+			rejectionMsg := result.DecisionReason
+			if rejectionMsg == "" {
+				rejectionMsg = "Response blocked by policy."
+			}
+			state.Messages.AppendPending(providers.Message{
+				Role:    "user",
+				Content: rejectionMsg,
+			})
+			state.Observe.BlockedByHook = true
+			state.Observe.HookRejectionReason = rejectionMsg
+			state.Observe.ContinueAfterFinal = true
+			return
+		}
+	}
+
 	if len(injected) == 0 {
 		state.Observe.FinalContent = content
 		state.Observe.FinalThinking = thinking
