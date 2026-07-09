@@ -104,6 +104,7 @@ func (s *SQLiteEpisodicStore) Search(ctx context.Context, query string, agentID,
 		results = append(results, store.EpisodicSearchResult{
 			EpisodicID: sr.raw.id,
 			L0Abstract: sr.raw.l0Abstract,
+			KeyTopics:  searchKeyTopics(sr.raw.keyTopics),
 			Score:      sr.score,
 			CreatedAt:  sr.raw.createdAt.Time,
 			SessionKey: sr.raw.sessionKey,
@@ -113,6 +114,12 @@ func (s *SQLiteEpisodicStore) Search(ctx context.Context, query string, agentID,
 		}
 	}
 	return results, nil
+}
+
+func searchKeyTopics(raw string) []string {
+	var topics []string
+	scanJSONStringArray([]byte(raw), &topics)
+	return topics
 }
 
 // Ensure SQLiteEpisodicStore implements store.EpisodicStore.

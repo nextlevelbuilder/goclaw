@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -23,8 +24,8 @@ func (t *MemoryExpandTool) SetEpisodicStore(es store.EpisodicStore) {
 	t.episodicStore = es
 }
 
-func (t *MemoryExpandTool) Name() string        { return "memory_expand" }
-func (t *MemoryExpandTool) Description() string  {
+func (t *MemoryExpandTool) Name() string { return "memory_expand" }
+func (t *MemoryExpandTool) Description() string {
 	return "Load full content for a memory entry by ID. Returns the complete episodic summary for deep context."
 }
 
@@ -61,9 +62,12 @@ func (t *MemoryExpandTool) Execute(ctx context.Context, args map[string]any) *Re
 	}
 
 	// Format full summary with metadata
-	result := fmt.Sprintf("## Memory: %s\n\n**Session:** %s\n**Created:** %s\n**Turns:** %d\n\n%s",
-		ep.L0Abstract, ep.SessionKey, ep.CreatedAt.Format("2006-01-02 15:04"),
-		ep.TurnCount, ep.Summary)
+	result := fmt.Sprintf("## Memory: %s\n\n**Session:** %s\n**Created:** %s\n**Turns:** %d",
+		ep.L0Abstract, ep.SessionKey, ep.CreatedAt.Format("2006-01-02 15:04"), ep.TurnCount)
+	if len(ep.KeyTopics) > 0 {
+		result += "\n**Topics:** " + strings.Join(ep.KeyTopics, ", ")
+	}
+	result += "\n\n" + ep.Summary
 
 	return &Result{ForLLM: result}
 }

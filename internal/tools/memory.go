@@ -15,10 +15,10 @@ import (
 
 // MemorySearchTool implements the memory_search tool for hybrid semantic + FTS search.
 type MemorySearchTool struct {
-	memStore      store.MemoryStore              // Postgres-backed
-	episodicStore store.EpisodicStore             // v3 episodic memory (nil = v2 fallback)
-	metricsStore  store.EvolutionMetricsStore     // evolution metrics (nil = disabled)
-	hasKG         bool                           // knowledge_graph_search tool is available
+	memStore      store.MemoryStore           // Postgres-backed
+	episodicStore store.EpisodicStore         // v3 episodic memory (nil = v2 fallback)
+	metricsStore  store.EvolutionMetricsStore // evolution metrics (nil = disabled)
+	hasKG         bool                        // knowledge_graph_search tool is available
 }
 
 func NewMemorySearchTool() *MemorySearchTool {
@@ -150,8 +150,9 @@ func (t *MemorySearchTool) Execute(ctx context.Context, args map[string]any) *Re
 	type taggedResult struct {
 		Tier string `json:"tier"`
 		store.MemorySearchResult
-		L0         string `json:"l0_abstract,omitempty"`
-		EpisodicID string `json:"episodic_id,omitempty"`
+		L0         string   `json:"l0_abstract,omitempty"`
+		KeyTopics  []string `json:"key_topics,omitempty"`
+		EpisodicID string   `json:"episodic_id,omitempty"`
 	}
 	var combined []taggedResult
 	for _, r := range results {
@@ -159,7 +160,7 @@ func (t *MemorySearchTool) Execute(ctx context.Context, args map[string]any) *Re
 	}
 	for _, r := range episodicResults {
 		combined = append(combined, taggedResult{
-			Tier: "episodic", EpisodicID: r.EpisodicID, L0: r.L0Abstract,
+			Tier: "episodic", EpisodicID: r.EpisodicID, L0: r.L0Abstract, KeyTopics: r.KeyTopics,
 			MemorySearchResult: store.MemorySearchResult{
 				Path: "episodic:" + r.SessionKey, Score: r.Score, Snippet: r.L0Abstract, Source: "episodic",
 			},

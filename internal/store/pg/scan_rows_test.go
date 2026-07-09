@@ -2,6 +2,7 @@ package pg
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -195,11 +196,14 @@ func TestEpisodicSummaryRow_ToEpisodicSummary(t *testing.T) {
 func TestEpisodicScoredRow_ToEpisodicScored(t *testing.T) {
 	created := time.Now()
 	r := episodicScoredRow{
-		ID: "ep-1", SessionKey: "s-1", L0Abstract: "abs", Score: 0.5, CreatedAt: created,
+		ID: "ep-1", SessionKey: "s-1", L0Abstract: "abs", KeyTopics: pq.StringArray{"topic-a", "Entity B"}, Score: 0.5, CreatedAt: created,
 	}
 	got := r.toEpisodicScored()
 	if got.id != "ep-1" || got.sessionKey != "s-1" || got.l0 != "abs" || got.score != 0.5 {
 		t.Errorf("%+v", got)
+	}
+	if strings.Join(got.keyTopics, ",") != "topic-a,Entity B" {
+		t.Errorf("keyTopics = %v", got.keyTopics)
 	}
 	if !got.createdAt.Equal(created) {
 		t.Errorf("createdAt mismatch")
@@ -722,12 +726,12 @@ func TestCustomSkillExportRow_EmptyOptionals(t *testing.T) {
 
 func TestMergeEpisodicScores_WeightingAndMerge(t *testing.T) {
 	fts := []episodicScored{
-		{id: "a", sessionKey: "s-a", l0: "A", score: 1.0},
-		{id: "b", sessionKey: "s-b", l0: "B", score: 0.5},
+		{id: "a", sessionKey: "s-a", l0: "A", keyTopics: []string{"topic-a"}, score: 1.0},
+		{id: "b", sessionKey: "s-b", l0: "B", keyTopics: []string{"topic-b"}, score: 0.5},
 	}
 	vec := []episodicScored{
-		{id: "a", sessionKey: "s-a", l0: "A", score: 0.8},
-		{id: "c", sessionKey: "s-c", l0: "C", score: 0.9},
+		{id: "a", sessionKey: "s-a", l0: "A", keyTopics: []string{"topic-a"}, score: 0.8},
+		{id: "c", sessionKey: "s-c", l0: "C", keyTopics: []string{"topic-c"}, score: 0.9},
 	}
 	merged := mergeEpisodicScores(fts, vec, 0.5, 0.5)
 	if len(merged) != 3 {
@@ -736,6 +740,13 @@ func TestMergeEpisodicScores_WeightingAndMerge(t *testing.T) {
 	byID := make(map[string]float64)
 	for _, r := range merged {
 		byID[r.id] = r.score
+	}
+	byTopics := make(map[string]string)
+	for _, r := range merged {
+		byTopics[r.id] = strings.Join(r.keyTopics, ",")
+	}
+	if byTopics["a"] != "topic-a" || byTopics["c"] != "topic-c" {
+		t.Errorf("topics not preserved: %v", byTopics)
 	}
 	// a: in both → 1.0*0.5 + 0.8*0.5 = 0.5 + 0.4 = 0.9
 	if got := byID["a"]; got < 0.89 || got > 0.91 {

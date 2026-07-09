@@ -36,6 +36,7 @@ type EpisodicSummary struct {
 type EpisodicSearchResult struct {
 	EpisodicID string    `json:"episodic_id" db:"episodic_id"`
 	L0Abstract string    `json:"l0_abstract" db:"l0_abstract"`
+	KeyTopics  []string  `json:"key_topics" db:"key_topics"`
 	Score      float64   `json:"score" db:"score"`
 	CreatedAt  time.Time `json:"created_at" db:"created_at"`
 	SessionKey string    `json:"session_key" db:"session_key"`

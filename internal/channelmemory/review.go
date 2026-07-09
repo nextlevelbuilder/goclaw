@@ -31,13 +31,14 @@ func (s *Service) Approve(ctx context.Context, itemID uuid.UUID, approver string
 	}
 	if !exists {
 		retention := s.retentionDuration(ctx, item)
+		keyTopics := memoryKeyTopics(item)
 		ep := &store.EpisodicSummary{
 			TenantID:   item.TenantID,
 			AgentID:    item.AgentID,
 			UserID:     memoryUserID,
 			SessionKey: "channel:" + item.ChannelInstanceID.String(),
 			Summary:    item.Summary,
-			KeyTopics:  decodeStrings(item.Topics),
+			KeyTopics:  keyTopics,
 			L0Abstract: item.Summary,
 			SourceID:   sourceID,
 			SourceType: "channel",
@@ -58,7 +59,7 @@ func (s *Service) Approve(ctx context.Context, itemID uuid.UUID, approver string
 					EpisodicID:  ep.ID.String(),
 					SessionKey:  ep.SessionKey,
 					Summary:     item.Summary,
-					KeyTopics:   decodeStrings(item.Topics),
+					KeyTopics:   keyTopics,
 					KeyEntities: decodeStrings(item.Entities),
 				},
 			})

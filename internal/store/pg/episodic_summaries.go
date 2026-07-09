@@ -175,7 +175,7 @@ func (s *PGEpisodicStore) Search(ctx context.Context, query, agentID, userID str
 			continue
 		}
 		results = append(results, store.EpisodicSearchResult{
-			EpisodicID: m.id, L0Abstract: m.l0, Score: m.score,
+			EpisodicID: m.id, L0Abstract: m.l0, KeyTopics: m.keyTopics, Score: m.score,
 			CreatedAt: m.createdAt, SessionKey: m.sessionKey,
 		})
 	}

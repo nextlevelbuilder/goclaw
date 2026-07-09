@@ -680,7 +680,7 @@ func TestApprovePublishesTopicsAndEntitiesForSemanticHints(t *testing.T) {
 	if episodic.existsUserID != "" {
 		t.Fatalf("ExistsBySourceID user_id = %q, want shared scope", episodic.existsUserID)
 	}
-	if got := episodic.created[0].KeyTopics; strings.Join(got, ",") != "collaboration,planning" {
+	if got := strings.Join(episodic.created[0].KeyTopics, ","); got != "collaboration,planning,Project Orion,ExampleCo" {
 		t.Fatalf("episodic key_topics = %#v", got)
 	}
 	if len(eventBus.published) != 1 {
@@ -690,7 +690,7 @@ func TestApprovePublishesTopicsAndEntitiesForSemanticHints(t *testing.T) {
 	if !ok {
 		t.Fatalf("published payload type = %T", eventBus.published[0].Payload)
 	}
-	if got := strings.Join(payload.KeyTopics, ","); got != "collaboration,planning" {
+	if got := strings.Join(payload.KeyTopics, ","); got != "collaboration,planning,Project Orion,ExampleCo" {
 		t.Fatalf("payload KeyTopics = %q", got)
 	}
 	if got := strings.Join(payload.KeyEntities, ","); got != "Project Orion,ExampleCo" {

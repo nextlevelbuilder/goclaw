@@ -19,6 +19,7 @@ type episodicScored struct {
 	id         string
 	sessionKey string
 	l0         string
+	keyTopics  []string
 	score      float64
 	createdAt  time.Time
 }
@@ -27,7 +28,7 @@ type episodicScored struct {
 // Uses the stored search_vector column (GIN-indexed, 'english' config from migration 040).
 // When userID is empty, returns results across all users (admin view).
 func (s *PGEpisodicStore) ftsSearch(ctx context.Context, query, agentID, userID string, limit int) []episodicScored {
-	q := `SELECT id, session_key, COALESCE(NULLIF(l0_abstract, ''), left(summary, 500)) AS l0_abstract,
+	q := `SELECT id, session_key, COALESCE(NULLIF(l0_abstract, ''), left(summary, 500)) AS l0_abstract, key_topics,
 	        ts_rank(search_vector, plainto_tsquery('english', $1)) AS score, created_at
 		FROM episodic_summaries
 		WHERE agent_id = $2
@@ -66,7 +67,7 @@ func (s *PGEpisodicStore) ftsSearch(ctx context.Context, query, agentID, userID 
 func (s *PGEpisodicStore) vectorSearch(ctx context.Context, embedding []float32, agentID, userID string, limit int) []episodicScored {
 	vecStr := vectorToString(embedding)
 	q := `SELECT id, session_key, COALESCE(NULLIF(l0_abstract, ''), left(summary, 500)) AS l0_abstract,
-			1 - (embedding <=> $1) AS score, created_at
+			key_topics, 1 - (embedding <=> $1) AS score, created_at
 		FROM episodic_summaries
 		WHERE agent_id = $2
 		  AND embedding IS NOT NULL`
@@ -103,13 +104,13 @@ func (s *PGEpisodicStore) vectorSearch(ctx context.Context, embedding []float32,
 func mergeEpisodicScores(fts, vec []episodicScored, textWeight, vecWeight float64) []episodicScored {
 	byID := make(map[string]*episodicScored)
 	for _, r := range fts {
-		byID[r.id] = &episodicScored{id: r.id, sessionKey: r.sessionKey, l0: r.l0, createdAt: r.createdAt, score: r.score * textWeight}
+		byID[r.id] = &episodicScored{id: r.id, sessionKey: r.sessionKey, l0: r.l0, keyTopics: r.keyTopics, createdAt: r.createdAt, score: r.score * textWeight}
 	}
 	for _, r := range vec {
 		if existing, ok := byID[r.id]; ok {
 			existing.score += r.score * vecWeight
 		} else {
-			byID[r.id] = &episodicScored{id: r.id, sessionKey: r.sessionKey, l0: r.l0, createdAt: r.createdAt, score: r.score * vecWeight}
+			byID[r.id] = &episodicScored{id: r.id, sessionKey: r.sessionKey, l0: r.l0, keyTopics: r.keyTopics, createdAt: r.createdAt, score: r.score * vecWeight}
 		}
 	}
 	var merged []episodicScored

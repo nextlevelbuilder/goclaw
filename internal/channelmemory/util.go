@@ -62,6 +62,33 @@ func decodeStrings(raw json.RawMessage) []string {
 	return out
 }
 
+func memoryKeyTopics(item *store.ChannelMemoryExtractionItem) []string {
+	if item == nil {
+		return nil
+	}
+	return mergeTopicLabels(decodeStrings(item.Topics), decodeStrings(item.Entities))
+}
+
+func mergeTopicLabels(groups ...[]string) []string {
+	seen := make(map[string]struct{})
+	var out []string
+	for _, group := range groups {
+		for _, value := range group {
+			label := strings.TrimSpace(value)
+			if label == "" {
+				continue
+			}
+			key := strings.ToLower(label)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, label)
+		}
+	}
+	return out
+}
+
 //go:fix inline
 func timePtr(t time.Time) *time.Time { return &t }
 
