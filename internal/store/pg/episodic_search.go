@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,20 +23,15 @@ type episodicScored struct {
 	keyTopics  []string
 	score      float64
 	createdAt  time.Time
+	expiresAt  *time.Time
 }
 
-// ftsSearch performs full-text search on episodic summaries.
-// Uses the stored search_vector column (GIN-indexed, 'english' config from migration 040).
-// When userID is empty, returns results across all users (admin view).
-func (s *PGEpisodicStore) ftsSearch(ctx context.Context, query, agentID, userID string, limit int) []episodicScored {
-	q := `SELECT id, session_key, COALESCE(NULLIF(l0_abstract, ''), left(summary, 500)) AS l0_abstract, key_topics,
-	        ts_rank(search_vector, plainto_tsquery('english', $1)) AS score, created_at
-		FROM episodic_summaries
-		WHERE agent_id = $2
-		  AND search_vector @@ plainto_tsquery('english', $1)`
-	args := []any{query, agentID}
-	p := 3
+func isEpisodicListQuery(query string) bool {
+	q := strings.TrimSpace(query)
+	return q == "" || q == "*"
+}
 
+func appendEpisodicSearchFilters(ctx context.Context, q string, args []any, p int, userID string, opts store.EpisodicSearchOptions) (string, []any, int) {
 	if store.IsSharedMemory(ctx) {
 		// Shared memory searches all user scopes for the agent.
 	} else if userID != "" {
@@ -48,6 +44,37 @@ func (s *PGEpisodicStore) ftsSearch(ctx context.Context, query, agentID, userID 
 	q += fmt.Sprintf(" AND tenant_id = $%d", p)
 	args = append(args, tenantFromCtx(ctx))
 	p++
+	if opts.CreatedAfter != nil {
+		q += fmt.Sprintf(" AND created_at >= $%d", p)
+		args = append(args, opts.CreatedAfter.UTC())
+		p++
+	}
+	if opts.CreatedBefore != nil {
+		q += fmt.Sprintf(" AND created_at < $%d", p)
+		args = append(args, opts.CreatedBefore.UTC())
+		p++
+	}
+	if !opts.IncludeExpired {
+		q += fmt.Sprintf(" AND (expires_at IS NULL OR expires_at > $%d)", p)
+		args = append(args, time.Now().UTC())
+		p++
+	}
+	return q, args, p
+}
+
+// ftsSearch performs full-text search on episodic summaries.
+// Uses the stored search_vector column (GIN-indexed, 'english' config from migration 040).
+// When userID is empty, returns results across all users (admin view).
+func (s *PGEpisodicStore) ftsSearch(ctx context.Context, query, agentID, userID string, limit int, opts store.EpisodicSearchOptions) []episodicScored {
+	q := `SELECT id, session_key, COALESCE(NULLIF(l0_abstract, ''), left(summary, 500)) AS l0_abstract, key_topics,
+	        ts_rank(search_vector, plainto_tsquery('english', $1)) AS score, created_at, expires_at
+		FROM episodic_summaries
+		WHERE agent_id = $2
+		  AND search_vector @@ plainto_tsquery('english', $1)`
+	args := []any{query, agentID}
+	p := 3
+
+	q, args, p = appendEpisodicSearchFilters(ctx, q, args, p, userID, opts)
 	q += fmt.Sprintf(" ORDER BY score DESC LIMIT $%d", p)
 	args = append(args, limit)
 
@@ -64,29 +91,40 @@ func (s *PGEpisodicStore) ftsSearch(ctx context.Context, query, agentID, userID 
 
 // vectorSearch performs cosine similarity search on episodic embeddings.
 // When userID is empty, returns results across all users (admin view).
-func (s *PGEpisodicStore) vectorSearch(ctx context.Context, embedding []float32, agentID, userID string, limit int) []episodicScored {
+func (s *PGEpisodicStore) vectorSearch(ctx context.Context, embedding []float32, agentID, userID string, limit int, opts store.EpisodicSearchOptions) []episodicScored {
 	vecStr := vectorToString(embedding)
 	q := `SELECT id, session_key, COALESCE(NULLIF(l0_abstract, ''), left(summary, 500)) AS l0_abstract,
-			key_topics, 1 - (embedding <=> $1) AS score, created_at
+			key_topics, 1 - (embedding <=> $1) AS score, created_at, expires_at
 		FROM episodic_summaries
 		WHERE agent_id = $2
 		  AND embedding IS NOT NULL`
 	args := []any{vecStr, agentID}
 	p := 3
 
-	if store.IsSharedMemory(ctx) {
-		// Shared memory searches all user scopes for the agent.
-	} else if userID != "" {
-		q += fmt.Sprintf(" AND (user_id = $%d OR user_id = '')", p)
-		args = append(args, userID)
-		p++
-	} else {
-		q += " AND user_id = ''"
-	}
-	q += fmt.Sprintf(" AND tenant_id = $%d", p)
-	args = append(args, tenantFromCtx(ctx))
-	p++
+	q, args, p = appendEpisodicSearchFilters(ctx, q, args, p, userID, opts)
 	q += fmt.Sprintf(" ORDER BY embedding <=> $1 LIMIT $%d", p)
+	args = append(args, limit)
+
+	var rows []episodicScoredRow
+	if err := pkgSqlxDB.SelectContext(ctx, &rows, q, args...); err != nil {
+		return nil
+	}
+	results := make([]episodicScored, len(rows))
+	for i := range rows {
+		results[i] = rows[i].toEpisodicScored()
+	}
+	return results
+}
+
+func (s *PGEpisodicStore) recentSearch(ctx context.Context, agentID, userID string, limit int, opts store.EpisodicSearchOptions) []episodicScored {
+	q := `SELECT id, session_key, COALESCE(NULLIF(l0_abstract, ''), left(summary, 500)) AS l0_abstract, key_topics,
+	        1.0 AS score, created_at, expires_at
+		FROM episodic_summaries
+		WHERE agent_id = $1`
+	args := []any{agentID}
+	p := 2
+	q, args, p = appendEpisodicSearchFilters(ctx, q, args, p, userID, opts)
+	q += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d", p)
 	args = append(args, limit)
 
 	var rows []episodicScoredRow
@@ -104,13 +142,13 @@ func (s *PGEpisodicStore) vectorSearch(ctx context.Context, embedding []float32,
 func mergeEpisodicScores(fts, vec []episodicScored, textWeight, vecWeight float64) []episodicScored {
 	byID := make(map[string]*episodicScored)
 	for _, r := range fts {
-		byID[r.id] = &episodicScored{id: r.id, sessionKey: r.sessionKey, l0: r.l0, keyTopics: r.keyTopics, createdAt: r.createdAt, score: r.score * textWeight}
+		byID[r.id] = &episodicScored{id: r.id, sessionKey: r.sessionKey, l0: r.l0, keyTopics: r.keyTopics, createdAt: r.createdAt, expiresAt: r.expiresAt, score: r.score * textWeight}
 	}
 	for _, r := range vec {
 		if existing, ok := byID[r.id]; ok {
 			existing.score += r.score * vecWeight
 		} else {
-			byID[r.id] = &episodicScored{id: r.id, sessionKey: r.sessionKey, l0: r.l0, keyTopics: r.keyTopics, createdAt: r.createdAt, score: r.score * vecWeight}
+			byID[r.id] = &episodicScored{id: r.id, sessionKey: r.sessionKey, l0: r.l0, keyTopics: r.keyTopics, createdAt: r.createdAt, expiresAt: r.expiresAt, score: r.score * vecWeight}
 		}
 	}
 	var merged []episodicScored

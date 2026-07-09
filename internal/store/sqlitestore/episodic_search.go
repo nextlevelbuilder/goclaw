@@ -6,6 +6,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -25,14 +26,19 @@ func (s *SQLiteEpisodicStore) Search(ctx context.Context, query string, agentID,
 	}
 
 	tenantID := tenantIDForInsert(ctx)
-	pattern := "%" + escapeLike(query) + "%"
+	query = strings.TrimSpace(query)
+	listOnly := query == "" || query == "*"
 
 	q := `
-		SELECT id, COALESCE(NULLIF(l0_abstract, ''), substr(summary, 1, 500)) AS l0_abstract, key_topics, created_at, session_key
+		SELECT id, COALESCE(NULLIF(l0_abstract, ''), substr(summary, 1, 500)) AS l0_abstract, key_topics, created_at, expires_at, session_key
 		FROM episodic_summaries
-		WHERE agent_id = ? AND tenant_id = ?
-		  AND (summary LIKE ? ESCAPE '\' OR key_topics LIKE ? ESCAPE '\')`
-	args := []any{agentID, tenantID.String(), pattern, pattern}
+		WHERE agent_id = ? AND tenant_id = ?`
+	args := []any{agentID, tenantID.String()}
+	if !listOnly {
+		pattern := "%" + escapeLike(query) + "%"
+		q += " AND (summary LIKE ? ESCAPE '\\' OR key_topics LIKE ? ESCAPE '\\')"
+		args = append(args, pattern, pattern)
+	}
 	if store.IsSharedMemory(ctx) {
 		// Shared memory searches all user scopes for the agent.
 	} else if userID != "" {
@@ -40,6 +46,18 @@ func (s *SQLiteEpisodicStore) Search(ctx context.Context, query string, agentID,
 		args = append(args, userID)
 	} else {
 		q += " AND user_id = ''"
+	}
+	if opts.CreatedAfter != nil {
+		q += " AND created_at >= ?"
+		args = append(args, opts.CreatedAfter.UTC().Format(time.RFC3339Nano))
+	}
+	if opts.CreatedBefore != nil {
+		q += " AND created_at < ?"
+		args = append(args, opts.CreatedBefore.UTC().Format(time.RFC3339Nano))
+	}
+	if !opts.IncludeExpired {
+		q += " AND (expires_at IS NULL OR expires_at > ?)"
+		args = append(args, time.Now().UTC().Format(time.RFC3339Nano))
 	}
 	q += " ORDER BY created_at DESC LIMIT ?"
 	args = append(args, maxResults*3)
@@ -55,13 +73,14 @@ func (s *SQLiteEpisodicStore) Search(ctx context.Context, query string, agentID,
 		l0Abstract string
 		keyTopics  string
 		createdAt  sqliteTime
+		expiresAt  nullSqliteTime
 		sessionKey string
 	}
 
 	var raws []rawRow
 	for rows.Next() {
 		var r rawRow
-		if err := rows.Scan(&r.id, &r.l0Abstract, &r.keyTopics, &r.createdAt, &r.sessionKey); err != nil {
+		if err := rows.Scan(&r.id, &r.l0Abstract, &r.keyTopics, &r.createdAt, &r.expiresAt, &r.sessionKey); err != nil {
 			continue
 		}
 		raws = append(raws, r)
@@ -79,11 +98,13 @@ func (s *SQLiteEpisodicStore) Search(ctx context.Context, query string, agentID,
 	scoredRows := make([]scored, 0, len(raws))
 	for _, r := range raws {
 		sc := 1.0
-		if strings.Contains(strings.ToLower(r.l0Abstract), lowerQuery) {
-			sc += 0.2
-		}
-		if strings.Contains(strings.ToLower(r.keyTopics), lowerQuery) {
-			sc += 0.1
+		if !listOnly {
+			if strings.Contains(strings.ToLower(r.l0Abstract), lowerQuery) {
+				sc += 0.2
+			}
+			if strings.Contains(strings.ToLower(r.keyTopics), lowerQuery) {
+				sc += 0.1
+			}
 		}
 		scoredRows = append(scoredRows, scored{raw: r, score: sc})
 	}
@@ -101,12 +122,18 @@ func (s *SQLiteEpisodicStore) Search(ctx context.Context, query string, agentID,
 		if opts.MinScore > 0 && sr.score < opts.MinScore {
 			continue
 		}
+		var expiresAt *time.Time
+		if sr.raw.expiresAt.Valid {
+			t := sr.raw.expiresAt.Time
+			expiresAt = &t
+		}
 		results = append(results, store.EpisodicSearchResult{
 			EpisodicID: sr.raw.id,
 			L0Abstract: sr.raw.l0Abstract,
 			KeyTopics:  searchKeyTopics(sr.raw.keyTopics),
 			Score:      sr.score,
 			CreatedAt:  sr.raw.createdAt.Time,
+			ExpiresAt:  expiresAt,
 			SessionKey: sr.raw.sessionKey,
 		})
 		if len(results) >= maxResults {

@@ -34,20 +34,24 @@ type EpisodicSummary struct {
 
 // EpisodicSearchResult is a search hit with L0 summary.
 type EpisodicSearchResult struct {
-	EpisodicID string    `json:"episodic_id" db:"episodic_id"`
-	L0Abstract string    `json:"l0_abstract" db:"l0_abstract"`
-	KeyTopics  []string  `json:"key_topics" db:"key_topics"`
-	Score      float64   `json:"score" db:"score"`
-	CreatedAt  time.Time `json:"created_at" db:"created_at"`
-	SessionKey string    `json:"session_key" db:"session_key"`
+	EpisodicID string     `json:"episodic_id" db:"episodic_id"`
+	L0Abstract string     `json:"l0_abstract" db:"l0_abstract"`
+	KeyTopics  []string   `json:"key_topics" db:"key_topics"`
+	Score      float64    `json:"score" db:"score"`
+	CreatedAt  time.Time  `json:"created_at" db:"created_at"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty" db:"expires_at"`
+	SessionKey string     `json:"session_key" db:"session_key"`
 }
 
 // EpisodicSearchOptions configures episodic search behavior.
 type EpisodicSearchOptions struct {
-	MaxResults   int
-	MinScore     float64
-	VectorWeight float64
-	TextWeight   float64
+	MaxResults     int
+	MinScore       float64
+	VectorWeight   float64
+	TextWeight     float64
+	CreatedAfter   *time.Time
+	CreatedBefore  *time.Time
+	IncludeExpired bool
 }
 
 // EpisodicStore manages Tier 2 episodic memory.

@@ -98,11 +98,11 @@ The agent loop also uses this metadata for parallel tool-call scheduling. Only r
 
 | Tool | Description |
 |---|---|
-| `memory_search` | Search memory documents (BM25 + vector hybrid) — returns L1 abstracts |
+| `memory_search` | Search memory documents and episodic memory — supports episodic `created_at` filters via `timeRange`, `createdAfter`, and `createdBefore` |
 | `memory_get` | Retrieve a specific memory document by ID |
 | `memory_expand` | Load full episodic memory content (L2 deep retrieval) |
 
-Memory layers: L1 (`memory_search`) returns ranked abstracts; L2 (`memory_expand`) loads the full summary for a given episodic ID.
+Memory layers: L1 (`memory_search`) returns ranked abstracts; L2 (`memory_expand`) loads the full summary for a given episodic ID. Use `query: "*"` with an episodic time filter to list recent episodic memories without running document search.
 
 ### Sessions (`group:sessions`)
 

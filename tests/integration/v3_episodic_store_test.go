@@ -19,6 +19,8 @@ func newEpisodicStore(t *testing.T) *pg.PGEpisodicStore {
 	return pg.NewPGEpisodicStore(db)
 }
 
+func episodicTimePtr(t time.Time) *time.Time { return &t }
+
 func TestStoreEpisodic_CreateAndGet(t *testing.T) {
 	db := testDB(t)
 	tenantID, agentID := seedTenantAgent(t, db)
@@ -216,14 +218,14 @@ func TestStoreEpisodic_SearchSharedBlankL0FallsBackToSummary(t *testing.T) {
 	ctx := tenantCtx(tenantID)
 	s := newEpisodicStore(t)
 
-	summary := "BUV website Workshop 5 Brand Style Test focuses on typography weight contrast"
+	summary := "Project Alpha workshop notes mention visual hierarchy as a focus area"
 	ep := &store.EpisodicSummary{
 		TenantID:   tenantID,
 		AgentID:    agentID,
 		UserID:     "",
 		SessionKey: "channel:discord",
 		Summary:    summary,
-		KeyTopics:  []string{"BUV-website", "workshop-5", "typography"},
+		KeyTopics:  []string{"project-alpha", "workshop-notes", "visual-hierarchy"},
 		SourceType: "channel",
 		SourceID:   "channel-blank-l0-" + tenantID.String()[:8],
 	}
@@ -235,7 +237,7 @@ func TestStoreEpisodic_SearchSharedBlankL0FallsBackToSummary(t *testing.T) {
 		t.Fatalf("force blank l0: %v", err)
 	}
 
-	results, err := s.Search(ctx, "BUV website typography", agentID.String(), "guild:discord:user:nam", store.EpisodicSearchOptions{
+	results, err := s.Search(ctx, "Project Alpha visual hierarchy", agentID.String(), "guild:discord:user:sample", store.EpisodicSearchOptions{
 		MaxResults: 10,
 	})
 	if err != nil {
@@ -249,6 +251,111 @@ func TestStoreEpisodic_SearchSharedBlankL0FallsBackToSummary(t *testing.T) {
 	}
 	if results[0].L0Abstract != summary {
 		t.Fatalf("Search L0Abstract = %q, want summary fallback", results[0].L0Abstract)
+	}
+}
+
+func TestStoreEpisodic_SearchCreatedAtAndExpiryFilters(t *testing.T) {
+	db := testDB(t)
+	tenantID, agentID := seedTenantAgent(t, db)
+	ctx := tenantCtx(tenantID)
+	s := newEpisodicStore(t)
+	userID := "time-user-" + tenantID.String()[:8]
+	base := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)
+
+	items := []struct {
+		sourceID  string
+		summary   string
+		createdAt time.Time
+		expiresAt *time.Time
+	}{
+		{
+			sourceID:  "old",
+			summary:   "Project Alpha old planning note",
+			createdAt: base.Add(-48 * time.Hour),
+		},
+		{
+			sourceID:  "recent",
+			summary:   "Project Alpha recent planning note",
+			createdAt: base.Add(-2 * time.Hour),
+		},
+		{
+			sourceID:  "expired",
+			summary:   "Project Alpha expired planning note",
+			createdAt: base.Add(-1 * time.Hour),
+			expiresAt: episodicTimePtr(base.Add(-30 * time.Minute)),
+		},
+	}
+	for _, item := range items {
+		ep := &store.EpisodicSummary{
+			TenantID:   tenantID,
+			AgentID:    agentID,
+			UserID:     userID,
+			SessionKey: "time-sess",
+			Summary:    item.summary,
+			KeyTopics:  []string{"project-alpha", "planning"},
+			SourceType: "session",
+			SourceID:   "time-filter-" + item.sourceID + "-" + tenantID.String()[:8],
+		}
+		if item.expiresAt != nil {
+			ep.ExpiresAt = item.expiresAt
+		}
+		if err := s.Create(ctx, ep); err != nil {
+			t.Fatalf("Create %s: %v", item.sourceID, err)
+		}
+		if _, err := db.ExecContext(ctx, `UPDATE episodic_summaries SET created_at = $1 WHERE id = $2`, item.createdAt, ep.ID); err != nil {
+			t.Fatalf("set created_at %s: %v", item.sourceID, err)
+		}
+	}
+
+	createdAfter := base.Add(-24 * time.Hour)
+	results, err := s.Search(ctx, "Project Alpha planning", agentID.String(), userID, store.EpisodicSearchOptions{
+		MaxResults:     10,
+		CreatedAfter:   &createdAfter,
+		IncludeExpired: true,
+	})
+	if err != nil {
+		t.Fatalf("Search with CreatedAfter: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("CreatedAfter results = %d, want 2 recent+expired", len(results))
+	}
+	for _, r := range results {
+		if r.CreatedAt.Before(createdAfter) {
+			t.Fatalf("result before CreatedAfter: %s < %s", r.CreatedAt, createdAfter)
+		}
+	}
+
+	results, err = s.Search(ctx, "*", agentID.String(), userID, store.EpisodicSearchOptions{
+		MaxResults:   10,
+		CreatedAfter: &createdAfter,
+	})
+	if err != nil {
+		t.Fatalf("Recent list search: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("non-expired recent results = %d, want 1", len(results))
+	}
+	if results[0].L0Abstract != "Project Alpha recent planning note" {
+		t.Fatalf("recent result = %q, want non-expired recent note", results[0].L0Abstract)
+	}
+	if results[0].ExpiresAt != nil {
+		t.Fatalf("non-expired result ExpiresAt = %v, want nil", results[0].ExpiresAt)
+	}
+
+	createdBefore := base.Add(-24 * time.Hour)
+	results, err = s.Search(ctx, "*", agentID.String(), userID, store.EpisodicSearchOptions{
+		MaxResults:     10,
+		CreatedBefore:  &createdBefore,
+		IncludeExpired: true,
+	})
+	if err != nil {
+		t.Fatalf("CreatedBefore list search: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("CreatedBefore results = %d, want 1 old note", len(results))
+	}
+	if !results[0].CreatedAt.Before(createdBefore) {
+		t.Fatalf("result not before CreatedBefore: %s >= %s", results[0].CreatedAt, createdBefore)
 	}
 }
 

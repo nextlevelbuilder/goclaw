@@ -152,6 +152,7 @@ type episodicScoredRow struct {
 	KeyTopics  pq.StringArray `db:"key_topics"`
 	Score      float64        `db:"score"`
 	CreatedAt  time.Time      `db:"created_at"`
+	ExpiresAt  *time.Time     `db:"expires_at"`
 }
 
 func (r *episodicScoredRow) toEpisodicScored() episodicScored {
@@ -162,5 +163,6 @@ func (r *episodicScoredRow) toEpisodicScored() episodicScored {
 		keyTopics:  []string(r.KeyTopics),
 		score:      r.Score,
 		createdAt:  r.CreatedAt,
+		expiresAt:  r.ExpiresAt,
 	}
 }
