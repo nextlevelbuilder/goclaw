@@ -51,6 +51,22 @@ func TestFullModeToolCallStyleGuidesNaturalProgress(t *testing.T) {
 	}
 }
 
+func TestFullModeMemoryRecallGuidesRecencyFilters(t *testing.T) {
+	prompt := BuildSystemPrompt(fullTestConfig())
+	for _, want := range []string{
+		"recency/date questions",
+		"query:\"*\"",
+		"createdAfter/createdBefore",
+		"timeRange",
+		"Do not put date words or guessed topics into query",
+		"second semantic search",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("full mode memory recall missing %q", want)
+		}
+	}
+}
+
 // --- Minimal mode tests ---
 
 func TestMinimalModeExclusions(t *testing.T) {
@@ -135,6 +151,22 @@ func TestTaskModeMemorySlim(t *testing.T) {
 	// Should NOT have verbose memory recall section
 	if strings.Contains(prompt, "## Memory Recall") {
 		t.Error("task mode should not have verbose Memory Recall section")
+	}
+}
+
+func TestTaskModeMemorySlimGuidesRecencyFilters(t *testing.T) {
+	cfg := fullTestConfig()
+	cfg.Mode = PromptTask
+	prompt := BuildSystemPrompt(cfg)
+	for _, want := range []string{
+		"query:\"*\"",
+		"createdAfter/createdBefore",
+		"timeRange",
+		"do not put date words into query",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("task mode memory instruction missing %q", want)
+		}
 	}
 }
 

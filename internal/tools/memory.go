@@ -49,7 +49,7 @@ func (t *MemorySearchTool) SetHasKG(has bool) {
 func (t *MemorySearchTool) Name() string { return "memory_search" }
 
 func (t *MemorySearchTool) Description() string {
-	return "Mandatory recall step: semantically search MEMORY.md + memory/*.md before answering questions about prior work, decisions, dates, people, preferences, or todos; returns top snippets with path + lines. If response has disabled=true, memory retrieval is unavailable and should be surfaced to the user. IMPORTANT: Always query in the SAME language as the stored memory content. If the user speaks Vietnamese, search in Vietnamese. If memory was written in English, search in English. Matching the language dramatically improves search accuracy. If no relevant results found or confidence is low, tell the user you checked but found nothing — do not fabricate or guess memories."
+	return "Mandatory recall step: search memory documents and episodic memory before answering questions about prior work, decisions, dates, people, preferences, or todos; returns top snippets with path + lines. For recency/date questions such as today, yesterday, last 24h, this week, \"hom nay\", \"hom qua\", or \"24h gan nhat\": do NOT put date words or guessed topics into query. Use query=\"*\" with createdAfter/createdBefore for calendar windows, or query=\"*\" with timeRange for relative windows; then run a second semantic search only if the user asks for a narrower topic. If response has disabled=true, memory retrieval is unavailable and should be surfaced to the user. IMPORTANT: Always query in the SAME language as the stored memory content. If the user speaks Vietnamese, search in Vietnamese. If memory was written in English, search in English. Matching the language dramatically improves search accuracy. If no relevant results found or confidence is low, tell the user you checked but found nothing — do not fabricate or guess memories."
 }
 
 func (t *MemorySearchTool) Parameters() map[string]any {
@@ -58,7 +58,7 @@ func (t *MemorySearchTool) Parameters() map[string]any {
 		"properties": map[string]any{
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Natural language search query. Must be in the same language as the stored memory content (e.g., Vietnamese if memory is in Vietnamese).",
+				"description": "Natural language search query. Must be in the same language as the stored memory content. Use query=\"*\" with timeRange or createdAfter/createdBefore to list episodic memories for a time window; do not put date words such as today/yesterday/hom qua into query.",
 			},
 			"maxResults": map[string]any{
 				"type":        "number",
@@ -75,15 +75,15 @@ func (t *MemorySearchTool) Parameters() map[string]any {
 			},
 			"timeRange": map[string]any{
 				"type":        "string",
-				"description": "Optional episodic-only relative created_at filter such as 24h, 7d, or 2w. Use query='*' with timeRange to list recent episodic memories.",
+				"description": "Optional episodic-only relative created_at filter such as 24h, 7d, or 2w. Use query=\"*\" with timeRange for relative recency requests like last 24h or recent memories. For calendar windows like yesterday/today, prefer createdAfter and createdBefore.",
 			},
 			"createdAfter": map[string]any{
 				"type":        "string",
-				"description": "Optional episodic-only created_at lower bound as an RFC3339 timestamp.",
+				"description": "Optional episodic-only created_at lower bound as an RFC3339 timestamp. Use with query=\"*\" and createdBefore for explicit calendar windows such as yesterday, today, or a named date range.",
 			},
 			"createdBefore": map[string]any{
 				"type":        "string",
-				"description": "Optional episodic-only created_at upper bound as an RFC3339 timestamp.",
+				"description": "Optional episodic-only created_at upper bound as an RFC3339 timestamp. Use with query=\"*\" and createdAfter for explicit calendar windows such as yesterday, today, or a named date range.",
 			},
 			"includeExpired": map[string]any{
 				"type":        "boolean",

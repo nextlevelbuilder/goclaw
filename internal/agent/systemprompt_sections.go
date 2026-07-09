@@ -165,7 +165,7 @@ func buildSafetySlimSection() []string {
 
 // buildMemoryRecallSlimSection generates a concise memory instruction for task mode.
 func buildMemoryRecallSlimSection(hasMemoryExpand bool) []string {
-	line := "Before answering about prior work/decisions: call memory_search."
+	line := "Before answering about prior work/decisions: call memory_search. For today/yesterday/last 24h style questions, use query:\"*\" with createdAfter/createdBefore or timeRange; do not put date words into query."
 	if hasMemoryExpand {
 		line += " Use memory_expand(id) for full session details from episodic results."
 	}
@@ -176,7 +176,7 @@ func buildMemoryRecallSlimSection(hasMemoryExpand bool) []string {
 // buildMemoryRecallMinimalSection generates a 1-line memory instruction for minimal mode.
 func buildMemoryRecallMinimalSection() []string {
 	return []string{
-		"If you need context from past sessions: call memory_search.",
+		"If you need context from past sessions: call memory_search; for recency/date questions use query:\"*\" with time filters.",
 		"",
 	}
 }
@@ -353,6 +353,10 @@ func buildMemoryRecallSection(hasMemoryGet, hasMemoryExpand, hasKG bool) []strin
 				"call memory_search with a relevant query and answer from the matching results. "+
 				"If no relevant results found, say so naturally without mentioning tool names.")
 	}
+	lines = append(lines,
+		"For recency/date questions (today, yesterday, last 24h, this week, \"hom nay\", \"hom qua\", \"24h gan nhat\"), "+
+			"compute the time window and call memory_search with query:\"*\" plus createdAfter/createdBefore or timeRange. "+
+			"Do not put date words or guessed topics into query. First retrieve the broad time window, then run a second semantic search only if the user asks for a narrower topic.")
 
 	if hasMemoryExpand {
 		lines = append(lines,

@@ -186,7 +186,7 @@ var coreToolSummaries = map[string]string{
 	"send_file":              "Send an EXISTING workspace file as a chat attachment — use to resend/share files; does NOT create or modify the file (use write_file for that)",
 	"list_files":             "List directory contents",
 	"exec":                   "Run shell commands",
-	"memory_search":          "Search indexed memory files (MEMORY.md + memory/*.md)",
+	"memory_search":          "Search memory docs + episodic memory; time filters for dates/recency",
 	"memory_get":             "Read specific sections of memory files",
 	"spawn":                  "Spawn a self-clone subagent to handle a task in the background",
 	"web_search":             "Search the web",

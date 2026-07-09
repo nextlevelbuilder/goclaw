@@ -31,6 +31,45 @@ type memorySearchFakeEpisodicStore struct {
 	opts    store.EpisodicSearchOptions
 }
 
+func TestMemorySearchDescriptionGuidesRecencyFilters(t *testing.T) {
+	tool := NewMemorySearchTool()
+	desc := tool.Description()
+	for _, want := range []string{
+		"recency/date questions",
+		"query=\"*\"",
+		"createdAfter/createdBefore",
+		"timeRange",
+		"do NOT put date words",
+		"second semantic search",
+	} {
+		if !strings.Contains(desc, want) {
+			t.Fatalf("description missing %q:\n%s", want, desc)
+		}
+	}
+
+	props, ok := tool.Parameters()["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("tool parameters missing properties")
+	}
+	for name, wants := range map[string][]string{
+		"query":         {"query=\"*\"", "createdAfter/createdBefore", "do not put date words"},
+		"timeRange":     {"query=\"*\"", "relative recency requests", "createdAfter and createdBefore"},
+		"createdAfter":  {"query=\"*\"", "calendar windows"},
+		"createdBefore": {"query=\"*\"", "calendar windows"},
+	} {
+		param, ok := props[name].(map[string]any)
+		if !ok {
+			t.Fatalf("parameter %q missing", name)
+		}
+		got, _ := param["description"].(string)
+		for _, want := range wants {
+			if !strings.Contains(got, want) {
+				t.Fatalf("%s description missing %q:\n%s", name, want, got)
+			}
+		}
+	}
+}
+
 func (f *memorySearchFakeEpisodicStore) Search(_ context.Context, query string, _ string, _ string, opts store.EpisodicSearchOptions) ([]store.EpisodicSearchResult, error) {
 	f.query = query
 	f.opts = opts
