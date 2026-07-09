@@ -45,6 +45,10 @@ type Channel struct {
 	newTransport func(h chatbot.IChatBotMessageHandler) streamTransport
 	transport    streamTransport
 
+	// runCtx is the channel-scoped context captured at Start. Inbound work runs
+	// on it rather than on the SDK callback's ctx, which dies with the frame.
+	runCtx context.Context
+
 	// dedup guards against DingTalk redelivering a message. Keyed by MsgId,
 	// which is stable across server-side resends (unlike the per-delivery
 	// frame header id, which the SDK does not surface to us). Entries evict
@@ -104,6 +108,7 @@ func (c *Channel) Start(ctx context.Context) error {
 	c.GroupHistory().StartFlusher()
 	slog.Info("starting dingtalk bot", "channel", c.Name())
 
+	c.runCtx = ctx
 	c.transport = c.newTransport(c.handleBotMessage)
 	if err := c.transport.Start(ctx); err != nil {
 		c.GroupHistory().StopFlusher()
@@ -137,13 +142,7 @@ func (c *Channel) Stop(_ context.Context) error {
 	return nil
 }
 
-// handleBotMessage is the SDK's inbound callback. Returning from it is the ack
-// that DingTalk waits for, so it must never block on an agent run.
-//
-// Implemented in Phase 3; for now it acks and drops.
-func (c *Channel) handleBotMessage(_ context.Context, _ *chatbot.BotCallbackDataModel) ([]byte, error) {
-	return []byte(""), nil
-}
+// handleBotMessage lives in inbound.go.
 
 // Send delivers an outbound message. Implemented in Phase 4.
 func (c *Channel) Send(_ context.Context, _ bus.OutboundMessage) error {
