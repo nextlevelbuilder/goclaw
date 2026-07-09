@@ -210,6 +210,48 @@ func TestStoreEpisodic_FTSSearch(t *testing.T) {
 	}
 }
 
+func TestStoreEpisodic_SearchSharedBlankL0FallsBackToSummary(t *testing.T) {
+	db := testDB(t)
+	tenantID, agentID := seedTenantAgent(t, db)
+	ctx := tenantCtx(tenantID)
+	s := newEpisodicStore(t)
+
+	summary := "BUV website Workshop 5 Brand Style Test focuses on typography weight contrast"
+	ep := &store.EpisodicSummary{
+		TenantID:   tenantID,
+		AgentID:    agentID,
+		UserID:     "",
+		SessionKey: "channel:discord",
+		Summary:    summary,
+		KeyTopics:  []string{"BUV-website", "workshop-5", "typography"},
+		SourceType: "channel",
+		SourceID:   "channel-blank-l0-" + tenantID.String()[:8],
+	}
+	if err := s.Create(ctx, ep); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if _, err := db.ExecContext(ctx, `UPDATE episodic_summaries SET l0_abstract = '' WHERE id = $1`, ep.ID); err != nil {
+		t.Fatalf("force blank l0: %v", err)
+	}
+
+	results, err := s.Search(ctx, "BUV website typography", agentID.String(), "guild:discord:user:nam", store.EpisodicSearchOptions{
+		MaxResults: 10,
+	})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("Search returned 0 results, expected shared channel memory")
+	}
+	if results[0].L0Abstract == "" {
+		t.Fatal("Search returned blank L0Abstract, want summary fallback")
+	}
+	if results[0].L0Abstract != summary {
+		t.Fatalf("Search L0Abstract = %q, want summary fallback", results[0].L0Abstract)
+	}
+}
+
 func TestStoreEpisodic_TenantIsolation(t *testing.T) {
 	db := testDB(t)
 	tenantA, agentA := seedTenantAgent(t, db)

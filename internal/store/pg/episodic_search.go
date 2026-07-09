@@ -27,7 +27,7 @@ type episodicScored struct {
 // Uses the stored search_vector column (GIN-indexed, 'english' config from migration 040).
 // When userID is empty, returns results across all users (admin view).
 func (s *PGEpisodicStore) ftsSearch(ctx context.Context, query, agentID, userID string, limit int) []episodicScored {
-	q := `SELECT id, session_key, l0_abstract,
+	q := `SELECT id, session_key, COALESCE(NULLIF(l0_abstract, ''), left(summary, 500)) AS l0_abstract,
 	        ts_rank(search_vector, plainto_tsquery('english', $1)) AS score, created_at
 		FROM episodic_summaries
 		WHERE agent_id = $2
@@ -35,10 +35,14 @@ func (s *PGEpisodicStore) ftsSearch(ctx context.Context, query, agentID, userID 
 	args := []any{query, agentID}
 	p := 3
 
-	if userID != "" {
-		q += fmt.Sprintf(" AND user_id = $%d", p)
+	if store.IsSharedMemory(ctx) {
+		// Shared memory searches all user scopes for the agent.
+	} else if userID != "" {
+		q += fmt.Sprintf(" AND (user_id = $%d OR user_id = '')", p)
 		args = append(args, userID)
 		p++
+	} else {
+		q += " AND user_id = ''"
 	}
 	q += fmt.Sprintf(" AND tenant_id = $%d", p)
 	args = append(args, tenantFromCtx(ctx))
@@ -61,17 +65,22 @@ func (s *PGEpisodicStore) ftsSearch(ctx context.Context, query, agentID, userID 
 // When userID is empty, returns results across all users (admin view).
 func (s *PGEpisodicStore) vectorSearch(ctx context.Context, embedding []float32, agentID, userID string, limit int) []episodicScored {
 	vecStr := vectorToString(embedding)
-	q := `SELECT id, session_key, l0_abstract, 1 - (embedding <=> $1) AS score, created_at
+	q := `SELECT id, session_key, COALESCE(NULLIF(l0_abstract, ''), left(summary, 500)) AS l0_abstract,
+			1 - (embedding <=> $1) AS score, created_at
 		FROM episodic_summaries
 		WHERE agent_id = $2
 		  AND embedding IS NOT NULL`
 	args := []any{vecStr, agentID}
 	p := 3
 
-	if userID != "" {
-		q += fmt.Sprintf(" AND user_id = $%d", p)
+	if store.IsSharedMemory(ctx) {
+		// Shared memory searches all user scopes for the agent.
+	} else if userID != "" {
+		q += fmt.Sprintf(" AND (user_id = $%d OR user_id = '')", p)
 		args = append(args, userID)
 		p++
+	} else {
+		q += " AND user_id = ''"
 	}
 	q += fmt.Sprintf(" AND tenant_id = $%d", p)
 	args = append(args, tenantFromCtx(ctx))
