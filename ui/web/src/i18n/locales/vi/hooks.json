@@ -8,7 +8,7 @@
     "badge": "Beta",
     "description": "Hooks cho phép bạn chen vào các sự kiện vòng đời của agent để cho phép, chặn hoặc viết lại nội dung. Đang trong giai đoạn beta — có thể còn lỗi, hãy theo dõi audit log.",
     "howItWorksTitle1": "1. Chọn sự kiện",
-    "howItWorksBody1": "Mỗi hook gắn với một sự kiện như user_prompt_submit, pre_tool_use, hoặc stop. Sự kiện blocking sẽ chờ quyết định của bạn trước khi tiếp tục.",
+    "howItWorksBody1": "Mỗi hook gắn với một sự kiện như user_prompt_submit, pre_tool_use, post_model_response, hoặc stop. Sự kiện blocking sẽ chờ quyết định của bạn trước khi tiếp tục.",
     "howItWorksTitle2": "2. Chọn loại xử lý",
     "howItWorksBody2": "Script chạy JavaScript trong sandbox. HTTP gọi webhook của bạn. Prompt hỏi LLM. Hook dựng sẵn (badge Hệ thống) do GoClaw cung cấp — chỉ chỉnh được toggle bật/tắt.",
     "howItWorksTitle3": "3. Test trước khi bật",
@@ -104,7 +104,7 @@
     "resultHint": "Phản hồi từ dispatcher, bao gồm cả mutation đầu vào từ hook builtin.",
     "emptyState": "Bấm Run để xem hook phản hồi thế nào.",
     "fire": "Chạy hook",
-    "firing": "Đang chạy\u2026",
+    "firing": "Đang chạy…",
     "decision": "Quyết định",
     "duration": "Thời gian",
     "reason": "Lý do",
@@ -113,7 +113,13 @@
     "statusCode": "Mã trạng thái",
     "updatedInput": "Đầu vào đã cập nhật (diff)",
     "toolNamePickerPlaceholder": "Chọn hoặc nhập tên tool...",
-    "overwriteConfirm": "Nội dung hiện tại sẽ bị thay thế bằng mẫu. Tiếp tục?"
+    "overwriteConfirm": "Nội dung hiện tại sẽ bị thay thế bằng mẫu. Tiếp tục?",
+    "modelResponse": "Phản hồi Model",
+    "modelResponseHint": "Nội dung phản hồi của model (JSON). Dùng cho hook post_model_response.",
+    "thinking": "Quá trình suy nghĩ",
+    "thinkingHint": "Chuỗi suy luận của model (tùy chọn).",
+    "toolCalls": "Các cuộc gọi Tool",
+    "toolCallsHint": "Mảng các cuộc gọi tool mà model muốn thực hiện (tùy chọn)."
   },
   "history": {
     "title": "Lịch sử thực thi",

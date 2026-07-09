@@ -8,7 +8,7 @@
     "badge": "Beta",
     "description": "钩子让你拦截 Agent 生命周期事件以放行、阻止或改写其行为。当前处于公测阶段 — 可能存在问题,请关注审计日志。",
     "howItWorksTitle1": "1. 选择事件",
-    "howItWorksBody1": "每个钩子绑定一个事件,例如 user_prompt_submit、pre_tool_use 或 stop。阻塞型事件会等待你的决策后再继续。",
+    "howItWorksBody1": "每个钩子绑定一个事件,例如 user_prompt_submit、pre_tool_use、post_model_response 或 stop。阻塞型事件会等待你的决策后再继续。",
     "howItWorksTitle2": "2. 选择处理器",
     "howItWorksBody2": "Script 在沙箱中运行 JavaScript。HTTP 调用你的 Webhook。Prompt 询问 LLM。内置钩子（系统徽章）由 GoClaw 提供 — 仅可切换启用状态。",
     "howItWorksTitle3": "3. 启用前先测试",
@@ -104,7 +104,7 @@
     "resultHint": "调度器的返回结果,包括来自内置钩子的输入修改。",
     "emptyState": "运行钩子以查看响应。",
     "fire": "运行钩子",
-    "firing": "运行中\u2026",
+    "firing": "运行中…",
     "decision": "决策",
     "duration": "耗时",
     "reason": "原因",
@@ -113,7 +113,13 @@
     "statusCode": "状态码",
     "updatedInput": "已更新输入（差异）",
     "toolNamePickerPlaceholder": "选择或输入工具名称...",
-    "overwriteConfirm": "当前内容将被模板替换。继续？"
+    "overwriteConfirm": "当前内容将被模板替换。继续？",
+    "modelResponse": "模型响应",
+    "modelResponseHint": "模型的响应内容（JSON）。用于 post_model_response 钩子。",
+    "thinking": "思考过程",
+    "thinkingHint": "模型的思维链推理（可选）。",
+    "toolCalls": "工具调用",
+    "toolCallsHint": "模型想要进行的工具调用数组（可选）。"
   },
   "history": {
     "title": "执行历史",

@@ -48,6 +48,24 @@ func bindEvent(rt *goja.Runtime, ev hooks.Event) error {
 		"depth":     ev.Depth,
 		"eventId":   ev.EventID,
 	}
+
+	// PostModelResponse-specific fields
+	if ev.HookEvent == hooks.EventPostModelResponse {
+		viewable["modelResponse"] = ev.ModelResponse
+		viewable["thinking"] = ev.Thinking
+		toolCalls := make([]map[string]any, len(ev.ToolCalls))
+		for i, tc := range ev.ToolCalls {
+			toolCalls[i] = map[string]any{
+				"id":         tc.ID,
+				"name":       tc.Name,
+				"arguments":  tc.Arguments,
+				"metadata":   tc.Metadata,
+				"parseError": tc.ParseError,
+			}
+		}
+		viewable["toolCalls"] = toolCalls
+	}
+
 	b, err := json.Marshal(viewable)
 	if err != nil {
 		return fmt.Errorf("bindEvent marshal: %w", err)

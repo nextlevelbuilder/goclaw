@@ -8,7 +8,7 @@
     "badge": "Beta",
     "description": "Hooks let you intercept agent lifecycle events to allow, block, or rewrite what happens. Currently in beta — expect rough edges and watch your audit log.",
     "howItWorksTitle1": "1. Pick an event",
-    "howItWorksBody1": "Each hook fires on one event such as user_prompt_submit, pre_tool_use, or stop. Blocking events wait for your decision before continuing.",
+    "howItWorksBody1": "Each hook fires on one event such as user_prompt_submit, pre_tool_use, post_model_response, or stop. Blocking events wait for your decision before continuing.",
     "howItWorksTitle2": "2. Choose a handler",
     "howItWorksBody2": "Script runs sandboxed JavaScript. HTTP posts to your webhook. Prompt asks an LLM. Built-in hooks (System badge) ship with GoClaw and only the enabled toggle is editable.",
     "howItWorksTitle3": "3. Test before enabling",
@@ -104,7 +104,7 @@
     "resultHint": "What the dispatcher returned, including any input mutations from builtin hooks.",
     "emptyState": "Run the hook to see how it would respond.",
     "fire": "Run hook",
-    "firing": "Running\u2026",
+    "firing": "Running…",
     "decision": "Decision",
     "duration": "Duration",
     "reason": "Reason",
@@ -113,7 +113,13 @@
     "statusCode": "Status code",
     "updatedInput": "Updated input (diff)",
     "toolNamePickerPlaceholder": "Select or type tool name...",
-    "overwriteConfirm": "Current input will be replaced with template. Continue?"
+    "overwriteConfirm": "Current input will be replaced with template. Continue?",
+    "modelResponse": "Model Response",
+    "modelResponseHint": "The model's response content (JSON). Used by post_model_response hooks.",
+    "thinking": "Thinking",
+    "thinkingHint": "The model's chain-of-thought reasoning (optional).",
+    "toolCalls": "Tool Calls",
+    "toolCallsHint": "Array of tool calls the model wants to make (optional)."
   },
   "history": {
     "title": "Execution history",

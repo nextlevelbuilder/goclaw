@@ -47,12 +47,23 @@ export function HookTestPanel({ hook }: HookTestPanelProps) {
   const { t } = useTranslation("hooks");
   const testMutation = useTestHook();
 
+  const isModelResponse = hook.event === "post_model_response";
   const saved = loadSavedSample(hook.id);
   const [toolName, setToolName] = useState<string>(saved?.toolName ?? "bash");
   const [toolInputRaw, setToolInputRaw] = useState<string>(
     saved?.toolInputRaw ?? JSON.stringify({ command: "ls -la" }, null, 2),
   );
   const [rawInput, setRawInput] = useState<string>(saved?.rawInput ?? "");
+  // post_model_response specific fields
+  const [modelResponse, setModelResponse] = useState<string>(
+    saved?.modelResponse ?? JSON.stringify({ content: "Task completed successfully." }, null, 2),
+  );
+  const [thinking, setThinking] = useState<string>(
+    saved?.thinking ?? "The user asked to list files. I'll use the bash tool.",
+  );
+  const [toolCallsRaw, setToolCallsRaw] = useState<string>(
+    saved?.toolCallsRaw ?? JSON.stringify([{ name: "bash", arguments: { command: "ls -la" } }], null, 2),
+  );
   const [result, setResult] = useState<HookTestResult | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
 
@@ -69,18 +80,33 @@ export function HookTestPanel({ hook }: HookTestPanelProps) {
   const handleFire = async () => {
     setParseError(null);
     let toolInput: Record<string, unknown>;
+    let toolCalls: Array<Record<string, unknown>> | undefined;
     try {
-      toolInput = JSON.parse(toolInputRaw);
+      if (isModelResponse) {
+        toolInput = JSON.parse(modelResponse);
+        toolCalls = JSON.parse(toolCallsRaw);
+      } else {
+        toolInput = JSON.parse(toolInputRaw);
+      }
     } catch {
       setParseError(t("test.parseError"));
       return;
     }
 
-    saveSample(hook.id, { toolName, toolInputRaw, rawInput });
+    saveSample(hook.id, {
+      toolName,
+      toolInputRaw,
+      rawInput,
+      modelResponse,
+      thinking,
+      toolCallsRaw,
+    });
 
     const res = await testMutation.mutateAsync({
       config: hook,
-      sampleEvent: { toolName, toolInput, rawInput: rawInput || undefined },
+      sampleEvent: isModelResponse
+        ? { modelResponse: toolInput, thinking, toolCalls, rawInput: rawInput || undefined }
+        : { toolName, toolInput, rawInput: rawInput || undefined },
     });
     setResult(res.result);
   };
@@ -96,43 +122,85 @@ export function HookTestPanel({ hook }: HookTestPanelProps) {
           </div>
         </header>
 
-        <div className="space-y-1.5">
-          <Label className="text-xs">{t("test.toolName")}</Label>
-          <ToolSingleCombobox
-            value={toolName}
-            onChange={setToolName}
-            onToolSelect={handleToolSelect}
-            placeholder={t("test.toolNamePickerPlaceholder")}
-          />
-          <p className="text-2xs text-muted-foreground">{t("test.toolNameHint")}</p>
-        </div>
+        {isModelResponse ? (
+          <>
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("test.modelResponse")}</Label>
+              <Textarea
+                value={modelResponse}
+                onChange={(e) => setModelResponse(e.target.value)}
+                rows={6}
+                placeholder='{"content": "Task completed successfully."}'
+                className="text-base md:text-sm font-mono"
+              />
+              <p className="text-2xs text-muted-foreground">{t("test.modelResponseHint")}</p>
+            </div>
 
-        <div className="space-y-1.5">
-          <Label className="text-xs">{t("test.toolInput")}</Label>
-          <Textarea
-            value={toolInputRaw}
-            onChange={(e) => setToolInputRaw(e.target.value)}
-            rows={10}
-            placeholder='{"command": "ls -la"}'
-            className="text-base md:text-sm font-mono"
-          />
-          {parseError ? (
-            <p className="text-xs text-destructive">{parseError}</p>
-          ) : (
-            <p className="text-2xs text-muted-foreground">{t("test.toolInputHint")}</p>
-          )}
-        </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("test.thinking")}</Label>
+              <Textarea
+                value={thinking}
+                onChange={(e) => setThinking(e.target.value)}
+                rows={4}
+                placeholder="The user asked to list files. I'll use the bash tool."
+                className="text-base md:text-sm font-mono"
+              />
+              <p className="text-2xs text-muted-foreground">{t("test.thinkingHint")}</p>
+            </div>
 
-        <div className="space-y-1.5">
-          <Label className="text-xs">{t("test.rawInput")}</Label>
-          <Input
-            value={rawInput}
-            onChange={(e) => setRawInput(e.target.value)}
-            placeholder={t("test.rawInputPlaceholder")}
-            className="text-base md:text-sm"
-          />
-          <p className="text-2xs text-muted-foreground">{t("test.rawInputHint")}</p>
-        </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("test.toolCalls")}</Label>
+              <Textarea
+                value={toolCallsRaw}
+                onChange={(e) => setToolCallsRaw(e.target.value)}
+                rows={4}
+                placeholder='[{"name": "bash", "arguments": {"command": "ls -la"}}]'
+                className="text-base md:text-sm font-mono"
+              />
+              <p className="text-2xs text-muted-foreground">{t("test.toolCallsHint")}</p>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("test.toolName")}</Label>
+              <ToolSingleCombobox
+                value={toolName}
+                onChange={setToolName}
+                onToolSelect={handleToolSelect}
+                placeholder={t("test.toolNamePickerPlaceholder")}
+              />
+              <p className="text-2xs text-muted-foreground">{t("test.toolNameHint")}</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("test.toolInput")}</Label>
+              <Textarea
+                value={toolInputRaw}
+                onChange={(e) => setToolInputRaw(e.target.value)}
+                rows={10}
+                placeholder='{"command": "ls -la"}'
+                className="text-base md:text-sm font-mono"
+              />
+              {parseError ? (
+                <p className="text-xs text-destructive">{parseError}</p>
+              ) : (
+                <p className="text-2xs text-muted-foreground">{t("test.toolInputHint")}</p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("test.rawInput")}</Label>
+              <Input
+                value={rawInput}
+                onChange={(e) => setRawInput(e.target.value)}
+                placeholder={t("test.rawInputPlaceholder")}
+                className="text-base md:text-sm"
+              />
+              <p className="text-2xs text-muted-foreground">{t("test.rawInputHint")}</p>
+            </div>
+          </>
+        )}
 
         <Button
           onClick={handleFire}

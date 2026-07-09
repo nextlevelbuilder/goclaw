@@ -20,7 +20,7 @@ import { ScriptEditor } from "./script-editor";
 
 const HOOK_EVENTS = [
   "session_start", "user_prompt_submit", "pre_tool_use",
-  "post_tool_use", "stop", "subagent_start", "subagent_stop",
+  "post_tool_use", "post_model_response", "stop", "subagent_start", "subagent_stop",
 ] as const;
 
 interface HookFormDialogProps {
