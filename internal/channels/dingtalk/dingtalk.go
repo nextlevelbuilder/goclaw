@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/chatbot"
 
@@ -55,6 +56,10 @@ type Channel struct {
 	// themselves after dedupTTL.
 	dedup sync.Map
 
+	// now is the clock. A field so the session-webhook expiry check is testable
+	// without sleeping.
+	now func() time.Time
+
 	stopOnce sync.Once
 	stopCh   chan struct{}
 }
@@ -85,6 +90,7 @@ func New(cfg Config, msgBus *bus.MessageBus, pairingSvc store.PairingStore,
 		cfg:         cfg,
 		client:      NewClient(cfg.ClientID, cfg.ClientSecret),
 		audioMgr:    audioMgr,
+		now:         time.Now,
 		stopCh:      make(chan struct{}),
 	}
 	ch.newTransport = func(h chatbot.IChatBotMessageHandler) streamTransport {
@@ -143,8 +149,3 @@ func (c *Channel) Stop(_ context.Context) error {
 }
 
 // handleBotMessage lives in inbound.go.
-
-// Send delivers an outbound message. Implemented in Phase 4.
-func (c *Channel) Send(_ context.Context, _ bus.OutboundMessage) error {
-	return nil
-}

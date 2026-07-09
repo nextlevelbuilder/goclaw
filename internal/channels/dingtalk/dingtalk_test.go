@@ -176,16 +176,6 @@ func TestHandleBotMessage_Acks(t *testing.T) {
 	}
 }
 
-// Phase 1 has no send path: Send is a no-op. This test pins that so Phase 4
-// replacing it is a deliberate change, not an accident.
-func TestSend_NoopUntilPhase4(t *testing.T) {
-	ch, _ := newTestChannel(t)
-	err := ch.Send(context.Background(), bus.OutboundMessage{ChatID: "cid", Content: "hi"})
-	if err != nil {
-		t.Fatalf("Send: %v", err)
-	}
-}
-
 func TestFactory_AllowListWiredToBaseChannel(t *testing.T) {
 	ch, err := Factory("dt", json.RawMessage(validCreds),
 		json.RawMessage(`{"allow_from":["staff1"]}`), bus.New(), nil)

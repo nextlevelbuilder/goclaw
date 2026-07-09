@@ -97,11 +97,13 @@ func TestInbound_DirectMessagePublishes(t *testing.T) {
 	if msg.SenderID != "staff-1" || msg.UserID != "staff-1" {
 		t.Errorf("sender/user = %q/%q", msg.SenderID, msg.UserID)
 	}
-	if msg.Metadata["session_webhook"] != "https://hook.example/1" {
-		t.Errorf("session_webhook missing from metadata: %v", msg.Metadata)
+	// The dingtalk_* keys are the ones on channels.routingMetaKeys, so they are
+	// the ones Send() will actually see.
+	if msg.Metadata["dingtalk_session_webhook"] != "https://hook.example/1" {
+		t.Errorf("dingtalk_session_webhook missing from metadata: %v", msg.Metadata)
 	}
-	if msg.Metadata["chat_type"] != "direct" {
-		t.Errorf("chat_type = %q", msg.Metadata["chat_type"])
+	if msg.Metadata["dingtalk_chat_type"] != "direct" {
+		t.Errorf("dingtalk_chat_type = %q", msg.Metadata["dingtalk_chat_type"])
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -374,23 +375,38 @@ func (c *Channel) processMessage(ctx context.Context, data *chatbot.BotCallbackD
 }
 
 // buildMetadata carries the DingTalk-specific handles the outbound path needs.
+//
+// The dingtalk_* keys are the ones that must survive the hop into
+// OutboundMessage.Metadata, and so are listed in channels.routingMetaKeys. The
+// unprefixed keys are for logging and other channels' shared conventions.
 func (c *Channel) buildMetadata(in *inbound) map[string]string {
-	md := map[string]string{
-		"platform":        channels.TypeDingtalk,
-		"message_id":      in.MessageID,
-		"conversation_id": in.ConversationID,
-		"sender_id":       in.SenderID,
-		"sender_name":     in.SenderName,
-		"display_name":    channels.SanitizeDisplayName(in.SenderName),
-		"mentioned_bot":   fmt.Sprintf("%t", in.MentionedBot),
-		"chat_type":       map[bool]string{true: "group", false: "direct"}[in.IsGroup],
+	chatType := "direct"
+	if in.IsGroup {
+		chatType = "group"
 	}
-	// The session webhook is the cheap reply path, but it expires. Phase 4 falls
-	// back to the proactive OpenAPI once it has.
+
+	md := map[string]string{
+		"platform":      channels.TypeDingtalk,
+		"message_id":    in.MessageID,
+		"sender_id":     in.SenderID,
+		"sender_name":   in.SenderName,
+		"display_name":  channels.SanitizeDisplayName(in.SenderName),
+		"mentioned_bot": fmt.Sprintf("%t", in.MentionedBot),
+		"chat_type":     chatType,
+
+		// Routed to Send(). chat_type and conversation_id are both needed
+		// because group_session_scope=group_sender suffixes the ChatID, so the
+		// bare conversation id cannot be recovered from it.
+		"dingtalk_chat_type":       chatType,
+		"dingtalk_conversation_id": in.ConversationID,
+	}
+
+	// The session webhook is the cheap reply path, but it is scoped to this one
+	// message and it expires. Send() falls back to the proactive OpenAPI.
 	if in.SessionWebhook != "" {
-		md["session_webhook"] = in.SessionWebhook
+		md["dingtalk_session_webhook"] = in.SessionWebhook
 		if !in.WebhookExpires.IsZero() {
-			md["session_webhook_expires_at"] = fmt.Sprintf("%d", in.WebhookExpires.UnixMilli())
+			md["dingtalk_webhook_expires_at"] = strconv.FormatInt(in.WebhookExpires.UnixMilli(), 10)
 		}
 	}
 	return md

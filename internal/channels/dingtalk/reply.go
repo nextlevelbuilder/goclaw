@@ -9,23 +9,39 @@ import (
 	"net/http"
 )
 
-// replyWebhookText posts a plain-text reply to a message's session webhook.
+// Message types accepted by the session webhook and by msgKey mapping.
+const (
+	msgTypeText     = "text"
+	msgTypeMarkdown = "markdown"
+)
+
+// replyWebhook posts a reply to a message's session webhook.
 //
 // The session webhook is a pre-signed, per-message URL: it carries its own
-// authorization, so no access token is attached. It also expires — callers that
-// might run long must check the expiry and fall back to the proactive OpenAPI.
+// authorization, so no access token is attached. (The upstream connector sends
+// one anyway; it is not required.) It expires — callers must consult
+// webhookUsable before choosing this path.
 //
-// This is the minimum needed to answer an unpaired sender in phase 3. The full
-// outbound path (chunking, markdown, proactive fallback, media) is phase 4.
-func (c *Channel) replyWebhookText(ctx context.Context, webhook, text string) error {
+// Media cannot be sent this way; media always goes through the proactive API.
+func (c *Channel) replyWebhook(ctx context.Context, webhook, msgType, text string) error {
 	if webhook == "" {
 		return fmt.Errorf("dingtalk: no session webhook for reply")
 	}
 
-	payload := map[string]any{
-		"msgtype": "text",
-		"text":    map[string]string{"content": text},
+	var payload map[string]any
+	switch msgType {
+	case msgTypeMarkdown:
+		payload = map[string]any{
+			"msgtype":  msgTypeMarkdown,
+			"markdown": map[string]string{"title": markdownTitle(text), "text": text},
+		}
+	default:
+		payload = map[string]any{
+			"msgtype": msgTypeText,
+			"text":    map[string]string{"content": text},
+		}
 	}
+
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("dingtalk: encode webhook reply: %w", err)
@@ -58,4 +74,9 @@ func (c *Channel) replyWebhookText(ctx context.Context, webhook, text string) er
 		return fmt.Errorf("dingtalk: webhook reply errcode=%d errmsg=%s", envelope.ErrCode, envelope.ErrMsg)
 	}
 	return nil
+}
+
+// replyWebhookText is the plain-text shorthand used by the pairing notice.
+func (c *Channel) replyWebhookText(ctx context.Context, webhook, text string) error {
+	return c.replyWebhook(ctx, webhook, msgTypeText, text)
 }
