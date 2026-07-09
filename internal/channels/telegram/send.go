@@ -813,6 +813,27 @@ func (c *Channel) EditMessage(ctx context.Context, chatID string, messageID int,
 	return err
 }
 
+// ReactToMessage sets a single emoji reaction on a message (implements
+// channels.MessageReactor). Only Telegram-supported reaction emojis are allowed
+// — ✅/❌ are not among them, so callers must pass e.g. 👍. Reacting to the bot's
+// own status post is allowed.
+func (c *Channel) ReactToMessage(ctx context.Context, chatID string, messageID int, emoji string) error {
+	if !telegramSupportedEmojis[emoji] {
+		return fmt.Errorf("emoji %q is not a supported Telegram reaction", emoji)
+	}
+	id, err := parseRawChatID(chatID)
+	if err != nil {
+		return fmt.Errorf("invalid telegram chat id %q: %w", chatID, err)
+	}
+	return c.bot.SetMessageReaction(ctx, &telego.SetMessageReactionParams{
+		ChatID:    tu.ID(id),
+		MessageID: messageID,
+		Reaction: []telego.ReactionType{
+			&telego.ReactionTypeEmoji{Type: telego.ReactionEmoji, Emoji: emoji},
+		},
+	})
+}
+
 // editMessageCaption edits the caption of a media message (photo/document).
 func (c *Channel) editMessageCaption(ctx context.Context, chatID int64, messageID int, htmlCaption string) error {
 	editCap := &telego.EditMessageCaptionParams{

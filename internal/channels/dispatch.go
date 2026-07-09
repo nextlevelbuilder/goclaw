@@ -218,6 +218,29 @@ func (m *Manager) EditChannelMessage(ctx context.Context, channelName, chatID st
 	return editor.EditMessage(ctx, chatID, messageID, content)
 }
 
+// MessageReactor is optionally implemented by channels that can set an emoji
+// reaction on an existing message.
+type MessageReactor interface {
+	ReactToMessage(ctx context.Context, chatID string, messageID int, emoji string) error
+}
+
+// ReactToMessage sets an emoji reaction on a message in a channel by name.
+// Returns an error if the channel is unknown or does not support reactions.
+func (m *Manager) ReactToMessage(ctx context.Context, channelName, chatID string, messageID int, emoji string) error {
+	m.mu.RLock()
+	channel, exists := m.channels[channelName]
+	m.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("channel %s not found", channelName)
+	}
+	reactor, ok := channel.(MessageReactor)
+	if !ok {
+		return fmt.Errorf("channel %s (%s) does not support reactions", channelName, channel.Type())
+	}
+	return reactor.ReactToMessage(ctx, chatID, messageID, emoji)
+}
+
 // TopicMessagePoster is optionally implemented by channels that can post a
 // message into a forum topic and return the sent message's id.
 type TopicMessagePoster interface {

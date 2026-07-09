@@ -111,6 +111,17 @@ type ChannelEditorAware interface {
 	SetChannelEditor(ChannelEditor)
 }
 
+// ReactionSetter abstracts setting a single emoji reaction on an existing
+// message. Implemented by channels.Manager.ReactToMessage. The emoji must be a
+// platform-supported reaction (e.g. Telegram allows a fixed set like 👍/👎/🔥);
+// unsupported channels or emojis return an error.
+type ReactionSetter func(ctx context.Context, channel, chatID string, messageID int, emoji string) error
+
+// ReactionSetterAware tools can receive a reaction setter function.
+type ReactionSetterAware interface {
+	SetReactionSetter(ReactionSetter)
+}
+
 // TopicResolver resolves a forum topic name to its message_thread_id within a
 // specific chat, so the agent can post into a named topic (e.g. "Announcements").
 // Returns ("", false) when the topic is unknown.

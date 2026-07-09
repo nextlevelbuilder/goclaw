@@ -721,6 +721,9 @@ func runGateway() {
 		if ce, ok := t.(tools.ChannelEditorAware); ok {
 			ce.SetChannelEditor(channelMgr.EditChannelMessage)
 		}
+		if rs, ok := t.(tools.ReactionSetterAware); ok {
+			rs.SetReactionSetter(channelMgr.ReactToMessage)
+		}
 		if tr, ok := t.(tools.TopicResolverAware); ok && pgStores != nil && pgStores.Contacts != nil {
 			contacts := pgStores.Contacts
 			tr.SetTopicResolver(func(ctx context.Context, channel, chatID, topicName string) (string, bool) {

@@ -23,14 +23,15 @@ var embeddedMediaPattern = regexp.MustCompile(`MEDIA:\S+`)
 
 // MessageTool allows the agent to proactively send messages to channels.
 type MessageTool struct {
-	workspace     string
-	restrict      bool
-	sender        ChannelSender
-	editor        ChannelEditor
-	topicResolver TopicResolver
-	topicPoster   TopicPoster
-	msgBus        *bus.MessageBus
-	tenantChecker ChannelTenantChecker
+	workspace      string
+	restrict       bool
+	sender         ChannelSender
+	editor         ChannelEditor
+	topicResolver  TopicResolver
+	topicPoster    TopicPoster
+	reactionSetter ReactionSetter
+	msgBus         *bus.MessageBus
+	tenantChecker  ChannelTenantChecker
 }
 
 func NewMessageTool(workspace string, restrict bool) *MessageTool {
@@ -41,6 +42,7 @@ func (t *MessageTool) SetChannelSender(s ChannelSender)               { t.sender
 func (t *MessageTool) SetChannelEditor(e ChannelEditor)               { t.editor = e }
 func (t *MessageTool) SetTopicResolver(r TopicResolver)               { t.topicResolver = r }
 func (t *MessageTool) SetTopicPoster(p TopicPoster)                   { t.topicPoster = p }
+func (t *MessageTool) SetReactionSetter(r ReactionSetter)             { t.reactionSetter = r }
 func (t *MessageTool) SetMessageBus(b *bus.MessageBus)                { t.msgBus = b }
 func (t *MessageTool) SetChannelTenantChecker(c ChannelTenantChecker) { t.tenantChecker = c }
 
@@ -55,12 +57,16 @@ func (t *MessageTool) Parameters() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: 'send' a new message, or 'edit' an existing one (change its text in place). To edit, the user usually replies to the target message — use its id from reply_to_message_id in your context.",
-				"enum":        []string{"send", "edit"},
+				"description": "Action: 'send' a new message, 'edit' an existing one (change its text in place), or 'react' (set an emoji reaction on an existing message — e.g. mark your own status post as done). To edit, the user usually replies to the target message — use its id from reply_to_message_id in your context.",
+				"enum":        []string{"send", "edit", "react"},
 			},
 			"message_id": map[string]any{
 				"type":        "integer",
-				"description": "For action='edit': the id of the message to change. Take it from reply_to_message_id when the user replied to the message they want edited.",
+				"description": "For action='edit' or 'react': the id of the target message. For 'react' this is usually your OWN earlier post (the message_id returned when you sent it). For 'edit' take it from reply_to_message_id when the user replied to the message they want edited.",
+			},
+			"emoji": map[string]any{
+				"type":        "string",
+				"description": "For action='react': the reaction emoji to set on message_id. Telegram allows only a fixed set (e.g. 👍 👎 🔥 🎉 💯 🤝) — ✅ and ❌ are NOT valid reactions. Use 👍 for done/paid.",
 			},
 			"topic": map[string]any{
 				"type":        "string",
@@ -96,8 +102,11 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 	if action == "edit" {
 		return t.executeEdit(ctx, args)
 	}
+	if action == "react" {
+		return t.executeReact(ctx, args)
+	}
 	if action != "send" {
-		return ErrorResult(fmt.Sprintf("unsupported action: %s (only 'send' and 'edit' are supported)", action))
+		return ErrorResult(fmt.Sprintf("unsupported action: %s (only 'send', 'edit' and 'react' are supported)", action))
 	}
 
 	// Posting into a named forum topic of the current group.
@@ -390,6 +399,46 @@ func (t *MessageTool) executeEdit(ctx context.Context, args map[string]any) *Res
 		return ErrorResult(fmt.Sprintf("failed to edit message: %v", err))
 	}
 	return SilentResult(fmt.Sprintf(`{"status":"edited","channel":"%s","target":"%s","message_id":%d}`, channel, target, messageID))
+}
+
+// executeReact sets an emoji reaction on an existing message (e.g. 👍 on the
+// bot's own status post once it's fully paid). Targets message_id in the current
+// channel/chat. Only platform-supported reaction emojis are allowed.
+func (t *MessageTool) executeReact(ctx context.Context, args map[string]any) *Result {
+	if t.reactionSetter == nil {
+		return ErrorResult("reactions are not supported in this context")
+	}
+	messageID := argInt(args, "message_id")
+	if messageID == 0 {
+		return ErrorResult("message_id is required for react (the id of the message to react to — usually your own earlier post)")
+	}
+	emoji := argString(args, "emoji")
+	if emoji == "" {
+		return ErrorResult("emoji is required for react (e.g. 👍 — note ✅/❌ are not valid Telegram reactions)")
+	}
+
+	channel := ToolChannelFromCtx(ctx)
+	if channel == "" {
+		channel = argString(args, "channel")
+	}
+	if channel == "" {
+		return ErrorResult("channel is required (no current channel in context)")
+	}
+	target := ToolChatIDFromCtx(ctx)
+	if target == "" {
+		target = argString(args, "target")
+	}
+	if target == "" {
+		return ErrorResult("target chat ID is required (no current chat in context)")
+	}
+
+	if err := t.validateChannelTenant(ctx, channel, target); err != nil {
+		return err
+	}
+	if err := t.reactionSetter(ctx, channel, target, messageID, emoji); err != nil {
+		return ErrorResult(fmt.Sprintf("failed to set reaction: %v", err))
+	}
+	return SilentResult(fmt.Sprintf(`{"status":"reacted","channel":"%s","target":"%s","message_id":%d,"emoji":"%s"}`, channel, target, messageID, emoji))
 }
 
 // validateChannelTenant checks the target channel belongs to the current tenant.
