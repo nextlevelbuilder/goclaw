@@ -40,6 +40,9 @@ func TestDefault_SensibleDefaults(t *testing.T) {
 	if cfg.Skills.SlashCommands.EffectivePrefix() != "/" {
 		t.Fatalf("slash command prefix = %q, want /", cfg.Skills.SlashCommands.EffectivePrefix())
 	}
+	if cfg.Channels.Discord.HistoryLimit != 200 {
+		t.Fatalf("default discord history limit: got %d, want 200", cfg.Channels.Discord.HistoryLimit)
+	}
 
 }
 
@@ -52,6 +55,9 @@ func TestLoad_MissingFile_UsesDefaults(t *testing.T) {
 	}
 	if cfg.Gateway.Port != 18790 {
 		t.Fatalf("expected default port, got %d", cfg.Gateway.Port)
+	}
+	if cfg.Channels.Discord.HistoryLimit != 200 {
+		t.Fatalf("expected default discord history limit, got %d", cfg.Channels.Discord.HistoryLimit)
 	}
 }
 
@@ -84,6 +90,28 @@ func TestLoad_ValidJSON5(t *testing.T) {
 	// Unset fields should retain defaults
 	if cfg.Agents.Defaults.Provider != "anthropic" {
 		t.Fatalf("default provider should be preserved: got %q", cfg.Agents.Defaults.Provider)
+	}
+}
+
+func TestLoad_DiscordHistoryLimitExplicitZeroDisables(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json5")
+
+	content := `{
+		"channels": {
+			"discord": {
+				"history_limit": 0,
+			},
+		},
+	}`
+	os.WriteFile(cfgPath, []byte(content), 0644)
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if cfg.Channels.Discord.HistoryLimit != 0 {
+		t.Fatalf("discord history_limit explicit zero: got %d, want 0", cfg.Channels.Discord.HistoryLimit)
 	}
 }
 

@@ -61,11 +61,6 @@ func New(cfg config.DiscordConfig, msgBus *bus.MessageBus, pairingSvc store.Pair
 		requireMention = *cfg.RequireMention
 	}
 
-	historyLimit := cfg.HistoryLimit
-	if historyLimit == 0 {
-		historyLimit = channels.DefaultGroupHistoryLimit
-	}
-
 	ch := &Channel{
 		BaseChannel:     base,
 		session:         session,
@@ -77,7 +72,7 @@ func New(cfg config.DiscordConfig, msgBus *bus.MessageBus, pairingSvc store.Pair
 	ch.SetRequireMention(requireMention)
 	ch.SetPairingService(pairingSvc)
 	ch.SetGroupHistory(channels.MakeHistory(channels.TypeDiscord, pendingStore, base.TenantID()))
-	ch.SetHistoryLimit(historyLimit)
+	ch.SetHistoryLimit(cfg.HistoryLimit)
 	return ch, nil
 }
 

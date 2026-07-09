@@ -22,7 +22,7 @@ type discordInstanceConfig struct {
 	GroupPolicy       string                     `json:"group_policy,omitempty"`
 	AllowFrom         []string                   `json:"allow_from,omitempty"`
 	RequireMention    *bool                      `json:"require_mention,omitempty"`
-	HistoryLimit      int                        `json:"history_limit,omitempty"`
+	HistoryLimit      *int                       `json:"history_limit,omitempty"`
 	BlockReply        *bool                      `json:"block_reply,omitempty"`
 	ChatBehavior      *config.ChatBehaviorConfig `json:"chat_behavior,omitempty"`
 	MediaMaxBytes     int64                      `json:"media_max_bytes,omitempty"`
@@ -81,7 +81,7 @@ func buildChannel(name string, creds json.RawMessage, cfg json.RawMessage,
 		DMPolicy:          ic.DMPolicy,
 		GroupPolicy:       ic.GroupPolicy,
 		RequireMention:    ic.RequireMention,
-		HistoryLimit:      ic.HistoryLimit,
+		HistoryLimit:      resolveHistoryLimit(ic.HistoryLimit),
 		BlockReply:        ic.BlockReply,
 		ChatBehavior:      ic.ChatBehavior,
 		MediaMaxBytes:     ic.MediaMaxBytes,
@@ -104,4 +104,11 @@ func buildChannel(name string, creds json.RawMessage, cfg json.RawMessage,
 
 	ch.SetName(name)
 	return ch, nil
+}
+
+func resolveHistoryLimit(limit *int) int {
+	if limit == nil {
+		return channels.DefaultGroupHistoryLimit
+	}
+	return *limit
 }

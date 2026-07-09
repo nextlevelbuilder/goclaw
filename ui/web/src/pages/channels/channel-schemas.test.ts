@@ -73,6 +73,17 @@ describe("telegram configSchema", () => {
   });
 });
 
+describe("discord configSchema", () => {
+  const discordConfig = configSchema["discord"]!;
+
+  it("matches the backend pending group history default", () => {
+    const historyLimit = discordConfig.find((field) => field.key === "history_limit");
+    expect(historyLimit).toBeDefined();
+    expect(historyLimit!.defaultValue).toBe(200);
+    expect(historyLimit!.help).toMatch(/0 = disabled/i);
+  });
+});
+
 describe("pancake configSchema", () => {
   const pancakeConfig = configSchema["pancake"]!;
 

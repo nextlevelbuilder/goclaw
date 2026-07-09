@@ -152,7 +152,7 @@ type DiscordConfig struct {
 	DMPolicy          string              `json:"dm_policy,omitempty"`       // "open" (default), "allowlist", "disabled"
 	GroupPolicy       string              `json:"group_policy,omitempty"`    // "open" (default), "allowlist", "disabled"
 	RequireMention    *bool               `json:"require_mention,omitempty"` // require @bot mention in groups (default true)
-	HistoryLimit      int                 `json:"history_limit,omitempty"`   // max pending group messages for context (default 50, 0=disabled)
+	HistoryLimit      int                 `json:"history_limit,omitempty"`   // max pending group messages for context (default 200, 0=disabled)
 	BlockReply        *bool               `json:"block_reply,omitempty"`     // override gateway block_reply (nil = inherit)
 	ChatBehavior      *ChatBehaviorConfig `json:"chat_behavior,omitempty"`   // override gateway chat behavior (nil = inherit)
 	MediaMaxBytes     int64               `json:"media_max_bytes,omitempty"` // max media download size (default 25MB)

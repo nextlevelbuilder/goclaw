@@ -97,6 +97,9 @@ func Default() *Config {
 			Telegram: TelegramConfig{
 				ReactionLevel: "full",
 			},
+			Discord: DiscordConfig{
+				HistoryLimit: 200,
+			},
 		},
 		Gateway: GatewayConfig{
 			Host:            "0.0.0.0",
