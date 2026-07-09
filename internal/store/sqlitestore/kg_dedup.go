@@ -196,9 +196,10 @@ func (s *SQLiteKnowledgeGraphStore) DedupAfterExtraction(ctx context.Context, ag
 					break
 				}
 			} else if sim >= kgDedupFlagThreshold {
-				if flagErr := s.insertDedupCandidate(ctx, agentID, userID, newE.ID, existE.ID, sim); flagErr != nil {
+				inserted, flagErr := s.insertDedupCandidate(ctx, agentID, userID, newE.ID, existE.ID, sim)
+				if flagErr != nil {
 					slog.Warn("kg.dedup: flag candidate failed", "error", flagErr)
-				} else {
+				} else if inserted {
 					flagged++
 				}
 			}
@@ -210,7 +211,7 @@ func (s *SQLiteKnowledgeGraphStore) DedupAfterExtraction(ctx context.Context, ag
 
 // ScanDuplicates performs a bulk scan of all entities using Go-side pairwise
 // Jaro-Winkler. 2-pass: load distinct entity_types, then compare within each type.
-// Caps per-type pool at kgDedupEntityCap. Returns number of candidates inserted.
+// Caps per-type pool at kgDedupEntityCap. Returns newly inserted candidates.
 func (s *SQLiteKnowledgeGraphStore) ScanDuplicates(ctx context.Context, agentID, userID string, threshold float64, limit int) (int, error) {
 	if threshold <= 0 {
 		threshold = kgDedupFlagThreshold
@@ -277,11 +278,14 @@ func (s *SQLiteKnowledgeGraphStore) ScanDuplicates(ctx context.Context, agentID,
 				a, b := &pool[i], &pool[j]
 				sim := kg.JaroWinkler(a.Name+" "+a.Description, b.Name+" "+b.Description)
 				if sim >= threshold {
-					if insertErr := s.insertDedupCandidate(ctx, agentID, userID, a.ID, b.ID, sim); insertErr != nil {
+					inserted, insertErr := s.insertDedupCandidate(ctx, agentID, userID, a.ID, b.ID, sim)
+					if insertErr != nil {
 						slog.Warn("kg.scan_duplicates: insert candidate failed", "error", insertErr)
 						continue
 					}
-					found++
+					if inserted {
+						found++
+					}
 				}
 			}
 		}
@@ -486,21 +490,28 @@ func (s *SQLiteKnowledgeGraphStore) DismissCandidate(ctx context.Context, agentI
 }
 
 // insertDedupCandidate inserts a dedup candidate pair (smaller ID first for dedup consistency).
-func (s *SQLiteKnowledgeGraphStore) insertDedupCandidate(ctx context.Context, agentID, userID, entityAID, entityBID string, similarity float64) error {
+func (s *SQLiteKnowledgeGraphStore) insertDedupCandidate(ctx context.Context, agentID, userID, entityAID, entityBID string, similarity float64) (bool, error) {
 	if entityAID > entityBID {
 		entityAID, entityBID = entityBID, entityAID
 	}
 	id := uuid.Must(uuid.NewV7()).String()
 	tid := tenantIDForInsert(ctx).String()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err := s.db.ExecContext(ctx, `
+	res, err := s.db.ExecContext(ctx, `
 		INSERT INTO kg_dedup_candidates
 			(id, tenant_id, agent_id, user_id, entity_a_id, entity_b_id, similarity, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(entity_a_id, entity_b_id) DO NOTHING`,
 		id, tid, agentID, userID, entityAID, entityBID, similarity, now,
 	)
-	return err
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
 }
 
 // fetchEntitiesByIDs loads a set of entities by their DB IDs within an agent scope.

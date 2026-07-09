@@ -96,7 +96,7 @@ type KnowledgeGraphStore interface {
 	// Auto-merges at high similarity (>0.98 + name match), flags medium (>0.90) as candidates.
 	DedupAfterExtraction(ctx context.Context, agentID, userID string, newEntityIDs []string) (merged int, flagged int, err error)
 	// ScanDuplicates scans ALL entities with embeddings for duplicates (self-join).
-	// Flags candidates above threshold. Used for on-demand bulk scanning of existing data.
+	// Returns the number of newly inserted review candidates above threshold.
 	ScanDuplicates(ctx context.Context, agentID, userID string, threshold float64, limit int) (int, error)
 	// ListDedupCandidates returns pending dedup candidates for review.
 	ListDedupCandidates(ctx context.Context, agentID, userID string, limit int) ([]DedupCandidate, error)

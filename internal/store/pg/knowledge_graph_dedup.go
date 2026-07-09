@@ -84,9 +84,10 @@ func (s *PGKnowledgeGraphStore) DedupAfterExtraction(ctx context.Context, agentI
 				break // entity merged, stop checking neighbors
 			} else if n.similarity >= dedupCandidateThreshold {
 				// Flag as candidate for manual review
-				if err := s.insertDedupCandidate(ctx, aid, userID, eid, n.id, n.similarity); err != nil {
+				inserted, err := s.insertDedupCandidate(ctx, aid, userID, eid, n.id, n.similarity)
+				if err != nil {
 					slog.Warn("kg.dedup: flag candidate failed", "error", err)
-				} else {
+				} else if inserted {
 					flagged++
 				}
 			}
@@ -143,32 +144,39 @@ func (s *PGKnowledgeGraphStore) knnNeighbors(ctx context.Context, agentID uuid.U
 	return results, nil
 }
 
-func (s *PGKnowledgeGraphStore) insertDedupCandidate(ctx context.Context, agentID uuid.UUID, userID, entityAID, entityBID string, similarity float64) error {
+func (s *PGKnowledgeGraphStore) insertDedupCandidate(ctx context.Context, agentID uuid.UUID, userID, entityAID, entityBID string, similarity float64) (bool, error) {
 	// Ensure consistent ordering (smaller UUID first) to avoid duplicates
 	if entityAID > entityBID {
 		entityAID, entityBID = entityBID, entityAID
 	}
 	aID, err := parseUUID(entityAID)
 	if err != nil {
-		return fmt.Errorf("insert dedup candidate: entity_a_id: %w", err)
+		return false, fmt.Errorf("insert dedup candidate: entity_a_id: %w", err)
 	}
 	bID, err := parseUUID(entityBID)
 	if err != nil {
-		return fmt.Errorf("insert dedup candidate: entity_b_id: %w", err)
+		return false, fmt.Errorf("insert dedup candidate: entity_b_id: %w", err)
 	}
 	tid := tenantIDForInsert(ctx)
-	_, err = s.db.ExecContext(ctx, `
+	res, err := s.db.ExecContext(ctx, `
 		INSERT INTO kg_dedup_candidates (id, tenant_id, agent_id, user_id, entity_a_id, entity_b_id, similarity, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (entity_a_id, entity_b_id) DO NOTHING`,
 		uuid.Must(uuid.NewV7()), tid, agentID, userID, aID, bID, similarity, time.Now(),
 	)
-	return err
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
 }
 
 // ScanDuplicates performs a bulk scan of ALL entities with embeddings using
 // a self-join to find duplicate candidates above the given threshold.
-// Inserts results into kg_dedup_candidates. Returns number of candidates found.
+// Inserts results into kg_dedup_candidates. Returns newly inserted candidates.
 func (s *PGKnowledgeGraphStore) ScanDuplicates(ctx context.Context, agentID, userID string, threshold float64, limit int) (int, error) {
 	aid, err := parseUUID(agentID)
 	if err != nil {
@@ -245,16 +253,19 @@ func (s *PGKnowledgeGraphStore) ScanDuplicates(ctx context.Context, agentID, use
 			slog.Warn("kg.scan_duplicates: invalid entity_b UUID from DB row", "id", bID, "error", err)
 			continue
 		}
-		if _, err := s.db.ExecContext(ctx, `
+		res, err := s.db.ExecContext(ctx, `
 			INSERT INTO kg_dedup_candidates (id, tenant_id, agent_id, user_id, entity_a_id, entity_b_id, similarity, created_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			ON CONFLICT (entity_a_id, entity_b_id) DO NOTHING`,
 			uuid.Must(uuid.NewV7()), tid, aid, userID, aUUID, bUUID, sim, time.Now(),
-		); err != nil {
+		)
+		if err != nil {
 			slog.Warn("kg.scan_duplicates: insert candidate failed", "error", err)
 			continue
 		}
-		found++
+		if n, err := res.RowsAffected(); err == nil && n > 0 {
+			found++
+		}
 	}
 
 	return found, rows.Err()

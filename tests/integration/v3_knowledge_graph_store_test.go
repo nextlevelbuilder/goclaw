@@ -329,6 +329,70 @@ func TestStoreKG_Stats(t *testing.T) {
 	}
 }
 
+func TestStoreKG_ScanDuplicatesCountsOnlyInsertedCandidates(t *testing.T) {
+	db := testDB(t)
+	tenantID, agentID := seedTenantAgent(t, db)
+	ctx := store.WithSharedKG(tenantCtx(tenantID))
+	s := newKGStore(t)
+
+	aid := agentID.String()
+	entities := []store.Entity{
+		{
+			ExternalID:  "dupe-a",
+			Name:        "Alice Nguyen",
+			EntityType:  "person",
+			Description: "Project manager for the migration",
+			Confidence:  0.9,
+		},
+		{
+			ExternalID:  "dupe-b",
+			Name:        "Alice Nguyen",
+			EntityType:  "person",
+			Description: "Project manager for the migration",
+			Confidence:  0.9,
+		},
+	}
+	entityIDs, err := s.IngestExtraction(ctx, aid, "", entities, nil)
+	if err != nil {
+		t.Fatalf("IngestExtraction: %v", err)
+	}
+	if len(entityIDs) != 2 {
+		t.Fatalf("entityIDs len = %d, want 2", len(entityIDs))
+	}
+
+	aID, bID := entityIDs[0], entityIDs[1]
+	if aID > bID {
+		aID, bID = bID, aID
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO kg_dedup_candidates
+			(id, tenant_id, agent_id, user_id, entity_a_id, entity_b_id, similarity, status)
+		VALUES ($1, $2, $3, '', $4, $5, 1.0, 'dismissed')`,
+		uuid.Must(uuid.NewV7()), tenantID, agentID, aID, bID,
+	); err != nil {
+		t.Fatalf("seed dismissed candidate: %v", err)
+	}
+
+	found, err := s.ScanDuplicates(ctx, aid, "", 0.90, 100)
+	if err != nil {
+		t.Fatalf("ScanDuplicates: %v", err)
+	}
+	if found != 0 {
+		t.Fatalf("ScanDuplicates found = %d, want 0 for conflict with dismissed candidate", found)
+	}
+
+	if _, err := db.ExecContext(ctx, `DELETE FROM kg_dedup_candidates WHERE entity_a_id = $1 AND entity_b_id = $2`, aID, bID); err != nil {
+		t.Fatalf("delete seeded candidate: %v", err)
+	}
+	found, err = s.ScanDuplicates(ctx, aid, "", 0.90, 100)
+	if err != nil {
+		t.Fatalf("ScanDuplicates after delete: %v", err)
+	}
+	if found != 1 {
+		t.Fatalf("ScanDuplicates found = %d, want 1 newly inserted candidate", found)
+	}
+}
+
 func TestStoreKG_UserScopeIsolation(t *testing.T) {
 	db := testDB(t)
 	tenantID, agentID := seedTenantAgent(t, db)
