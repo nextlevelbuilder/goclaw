@@ -317,6 +317,13 @@ func (c *Channel) processMessage(ctx context.Context, data *chatbot.BotCallbackD
 	chatID := c.chatID(in)
 	senderName := channels.SanitizeDisplayName(in.SenderName)
 
+	// CreateStream sees only a chatID; record what a card needs to be delivered.
+	c.rememberChat(chatID, chatMeta{
+		ConversationID: in.ConversationID,
+		UserID:         in.SenderID,
+		IsGroup:        in.IsGroup,
+	})
+
 	if in.IsGroup && !c.checkGroupPolicy(ctx, in, chatID) {
 		return
 	}

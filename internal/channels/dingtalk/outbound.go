@@ -39,8 +39,20 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 
 	isGroup := msg.Metadata["dingtalk_chat_type"] == "group"
 	msgType := c.replyMsgType(isGroup)
+	text := strings.TrimSpace(msg.Content)
 
-	if text := strings.TrimSpace(msg.Content); text != "" {
+	// A run that streamed into an AI Card has already shown this answer. Repaint
+	// the card with the formatted version rather than posting it a second time.
+	if card, ok := c.takeCard(msg.ChatID); ok {
+		if text != "" {
+			if err := card.repaint(ctx, text); err != nil {
+				return err
+			}
+		}
+		return c.sendMedia(ctx, msg, isGroup)
+	}
+
+	if text != "" {
 		for _, chunk := range channels.ChunkMarkdown(text, c.cfg.TextChunkLimit) {
 			if err := c.deliver(ctx, msg, isGroup, msgType, chunk); err != nil {
 				return err

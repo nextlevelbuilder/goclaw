@@ -50,6 +50,22 @@ type Channel struct {
 	// on it rather than on the SDK callback's ctx, which dies with the frame.
 	runCtx context.Context
 
+	// cardLimiter paces AI Card writes. Per-channel, because DingTalk meters the
+	// card API per app and one channel instance is exactly one app.
+	cardLimiter *cardRateLimiter
+
+	// chatMeta maps a chatID to the routing facts CreateStream needs but the
+	// key cannot carry (conversation id, group-ness).
+	chatMeta sync.Map
+
+	// cards holds a finished card per chatID, between FinalizeStream and the
+	// Send() that repaints it with the final answer.
+	cards sync.Map
+
+	// liveCards tracks every open card so Stop() can drive them terminal rather
+	// than leaving them spinning at INPUTING forever.
+	liveCards sync.Map
+
 	// dedup guards against DingTalk redelivering a message. Keyed by MsgId,
 	// which is stable across server-side resends (unlike the per-delivery
 	// frame header id, which the SDK does not surface to us). Entries evict
@@ -64,8 +80,8 @@ type Channel struct {
 	stopCh   chan struct{}
 }
 
-// Compile-time interface conformance. StreamingChannel is asserted in Phase 6,
-// once CreateStream/FinalizeStream exist.
+// Compile-time interface conformance. StreamingChannel is asserted in
+// stream_channel.go.
 var _ channels.Channel = (*Channel)(nil)
 
 // New builds a DingTalk channel from a resolved config.
@@ -90,6 +106,7 @@ func New(cfg Config, msgBus *bus.MessageBus, pairingSvc store.PairingStore,
 		cfg:         cfg,
 		client:      NewClient(cfg.ClientID, cfg.ClientSecret),
 		audioMgr:    audioMgr,
+		cardLimiter: newCardRateLimiter(),
 		now:         time.Now,
 		stopCh:      make(chan struct{}),
 	}
@@ -134,8 +151,10 @@ func (c *Channel) Start(ctx context.Context) error {
 // Stop closes the connection and stops background work. Safe to call twice, and
 // safe on a channel whose Start failed — the InstanceLoader calls Stop on a
 // partially-started channel after a start timeout.
-func (c *Channel) Stop(_ context.Context) error {
+func (c *Channel) Stop(ctx context.Context) error {
 	c.stopOnce.Do(func() { close(c.stopCh) })
+	// Cards outlive the process unless they are stamped terminal.
+	c.finalizeLiveCards(ctx)
 	if c.transport != nil {
 		c.transport.Close()
 	}
