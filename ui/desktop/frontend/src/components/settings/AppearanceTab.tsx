@@ -5,6 +5,7 @@ const LANGUAGES = [
   { value: 'en', label: 'English' },
   { value: 'vi', label: 'Tiếng Việt' },
   { value: 'zh', label: '中文' },
+  { value: 'ru', label: 'Русский' },
 ] as const
 
 export function AppearanceTab() {

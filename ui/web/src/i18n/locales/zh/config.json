@@ -371,6 +371,7 @@
   "systemMessages.locale.vi": "越南语",
   "systemMessages.locale.zh": "中文",
   "systemMessages.locale.ko": "韩语",
+  "systemMessages.locale.ru": "俄语",
   "systemMessages.override": "覆盖模板",
   "systemMessages.overrideTip": "替代内置消息发送的模板。变量使用 {{name}}。",
   "systemMessages.defaultTemplate": "默认模板",

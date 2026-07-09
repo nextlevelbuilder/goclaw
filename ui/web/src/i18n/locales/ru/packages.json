@@ -1,0 +1,125 @@
+{
+  "title": "Среда выполнения и пакеты",
+  "description": "Управление средами выполнения и установленными пакетами внутри активного контейнера среды выполнения GoClaw",
+  "runtimes": {
+    "title": "Среды выполнения",
+    "scopeTitle": "Статус сред выполнения в рамках контейнера",
+    "scopeDesc": "Эти проверки выполняются внутри активного контейнера среды выполнения GoClaw. Среды выполнения, установленные на хосте, изменения профиля оболочки и бинарные файлы, управляемые nvm, здесь не используются.",
+    "minimalImageHint": "Опубликованный образ latest включает Python, но не Node. Используйте образ full для Node/npm и встроенных дополнений, base для минимального образа, пересоберите с ENABLE_NODE=true / ENABLE_FULL_SKILLS=true или установите среды выполнения вручную в этом контейнере.",
+    "available": "Доступно",
+    "missing": "Отсутствует",
+    "missingInContainer": "Отсутствует в контейнере"
+  },
+  "system": {
+    "title": "Системные пакеты",
+    "placeholder": "Имя пакета (напр. github-cli)"
+  },
+  "pip": {
+    "title": "Пакеты Python",
+    "placeholder": "Имя пакета (напр. pandas)"
+  },
+  "npm": {
+    "title": "Пакеты Node",
+    "placeholder": "Имя пакета (напр. typescript)"
+  },
+  "github": {
+    "title": "Бинарные файлы GitHub",
+    "placeholder": "owner/repo[@tag] (напр. cli/cli@v2.45.0)",
+    "browse": "Обзор релизов",
+    "muslWarning": "Alpine Linux использует musl libc. Бинарные файлы, скомпилированные под glibc, могут не работать во время выполнения. Предпочитайте статические или совместимые с musl релизы.",
+    "muslDismiss": "Закрыть",
+    "pickerTitle": "Выберите релиз из {{repo}}",
+    "pickerEmpty": "Релизы для {{repo}} не найдены",
+    "pickerLoading": "Загрузка релизов...",
+    "pickerMatchingAssets": "{{count}} подходящих / {{total}} всего",
+    "pickerPrerelease": "Предварительный выпуск",
+    "pickerSelect": "Выбрать",
+    "columns": {
+      "repo": "Репозиторий",
+      "tag": "Версия",
+      "binaries": "Бинарные файлы",
+      "installedAt": "Установлено"
+    }
+  },
+  "updates": {
+    "available": "Доступно обновлений: {{count}}",
+    "none": "Все пакеты актуальны",
+    "refresh": "Обновить",
+    "refreshing": "Обновление...",
+    "lastCheckedAgo": "Последняя проверка {{ago}}",
+    "neverChecked": "Ещё не проверялось",
+    "update": "Обновить",
+    "updateAll": "Обновить все",
+    "updating": "Обновление {{name}}...",
+    "updateSucceeded": "{{name}} обновлён до {{version}}",
+    "updateFailed": "Не удалось обновить {{name}}: {{reason}}",
+    "updateAllResult": "Успешно: {{succeeded}}, с ошибкой: {{failed}}",
+    "confirmAllTitle": "Обновить пакетов: {{count}}?",
+    "confirmAllBody": "Это может занять несколько минут. Отдельные обновления применяются последовательно.",
+    "selected": "Выбрано: {{count}}",
+    "manifestDesyncWarn": "Бинарный файл обновлён, но не удалось сохранить манифест. Требуется ручное восстановление для {{name}}.",
+    "cacheStale": "Кэш обновлений устарел. Пожалуйста, сначала обновите.",
+    "adminOnly": "Требуется доступ администратора",
+    "empty": "Нет доступных обновлений",
+    "source": {
+      "github": "GitHub",
+      "pip": "pip",
+      "npm": "npm",
+      "apk": "apk"
+    },
+    "filter": {
+      "all": "Все источники",
+      "label": "Фильтр"
+    },
+    "unavailable": {
+      "pip": "pip не установлен",
+      "npm": "npm не установлен",
+      "apk": "apk недоступен в этой системе"
+    },
+    "button": {
+      "tooltip": {
+        "github": "Обновить из релиза GitHub",
+        "pip": "Обновить через pip",
+        "npm": "Обновить через npm",
+        "apk": "Обновить через apk (системный пакет)"
+      }
+    },
+    "summary": {
+      "perSource": "{{source}}: {{count}}"
+    }
+  },
+  "actions": {
+    "install": "Установить",
+    "uninstall": "Удалить",
+    "installing": "Установка...",
+    "uninstalling": "Удаление..."
+  },
+  "messages": {
+    "installSuccess": "{{name}} успешно установлен",
+    "installError": "Не удалось установить {{name}}",
+    "uninstallSuccess": "{{name}} успешно удалён",
+    "uninstallError": "Не удалось удалить {{name}}"
+  },
+  "confirmUninstall": {
+    "title": "Подтвердить удаление",
+    "description": "Вы уверены, что хотите удалить {{name}}? Это действие нельзя отменить."
+  },
+  "table": {
+    "name": "Имя",
+    "version": "Версия",
+    "actions": "Действия",
+    "empty": "Пакеты не установлены"
+  },
+  "tabs": {
+    "system": "Система",
+    "python": "Python",
+    "node": "Node",
+    "github": "GitHub",
+    "cliCredentials": "Учётные данные CLI"
+  },
+  "runtimesHeader": {
+    "title": "Среды выполнения",
+    "available": "Доступно",
+    "missing": "Отсутствует"
+  }
+}

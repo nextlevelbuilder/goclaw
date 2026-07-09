@@ -1,0 +1,82 @@
+{
+  "title": "Рабочие станции",
+  "description": "Управление подключениями к удалённым рабочим станциям (SSH, Docker) для выполнения команд агентами.",
+  "addWorkstation": "Добавить рабочую станцию",
+  "emptyTitle": "Рабочие станции не настроены",
+  "emptyDescription": "Добавьте рабочую станцию, чтобы агенты могли выполнять команды на удалённых машинах.",
+  "backend": {
+    "ssh": "SSH",
+    "docker": "Docker"
+  },
+  "status": {
+    "active": "Активна",
+    "inactive": "Неактивна"
+  },
+  "columns": {
+    "name": "Имя",
+    "key": "Ключ",
+    "backend": "Бэкенд",
+    "status": "Статус",
+    "created": "Создана",
+    "actions": "Действия"
+  },
+  "actions": {
+    "edit": "Изменить",
+    "delete": "Удалить",
+    "test": "Проверить подключение",
+    "activate": "Активировать",
+    "deactivate": "Деактивировать"
+  },
+  "createDialog": {
+    "title": "Добавить рабочую станцию",
+    "description": "Настройте новое подключение к удалённой рабочей станции.",
+    "nameLabel": "Отображаемое имя",
+    "namePlaceholder": "Мой сервер разработки",
+    "keyLabel": "Ключ рабочей станции",
+    "keyPlaceholder": "dev-server",
+    "keyHint": "Строчные буквы, цифры, дефисы. Используется агентами для ссылки на эту рабочую станцию.",
+    "backendLabel": "Тип бэкенда",
+    "sshOption": "SSH",
+    "dockerOption": "Docker",
+    "hostLabel": "Хост",
+    "hostPlaceholder": "192.168.1.100",
+    "portLabel": "Порт",
+    "userLabel": "Пользователь SSH",
+    "userPlaceholder": "ubuntu",
+    "identityFileLabel": "Файл идентификации (необязательно)",
+    "identityFilePlaceholder": "~/.ssh/id_rsa",
+    "containerLabel": "Имя / ID контейнера",
+    "containerPlaceholder": "my-container",
+    "dockerHostLabel": "Docker-хост (необязательно)",
+    "dockerHostPlaceholder": "unix:///var/run/docker.sock",
+    "cancel": "Отмена",
+    "create": "Создать"
+  },
+  "deleteDialog": {
+    "title": "Удалить рабочую станцию",
+    "description": "Вы уверены, что хотите удалить «{{name}}»? Это нельзя отменить.",
+    "confirmLabel": "Удалить"
+  },
+  "testResult": {
+    "success": "Подключение успешно",
+    "notImplemented": "Проверка подключения пока недоступна"
+  },
+  "activity": {
+    "title": "Недавняя активность",
+    "emptyTitle": "Активности пока нет",
+    "emptyDescription": "События выполнения появятся здесь, как только агенты запустят команды.",
+    "columns": {
+      "action": "Действие",
+      "cmdPreview": "Команда",
+      "exitCode": "Код выхода",
+      "duration": "Длительность",
+      "agent": "Агент",
+      "timestamp": "Время"
+    },
+    "actions": {
+      "exec": "Выполнить",
+      "deny": "Отклонено"
+    },
+    "loadMore": "Загрузить ещё"
+  }
+}

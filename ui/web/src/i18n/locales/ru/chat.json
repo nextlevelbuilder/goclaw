@@ -1,0 +1,34 @@
+{
+  "deleteChat": "Удалить чат",
+  "deleteChatConfirm": "Это навсегда удалит эту беседу и все её сообщения.",
+  "newChat": "Новый чат",
+  "openSessions": "Открытые сессии",
+  "readOnly": "Только чтение — эта сессия принадлежит другому пользователю",
+  "contextUsage": {
+    "tooltip": "{{used}} / {{max}} токенов ({{percent}}%) · сжатий: {{compactions}} · последнее: {{lastCompact}}",
+    "never": "никогда"
+  },
+  "empty": {
+    "title": "Начните беседу",
+    "description": "Отправьте сообщение, чтобы начать общение с агентом."
+  },
+  "media": {
+    "image": "Изображение",
+    "video": "Видео",
+    "audio": "Аудио",
+    "voice": "Голосовое сообщение",
+    "document": "Документ",
+    "animation": "Анимация",
+    "attached": "прикреплено"
+  },
+  "forwardedFrom": "Переслано от",
+  "replyingTo": "Ответ на",
+  "error": {
+    "notConnected": "Нет соединения. Пожалуйста, дождитесь установления соединения."
+  },
+  "selectAgent": {
+    "title": "Выберите агента",
+    "description": "Выберите агента, чтобы начать общение"
+  },
+  "imageGenDownloadName": "generated-{{timestamp}}.png"
+}

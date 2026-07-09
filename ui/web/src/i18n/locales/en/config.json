@@ -372,6 +372,7 @@
   "systemMessages.locale.vi": "Vietnamese",
   "systemMessages.locale.zh": "Chinese",
   "systemMessages.locale.ko": "Korean",
+  "systemMessages.locale.ru": "Russian",
   "systemMessages.override": "Override Template",
   "systemMessages.overrideTip": "Template sent instead of the built-in message for the selected locale. Variables use {{name}}.",
   "systemMessages.defaultTemplate": "Default Template",

@@ -113,8 +113,16 @@ describe("hooks i18n key contracts", () => {
     expect(zhKeys).toEqual(enKeys);
   });
 
+  it("ru locale has same top-level keys as en", async () => {
+    const en = await import("@/i18n/locales/en/hooks.json");
+    const ru = await import("@/i18n/locales/ru/hooks.json");
+    const enKeys = Object.keys(en as unknown as Record<string, unknown>).sort();
+    const ruKeys = Object.keys(ru as unknown as Record<string, unknown>).sort();
+    expect(ruKeys).toEqual(enKeys);
+  });
+
   it("decision keys exist in all locales", async () => {
-    for (const locale of ["en", "vi", "zh"]) {
+    for (const locale of ["en", "vi", "zh", "ru"]) {
       const mod = await import(`@/i18n/locales/${locale}/hooks.json`);
       const data = mod as unknown as Record<string, Record<string, string>>;
       expect(data.decision?.allow).toBeTruthy();

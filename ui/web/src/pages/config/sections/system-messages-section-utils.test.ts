@@ -46,7 +46,7 @@ describe("system-messages-section-utils", () => {
   });
 
   it("normalizes all supported locales for each known message definition", () => {
-    expect(SYSTEM_MESSAGE_LOCALES.map((locale) => locale.code)).toEqual(["en", "vi", "zh", "ko"]);
+    expect(SYSTEM_MESSAGE_LOCALES.map((locale) => locale.code)).toEqual(["en", "vi", "zh", "ko", "ru"]);
 
     const draft = normalizeSystemMessagesDraft(
       {
@@ -91,6 +91,7 @@ describe("system-messages-section-utils", () => {
           vi: "Nhóm {{code}}",
           zh: "",
           ko: "",
+          ru: "",
         },
       },
     });
@@ -108,6 +109,7 @@ describe("system-messages-section-utils", () => {
           vi: "",
           zh: "",
           ko: "",
+          ru: "",
         },
       },
     });
@@ -132,6 +134,7 @@ describe("system-messages-section-utils", () => {
           vi: "",
           zh: "",
           ko: "",
+          ru: "",
         },
       },
     });
