@@ -15,7 +15,7 @@ import { useTenants } from "@/hooks/use-tenants";
 import { CategoryGroup } from "./builtin-tool-category-group";
 
 const CATEGORY_ORDER = [
-  "filesystem", "runtime", "web", "memory", "media", "browser",
+  "filesystem", "runtime", "web", "memory", "vault", "media", "browser",
   "sessions", "messaging", "scheduling", "subagents", "skills", "delegation", "teams",
 ];
 
@@ -204,4 +204,3 @@ export function BuiltinToolsPage() {
     </div>
   );
 }
-

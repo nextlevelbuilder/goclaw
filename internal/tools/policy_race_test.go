@@ -152,6 +152,15 @@ func TestToolGroups_BuiltinGroups_Seeded(t *testing.T) {
 	if !containsTool(memory, "memory_search") {
 		t.Errorf("memory group should contain memory_search, got: %v", memory)
 	}
+	if !containsTool(memory, "memory_get") {
+		t.Errorf("memory group should contain memory_get, got: %v", memory)
+	}
+	if !containsTool(memory, "memory_expand") {
+		t.Errorf("memory group should contain memory_expand, got: %v", memory)
+	}
+	if !containsTool(memory, "knowledge_graph_search") {
+		t.Errorf("memory group should contain knowledge_graph_search, got: %v", memory)
+	}
 
 	web, ok := reg.GetToolGroup("web")
 	if !ok {

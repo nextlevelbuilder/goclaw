@@ -92,6 +92,7 @@
       "runtime": "런타임",
       "web": "웹",
       "memory": "메모리",
+      "vault": "지식 저장소",
       "media": "미디어",
       "browser": "브라우저",
       "sessions": "세션",

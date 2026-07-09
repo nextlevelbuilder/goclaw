@@ -6,6 +6,7 @@
       "filesystem": "文件系统",
       "media": "媒体",
       "memory": "内存",
+      "vault": "知识库",
       "messaging": "消息",
       "runtime": "运行时",
       "scheduling": "调度",

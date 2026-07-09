@@ -362,7 +362,7 @@ flowchart TD
 | `fs` | `read_file`, `write_file`, `list_files`, `edit`, `send_file` |
 | `runtime` | `exec` |
 | `web` | `web_search`, `web_fetch` |
-| `memory` | `memory_search`, `memory_get` |
+| `memory` | `memory_search`, `memory_get`, `memory_expand`, `knowledge_graph_search` |
 | `sessions` | `sessions_list`, `sessions_history`, `sessions_send`, `spawn`, `session_status` |
 | `automation` | `cron` |
 | `messaging` | `message`, `create_forum_topic`, `list_group_members` |

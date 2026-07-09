@@ -96,6 +96,7 @@
       "runtime": "Runtime",
       "web": "Web",
       "memory": "Memory",
+      "vault": "Vault",
       "media": "Media",
       "browser": "Browser",
       "sessions": "Sessions",
