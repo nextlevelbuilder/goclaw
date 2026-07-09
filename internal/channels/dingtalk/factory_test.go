@@ -77,15 +77,12 @@ func TestConfigDefaults(t *testing.T) {
 	if !cfg.StreamingOrDefault() {
 		t.Error("streaming should default to true")
 	}
-	if cfg.AsyncModeOrDefault() {
-		t.Error("async_mode should default to false")
-	}
 }
 
 // A nil *bool means "unset" and must not collide with an explicit false.
 func TestConfigExplicitFalseBeatsDefault(t *testing.T) {
 	cfg, err := resolve(json.RawMessage(validCreds), json.RawMessage(
-		`{"require_mention":false,"streaming":false,"async_mode":true}`))
+		`{"require_mention":false,"streaming":false}`))
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -94,9 +91,6 @@ func TestConfigExplicitFalseBeatsDefault(t *testing.T) {
 	}
 	if cfg.StreamingOrDefault() {
 		t.Error("streaming=false must survive the default")
-	}
-	if !cfg.AsyncModeOrDefault() {
-		t.Error("async_mode=true not honored")
 	}
 }
 
@@ -111,8 +105,7 @@ func TestConfigFullRoundTrip(t *testing.T) {
 		"media_max_mb": 5,
 		"history_limit": 42,
 		"group_reply_mode": "markdown",
-		"group_session_scope": "group_sender",
-		"ack_text": "收到"
+		"group_session_scope": "group_sender"
 	}`
 	cfg, err := resolve(json.RawMessage(validCreds), json.RawMessage(raw))
 	if err != nil {
@@ -142,9 +135,6 @@ func TestConfigFullRoundTrip(t *testing.T) {
 	if cfg.GroupSessionScope != GroupSessionScopeGroupSender {
 		t.Errorf("group_session_scope = %q", cfg.GroupSessionScope)
 	}
-	if cfg.AckText != "收到" {
-		t.Errorf("ack_text = %q", cfg.AckText)
-	}
 }
 
 // A typo in an enum must fail when the operator saves the instance, not hours
@@ -157,6 +147,10 @@ func TestConfigValidate_RejectsBadEnums(t *testing.T) {
 	}{
 		{"bad group_reply_mode", func(c *Config) { c.GroupReplyMode = "aicards" }, "group_reply_mode"},
 		{"bad group_session_scope", func(c *Config) { c.GroupSessionScope = "sender" }, "group_session_scope"},
+		// BaseChannel's policy switches fall through to their permissive branch
+		// on an unknown value, so a typo must not survive validation.
+		{"typo group_policy", func(c *Config) { c.GroupPolicy = "opne" }, "group_policy"},
+		{"typo dm_policy", func(c *Config) { c.DMPolicy = "pairnig" }, "dm_policy"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

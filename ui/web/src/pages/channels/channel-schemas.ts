@@ -96,6 +96,10 @@ export const credentialsSchema: Record<string, FieldDef[]> = {
     { key: "app_token", label: "App-Level Token", type: "password", required: true, placeholder: "xapp-...", help: "App-Level Token with connections:write scope (required for Socket Mode)" },
     { key: "user_token", label: "User Token (Optional)", type: "password", required: false, placeholder: "xoxp-...", help: "Optional: User OAuth Token for custom bot identity. Leave empty to use default bot identity." },
   ],
+  dingtalk: [
+    { key: "client_id", label: "Client ID (AppKey)", type: "password", required: true, placeholder: "dingxxxxxxxx", help: "AppKey of your DingTalk enterprise-internal robot app" },
+    { key: "client_secret", label: "Client Secret (AppSecret)", type: "password", required: true, help: "AppSecret of the same app" },
+  ],
   feishu: [
     { key: "app_id", label: "App ID", type: "text", required: true, placeholder: "cli_xxxxx" },
     { key: "app_secret", label: "App Secret", type: "password", required: true },
@@ -189,6 +193,21 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "thread_ttl", label: "Thread Participation TTL (hours)", type: "number", defaultValue: 24, help: "Hours before bot stops auto-replying in threads it participated in. 0 = always require @mention." },
     { key: "reaction_level", label: "Reaction Level", type: "select", options: [{ value: "off", label: "Off" }, { value: "minimal", label: "Minimal (thinking + done)" }, { value: "full", label: "Full (all status emoji)" }], defaultValue: "off", help: "Show emoji reactions on user messages during agent processing" },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Slack user IDs (U...) allowed to interact; empty = no allowlist filter" },
+    ...chatBehaviorOverrideFields,
+  ],
+  dingtalk: [
+    { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
+    { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "pairing" },
+    { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true },
+    { key: "group_reply_mode", label: "Group Reply Mode", type: "select", options: [{ value: "aicard", label: "AI Card (streaming)" }, { value: "text", label: "Plain text" }, { value: "markdown", label: "Markdown" }], defaultValue: "aicard", help: "Groups only. DMs always stream into an AI Card." },
+    { key: "group_session_scope", label: "Group Session Scope", type: "select", options: [{ value: "group", label: "One session per group" }, { value: "group_sender", label: "One session per sender in a group" }], defaultValue: "group" },
+    { key: "streaming", label: "Stream replies", type: "boolean", defaultValue: true, help: "Type the answer into an AI Card as it is generated" },
+    { key: "allow_from", label: "Allowed Users", type: "tags", help: "DingTalk staff IDs allowed to interact; empty = no allowlist filter" },
+    { key: "group_allow_from", label: "Group Allowlist Bypass", type: "tags", help: "Staff IDs that bypass the group policy" },
+    { key: "history_limit", label: "Group History Limit", type: "number", help: "Max pending group messages for context (0 = disabled)" },
+    { key: "text_chunk_limit", label: "Text Chunk Limit", type: "number", defaultValue: 4000, help: "Max characters per message" },
+    { key: "media_max_mb", label: "Max Media Size (MB)", type: "number", defaultValue: 20, help: "Inbound attachment size cap" },
+    { key: "endpoint", label: "Gateway Endpoint", type: "text", placeholder: "https://api.dingtalk.com", help: "Override the Stream-mode gateway host", advanced: true },
     ...chatBehaviorOverrideFields,
   ],
   feishu: [
@@ -334,6 +353,11 @@ export interface ScopeEntry {
 }
 
 export const requiredScopes: Partial<Record<string, ScopeEntry[]>> = {
+  // dingtalk is deliberately absent: requiredScopes lists exact permission ids
+  // that an operator pastes into the provider console, and DingTalk's ids for
+  // the card / robot / media permissions are not verified here. A wrong id is
+  // worse than none. See docs/05-channels-messaging.md for the permission list
+  // by name.
   feishu: [
     { scope: "application:application:self_manage" },
     { scope: "application:bot.menu:write" },

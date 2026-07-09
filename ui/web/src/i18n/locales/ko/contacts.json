@@ -22,6 +22,7 @@
     "discord": "Discord — 표시 이름과 사용자명이 자동으로 제공됩니다.",
     "zalo": "Zalo — 표시 이름이 자동으로 제공됩니다.",
     "slack": "Slack — Slack API를 통해 표시 이름이 해석됩니다 (봇이 워크스페이스에 있어야 함).",
+    "dingtalk": "DingTalk — 발신자 이름은 모든 메시지에 포함되어 전달됩니다(senderNick). 추가 권한이 필요하지 않습니다.",
     "feishu": "Feishu/Lark — contact:user.base:readonly 권한이 필요합니다. 없으면 이름이 비어 있습니다."
   },
   "selectedCount": "{{count}}개 선택됨",

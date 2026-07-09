@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/chatbot"
 
@@ -18,14 +20,18 @@ import (
 // handler, which is how the whole inbound pipeline is exercised without a
 // network connection.
 type fakeTransport struct {
-	startErr error
-	started  atomic.Int32
-	closed   atomic.Int32
-	handler  chatbot.IChatBotMessageHandler
+	startErr   error
+	startDelay time.Duration
+	started    atomic.Int32
+	closed     atomic.Int32
+	handler    chatbot.IChatBotMessageHandler
 }
 
 func (f *fakeTransport) Start(context.Context) error {
 	f.started.Add(1)
+	if f.startDelay > 0 {
+		time.Sleep(f.startDelay)
+	}
 	return f.startErr
 }
 
@@ -187,5 +193,69 @@ func TestFactory_AllowListWiredToBaseChannel(t *testing.T) {
 	}
 	if ch.IsAllowed("intruder") {
 		t.Error("intruder should not be allowed")
+	}
+}
+
+// The InstanceLoader runs Start on its own goroutine and calls Stop from
+// another when Start overruns its timeout (instance_loader.go:411-454), so Stop
+// can read c.transport while Start is still assigning it. Under -race this
+// caught a real data race.
+func TestStartStop_ConcurrentIsRaceFree(t *testing.T) {
+	for range 20 {
+		ch, ft := newTestChannel(t)
+		// A Start that blocks long enough for Stop to overlap it.
+		ft.startDelay = 5 * time.Millisecond
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			_ = ch.Start(context.Background())
+		}()
+		go func() {
+			defer wg.Done()
+			_ = ch.Stop(context.Background())
+		}()
+		wg.Wait()
+	}
+}
+
+// A saturated bus must not pin inbound goroutines past shutdown.
+func TestInbound_PublishGivesUpWhenChannelStops(t *testing.T) {
+	msgBus := bus.New()
+	ch, err := New(Config{ClientID: "k", ClientSecret: "s", DMPolicy: "open", GroupPolicy: "open"},
+		msgBus, nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ft := &fakeTransport{}
+	ch.newTransport = func(h chatbot.IChatBotMessageHandler) streamTransport {
+		ft.handler = h
+		return ft
+	}
+	if err := ch.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	for msgBus.TryPublishInbound(bus.InboundMessage{ChatID: "filler"}) {
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ch.processMessage(ch.runCtx, &chatbot.BotCallbackDataModel{
+			MsgId: "m1", Msgtype: "text", ConversationType: conversationTypeDirect,
+			SenderStaffId: "staff-1", Text: chatbot.BotCallbackDataTextModel{Content: "hi"},
+		})
+	}()
+
+	// Stop cancels runCtx; the blocked publish must give up rather than leak.
+	if err := ch.Stop(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("processMessage still pinned on a saturated bus after Stop")
 	}
 }

@@ -163,13 +163,11 @@ func TestAPIToken_ConcurrentSingleFetch(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 50 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if _, err := c.apiToken(ctx); err != nil {
 				t.Errorf("apiToken: %v", err)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

@@ -466,7 +466,7 @@ func TestCard_FailedRunLeavesCardAndPostsError(t *testing.T) {
 }
 
 func TestStreamEnabled_Matrix(t *testing.T) {
-	no, yes := false, true
+	no := false
 	tests := []struct {
 		name    string
 		cfg     Config
@@ -476,7 +476,6 @@ func TestStreamEnabled_Matrix(t *testing.T) {
 		{"default dm", Config{}, false, true},
 		{"default group", Config{GroupReplyMode: GroupReplyModeAICard}, true, true},
 		{"streaming off", Config{Streaming: &no}, false, false},
-		{"async mode", Config{AsyncMode: &yes}, false, false},
 		{"group text mode", Config{GroupReplyMode: GroupReplyModeText}, true, false},
 		{"group markdown mode", Config{GroupReplyMode: GroupReplyModeMarkdown}, true, false},
 		// The asymmetry: group_reply_mode never disables DM streaming.

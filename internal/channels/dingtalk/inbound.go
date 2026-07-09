@@ -54,7 +54,12 @@ func (c *Channel) handleBotMessage(_ context.Context, data *chatbot.BotCallbackD
 
 	// The callback ctx dies with the frame. The agent run must not, so it
 	// inherits the channel-scoped context captured in Start().
+	c.stateMu.Lock()
 	ctx := c.runCtx
+	c.stateMu.Unlock()
+	if ctx == nil {
+		return ackEmpty, nil
+	}
 
 	go func() {
 		defer safego.Recover(nil, "component", "dingtalk_inbound", "channel", c.Name())
@@ -372,7 +377,7 @@ func (c *Channel) processMessage(ctx context.Context, data *chatbot.BotCallbackD
 		content = c.GroupHistory().BuildContext(chatID, content, c.HistoryLimit())
 	}
 
-	c.Bus().PublishInbound(bus.InboundMessage{
+	published := c.publish(ctx, bus.InboundMessage{
 		Channel:      c.Name(),
 		SenderID:     in.SenderID,
 		ChatID:       chatID,
@@ -385,9 +390,35 @@ func (c *Channel) processMessage(ctx context.Context, data *chatbot.BotCallbackD
 		TenantID:     c.TenantID(),
 		Metadata:     c.buildMetadata(in),
 	})
+	if !published {
+		return
+	}
 
 	if in.IsGroup {
 		c.GroupHistory().Clear(chatID)
+	}
+}
+
+// publishRetryInterval paces retries while the inbound bus is saturated.
+const publishRetryInterval = 50 * time.Millisecond
+
+// publish enqueues an inbound message, giving up if the channel stops.
+//
+// bus.PublishInbound is a bare channel send that ignores context, so a saturated
+// bus would pin this goroutine forever — and at shutdown, forever means leaked.
+// Retrying TryPublishInbound keeps the backpressure while staying interruptible.
+func (c *Channel) publish(ctx context.Context, msg bus.InboundMessage) bool {
+	for {
+		if c.Bus().TryPublishInbound(msg) {
+			return true
+		}
+		select {
+		case <-ctx.Done():
+			slog.Warn("dingtalk inbound dropped; bus saturated and channel stopping",
+				"channel", c.Name(), "chat_id", msg.ChatID)
+			return false
+		case <-time.After(publishRetryInterval):
+		}
 	}
 }
 

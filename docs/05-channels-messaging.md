@@ -165,7 +165,7 @@ Every channel must implement the base interface:
 
 | Interface | Purpose | Implemented By |
 |-----------|---------|----------------|
-| `StreamingChannel` | Real-time streaming updates | Telegram, Slack |
+| `StreamingChannel` | Real-time streaming updates | Telegram, Slack, DingTalk (AI Card) |
 | `WebhookChannel` | Webhook HTTP handler mounting | Facebook, Feishu/Lark, Pancake |
 | `ReactionChannel` | Status reactions on messages | Telegram, Slack, Feishu |
 | `BlockReplyChannel` | Override gateway block_reply setting | Discord, Feishu/Lark, Pancake, Slack, Zalo OA, Zalo Personal |
@@ -842,13 +842,88 @@ The bot app must have the `imbot` scope granted. The `disk` scope is **not** req
 
 ---
 
+
+## 17. DingTalk
+
+The DingTalk channel connects over **Stream mode**: a long-lived WebSocket to DingTalk's
+gateway, so the gateway needs no public IP and no filed callback domain. It uses the official
+`github.com/open-dingtalk/dingtalk-stream-sdk-go`, which handles the socket, the ping/pong
+watchdog, the `disconnect` system topic, and auto-reconnect.
+
+Credentials are the app's `client_id` (AppKey) and `client_secret` (AppSecret), stored
+encrypted on the `channel_instances` row. DingTalk is a DB-instance-only channel: there is no
+config-file setup path.
+
+### Replies
+
+Two transports, chosen per message:
+
+- **Session webhook** — a pre-signed, per-message URL that needs no token. Cheap, but scoped to
+  one inbound message and short-lived. An agent run routinely outlives it.
+- **Proactive robot OpenAPI** — `/v1.0/robot/oToMessages/batchSend` (DM) or
+  `/v1.0/robot/groupMessages/send` (group). Works with no inbound message, so cron and delegate
+  replies use it.
+
+`Send()` prefers the webhook while its stamped expiry holds, and falls back to the proactive
+API when it has expired or when the webhook rejects a live-looking request.
+
+### AI Card streaming
+
+The answer types into a DingTalk AI Card rather than arriving as one late message. One card is
+one run, identified by a client-generated `outTrackId`.
+
+`group_reply_mode` governs **groups only**:
+
+| `group_reply_mode` | Group reply | DM reply |
+|---|---|---|
+| `aicard` (default) | Streaming AI Card | Streaming AI Card |
+| `markdown` | Markdown message | Streaming AI Card |
+| `text` | Plain text message | Streaming AI Card |
+
+Set `streaming: false` to disable cards everywhere.
+
+A card left at `INPUTING` spins forever in the DingTalk UI, so the channel drives every card to
+a terminal status: on run completion, failure, and cancellation, and on gateway shutdown for
+any card still open.
+
+### Media
+
+Inbound attachments arrive as a `downloadCode`, exchanged for a short-lived OSS-signed URL via
+`/v1.0/robot/messageFiles/download`. Voice notes carry DingTalk's own transcription in
+`content.recognition`, so unlike Feishu no STT runs. Outbound uploads go to the legacy
+`oapi.dingtalk.com/media/upload`; files over 20MB use the three-step chunked transaction.
+
+### Required app permissions
+
+Grant the enterprise-internal robot app permission to: receive robot messages (Stream mode),
+send proactive robot messages to users and groups, create and stream **interactive cards**, and
+download message files. Media upload additionally uses the legacy OpenAPI. Exact permission ids
+are listed in the DingTalk app console under 权限管理; this document does not reproduce them
+because a stale id pasted into the console fails opaquely.
+
+### Config keys
+
+`dm_policy`, `group_policy`, `require_mention`, `allow_from`, `group_allow_from`,
+`group_reply_mode`, `group_session_scope`, `streaming`, `history_limit`, `text_chunk_limit`,
+`media_max_mb`, `endpoint`, `chat_behavior`.
+
+`dm_policy` and `group_policy` are validated against their allowed values at instance-save
+time. BaseChannel's policy switches treat an unrecognized value as their *permissive* default,
+so a typo like `group_policy: "opne"` would otherwise open the bot to every group message with
+nothing in the logs to explain it.
+
+Not supported: the upstream connector's `accounts{}` multi-account map (one channel instance
+carries one DingTalk app; a second app is a second instance), and its `async_mode` / `ack_text`
+ack-then-push delivery mode.
+
 ## File Reference
 
 | Module | Path | Purpose |
 |---|---|---|
 | Channel core | `internal/channels/` | `Channel` interface, `BaseChannel` (incl. `HandleMessageMedia()` method), `Manager` (StartAll/StopAll), outbound dispatcher, DB instance loader |
-| Platform adapters | `internal/channels/{telegram,feishu,discord,slack,whatsapp,zalo,bitrix24}/` | Per-platform: message handling, formatting, streaming, reactions, media, pairing |
+| Platform adapters | `internal/channels/{telegram,feishu,dingtalk,discord,slack,whatsapp,zalo,bitrix24}/` | Per-platform: message handling, formatting, streaming, reactions, media, pairing |
 | Bitrix24 media | `internal/channels/bitrix24/download.go`, `send_media.go` | Inbound file download via `imbot.v2.File.download`, outbound upload via `imbot.v2.File.upload` |
+| DingTalk media | `internal/channels/dingtalk/media_inbound.go`, `media_outbound.go` | Inbound `downloadCode` → signed OSS URL, outbound `oapi` upload with a chunked transaction above 20MB |
 | Audio / STT | `internal/audio/` | Audio manager, STT chain resolution, legacy STT bridge |
 | Pairing & routing | `internal/store/pg/pairing.go`, `cmd/gateway_consumer.go` | Pairing code persistence, inbound message routing and cancel interception |
 

@@ -37,12 +37,11 @@ func (c *Channel) lookupChat(chatID string) (chatMeta, bool) {
 
 // StreamEnabled reports whether this reply should stream into an AI Card.
 //
-// The asymmetry is deliberate and matches phase 4's replyMsgType: group_reply_mode
-// governs groups only, so a DM keeps streaming even when groups are configured
-// for plain text. async_mode disables streaming outright — it acks first and
-// pushes a finished answer later, which is a different delivery model.
+// The asymmetry is deliberate and matches replyMsgType in outbound.go:
+// group_reply_mode governs groups only, so a DM keeps streaming even when groups
+// are configured for plain text.
 func (c *Channel) StreamEnabled(isGroup bool) bool {
-	if !c.cfg.StreamingOrDefault() || c.cfg.AsyncModeOrDefault() {
+	if !c.cfg.StreamingOrDefault() {
 		return false
 	}
 	if isGroup && c.cfg.GroupReplyMode != GroupReplyModeAICard {
@@ -86,7 +85,15 @@ func (c *Channel) FinalizeStream(_ context.Context, chatID string, stream channe
 	if !ok {
 		return
 	}
-	c.cards.Store(chatID, cs)
+	// Two runs finishing in one conversation race for this key. Both cards are
+	// already terminal by now (Stop runs before FinalizeStream), so nothing gets
+	// stuck — but the loser's answer will be posted as its own message instead of
+	// repainting its card. Telegram's placeholders map has the same shape.
+	if prev, loaded := c.cards.Swap(chatID, cs); loaded {
+		slog.Warn("dingtalk concurrent runs in one chat; earlier card will not be repainted",
+			"channel", c.Name(), "chat_id", chatID,
+			"superseded_card", prev.(*cardStream).outTrackID, "card", cs.outTrackID)
+	}
 	slog.Debug("dingtalk card handed to Send for final repaint",
 		"channel", c.Name(), "chat_id", chatID, "card", cs.outTrackID)
 }

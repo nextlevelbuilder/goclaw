@@ -44,11 +44,18 @@ type Channel struct {
 	// than a direct call so tests can substitute a fake and drive the inbound
 	// pipeline without a socket.
 	newTransport func(h chatbot.IChatBotMessageHandler) streamTransport
-	transport    streamTransport
 
-	// runCtx is the channel-scoped context captured at Start. Inbound work runs
-	// on it rather than on the SDK callback's ctx, which dies with the frame.
-	runCtx context.Context
+	// stateMu guards transport and runCtx. Start and Stop genuinely race: the
+	// InstanceLoader runs Start on its own goroutine and calls Stop from another
+	// when Start overruns its timeout (instance_loader.go:411-454), so Stop can
+	// read transport while Start is still assigning it.
+	stateMu   sync.Mutex
+	transport streamTransport
+
+	// runCtx is the channel-scoped context for inbound work; the SDK callback's
+	// own ctx dies with the frame. runCancel unblocks that work at shutdown.
+	runCtx    context.Context
+	runCancel context.CancelFunc
 
 	// cardLimiter paces AI Card writes. Per-channel, because DingTalk meters the
 	// card API per app and one channel instance is exactly one app.
@@ -131,9 +138,13 @@ func (c *Channel) Start(ctx context.Context) error {
 	c.GroupHistory().StartFlusher()
 	slog.Info("starting dingtalk bot", "channel", c.Name())
 
-	c.runCtx = ctx
-	c.transport = c.newTransport(c.handleBotMessage)
-	if err := c.transport.Start(ctx); err != nil {
+	c.stateMu.Lock()
+	c.runCtx, c.runCancel = context.WithCancel(ctx)
+	transport := c.newTransport(c.handleBotMessage)
+	c.transport = transport
+	c.stateMu.Unlock()
+
+	if err := transport.Start(ctx); err != nil {
 		c.GroupHistory().StopFlusher()
 		// The failure kind is genuinely ambiguous: the SDK negotiates the
 		// socket endpoint with the app credentials, so a wrong AppKey and an
@@ -153,10 +164,22 @@ func (c *Channel) Start(ctx context.Context) error {
 // partially-started channel after a start timeout.
 func (c *Channel) Stop(ctx context.Context) error {
 	c.stopOnce.Do(func() { close(c.stopCh) })
-	// Cards outlive the process unless they are stamped terminal.
+
+	// Finalize cards before cancelling runCtx: this needs the network, and the
+	// callers that matter (gateway_lifecycle.go:201, instance_loader.go:430)
+	// hand us a live context for exactly that reason.
 	c.finalizeLiveCards(ctx)
-	if c.transport != nil {
-		c.transport.Close()
+
+	c.stateMu.Lock()
+	transport, cancel := c.transport, c.runCancel
+	c.stateMu.Unlock()
+
+	// Unblock any inbound goroutine still waiting on a saturated bus.
+	if cancel != nil {
+		cancel()
+	}
+	if transport != nil {
+		transport.Close()
 	}
 	if gh := c.GroupHistory(); gh != nil {
 		gh.StopFlusher()

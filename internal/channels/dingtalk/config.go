@@ -2,6 +2,8 @@ package dingtalk
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
@@ -30,6 +32,14 @@ const (
 const (
 	GroupSessionScopeGroup       = "group"
 	GroupSessionScopeGroupSender = "group_sender"
+)
+
+// Valid policy values, mirroring BaseChannel.CheckDMPolicy (channel.go:358) and
+// CheckGroupPolicy (:395). Both fall through to their most permissive branch on
+// an unrecognized value, so a typo would silently open the bot to everyone.
+var (
+	validDMPolicies    = []string{"pairing", "open", "allowlist", "disabled"}
+	validGroupPolicies = []string{"pairing", "open", "allowlist", "disabled"}
 )
 
 // Config is the resolved configuration for one DingTalk channel instance.
@@ -63,8 +73,6 @@ type Config struct {
 	GroupReplyMode    string
 	GroupSessionScope string
 	Streaming         *bool
-	AsyncMode         *bool
-	AckText           string
 
 	ChatBehavior *config.ChatBehaviorConfig
 }
@@ -86,12 +94,6 @@ func (c Config) StreamingOrDefault() bool {
 		return true
 	}
 	return *c.Streaming
-}
-
-// AsyncModeOrDefault reports whether the channel acks first and pushes the
-// result later. Unset means false.
-func (c Config) AsyncModeOrDefault() bool {
-	return c.AsyncMode != nil && *c.AsyncMode
 }
 
 // applyDefaults fills unset fields. DB instances default to "pairing" for both
@@ -129,6 +131,13 @@ func (c Config) validate() error {
 		return fmt.Errorf("dingtalk client_id and client_secret are required")
 	}
 
+	if err := requireOneOf("dm_policy", c.DMPolicy, validDMPolicies); err != nil {
+		return err
+	}
+	if err := requireOneOf("group_policy", c.GroupPolicy, validGroupPolicies); err != nil {
+		return err
+	}
+
 	switch c.GroupReplyMode {
 	case GroupReplyModeAICard, GroupReplyModeText, GroupReplyModeMarkdown:
 	default:
@@ -144,4 +153,17 @@ func (c Config) validate() error {
 	}
 
 	return nil
+}
+
+// requireOneOf rejects a value outside the allowed set.
+//
+// This matters more than it looks: BaseChannel's policy switches treat an
+// unknown value as their default branch, which is the *permissive* one. Without
+// this check, `group_policy: "opne"` would make the bot answer every group
+// message from anyone, with nothing in the logs to say why.
+func requireOneOf(field, value string, allowed []string) error {
+	if slices.Contains(allowed, value) {
+		return nil
+	}
+	return fmt.Errorf("dingtalk %s %q: want one of %s", field, value, strings.Join(allowed, ", "))
 }
