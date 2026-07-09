@@ -1,0 +1,23 @@
+# Local-build overlay for the "fork-dev" integration branch.
+#
+# Purpose: run goclaw from a LOCALLY BUILT image that merges upstream dev with
+# un-merged fork features (Telegram trigger-words + Russian locale), instead of
+# pulling the published ghcr.io/...:latest (which lacks those features).
+#
+# It swaps the service image to a distinct local tag `goclaw:forkdev` and forbids
+# pulling, so `:latest` stays untouched and the running bot is unambiguously the
+# local build. The build context comes from GOCLAW_DIR (set by deploy-forkdev.sh
+# to the integration worktree); the base compose already defines build.args.
+#
+# Usage (via the helper — handles fetch + merge + build + up):
+#   scripts/deploy-forkdev.sh
+#
+# Or manually against an already-prepared worktree at $GOCLAW_DIR:
+#   GOCLAW_DIR=../.goclaw-forkdev \
+#     docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
+#                    -f docker-compose.forkdev.yml up -d --build
+
+services:
+  goclaw:
+    image: goclaw:forkdev
+    pull_policy: never

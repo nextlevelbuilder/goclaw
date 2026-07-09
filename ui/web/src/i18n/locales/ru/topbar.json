@@ -1,0 +1,35 @@
+{
+  "expandSidebar": "Развернуть боковую панель",
+  "collapseSidebar": "Свернуть боковую панель",
+  "openMenu": "Открыть меню",
+  "systemSettings": "Системные настройки",
+  "toggleTheme": "Переключить тему",
+  "logout": "Выйти",
+  "logoutConfirm": "Вы уверены, что хотите выйти?",
+  "language": "Язык",
+  "timezone": "Часовой пояс",
+  "pairingRequests": "Запросы на привязку",
+  "pendingPairingRequest": "{{count}} ожидающий запрос на привязку",
+  "pendingPairingRequests": "{{count}} ожидающих запросов на привязку",
+  "apiKeys": "Ключи API",
+  "documents": "Документы",
+  "about": {
+    "menuItem": "О программе",
+    "title": "О GoClaw",
+    "version": "Версия",
+    "sourceCode": "Исходный код",
+    "license": "Лицензия",
+    "documentation": "Документация",
+    "reportBug": "Сообщить об ошибке",
+    "upToDate": "Актуальная версия",
+    "updateAvailable": "Доступно обновление: {{version}}",
+    "viewRelease": "Смотреть заметки о выпуске →",
+    "releaseNotes": "Заметки о выпуске"
+  },
+  "languages": {
+    "en": "English",
+    "vi": "Tiếng Việt",
+    "zh": "中文",
+    "ko": "한국어"
+  }
+}

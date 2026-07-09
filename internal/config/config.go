@@ -125,7 +125,7 @@ type SystemMsgConfig struct {
 	Messages      map[string]LocalizedSystemMessage `json:"messages,omitempty"`
 }
 
-// LocalizedSystemMessage maps locale code ("en", "vi", "zh", "ko") to a
+// LocalizedSystemMessage maps locale code ("en", "vi", "zh", "ko", "ru") to a
 // template override for one system message key.
 type LocalizedSystemMessage map[string]string
 

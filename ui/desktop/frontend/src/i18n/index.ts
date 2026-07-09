@@ -55,14 +55,33 @@ import zhTeams from './locales/zh/teams.json'
 import zhChannels from './locales/zh/channels.json'
 import zhTts from './locales/zh/tts.json'
 
+// --- RU namespaces ---
+import ruCommon from './locales/ru/common.json'
+import ruChat from './locales/ru/chat.json'
+import ruAgents from './locales/ru/agents.json'
+import ruProviders from './locales/ru/providers.json'
+import ruSkills from './locales/ru/skills.json'
+import ruCron from './locales/ru/cron.json'
+import ruMcp from './locales/ru/mcp.json'
+import ruTools from './locales/ru/tools.json'
+import ruTraces from './locales/ru/traces.json'
+import ruMemory from './locales/ru/memory.json'
+import ruStorage from './locales/ru/storage.json'
+import ruSessions from './locales/ru/sessions.json'
+import ruDesktop from './locales/ru/desktop.json'
+import ruTeams from './locales/ru/teams.json'
+import ruChannels from './locales/ru/channels.json'
+import ruTts from './locales/ru/tts.json'
+
 const STORAGE_KEY = 'goclaw:language'
 
 function getInitialLanguage(): string {
   const stored = localStorage.getItem(STORAGE_KEY)
-  if (stored === 'en' || stored === 'vi' || stored === 'zh') return stored
+  if (stored === 'en' || stored === 'vi' || stored === 'zh' || stored === 'ru') return stored
   const lang = navigator.language.toLowerCase()
   if (lang.startsWith('vi')) return 'vi'
   if (lang.startsWith('zh')) return 'zh'
+  if (lang.startsWith('ru')) return 'ru'
   return 'vi'
 }
 
@@ -85,6 +104,12 @@ i18n.use(initReactI18next).init({
       skills: zhSkills, cron: zhCron, mcp: zhMcp, tools: zhTools,
       traces: zhTraces, memory: zhMemory, storage: zhStorage, sessions: zhSessions,
       desktop: zhDesktop, teams: zhTeams, channels: zhChannels, tts: zhTts,
+    },
+    ru: {
+      common: ruCommon, chat: ruChat, agents: ruAgents, providers: ruProviders,
+      skills: ruSkills, cron: ruCron, mcp: ruMcp, tools: ruTools,
+      traces: ruTraces, memory: ruMemory, storage: ruStorage, sessions: ruSessions,
+      desktop: ruDesktop, teams: ruTeams, channels: ruChannels, tts: ruTts,
     },
   },
   ns: ['common', 'chat', 'agents', 'providers', 'skills', 'cron', 'mcp', 'tools', 'traces', 'memory', 'storage', 'sessions', 'desktop', 'teams', 'channels', 'tts'],

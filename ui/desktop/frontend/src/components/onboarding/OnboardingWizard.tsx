@@ -12,6 +12,7 @@ const LANGUAGES = [
   { value: 'en', label: 'EN' },
   { value: 'vi', label: 'VI' },
   { value: 'zh', label: '中文' },
+  { value: 'ru', label: 'RU' },
 ] as const
 
 interface OnboardingWizardProps {

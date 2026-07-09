@@ -363,7 +363,7 @@ func (m *ConfigMethods) handleSchema(_ context.Context, client *gateway.Client, 
 				"properties": map[string]any{
 					"default_locale": map[string]any{
 						"type":        "string",
-						"enum":        []string{"en", "vi", "zh", "ko"},
+						"enum":        []string{"en", "vi", "zh", "ko", "ru"},
 						"description": "Default locale used when a channel caller does not provide a locale",
 					},
 					"messages": map[string]any{

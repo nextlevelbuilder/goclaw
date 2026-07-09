@@ -1,0 +1,93 @@
+{
+  "title": "Панель управления",
+  "description": "Обзор шлюза и использование квот",
+  "tabs": {
+    "overview": "Обзор",
+    "usage": "Использование"
+  },
+  "statCards": {
+    "requestsToday": "Запросов сегодня",
+    "tokensToday": "Токенов сегодня",
+    "costToday": "Стоимость за сегодня",
+    "agents": "Агенты",
+    "channels": "Каналы",
+    "channelsAttention": "{{count}} требуют внимания",
+    "running": "выполняется",
+    "online": "онлайн",
+    "users": "{{count}} пользователей",
+    "inOut": "{{input}} вход / {{output}} выход"
+  },
+  "providers": {
+    "noProvidersTitle": "Провайдеры LLM не настроены",
+    "noEnabledTitle": "Нет включённых провайдеров LLM",
+    "noProvidersDesc": "Необходимо добавить хотя бы одного провайдера LLM, прежде чем агенты смогут работать. ",
+    "noEnabledDesc": "Все провайдеры сейчас отключены. Включите хотя бы одного, чтобы начать использовать агентов. ",
+    "goToSettings": "Перейти к настройкам провайдеров"
+  },
+  "systemHealth": {
+    "title": "Состояние системы",
+    "uptime": "Время работы",
+    "version": "Версия",
+    "database": "База данных",
+    "providers": "Провайдеры",
+    "tools": "Инструменты",
+    "sessions": "Сессии",
+    "clients": "Клиенты",
+    "channels": "Каналы",
+    "needsAttention": "Требует внимания",
+    "channelsNeedingAttention": "{{count}} каналов",
+    "failedCount": "{{count}} с ошибкой",
+    "warningCountOne": "{{count}} предупреждение",
+    "warningCountOther": "{{count}} предупреждений",
+    "moreAttention": "+ещё {{count}}",
+    "active": "{{count}} активно",
+    "none": "нет",
+    "runtimes": "Среды выполнения"
+  },
+  "connectedClients": {
+    "title": "Подключённые клиенты",
+    "noClients": "Нет подключённых клиентов",
+    "columns": {
+      "ip": "IP",
+      "user": "Пользователь",
+      "role": "Роль",
+      "connected": "Подключён"
+    },
+    "you": "вы"
+  },
+  "cronJobs": {
+    "title": "Задачи Cron",
+    "manage": "Управление",
+    "noJobs": "Задачи cron не настроены",
+    "disabled": "отключено"
+  },
+  "recentRequests": {
+    "title": "Недавние запросы",
+    "viewAll": "Показать все",
+    "noRequests": "Нет недавних запросов",
+    "columns": {
+      "time": "Время",
+      "name": "Название",
+      "user": "Пользователь",
+      "channel": "Канал",
+      "tokens": "Токены",
+      "duration": "Длительность",
+      "status": "Статус"
+    }
+  },
+  "quotaUsage": {
+    "title": "Использование квоты",
+    "columns": {
+      "userGroup": "Пользователь / Группа",
+      "hour": "Час",
+      "day": "День",
+      "week": "Неделя"
+    },
+    "noLimit": "без лимита"
+  },
+  "embedding": {
+    "title": "Эмбеддинги",
+    "notConfigured": "Не настроено",
+    "configure": "Настроить в разделе «Провайдеры» →"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "title": "Сессии",
+  "description": "Просмотр сессий бесед",
+  "searchPlaceholder": "Поиск сессий...",
+  "emptyTitle": "Пока нет сессий",
+  "emptyDescription": "Сессии появятся здесь, как только вы начнёте общение.",
+  "noMatchTitle": "Нет подходящих сессий",
+  "noMatchDescription": "Попробуйте другой поисковый запрос.",
+  "columns": {
+    "session": "Сессия",
+    "agent": "Агент",
+    "context": "Контекст",
+    "messages": "Сообщения",
+    "updated": "Обновлено"
+  },
+  "contextBar": {
+    "compacted": "Сжато раз: {{count}}"
+  },
+  "detail": {
+    "reset": "Сбросить",
+    "delete": "Удалить",
+    "deleteTitle": "Удалить сессию",
+    "deleteDescription": "Это навсегда удалит все сообщения в этой сессии.",
+    "resetTitle": "Сбросить сессию",
+    "resetDescription": "Это очистит все сообщения, но сохранит сессию.",
+    "confirmDelete": "Удалить",
+    "confirmReset": "Сбросить",
+    "noMessages": "В этой сессии нет сообщений",
+    "summary": "Сводка",
+    "showMore": "Показать больше",
+    "showLess": "Показать меньше",
+    "showDetails": "показать детали",
+    "hide": "скрыть",
+    "systemMessage": "Системное сообщение",
+    "messages": "сообщений",
+    "timeline": {
+      "title": "Хронология запуска",
+      "loading": "загрузка",
+      "count": "{{count}} элементов",
+      "runStatus": "запуск",
+      "assistant": "ассистент",
+      "toolCall": "вызов инструмента",
+      "toolResult": "результат инструмента",
+      "trace": "трассировка",
+      "activity": "активность",
+      "failed": "не удалось"
+    }
+  },
+  "toast": {
+    "deleted": "Сессия удалена",
+    "deleteFailed": "Не удалось удалить сессию",
+    "reset": "Сессия сброшена",
+    "resetFailed": "Не удалось сбросить сессию",
+    "updated": "Сессия обновлена",
+    "updateFailed": "Не удалось обновить сессию"
+  }
+}
