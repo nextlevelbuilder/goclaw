@@ -34,6 +34,13 @@ const (
 	GroupSessionScopeGroupSender = "group_sender"
 )
 
+// Reaction levels. DingTalk exposes exactly one usable reaction (the thinking
+// face), so unlike Feishu there is no "minimal" tier to degrade to.
+const (
+	ReactionLevelOff = "off"
+	ReactionLevelOn  = "on"
+)
+
 // Valid policy values, mirroring BaseChannel.CheckDMPolicy (channel.go:358) and
 // CheckGroupPolicy (:395). Both fall through to their most permissive branch on
 // an unrecognized value, so a typo would silently open the bot to everyone.
@@ -74,6 +81,10 @@ type Config struct {
 	GroupSessionScope string
 	Streaming         *bool
 
+	// ReactionLevel controls the 🤔 reaction posted on the user's message while
+	// the agent works. "on" (default) or "off".
+	ReactionLevel string
+
 	ChatBehavior *config.ChatBehaviorConfig
 }
 
@@ -86,6 +97,9 @@ func (c Config) RequireMentionOrDefault() bool {
 	}
 	return *c.RequireMention
 }
+
+// ReactionsEnabled reports whether to post the thinking reaction.
+func (c Config) ReactionsEnabled() bool { return c.ReactionLevel != ReactionLevelOff }
 
 // StreamingOrDefault reports whether AI Card streaming is permitted at all.
 // Unset means true, matching the connector's `config.streaming !== false`.
@@ -117,6 +131,9 @@ func (c *Config) applyDefaults() {
 	}
 	if c.GroupSessionScope == "" {
 		c.GroupSessionScope = GroupSessionScopeGroup
+	}
+	if c.ReactionLevel == "" {
+		c.ReactionLevel = ReactionLevelOn
 	}
 }
 
@@ -150,6 +167,13 @@ func (c Config) validate() error {
 	default:
 		return fmt.Errorf("dingtalk group_session_scope %q: want %q or %q",
 			c.GroupSessionScope, GroupSessionScopeGroup, GroupSessionScopeGroupSender)
+	}
+
+	switch c.ReactionLevel {
+	case ReactionLevelOn, ReactionLevelOff:
+	default:
+		return fmt.Errorf("dingtalk reaction_level %q: want %q or %q",
+			c.ReactionLevel, ReactionLevelOn, ReactionLevelOff)
 	}
 
 	return nil

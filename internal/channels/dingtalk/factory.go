@@ -48,6 +48,7 @@ type dingtalkInstanceConfig struct {
 	GroupReplyMode    string `json:"group_reply_mode,omitempty"`
 	GroupSessionScope string `json:"group_session_scope,omitempty"`
 	Streaming         *bool  `json:"streaming,omitempty"`
+	ReactionLevel     string `json:"reaction_level,omitempty"`
 
 	ChatBehavior *config.ChatBehaviorConfig `json:"chat_behavior,omitempty"`
 }
@@ -86,6 +87,7 @@ func resolve(creds json.RawMessage, cfg json.RawMessage) (Config, error) {
 		GroupReplyMode:    ic.GroupReplyMode,
 		GroupSessionScope: ic.GroupSessionScope,
 		Streaming:         ic.Streaming,
+		ReactionLevel:     ic.ReactionLevel,
 		ChatBehavior:      ic.ChatBehavior,
 	}, nil
 }

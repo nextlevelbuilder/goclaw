@@ -74,6 +74,9 @@ type Channel struct {
 	// than leaving them spinning at INPUTING forever.
 	liveCards sync.Map
 
+	// emotions tracks which inbound messages carry the 🤔 reaction.
+	emotions emotionState
+
 	// dedup guards against DingTalk redelivering a message. Keyed by MsgId,
 	// which is stable across server-side resends (unlike the per-delivery
 	// frame header id, which the SDK does not surface to us). Entries evict

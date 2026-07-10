@@ -167,7 +167,7 @@ Every channel must implement the base interface:
 |-----------|---------|----------------|
 | `StreamingChannel` | Real-time streaming updates | Telegram, Slack, DingTalk (AI Card) |
 | `WebhookChannel` | Webhook HTTP handler mounting | Facebook, Feishu/Lark, Pancake |
-| `ReactionChannel` | Status reactions on messages | Telegram, Slack, Feishu |
+| `ReactionChannel` | Status reactions on messages | Telegram, Slack, Feishu, DingTalk |
 | `BlockReplyChannel` | Override gateway block_reply setting | Discord, Feishu/Lark, Pancake, Slack, Zalo OA, Zalo Personal |
 | `ChatBehaviorChannel` | Override gateway chat_behavior setting | Bitrix24, Discord, Feishu/Lark, Pancake, Slack, Telegram, WhatsApp, Zalo OA, Zalo Personal |
 | `ReasoningDeliveryChannel` | Override channel-visible reasoning delivery | Telegram |
@@ -907,6 +907,17 @@ Two consequences worth knowing before you debug them:
   listening; today it never runs.
 
 DMs are unaffected: every direct message reaches the bot.
+
+### Thinking reaction
+
+While a run is in flight the bot posts a 🤔 reaction on the user's own message and recalls it
+when the run ends (`/v1.0/robot/emotion/reply` and `/emotion/recall`). Controlled by
+`reaction_level`, which is `on` or `off` — not Feishu's `off`/`minimal`/`full`. DingTalk's
+emotion API is keyed by numeric `emotionId` and only one id is documented, so there is no second
+reaction for a middle tier to show.
+
+Reactions are cosmetic and every failure is swallowed: a run never fails because an emoji did
+not stick.
 
 ### Media
 

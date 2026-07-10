@@ -18,8 +18,12 @@ import (
 
 // stubCardAPI serves the token endpoint and every card endpoint, recording calls.
 type stubCardAPI struct {
-	mu    sync.Mutex
-	calls []capturedRequest
+	mu      sync.Mutex
+	calls   []capturedRequest
+	methods map[string]string
+
+	// failPath makes requests to that path fail with a 500.
+	failPath string
 
 	// qpsRejectFirst makes the first streaming write fail with a QpsLimit 403.
 	qpsRejectFirst atomic.Bool
@@ -40,7 +44,18 @@ func newStubCardAPI(t *testing.T) *stubCardAPI {
 
 		s.mu.Lock()
 		s.calls = append(s.calls, capturedRequest{Path: r.URL.Path, Body: body})
+		if s.methods == nil {
+			s.methods = map[string]string{}
+		}
+		s.methods[r.URL.Path] = r.Method
+		fail := s.failPath == r.URL.Path
 		s.mu.Unlock()
+
+		if fail {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, `{"code":"Boom","message":"nope"}`)
+			return
+		}
 
 		if r.URL.Path == pathCardStreaming && s.qpsRejectFirst.CompareAndSwap(true, false) {
 			w.WriteHeader(http.StatusForbidden)
@@ -57,6 +72,12 @@ func (s *stubCardAPI) snapshot() []capturedRequest {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]capturedRequest(nil), s.calls...)
+}
+
+func (s *stubCardAPI) methodOf(path string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.methods[path]
 }
 
 func (s *stubCardAPI) pathsOf(path string) []capturedRequest {

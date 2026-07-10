@@ -202,6 +202,7 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "group_reply_mode", label: "Group Reply Mode", type: "select", options: [{ value: "aicard", label: "AI Card (streaming)" }, { value: "text", label: "Plain text" }, { value: "markdown", label: "Markdown" }], defaultValue: "aicard", help: "Groups only. DMs always stream into an AI Card." },
     { key: "group_session_scope", label: "Group Session Scope", type: "select", options: [{ value: "group", label: "One session per group" }, { value: "group_sender", label: "One session per sender in a group" }], defaultValue: "group" },
     { key: "streaming", label: "Stream replies", type: "boolean", defaultValue: true, help: "Type the answer into an AI Card as it is generated" },
+    { key: "reaction_level", label: "Thinking Reaction", type: "select", options: [{ value: "on", label: "On" }, { value: "off", label: "Off" }], defaultValue: "on", help: "Show a 🤔 reaction on the user's message while the agent works. DingTalk exposes one reaction, so there is no 'minimal' tier." },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "DingTalk staff IDs allowed to interact; empty = no allowlist filter" },
     { key: "group_allow_from", label: "Group Allowlist Bypass", type: "tags", help: "Staff IDs that bypass the group policy" },
     { key: "history_limit", label: "Group History Limit", type: "number", help: "Max pending group messages for context (0 = disabled)" },
