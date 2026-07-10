@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/chatbot"
 
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
@@ -95,6 +96,26 @@ type Channel struct {
 // Compile-time interface conformance. StreamingChannel is asserted in
 // stream_channel.go.
 var _ channels.Channel = (*Channel)(nil)
+
+// The InstanceLoader and Manager reach for these with anonymous interface
+// assertions, so a channel that omits one is silently skipped — no compile
+// error, no test failure, just a feature that quietly does nothing. That is how
+// SetPendingHistoryTenantID went missing here until a live group chat logged
+// `pending_history.db_fallback_failed ... tenant_id required`. Assert them.
+//
+// Everything except SetPendingHistoryTenantID comes from BaseChannel.
+var _ interface {
+	SetAgentID(string)                           // instance_loader.go:307
+	SetType(string)                              // :317
+	SetTenantID(uuid.UUID)                       // :321
+	SetPendingHistoryTenantID(uuid.UUID)         // :326
+	SetContactCollector(*store.ContactCollector) // manager.go:197
+	MarkStarting(string)                         // :111
+	MarkStopped(string)                          // :146
+	MarkRegistered(string)                       // :209
+	TenantID() uuid.UUID                         // :328
+	HealthSnapshot() channels.ChannelHealth      // :438
+} = (*Channel)(nil)
 
 // New builds a DingTalk channel from a resolved config.
 func New(cfg Config, msgBus *bus.MessageBus, pairingSvc store.PairingStore,
@@ -191,6 +212,17 @@ func (c *Channel) Stop(ctx context.Context) error {
 	c.MarkStopped("stopped")
 	slog.Info("stopped dingtalk bot", "channel", c.Name())
 	return nil
+}
+
+// SetPendingHistoryTenantID propagates tenant_id into the group history.
+//
+// The factory builds PendingHistory before the loader assigns the tenant, so
+// without this the history's DB writes fail with "tenant_id required" and group
+// context is silently lost.
+func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) {
+	if gh := c.GroupHistory(); gh != nil {
+		gh.SetTenantID(id)
+	}
 }
 
 // stopHistory shuts the group-history flusher down exactly once.
