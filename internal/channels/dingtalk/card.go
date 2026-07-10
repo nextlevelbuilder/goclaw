@@ -125,13 +125,15 @@ func randomBase36(n int) string {
 // One card is one run. The framework stores this on RunContext, so concurrent
 // runs in the same conversation never share a card.
 type cardStream struct {
-	ch         *Channel
-	outTrackID string
+	ch   *Channel
+	meta chatMeta
 
-	mu       sync.Mutex
-	lastText string
-	lastPush time.Time
-	done     bool
+	mu         sync.Mutex
+	outTrackID string // empty until the card is materialized
+	created    bool
+	lastText   string
+	lastPush   time.Time
+	done       bool
 }
 
 var _ interface {
@@ -140,7 +142,8 @@ var _ interface {
 	MessageID() int
 } = (*cardStream)(nil)
 
-// Update repaints the card, at most once per cardUpdateThrottle.
+// Update repaints the card, at most once per cardUpdateThrottle, materializing
+// it on the first call that carries text.
 //
 // A skipped repaint is not lost: the text is retained and Stop flushes it. The
 // clock is advanced before the network call, not after, so a slow request does
@@ -161,10 +164,24 @@ func (s *cardStream) Update(ctx context.Context, text string) {
 	s.lastPush = now
 	s.mu.Unlock()
 
+	if strings.TrimSpace(text) == "" {
+		return
+	}
+	if err := s.ensureCard(ctx, text); err != nil {
+		slog.Debug("dingtalk card create failed", "channel", s.ch.Name(), "error", err)
+		return
+	}
 	if err := s.push(ctx, text, false); err != nil {
 		slog.Debug("dingtalk card update failed",
 			"channel", s.ch.Name(), "card", s.outTrackID, "error", err)
 	}
+}
+
+// created reports whether a card was ever posted to the conversation.
+func (s *cardStream) materialized() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.created
 }
 
 // Stop drives the card to a terminal state.
@@ -186,9 +203,15 @@ func (s *cardStream) Stop(ctx context.Context) error {
 		return nil
 	}
 	s.done = true
-	text := s.lastText
+	text, created := s.lastText, s.created
 	s.mu.Unlock()
 
+	// A stream that never carried content never posted a card. The framework
+	// opens one on run.started and stops it again at the first tool call, so
+	// this is the common case, not an edge case.
+	if !created {
+		return nil
+	}
 	return s.finish(ctx, text, flowStatusFinished)
 }
 
@@ -201,9 +224,12 @@ func (s *cardStream) abort(ctx context.Context) error {
 		return nil
 	}
 	s.done = true
-	text := s.lastText
+	text, created := s.lastText, s.created
 	s.mu.Unlock()
 
+	if !created {
+		return nil
+	}
 	return s.finish(ctx, text, flowStatusFailed)
 }
 
@@ -323,13 +349,28 @@ func (c *Channel) cardWrite(ctx context.Context, method, path string, body map[s
 	return c.client.doAPI(ctx, method, path, body, out)
 }
 
-// createCard creates a card instance and delivers it into the conversation.
-func (c *Channel) createCard(ctx context.Context, meta chatMeta) (*cardStream, error) {
-	s := &cardStream{ch: c, outTrackID: newOutTrackID()}
+// ensureCard posts the card into the conversation on first use.
+//
+// Creation is deferred rather than done in CreateStream because the framework
+// opens a stream at run.started, before any token exists, and stops it again at
+// the first tool call (events.go:53, :107). An eagerly-created card would show
+// up as an empty bubble that then gets stamped FINISHED and abandoned — which is
+// exactly what a live DM produced. Telegram's DraftStream defers for the same
+// reason.
+func (s *cardStream) ensureCard(ctx context.Context, initialText string) error {
+	s.mu.Lock()
+	if s.created {
+		s.mu.Unlock()
+		return nil
+	}
+	s.mu.Unlock()
+
+	c := s.ch
+	outTrackID := newOutTrackID()
 
 	create := map[string]any{
 		"cardTemplateId": cardTemplateID,
-		"outTrackId":     s.outTrackID,
+		"outTrackId":     outTrackID,
 		"cardData": map[string]any{
 			"cardParamMap": map[string]string{"config": `{"autoLayout":true}`},
 		},
@@ -338,19 +379,19 @@ func (c *Channel) createCard(ctx context.Context, meta chatMeta) (*cardStream, e
 		"imRobotOpenSpaceModel": map[string]any{"supportForward": true},
 	}
 	if err := c.cardWrite(ctx, http.MethodPost, pathCardInstances, create, nil, nil); err != nil {
-		return nil, fmt.Errorf("dingtalk: create card: %w", err)
+		return fmt.Errorf("dingtalk: create card: %w", err)
 	}
 
 	deliver := map[string]any{
-		"outTrackId": s.outTrackID,
+		"outTrackId": outTrackID,
 		"userIdType": 1,
 	}
-	if meta.IsGroup {
+	if s.meta.IsGroup {
 		// The double slash in openSpaceId is literal.
-		deliver["openSpaceId"] = "dtv1.card//IM_GROUP." + meta.ConversationID
+		deliver["openSpaceId"] = "dtv1.card//IM_GROUP." + s.meta.ConversationID
 		deliver["imGroupOpenDeliverModel"] = map[string]any{"robotCode": c.cfg.ClientID}
 	} else {
-		deliver["openSpaceId"] = "dtv1.card//IM_ROBOT." + meta.UserID
+		deliver["openSpaceId"] = "dtv1.card//IM_ROBOT." + s.meta.UserID
 		deliver["imRobotOpenDeliverModel"] = map[string]any{
 			"spaceType": "IM_ROBOT",
 			"robotCode": c.cfg.ClientID,
@@ -358,14 +399,19 @@ func (c *Channel) createCard(ctx context.Context, meta chatMeta) (*cardStream, e
 		}
 	}
 	if err := c.cardWrite(ctx, http.MethodPost, pathCardDeliver, deliver, nil, nil); err != nil {
-		return nil, fmt.Errorf("dingtalk: deliver card: %w", err)
+		return fmt.Errorf("dingtalk: deliver card: %w", err)
 	}
 
-	if err := s.setInputing(ctx, ""); err != nil {
+	s.mu.Lock()
+	s.outTrackID = outTrackID
+	s.created = true
+	s.mu.Unlock()
+
+	c.liveCards.Store(outTrackID, s)
+
+	if err := s.setInputing(ctx, initialText); err != nil {
 		slog.Debug("dingtalk card inputing status failed",
-			"channel", c.Name(), "card", s.outTrackID, "error", err)
+			"channel", c.Name(), "card", outTrackID, "error", err)
 	}
-
-	c.liveCards.Store(s.outTrackID, s)
-	return s, nil
+	return nil
 }

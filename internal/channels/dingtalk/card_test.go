@@ -116,6 +116,7 @@ func TestCard_StopIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	stream.Update(context.Background(), "text")
 	if err := stream.Stop(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -140,9 +141,11 @@ func TestCard_ChannelStopAbortsLiveCards(t *testing.T) {
 	}
 	ch.rememberChat("staff-1", chatMeta{UserID: "staff-1"})
 
-	if _, err := ch.CreateStream(context.Background(), "staff-1", true); err != nil {
+	stream, err := ch.CreateStream(context.Background(), "staff-1", true)
+	if err != nil {
 		t.Fatal(err)
 	}
+	stream.Update(context.Background(), "partial")
 
 	if err := ch.Stop(context.Background()); err != nil {
 		t.Fatalf("Stop: %v", err)
@@ -183,9 +186,11 @@ func TestCard_CreateDeliversToRightSpace(t *testing.T) {
 			ch := cardChannel(t, baseCfg(), api)
 			ch.rememberChat("chat", tc.meta)
 
-			if _, err := ch.CreateStream(context.Background(), "chat", true); err != nil {
+			stream, err := ch.CreateStream(context.Background(), "chat", true)
+			if err != nil {
 				t.Fatalf("CreateStream: %v", err)
 			}
+			stream.Update(context.Background(), "hello") // materializes the card
 
 			deliver := api.pathsOf(pathCardDeliver)
 			if len(deliver) != 1 {
@@ -429,6 +434,7 @@ func TestCard_HandoffIsSingleUse(t *testing.T) {
 
 	ctx := context.Background()
 	stream, _ := ch.CreateStream(ctx, "staff-1", true)
+	stream.Update(ctx, "raw")
 	_ = stream.Stop(ctx)
 	ch.FinalizeStream(ctx, "staff-1", stream)
 
@@ -517,11 +523,90 @@ func TestCreateStream_UnknownChatFallsBackToDM(t *testing.T) {
 	api := newStubCardAPI(t)
 	ch := cardChannel(t, baseCfg(), api)
 
-	if _, err := ch.CreateStream(context.Background(), "staff-9", true); err != nil {
+	stream, err := ch.CreateStream(context.Background(), "staff-9", true)
+	if err != nil {
 		t.Fatalf("CreateStream: %v", err)
 	}
+	stream.Update(context.Background(), "hi")
 	deliver := api.pathsOf(pathCardDeliver)[0]
 	if got := deliver.Body["openSpaceId"]; got != "dtv1.card//IM_ROBOT.staff-9" {
 		t.Errorf("openSpaceId = %v", got)
+	}
+}
+
+// The framework opens a stream at run.started, before a single token exists, and
+// stops it again at the first tool call (events.go:53, :107). Creating the card
+// there posts an empty bubble that is then stamped FINISHED and abandoned — a
+// live DM showed exactly that, an empty card above the real answer.
+//
+// So CreateStream must touch the network not at all, and a stream that carried
+// no text must leave nothing behind.
+func TestCard_CreateStreamPostsNothingUntilFirstText(t *testing.T) {
+	api := newStubCardAPI(t)
+	ch := cardChannel(t, baseCfg(), api)
+	ch.rememberChat("staff-1", chatMeta{UserID: "staff-1"})
+
+	ctx := context.Background()
+	stream, err := ch.CreateStream(ctx, "staff-1", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(api.snapshot()); got != 0 {
+		t.Fatalf("CreateStream issued %d requests, want 0: %+v", got, api.snapshot())
+	}
+
+	// An empty chunk must not materialize a card either.
+	stream.Update(ctx, "   ")
+	if got := len(api.snapshot()); got != 0 {
+		t.Fatalf("blank Update issued %d requests, want 0", got)
+	}
+
+	// Stopping a stream that never carried text leaves no card behind.
+	if err := stream.Stop(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(api.snapshot()); got != 0 {
+		t.Fatalf("Stop on an empty stream issued %d requests, want 0", got)
+	}
+
+	// And it must not be handed to Send, or Send would repaint a card that does
+	// not exist instead of posting the answer.
+	ch.FinalizeStream(ctx, "staff-1", stream)
+	if _, ok := ch.takeCard("staff-1"); ok {
+		t.Error("an unmaterialized stream was handed to Send")
+	}
+
+	// First real text creates it.
+	stream2, _ := ch.CreateStream(ctx, "staff-1", false)
+	stream2.Update(ctx, "hello")
+	if len(api.pathsOf(pathCardInstances)) == 0 || len(api.pathsOf(pathCardDeliver)) != 1 {
+		t.Fatalf("first text did not create+deliver the card: %+v", api.snapshot())
+	}
+}
+
+// A tool-call run: stream 1 opens and stops with nothing, stream 2 carries the
+// answer. Exactly one card must exist.
+func TestCard_ToolCallRunLeavesOneCard(t *testing.T) {
+	api := newStubCardAPI(t)
+	ch := cardChannel(t, baseCfg(), api)
+	ch.rememberChat("staff-1", chatMeta{UserID: "staff-1"})
+	ctx := context.Background()
+
+	// run.started
+	s1, _ := ch.CreateStream(ctx, "staff-1", true)
+	// tool.call → Stop, no FinalizeStream
+	_ = s1.Stop(ctx)
+
+	// answer lane
+	s2, _ := ch.CreateStream(ctx, "staff-1", false)
+	s2.Update(ctx, "the answer")
+	_ = s2.Stop(ctx)
+	ch.FinalizeStream(ctx, "staff-1", s2)
+
+	if got := len(api.pathsOf(pathCardDeliver)); got != 1 {
+		t.Errorf("delivered %d cards, want 1 (an empty card was left in the chat)", got)
+	}
+	if _, ok := ch.takeCard("staff-1"); !ok {
+		t.Error("the answer card was not handed to Send")
 	}
 }

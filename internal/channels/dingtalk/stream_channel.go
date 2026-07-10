@@ -58,7 +58,7 @@ func (c *Channel) StreamEnabled(isGroup bool) bool {
 func (c *Channel) ReasoningStreamEnabled() bool { return false }
 
 // CreateStream opens an AI Card for one run.
-func (c *Channel) CreateStream(ctx context.Context, chatID string, _ bool) (channels.ChannelStream, error) {
+func (c *Channel) CreateStream(_ context.Context, chatID string, _ bool) (channels.ChannelStream, error) {
 	meta, ok := c.lookupChat(chatID)
 	if !ok {
 		// A cron or delegate run has no inbound message and therefore no
@@ -70,7 +70,9 @@ func (c *Channel) CreateStream(ctx context.Context, chatID string, _ bool) (chan
 		return nil, fmt.Errorf("dingtalk: no conversation id for group chat %q", chatID)
 	}
 
-	return c.createCard(ctx, meta)
+	// No network call here. The card is posted on the first Update that carries
+	// text; see ensureCard.
+	return &cardStream{ch: c, meta: meta}, nil
 }
 
 // FinalizeStream hands the finished card to Send().
@@ -83,6 +85,11 @@ func (c *Channel) CreateStream(ctx context.Context, chatID string, _ bool) (chan
 func (c *Channel) FinalizeStream(_ context.Context, chatID string, stream channels.ChannelStream) {
 	cs, ok := stream.(*cardStream)
 	if !ok {
+		return
+	}
+	// A stream that never carried text posted no card, so there is nothing for
+	// Send() to repaint — it must deliver the answer as a normal message.
+	if !cs.materialized() {
 		return
 	}
 	// Two runs finishing in one conversation race for this key. Both cards are

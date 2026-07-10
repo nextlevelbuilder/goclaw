@@ -882,9 +882,14 @@ one run, identified by a client-generated `outTrackId`.
 
 Set `streaming: false` to disable cards everywhere.
 
-A card left at `INPUTING` spins forever in the DingTalk UI, so the channel drives every card to
-a terminal status: on run completion, failure, and cancellation, and on gateway shutdown for
-any card still open.
+The card is posted on the **first token**, not when the stream opens. The agent framework opens
+a stream at `run.started` — before any content exists — and closes it again at the first tool
+call. Creating the card there leaves an empty bubble in the conversation, stamped FINISHED and
+abandoned, above the real answer.
+
+A card left at `INPUTING` spins forever in the DingTalk UI, so the channel drives every card it
+did post to a terminal status: on run completion, failure, and cancellation, and on gateway
+shutdown for any card still open.
 
 ### Groups only deliver @mentions
 
