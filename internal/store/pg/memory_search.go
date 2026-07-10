@@ -93,9 +93,9 @@ func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any
 		}
 		limitN := 4 + len(tcArgs)
 		q = fmt.Sprintf(`SELECT path, start_line, end_line, text, user_id,
-				ts_rank(tsv, plainto_tsquery('simple', $1)) AS score
+				ts_rank(tsv, plainto_tsquery('russian', $1)) AS score
 			FROM memory_chunks
-			WHERE agent_id = $2 AND tsv @@ plainto_tsquery('simple', $3)%s
+			WHERE agent_id = $2 AND tsv @@ plainto_tsquery('russian', $3)%s
 			ORDER BY score DESC LIMIT $%d`, tc, limitN)
 		args = append([]any{query, agentID, query}, tcArgs...)
 		args = append(args, limit)
@@ -107,9 +107,9 @@ func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any
 		}
 		limitN := 5 + len(tcArgs)
 		q = fmt.Sprintf(`SELECT path, start_line, end_line, text, user_id,
-				ts_rank(tsv, plainto_tsquery('simple', $1)) AS score
+				ts_rank(tsv, plainto_tsquery('russian', $1)) AS score
 			FROM memory_chunks
-			WHERE agent_id = $2 AND tsv @@ plainto_tsquery('simple', $3)
+			WHERE agent_id = $2 AND tsv @@ plainto_tsquery('russian', $3)
 			AND (user_id IS NULL OR user_id = $4)%s
 			ORDER BY score DESC LIMIT $%d`, tc, limitN)
 		args = append([]any{query, agentID, query, userID}, tcArgs...)
@@ -122,9 +122,9 @@ func (s *PGMemoryStore) ftsSearch(ctx context.Context, query string, agentID any
 		}
 		limitN := 4 + len(tcArgs)
 		q = fmt.Sprintf(`SELECT path, start_line, end_line, text, user_id,
-				ts_rank(tsv, plainto_tsquery('simple', $1)) AS score
+				ts_rank(tsv, plainto_tsquery('russian', $1)) AS score
 			FROM memory_chunks
-			WHERE agent_id = $2 AND tsv @@ plainto_tsquery('simple', $3)
+			WHERE agent_id = $2 AND tsv @@ plainto_tsquery('russian', $3)
 			AND user_id IS NULL%s
 			ORDER BY score DESC LIMIT $%d`, tc, limitN)
 		args = append([]any{query, agentID, query}, tcArgs...)
