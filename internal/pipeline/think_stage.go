@@ -81,12 +81,20 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 		return fmt.Errorf("llm call: %w", err)
 	}
 
-	// 5. Accumulate usage (including ThinkingTokens for reasoning models)
+	// 5. Accumulate usage across turns: base tokens, ThinkingTokens for reasoning
+	// models, and cache tokens. Cache read/creation must be summed too — otherwise
+	// the aggregated RunResult.Usage (and thus webhook usage + usage_events) reports
+	// zero cache even when each turn hit the prompt cache heavily.
 	if resp.Usage != nil {
 		state.Think.TotalUsage.PromptTokens += resp.Usage.PromptTokens
 		state.Think.TotalUsage.CompletionTokens += resp.Usage.CompletionTokens
 		state.Think.TotalUsage.TotalTokens += resp.Usage.TotalTokens
 		state.Think.TotalUsage.ThinkingTokens += resp.Usage.ThinkingTokens
+		state.Think.TotalUsage.CacheReadTokens += resp.Usage.CacheReadTokens
+		state.Think.TotalUsage.CacheCreationTokens += resp.Usage.CacheCreationTokens
+		if resp.Usage.PromptTokensIncludeCachedSegments {
+			state.Think.TotalUsage.PromptTokensIncludeCachedSegments = true
+		}
 	}
 
 	if isEmptyLengthResponse(resp) {
