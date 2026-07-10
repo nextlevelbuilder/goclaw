@@ -673,16 +673,17 @@ type RunRequest struct {
 
 // RunResult is the output of a completed agent run.
 type RunResult struct {
-	Content        string           `json:"content"`
-	Thinking       string           `json:"thinking,omitempty"` // reasoning content from thinking models (Claude, o3, DeepSeek-R1, Kimi)
-	RunID          string           `json:"runId"`
-	Iterations     int              `json:"iterations"`
-	Usage          *providers.Usage `json:"usage,omitempty"`
-	Media          []MediaResult    `json:"media,omitempty"`          // media files from tool results (MEDIA: prefix)
-	Deliverables   []string         `json:"deliverables,omitempty"`   // actual content from tool outputs (for team task results)
-	BlockReplies   int              `json:"blockReplies,omitempty"`   // number of block.reply events emitted
-	LastBlockReply string           `json:"lastBlockReply,omitempty"` // last block reply content (for dedup)
-	LoopKilled     bool             `json:"loopKilled,omitempty"`     // true when run was terminated by loop detector
+	Content        string                `json:"content"`
+	Thinking       string                `json:"thinking,omitempty"` // reasoning content from thinking models (Claude, o3, DeepSeek-R1, Kimi)
+	RunID          string                `json:"runId"`
+	Iterations     int                   `json:"iterations"`
+	Usage          *providers.Usage      `json:"usage,omitempty"`
+	Media          []MediaResult         `json:"media,omitempty"`          // media files from tool results (MEDIA: prefix)
+	Deliverables   []string              `json:"deliverables,omitempty"`   // actual content from tool outputs (for team task results)
+	BlockReplies   int                   `json:"blockReplies,omitempty"`   // number of block.reply events emitted
+	LastBlockReply string                `json:"lastBlockReply,omitempty"` // last block reply content (for dedup)
+	LoopKilled     bool                  `json:"loopKilled,omitempty"`     // true when run was terminated by loop detector
+	Calls          []providers.CallUsage `json:"calls,omitempty"`          // per-call usage breakdown
 }
 
 // MediaResult represents a media file produced by a tool during the agent run.

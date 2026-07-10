@@ -281,6 +281,7 @@ func convertRunResult(pr *pipeline.RunResult) *RunResult {
 		BlockReplies:   pr.BlockReplies,
 		LastBlockReply: pr.LastBlockReply,
 		LoopKilled:     pr.LoopKilled,
+		Calls:          pr.Calls,
 	}
 }
 

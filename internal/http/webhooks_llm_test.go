@@ -28,22 +28,22 @@ type stubLLMAgent struct {
 	runFn   func(ctx context.Context, req agent.RunRequest) (*agent.RunResult, error)
 }
 
-func (a *stubLLMAgent) ID() string            { return a.id }
-func (a *stubLLMAgent) UUID() uuid.UUID        { return a.agentID }
+func (a *stubLLMAgent) ID() string                   { return a.id }
+func (a *stubLLMAgent) UUID() uuid.UUID              { return a.agentID }
 func (a *stubLLMAgent) OtherConfig() json.RawMessage { return nil }
 func (a *stubLLMAgent) Run(ctx context.Context, req agent.RunRequest) (*agent.RunResult, error) {
 	return a.runFn(ctx, req)
 }
-func (a *stubLLMAgent) IsRunning() bool            { return false }
-func (a *stubLLMAgent) Model() string               { return "test-model" }
-func (a *stubLLMAgent) ProviderName() string        { return "test" }
+func (a *stubLLMAgent) IsRunning() bool              { return false }
+func (a *stubLLMAgent) Model() string                { return "test-model" }
+func (a *stubLLMAgent) ProviderName() string         { return "test" }
 func (a *stubLLMAgent) Provider() providers.Provider { return nil }
 
 // ---- stub: store.WebhookCallStore for LLM tests ----
 
 // llmCallStore captures Create calls for assertion.
 type llmCallStore struct {
-	created []*store.WebhookCallData
+	created   []*store.WebhookCallData
 	createErr error
 }
 
@@ -226,6 +226,18 @@ func TestWebhookLLMHandler_SyncHappyPath(t *testing.T) {
 					CacheCreationTokens:               2,
 					PromptTokensIncludeCachedSegments: true,
 				},
+				// Cache fields live on call #1 only — mirrors production, where each
+				// CallUsage copies the full providers.Usage from the LLM response
+				// (loop_pipeline_callbacks.go), so SumCallUsage must OR/sum them
+				// across calls rather than reading them off the flat RunResult.Usage.
+				Calls: []providers.CallUsage{
+					{Type: "llm_call", Name: "stub/m #1", Provider: "stub", Model: "m",
+						Usage: providers.Usage{PromptTokens: 10, CompletionTokens: 5, TotalTokens: 15,
+							CacheReadTokens: 8, CacheCreationTokens: 2, PromptTokensIncludeCachedSegments: true},
+						CostUSD: 0.01},
+					{Type: "tool_call", Name: "read_image", Provider: "9router", Model: "cx/gpt-5.5",
+						Usage: providers.Usage{PromptTokens: 100, CompletionTokens: 20, TotalTokens: 120}, CostUSD: 0.02},
+				},
 			}, nil
 		},
 	}
@@ -260,9 +272,12 @@ func TestWebhookLLMHandler_SyncHappyPath(t *testing.T) {
 	if resp.Output != "42" {
 		t.Errorf("expected output '42', got %q", resp.Output)
 	}
-	if resp.Usage == nil || resp.Usage.TotalTokens != 15 {
+	// usage now equals SumCallUsage(resp.Calls): prompt 10+100=110, completion 5+20=25, total 15+120=135.
+	if resp.Usage == nil || resp.Usage.TotalTokens != 135 {
 		t.Errorf("unexpected usage: %+v", resp.Usage)
 	}
+	// Cache fields (set only on call #1) must survive the sum unchanged — regression
+	// coverage for cache-token propagation through the Calls -> SumCallUsage path.
 	if resp.Usage.CacheReadTokens != 8 || resp.Usage.CacheCreationTokens != 2 {
 		t.Errorf("cache tokens not propagated: read=%d create=%d", resp.Usage.CacheReadTokens, resp.Usage.CacheCreationTokens)
 	}
@@ -271,6 +286,18 @@ func TestWebhookLLMHandler_SyncHappyPath(t *testing.T) {
 	}
 	if resp.AgentID != agentUUID.String() {
 		t.Errorf("expected agent_id %s, got %s", agentUUID, resp.AgentID)
+	}
+	if len(resp.Calls) != 2 {
+		t.Fatalf("Calls len = %d, want 2", len(resp.Calls))
+	}
+	if resp.Calls[1].Provider != "9router" || resp.Calls[1].Model != "cx/gpt-5.5" {
+		t.Errorf("tool call attribution wrong: %+v", resp.Calls[1])
+	}
+	if resp.Usage == nil || resp.Usage.PromptTokens != 110 { // 10 + 100 = sum of calls
+		t.Errorf("usage should equal SumCallUsage(calls).PromptTokens=110, got %+v", resp.Usage)
+	}
+	if resp.TotalCostUSD < 0.0299 || resp.TotalCostUSD > 0.0301 {
+		t.Errorf("TotalCostUSD = %f, want ~0.03", resp.TotalCostUSD)
 	}
 
 	// Audit row must be written with status=done.

@@ -117,4 +117,5 @@ type RunResult struct {
 	Deliverables   []string
 	BlockReplies   int
 	LastBlockReply string
+	Calls          []providers.CallUsage
 }

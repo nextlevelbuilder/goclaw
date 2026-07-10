@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -44,6 +45,11 @@ type RunState struct {
 	CurrentLLMSpanID *uuid.UUID
 	// CurrentToolSpanID is the most recent tool-call span; post-tool-use hook spans parent to it.
 	CurrentToolSpanID *uuid.UUID
+
+	// Calls is the per-call usage breakdown (LLM calls + tool-internal LLM calls),
+	// appended during the run. Guarded by callsMu for the parallel tool path.
+	Calls   []providers.CallUsage
+	callsMu sync.Mutex
 }
 
 // NewRunState creates a RunState with identity fields set.
@@ -56,6 +62,13 @@ func NewRunState(input *RunInput, ws *workspace.WorkspaceContext, model string, 
 		RunID:     input.RunID,
 		Messages:  NewMessageBuffer(providers.Message{}),
 	}
+}
+
+// AppendCall records one call's usage in the run breakdown (thread-safe).
+func (rs *RunState) AppendCall(c providers.CallUsage) {
+	rs.callsMu.Lock()
+	rs.Calls = append(rs.Calls, c)
+	rs.callsMu.Unlock()
 }
 
 // BuildResult converts final RunState into a RunResult.
@@ -73,6 +86,7 @@ func (rs *RunState) BuildResult() *RunResult {
 		Deliverables:   rs.Tool.Deliverables,
 		BlockReplies:   rs.Observe.BlockReplies,
 		LastBlockReply: rs.Observe.LastBlockReply,
+		Calls:          rs.Calls,
 	}
 }
 
