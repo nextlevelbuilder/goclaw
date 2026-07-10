@@ -28,7 +28,7 @@ require (
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/mymmrac/telego v1.6.0
 	github.com/ollama/ollama v0.30.11
-	github.com/open-dingtalk/dingtalk-stream-sdk-go v0.9.1
+	github.com/open-dingtalk/dingtalk-stream-sdk-go v0.9.2-0.20260705041131-325e7c1049ad
 	github.com/pkoukk/tiktoken-go v0.1.8
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e

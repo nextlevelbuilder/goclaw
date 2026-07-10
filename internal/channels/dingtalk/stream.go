@@ -20,6 +20,21 @@ type streamTransport interface {
 	Close()
 }
 
+// The SDK is pinned to an untagged commit (v0.9.2-0.20260705041131-325e7c1049ad),
+// not to the latest tag. Do not "fix" that by moving back to v0.9.1.
+//
+// v0.9.1 crashes the whole process. Its processLoop defers `close(closeChan)`
+// while the reader goroutine it spawned still does `closeChan <- struct{}{}` on
+// a read error (client.go:147,161). When processLoop returns first — an idle
+// keepalive timeout, a reconnect — the reader sends on a closed channel and the
+// gateway dies with `panic: send on closed channel`. Observed here after ~40
+// minutes of an idle connection, with no user activity in the log.
+//
+// A panic in the SDK's own goroutine cannot be recovered from ours, so there is
+// no defensive fix on our side; the dependency has to carry it. Upstream replaced
+// closeChan with a context (issues #27, #28, #32), merged 2026-07-05 in #34 but
+// not yet released. Move to the next tag once it contains that merge.
+
 // sdkTransport adapts the official DingTalk Go SDK to streamTransport.
 //
 // Everything the upstream TypeScript connector hand-rolls around its Node SDK —
