@@ -331,7 +331,7 @@ func TestCard_ThrottleReleasesAfterInterval(t *testing.T) {
 	ctx := context.Background()
 
 	stream.Update(ctx, "a")
-	now = now.Add(cardUpdateThrottle - time.Millisecond)
+	now = now.Add(defaultCardUpdateInterval - time.Millisecond)
 	stream.Update(ctx, "b") // still throttled
 	now = now.Add(2 * time.Millisecond)
 	stream.Update(ctx, "c") // past the window
@@ -629,5 +629,73 @@ func TestCard_ToolCallRunLeavesOneCard(t *testing.T) {
 	}
 	if _, ok := ch.takeCard("staff-1"); !ok {
 		t.Error("the answer card was not handed to Send")
+	}
+}
+
+// The repaint interval is a cost knob: one billed card API call per frame. It is
+// configurable, and clamped so a misconfigured instance cannot queue behind the
+// QPS gate and look like a hang.
+func TestCardUpdateInterval(t *testing.T) {
+	tests := []struct {
+		ms   int
+		want time.Duration
+	}{
+		{0, defaultCardUpdateInterval},
+		{-1, defaultCardUpdateInterval},
+		{1, minCardUpdateInterval},
+		{50, minCardUpdateInterval},
+		{100, 100 * time.Millisecond},
+		{3000, 3 * time.Second},
+	}
+	for _, tc := range tests {
+		got := Config{CardUpdateIntervalMS: tc.ms}.cardUpdateInterval()
+		if got != tc.want {
+			t.Errorf("card_update_interval_ms=%d -> %v, want %v", tc.ms, got, tc.want)
+		}
+	}
+}
+
+// A longer interval must actually cut the number of frames pushed.
+func TestCard_LongerIntervalPushesFewerFrames(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		intervalMS int
+		wantFrames int
+	}{
+		{"default 800ms", 0, 3},
+		{"3s", 3000, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			api := newStubCardAPI(t)
+			cfg := baseCfg()
+			cfg.CardUpdateIntervalMS = tc.intervalMS
+			ch := cardChannel(t, cfg, api)
+
+			now := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)
+			ch.now = func() time.Time { return now }
+			ch.rememberChat("staff-1", chatMeta{UserID: "staff-1"})
+
+			ctx := context.Background()
+			stream, err := ch.CreateStream(ctx, "staff-1", true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Two seconds of chunks, one every 100ms.
+			for i := range 20 {
+				stream.Update(ctx, fmt.Sprintf("chunk %d", i))
+				now = now.Add(100 * time.Millisecond)
+			}
+			if got := len(api.pathsOf(pathCardStreaming)); got != tc.wantFrames {
+				t.Errorf("frames = %d, want %d", got, tc.wantFrames)
+			}
+		})
+	}
+}
+
+func TestConfigValidate_RejectsNegativeInterval(t *testing.T) {
+	cfg := Config{ClientID: "a", ClientSecret: "b", CardUpdateIntervalMS: -5}
+	cfg.applyDefaults()
+	if err := cfg.validate(); err == nil {
+		t.Fatal("want error for a negative card_update_interval_ms")
 	}
 }

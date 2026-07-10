@@ -50,6 +50,8 @@ type dingtalkInstanceConfig struct {
 	Streaming         *bool  `json:"streaming,omitempty"`
 	ReactionLevel     string `json:"reaction_level,omitempty"`
 
+	CardUpdateIntervalMS int `json:"card_update_interval_ms,omitempty"`
+
 	ChatBehavior *config.ChatBehaviorConfig `json:"chat_behavior,omitempty"`
 }
 
@@ -88,7 +90,10 @@ func resolve(creds json.RawMessage, cfg json.RawMessage) (Config, error) {
 		GroupSessionScope: ic.GroupSessionScope,
 		Streaming:         ic.Streaming,
 		ReactionLevel:     ic.ReactionLevel,
-		ChatBehavior:      ic.ChatBehavior,
+
+		CardUpdateIntervalMS: ic.CardUpdateIntervalMS,
+
+		ChatBehavior: ic.ChatBehavior,
 	}, nil
 }
 

@@ -34,9 +34,20 @@ const (
 // cardContentKey is the template field the streamed markdown lands in.
 const cardContentKey = "msgContent"
 
-// cardUpdateThrottle bounds how often one card is repainted. Every LLM chunk
-// would otherwise become an HTTP request.
-const cardUpdateThrottle = 800 * time.Millisecond
+// Card repaint cadence. Every LLM chunk would otherwise become an HTTP request.
+//
+// This is a cost knob, not a UX knob. The DingTalk client animates the delta
+// between frames character by character, so a longer interval does not make the
+// typing look chunky — measured against a live card, 14 frames of ~40 runes each
+// still read as smooth per-character typing. What the interval does change is
+// the number of billed card API calls: one per frame.
+//
+// minCardUpdateInterval keeps a misconfigured instance from queueing behind the
+// QPS gate, where it would look like a hang rather than a rate limit.
+const (
+	defaultCardUpdateInterval = 800 * time.Millisecond
+	minCardUpdateInterval     = 100 * time.Millisecond
+)
 
 // DingTalk's card API is rate limited per app. The documented ceiling is around
 // 40 QPS; the upstream connector halves it, and so do we — a repaint dropped to
@@ -142,7 +153,7 @@ var _ interface {
 	MessageID() int
 } = (*cardStream)(nil)
 
-// Update repaints the card, at most once per cardUpdateThrottle, materializing
+// Update repaints the card, at most once per card_update_interval_ms, materializing
 // it on the first call that carries text.
 //
 // A skipped repaint is not lost: the text is retained and Stop flushes it. The
@@ -157,7 +168,7 @@ func (s *cardStream) Update(ctx context.Context, text string) {
 	s.lastText = text
 
 	now := s.ch.now()
-	if !s.lastPush.IsZero() && now.Sub(s.lastPush) < cardUpdateThrottle {
+	if !s.lastPush.IsZero() && now.Sub(s.lastPush) < s.ch.cfg.cardUpdateInterval() {
 		s.mu.Unlock()
 		return
 	}

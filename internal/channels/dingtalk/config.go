@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
@@ -85,6 +86,11 @@ type Config struct {
 	// the agent works. "on" (default) or "off".
 	ReactionLevel string
 
+	// CardUpdateIntervalMS is how often a streaming card is repainted. Raising it
+	// cuts billed card API calls without making the typing look chunky — the
+	// DingTalk client animates between frames.
+	CardUpdateIntervalMS int
+
 	ChatBehavior *config.ChatBehaviorConfig
 }
 
@@ -96,6 +102,14 @@ func (c Config) RequireMentionOrDefault() bool {
 		return true
 	}
 	return *c.RequireMention
+}
+
+// cardUpdateInterval is the repaint cadence, clamped to a sane floor.
+func (c Config) cardUpdateInterval() time.Duration {
+	if c.CardUpdateIntervalMS <= 0 {
+		return defaultCardUpdateInterval
+	}
+	return max(time.Duration(c.CardUpdateIntervalMS)*time.Millisecond, minCardUpdateInterval)
 }
 
 // ReactionsEnabled reports whether to post the thinking reaction.
@@ -174,6 +188,10 @@ func (c Config) validate() error {
 	default:
 		return fmt.Errorf("dingtalk reaction_level %q: want %q or %q",
 			c.ReactionLevel, ReactionLevelOn, ReactionLevelOff)
+	}
+
+	if c.CardUpdateIntervalMS < 0 {
+		return fmt.Errorf("dingtalk card_update_interval_ms %d: must not be negative", c.CardUpdateIntervalMS)
 	}
 
 	return nil

@@ -882,6 +882,23 @@ one run, identified by a client-generated `outTrackId`.
 
 Set `streaming: false` to disable cards everywhere.
 
+#### The typewriter effect is client-side
+
+Measured against a live card: the gateway pushes a **full-text** frame (`isFull: true`) every
+`card_update_interval_ms`, each carrying 30–45 new characters. The DingTalk client animates the
+delta between frames character by character, so what looks like real-time typing is 14 coarse
+frames over 10 seconds, smoothed on the device.
+
+Two consequences:
+
+- `card_update_interval_ms` is a **cost knob, not a UX knob**. Every frame is one billed card
+  API call. Raising it to 1500–3000ms cuts calls by half to two-thirds and the typing still
+  reads as smooth.
+- What streaming actually buys is **time to first token**, not the animation. On a 22k-token
+  prompt, the first frame appeared 5.6s after the inbound message while the full answer landed
+  at 15.7s. With `streaming: false` (or `group_reply_mode` `text`/`markdown` in a group) nothing
+  is visible until the whole answer is generated — ten seconds later, in that run.
+
 The card is posted on the **first token**, not when the stream opens. The agent framework opens
 a stream at `run.started` — before any content exists — and closes it again at the first tool
 call. Creating the card there leaves an empty bubble in the conversation, stamped FINISHED and
@@ -937,8 +954,9 @@ because a stale id pasted into the console fails opaquely.
 ### Config keys
 
 `dm_policy`, `group_policy`, `require_mention`, `allow_from`, `group_allow_from`,
-`group_reply_mode`, `group_session_scope`, `streaming`, `history_limit`, `text_chunk_limit`,
-`media_max_mb`, `endpoint`, `chat_behavior`.
+`group_reply_mode`, `group_session_scope`, `streaming`, `card_update_interval_ms`,
+`reaction_level`, `history_limit`, `text_chunk_limit`, `media_max_mb`, `endpoint`,
+`chat_behavior`.
 
 `dm_policy` and `group_policy` are validated against their allowed values **when the channel
 starts**, not when the instance row is saved. BaseChannel's policy switches treat an
