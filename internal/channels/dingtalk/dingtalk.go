@@ -85,6 +85,11 @@ type Channel struct {
 
 	stopOnce sync.Once
 	stopCh   chan struct{}
+
+	// historyOnce guards the flusher shutdown. PendingHistory.StopFlusher is a
+	// bare close() and panics on a second call, and this channel has two paths
+	// into it: a failed Start, and the Stop the InstanceLoader runs on reload.
+	historyOnce sync.Once
 }
 
 // Compile-time interface conformance. StreamingChannel is asserted in
@@ -145,7 +150,7 @@ func (c *Channel) Start(ctx context.Context) error {
 	c.stateMu.Unlock()
 
 	if err := transport.Start(ctx); err != nil {
-		c.GroupHistory().StopFlusher()
+		c.stopHistory()
 		// The failure kind is genuinely ambiguous: the SDK negotiates the
 		// socket endpoint with the app credentials, so a wrong AppKey and an
 		// unreachable network surface identically here. Reporting either one
@@ -181,13 +186,25 @@ func (c *Channel) Stop(ctx context.Context) error {
 	if transport != nil {
 		transport.Close()
 	}
-	if gh := c.GroupHistory(); gh != nil {
-		gh.StopFlusher()
-	}
+	c.stopHistory()
 	c.SetRunning(false)
 	c.MarkStopped("stopped")
 	slog.Info("stopped dingtalk bot", "channel", c.Name())
 	return nil
+}
+
+// stopHistory shuts the group-history flusher down exactly once.
+//
+// StopFlusher closes a channel unguarded, so calling it twice panics and takes
+// the whole gateway with it. Two paths reach it here: Start's failure branch
+// (a bad AppKey stops the flusher it just started) and Stop (which the
+// InstanceLoader calls on the old channel during a reload).
+func (c *Channel) stopHistory() {
+	c.historyOnce.Do(func() {
+		if gh := c.GroupHistory(); gh != nil {
+			gh.StopFlusher()
+		}
+	})
 }
 
 // handleBotMessage lives in inbound.go.

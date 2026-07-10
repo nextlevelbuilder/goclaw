@@ -13,6 +13,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // fakeTransport stands in for the Stream-mode socket. It records lifecycle
@@ -257,5 +258,68 @@ func TestInbound_PublishGivesUpWhenChannelStops(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("processMessage still pinned on a saturated bus after Stop")
+	}
+}
+
+// fakePendingStore is a no-op PendingMessageStore. It exists so GroupHistory
+// gets a non-nil store and therefore a *real* flusher goroutine: with a nil
+// store, StopFlusher returns early and every double-stop bug hides.
+type fakePendingStore struct{ store.PendingMessageStore }
+
+func (fakePendingStore) ListByKey(context.Context, string, string) ([]store.PendingMessage, error) {
+	return nil, nil
+}
+func (fakePendingStore) AppendBatch(context.Context, []store.PendingMessage) error { return nil }
+func (fakePendingStore) DeleteByKey(context.Context, string, string) error         { return nil }
+
+// A failed Start stops the flusher it had just started; the InstanceLoader then
+// calls Stop on the same channel during reload. PendingHistory.StopFlusher is a
+// bare close(), so the second call used to panic with "close of closed channel"
+// and take the whole gateway down. Seen in a live run against real DingTalk
+// credentials.
+func TestStopHistory_SurvivesFailedStartThenStop(t *testing.T) {
+	ch, err := New(Config{ClientID: "k", ClientSecret: "s"},
+		bus.New(), nil, fakePendingStore{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ft := &fakeTransport{startErr: errors.New("authFailed")}
+	ch.newTransport = func(h chatbot.IChatBotMessageHandler) streamTransport {
+		ft.handler = h
+		return ft
+	}
+
+	if err := ch.Start(context.Background()); err == nil {
+		t.Fatal("want Start to fail")
+	}
+	// Must not panic.
+	if err := ch.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop after failed Start: %v", err)
+	}
+	if err := ch.Stop(context.Background()); err != nil {
+		t.Fatalf("second Stop: %v", err)
+	}
+}
+
+// The happy path must also survive a double Stop with a live flusher.
+func TestStopHistory_DoubleStopWithLiveFlusher(t *testing.T) {
+	ch, err := New(Config{ClientID: "k", ClientSecret: "s"},
+		bus.New(), nil, fakePendingStore{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ft := &fakeTransport{}
+	ch.newTransport = func(h chatbot.IChatBotMessageHandler) streamTransport {
+		ft.handler = h
+		return ft
+	}
+	if err := ch.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := ch.Stop(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := ch.Stop(context.Background()); err != nil {
+		t.Fatalf("second Stop panicked: %v", err)
 	}
 }
