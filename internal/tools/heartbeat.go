@@ -231,7 +231,8 @@ func (t *HeartbeatTool) handleSet(ctx context.Context, agentID uuid.UUID, args m
 	}
 
 	if hb.Enabled && hb.NextRunAt == nil {
-		nextRun := time.Now().Add(time.Duration(hb.IntervalSec)*time.Second + store.StaggerOffset(hb.AgentID, hb.IntervalSec))
+		anchor := hb.LastRunAt
+		nextRun := store.NextHeartbeatRunAt(time.Now(), hb.AgentID, hb.IntervalSec, anchor)
 		hb.NextRunAt = &nextRun
 	}
 
@@ -253,7 +254,8 @@ func (t *HeartbeatTool) handleToggle(ctx context.Context, agentID uuid.UUID, ena
 	}
 	hb.Enabled = enabled
 	if enabled && hb.NextRunAt == nil {
-		nextRun := time.Now().Add(time.Duration(hb.IntervalSec) * time.Second)
+		anchor := hb.LastRunAt
+		nextRun := store.NextHeartbeatRunAt(time.Now(), hb.AgentID, hb.IntervalSec, anchor)
 		hb.NextRunAt = &nextRun
 	}
 	if err := t.hbStore.Upsert(ctx, hb); err != nil {

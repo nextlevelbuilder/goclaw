@@ -67,8 +67,8 @@ func NewTicker(cfg TickerConfig) *Ticker {
 		msgBus:        cfg.MsgBus,
 		sched:         cfg.Sched,
 		runAgent:      cfg.RunAgent,
-		wakeCh:   make(chan uuid.UUID, 16),
-		stopCh:   make(chan struct{}),
+		wakeCh:        make(chan uuid.UUID, 16),
+		stopCh:        make(chan struct{}),
 	}
 }
 
@@ -369,7 +369,11 @@ func (t *Ticker) finishRun(ctx context.Context, hb store.AgentHeartbeat, session
 	if errMsg != "" {
 		newState.LastError = errMsg
 	}
-	nextRun := now.Add(time.Duration(hb.IntervalSec) * time.Second)
+	anchor := hb.NextRunAt
+	if anchor == nil {
+		anchor = hb.LastRunAt
+	}
+	nextRun := store.NextHeartbeatRunAt(now, hb.AgentID, hb.IntervalSec, anchor)
 	newState.NextRunAt = &nextRun
 
 	if err := t.store.UpdateState(ctx, hb.ID, newState); err != nil {
@@ -415,7 +419,12 @@ func (t *Ticker) logSkipped(ctx context.Context, hb store.AgentHeartbeat, reason
 }
 
 func (t *Ticker) advanceNextRun(ctx context.Context, hb store.AgentHeartbeat) {
-	nextRun := time.Now().Add(time.Duration(hb.IntervalSec) * time.Second)
+	now := time.Now()
+	anchor := hb.NextRunAt
+	if anchor == nil {
+		anchor = hb.LastRunAt
+	}
+	nextRun := store.NextHeartbeatRunAt(now, hb.AgentID, hb.IntervalSec, anchor)
 	state := store.HeartbeatState{
 		NextRunAt:     &nextRun,
 		LastStatus:    deref(hb.LastStatus),
