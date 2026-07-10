@@ -207,7 +207,10 @@ t.msgBus.PublishOutbound(bus.OutboundMessage{
 })
 ```
 
-**Delivery targets** are discovered via `heartbeat.targets` RPC, which lists distinct `(channel, chatID)` pairs from the agent's session history. The UI presents these as a dropdown for easy selection.
+**Delivery targets** are discovered via `heartbeat.targets` RPC from
+tenant-scoped channel contacts, not session history. The UI presents these as a
+dropdown while retaining the contacts' stable channel and chat IDs for
+selection and delivery.
 
 ---
 
@@ -224,7 +227,7 @@ All methods are registered under the `heartbeat.*` namespace on the WebSocket me
 | `heartbeat.logs` | `agentId`, `limit`, `offset` | Paginated run history |
 | `heartbeat.checklist.get` | `agentId` | Read HEARTBEAT.md content |
 | `heartbeat.checklist.set` | `agentId`, `content` | Write HEARTBEAT.md content |
-| `heartbeat.targets` | `agentId` | List known delivery targets from session history |
+| `heartbeat.targets` | `agentId` | List known delivery targets from tenant-scoped channel contacts |
 
 ### Validation Rules (heartbeat.set)
 

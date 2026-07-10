@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -73,7 +74,69 @@ func (c *ContactCollector) RefreshContact(ctx context.Context, channelType, chan
 	}
 }
 
+// EnsureContactWithMetadata is the metadata-aware counterpart of
+// EnsureContact. It preserves the same hot-path dedup behavior and gracefully
+// falls back for stores that only implement ContactStore.
+func (c *ContactCollector) EnsureContactWithMetadata(ctx context.Context, channelType, channelInstance, senderID, userID, displayName, username, peerKind, contactType, threadID, threadType string, metadata map[string]string) {
+	tid := TenantIDFromContext(ctx)
+	key := tid.String() + ":" + channelType + ":" + channelInstance + ":" + senderID + ":" + threadID
+	if _, ok := c.seen.Get(ctx, key); ok {
+		return
+	}
+	if contactType == "" {
+		contactType = "user"
+	}
+	metadataStore, ok := c.store.(ContactMetadataStore)
+	if !ok {
+		c.EnsureContact(ctx, channelType, channelInstance, senderID, userID, displayName, username, peerKind, contactType, threadID, threadType)
+		return
+	}
+	if err := metadataStore.UpsertContactWithMetadata(ctx, channelType, channelInstance, senderID, userID, displayName, username, peerKind, contactType, threadID, threadType, metadata); err != nil {
+		slog.Warn("contact_collector.upsert_metadata_failed",
+			"error", err,
+			"tenant_id", tid,
+			"channel", channelType,
+			"instance", channelInstance,
+			"sender", senderID,
+		)
+		return
+	}
+	c.seen.Set(ctx, key, true, contactSeenTTL)
+}
+
+// RefreshContactWithMetadata persists presentation metadata without hot-path
+// dedup, matching RefreshContact's refresh semantics.
+func (c *ContactCollector) RefreshContactWithMetadata(ctx context.Context, channelType, channelInstance, senderID, userID, displayName, username, peerKind, contactType, threadID, threadType string, metadata map[string]string) {
+	if contactType == "" {
+		contactType = "user"
+	}
+	metadataStore, ok := c.store.(ContactMetadataStore)
+	if !ok {
+		c.RefreshContact(ctx, channelType, channelInstance, senderID, userID, displayName, username, peerKind, contactType, threadID, threadType)
+		return
+	}
+	if err := metadataStore.UpsertContactWithMetadata(ctx, channelType, channelInstance, senderID, userID, displayName, username, peerKind, contactType, threadID, threadType, metadata); err != nil {
+		slog.Warn("contact_collector.refresh_metadata_failed",
+			"error", err,
+			"tenant_id", TenantIDFromContext(ctx),
+			"channel", channelType,
+			"instance", channelInstance,
+			"sender", senderID,
+		)
+	}
+}
+
 // ResolveTenantUserID delegates to the underlying ContactStore.
 func (c *ContactCollector) ResolveTenantUserID(ctx context.Context, channelType, senderID string) (string, error) {
 	return c.store.ResolveTenantUserID(ctx, channelType, senderID)
+}
+
+// ListContacts delegates contact discovery queries to the backing store.
+// Background channel syncs use this to backfill metadata for previously seen
+// contacts that are no longer present in a platform's live listing.
+func (c *ContactCollector) ListContacts(ctx context.Context, opts ContactListOpts) ([]ChannelContact, error) {
+	if c == nil || c.store == nil {
+		return nil, errors.New("contact collector unavailable")
+	}
+	return c.store.ListContacts(ctx, opts)
 }

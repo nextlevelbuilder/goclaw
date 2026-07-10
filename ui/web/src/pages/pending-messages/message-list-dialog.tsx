@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/format";
-import type { PendingMessageGroup, PendingMessage } from "./types";
+import { formatPendingGroupLabel, type PendingMessageGroup, type PendingMessage } from "./types";
 
 interface MessageListDialogProps {
   group: PendingMessageGroup;
@@ -35,7 +35,7 @@ export function MessageListDialog({
       <DialogContent className="max-h-[85vh] flex flex-col sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 truncate">
-            {t("dialog.title", { name: group.group_title || group.history_key })}
+            {t("dialog.title", { name: formatPendingGroupLabel(group) })}
             <Badge variant="outline" className="text-xs">{group.channel_name}</Badge>
           </DialogTitle>
         </DialogHeader>

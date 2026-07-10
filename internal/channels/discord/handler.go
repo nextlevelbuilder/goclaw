@@ -120,7 +120,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	// Process media: STT, document extraction, build tags
 	var mediaFiles []bus.MediaFile
 	if len(mediaList) > 0 {
-		var extraContent string
+		var extraContent strings.Builder
 		for i := range mediaList {
 			mi := &mediaList[i]
 
@@ -152,7 +152,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 					if err != nil {
 						slog.Warn("discord: document extraction failed", "file", mi.FileName, "error", err)
 					} else if docContent != "" {
-						extraContent += "\n\n" + docContent
+						extraContent.WriteString("\n\n" + docContent)
 					}
 				}
 			}
@@ -176,8 +176,8 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 			}
 		}
 
-		if extraContent != "" {
-			content += extraContent
+		if extraContent.String() != "" {
+			content += extraContent.String()
 		}
 	}
 
@@ -211,7 +211,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).
 			if cc := c.ContactCollector(); cc != nil {
 				cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, displayName, m.Author.Username, "group", "user", "", "")
-				cc.EnsureContact(ctx, c.Type(), c.Name(), channelID, "", c.resolveCachedChannelTitle(channelID), "", "group", "group", "", "")
+				cc.EnsureContactWithMetadata(ctx, c.Type(), c.Name(), channelID, "", c.resolveCachedChannelTitle(channelID), "", "group", "group", "", "", c.cachedContactMetadata(channelID))
 			}
 
 			slog.Debug("discord group message recorded (no mention)",
@@ -302,7 +302,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 		"placeholder_key": m.ID, // keyed by inbound message ID for placeholder lookup
 	}
 	if !isDM {
-		if title := c.resolveCachedChannelTitle(channelID); title != "" {
+		if title := c.resolveCachedGroupDisplayTitle(channelID); title != "" {
 			metadata[tools.MetaChatTitle] = title
 		}
 	}
@@ -313,7 +313,7 @@ func (c *Channel) handleMessage(_ *discordgo.Session, m *discordgo.MessageCreate
 	if cc := c.ContactCollector(); cc != nil {
 		cc.EnsureContact(ctx, c.Type(), c.Name(), senderID, senderID, displayName, m.Author.Username, peerKind, "user", "", "")
 		if peerKind == "group" {
-			cc.EnsureContact(ctx, c.Type(), c.Name(), channelID, "", c.resolveCachedChannelTitle(channelID), "", "group", "group", "", "")
+			cc.EnsureContactWithMetadata(ctx, c.Type(), c.Name(), channelID, "", c.resolveCachedChannelTitle(channelID), "", "group", "group", "", "", c.cachedContactMetadata(channelID))
 		}
 	}
 
@@ -495,6 +495,20 @@ func (c *Channel) resolveCachedChannelTitle(channelID string) string {
 		return ""
 	}
 	return channels.SanitizeDisplayName(ch.Name)
+}
+
+func (c *Channel) cachedContactMetadata(channelID string) map[string]string {
+	if c == nil || c.session == nil || c.session.State == nil || channelID == "" {
+		return nil
+	}
+	ch, err := c.session.State.Channel(channelID)
+	if err != nil || ch == nil {
+		return nil
+	}
+	return discordContactMetadata(ch, func(id string) *discordgo.Channel {
+		parent, _ := c.session.State.Channel(id)
+		return parent
+	})
 }
 
 func (c *Channel) ResolveGroupTitle(_ context.Context, channelID string) (string, error) {

@@ -11,7 +11,7 @@ import { useMinLoading } from "@/hooks/use-min-loading";
 import { useDeferredLoading } from "@/hooks/use-deferred-loading";
 import { usePendingMessages } from "./hooks/use-pending-messages";
 import { MessageListDialog } from "./message-list-dialog";
-import type { PendingMessageGroup } from "./types";
+import { formatPendingGroupLabel, type PendingMessageGroup } from "./types";
 
 export function PendingMessagesPage() {
   const { t } = useTranslation("pending-messages");
@@ -147,7 +147,7 @@ export function PendingMessagesPage() {
                       <td className="max-w-[300px] truncate px-4 py-3">
                         {g.group_title ? (
                           <span className="font-medium">
-                            {g.group_title}
+                            {formatPendingGroupLabel(g)}
                             {g.history_key.includes(":topic:") && (
                               <span className="ml-1.5 text-xs font-normal text-muted-foreground">
                                 &gt; topic:{g.history_key.split(":topic:")[1]}

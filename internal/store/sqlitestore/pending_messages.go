@@ -314,7 +314,7 @@ func (s *SQLitePendingMessageStore) resolveGroupTitlesFromContacts(ctx context.C
 	}
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT channel_instance, sender_id, display_name
+		`SELECT channel_instance, sender_id, COALESCE(NULLIF(json_extract(metadata, '$.display_title'), ''), display_name)
 		 FROM channel_contacts
 		 WHERE display_name IS NOT NULL
 		   AND display_name <> ''

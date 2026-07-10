@@ -136,6 +136,46 @@ func TestDeriveGroupUserID(t *testing.T) {
 	}
 }
 
+func TestResolveGroupDisplayTitleFallsBackThroughChannelManager(t *testing.T) {
+	manager := channels.NewManager(nil)
+	manager.RegisterChannel("discord-main", &consumerDisplayTitleChannel{
+		consumerTestChannel: consumerTestChannel{name: "discord-main", channelType: channels.TypeDiscord},
+		title:               "launch-thread / product-planning",
+	})
+
+	if got := resolveGroupDisplayTitle(context.Background(), manager, "discord-main", "thread-1", string(sessions.PeerGroup), ""); got != "launch-thread / product-planning" {
+		t.Fatalf("resolved title = %q, want qualified title", got)
+	}
+	if got := resolveGroupDisplayTitle(context.Background(), manager, "discord-main", "thread-1", string(sessions.PeerGroup), "already present"); got != "already present" {
+		t.Fatalf("metadata title = %q, want original value", got)
+	}
+}
+
+func TestResolveInboundChatTitleAvoidsLiveLookupForExternalMessage(t *testing.T) {
+	manager := channels.NewManager(nil)
+	channel := &consumerDisplayTitleChannel{
+		consumerTestChannel: consumerTestChannel{name: "discord-main", channelType: channels.TypeDiscord},
+		title:               "launch-thread / product-planning",
+	}
+	manager.RegisterChannel("discord-main", channel)
+
+	external := bus.InboundMessage{Channel: "discord-main", ChatID: "thread-1", SenderID: "user-1"}
+	if got := resolveInboundChatTitle(context.Background(), manager, external, string(sessions.PeerGroup)); got != "" {
+		t.Fatalf("external title = %q, want no live fallback", got)
+	}
+	if channel.calls != 0 {
+		t.Fatalf("external message invoked display resolver %d times", channel.calls)
+	}
+
+	internal := bus.InboundMessage{Channel: "discord-main", ChatID: "thread-1", SenderID: "system:ticker"}
+	if got := resolveInboundChatTitle(context.Background(), manager, internal, string(sessions.PeerGroup)); got != channel.title {
+		t.Fatalf("internal title = %q, want %q", got, channel.title)
+	}
+	if channel.calls != 1 {
+		t.Fatalf("internal message invoked display resolver %d times, want 1", channel.calls)
+	}
+}
+
 func TestResolveSenderNameReadsWhatsAppUserName(t *testing.T) {
 	got := resolveSenderName(bus.InboundMessage{
 		Metadata: map[string]string{
@@ -235,6 +275,17 @@ type consumerTestChannel struct {
 	name        string
 	channelType string
 	running     bool
+}
+
+type consumerDisplayTitleChannel struct {
+	consumerTestChannel
+	title string
+	calls int
+}
+
+func (c *consumerDisplayTitleChannel) ResolveGroupDisplayTitle(context.Context, string) (string, error) {
+	c.calls++
+	return c.title, nil
 }
 
 func (c consumerTestChannel) Name() string { return c.name }

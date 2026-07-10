@@ -75,9 +75,21 @@ export function useChannelDetail(instanceId: string | undefined) {
     async () => {
       if (!instanceId) return;
       try {
-        await http.post(`/v1/channels/instances/${instanceId}/metadata/refresh`);
+        const result = await http.post<{
+          ok: boolean;
+          report?: {
+            errors?: string[];
+            failures?: Array<{ channel_id: string; reason: string }>;
+          };
+        }>(`/v1/channels/instances/${instanceId}/metadata/refresh`);
         queryClient.invalidateQueries({ queryKey: queryKeys.channels.memoryExtractionGroups(instanceId), exact: true });
         await invalidate();
+        if (!result?.ok) {
+          const detail = result.report?.errors?.[0]
+            ?? result.report?.failures?.[0]?.reason;
+          toast.error(i18next.t("channels:detail.discordMetadataRefreshFailed"), detail);
+          return;
+        }
         toast.success(i18next.t("channels:detail.discordMetadataRefreshed"));
       } catch (err) {
         toast.error(i18next.t("channels:detail.discordMetadataRefreshFailed"), userFriendlyError(err));

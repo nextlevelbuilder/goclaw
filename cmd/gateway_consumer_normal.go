@@ -67,6 +67,17 @@ func processNormalMessage(
 	if peerKind == "" {
 		peerKind = string(sessions.PeerDirect) // default to DM
 	}
+	// Channel adapters already attach cache-only titles to external inbound
+	// messages. Resolve live hierarchy only for synthetic/re-ingressed messages,
+	// where no adapter metadata exists; this keeps Discord REST off the user
+	// message hot path.
+	chatTitle := resolveInboundChatTitle(ctx, deps.ChannelMgr, msg, peerKind)
+	if chatTitle != "" && chatTitle != msg.Metadata[tools.MetaChatTitle] {
+		if msg.Metadata == nil {
+			msg.Metadata = make(map[string]string)
+		}
+		msg.Metadata[tools.MetaChatTitle] = chatTitle
+	}
 	sessionKey := sessions.BuildScopedSessionKey(agentID, msg.Channel, sessions.PeerKind(peerKind), msg.ChatID)
 
 	// Thread-based isolation override (e.g. Slack DM threads, AI Panel)
@@ -136,7 +147,10 @@ func processNormalMessage(
 
 		// Also collect group chat as a contact (for group permission management / merge).
 		// Group IDs (e.g., Telegram "-100456") differ from user IDs — no UNIQUE conflict.
-		if peerKind == string(sessions.PeerGroup) && msg.ChatID != "" {
+		// Discord persists raw entity names plus hierarchy display metadata in its
+		// adapter. Do not overwrite that raw contact title with ChatTitle, which
+		// is intentionally parent-qualified for prompt/display context.
+		if peerKind == string(sessions.PeerGroup) && msg.ChatID != "" && channelType != channels.TypeDiscord {
 			groupTitle := msg.Metadata[tools.MetaChatTitle] // Telegram: message.Chat.Title
 			deps.ContactCollector.EnsureContact(ctx, channelType, msg.Channel, msg.ChatID, "", groupTitle, "", "group", "group", "", "")
 		}

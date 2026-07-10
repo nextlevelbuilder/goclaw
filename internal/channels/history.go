@@ -103,6 +103,37 @@ func NewPersistentHistory(channelName string, s store.PendingMessageStore, tenan
 // IsPersistent returns true if this history is backed by a DB store.
 func (ph *PendingHistory) IsPersistent() bool { return ph.store != nil }
 
+// PersistedGroupIDs returns the current channel's stored group and parent
+// history keys. It lets platform metadata refreshes backfill titles for groups
+// that have pending history but no channel-contact record.
+func (ph *PendingHistory) PersistedGroupIDs(ctx context.Context) ([]string, error) {
+	if ph == nil || ph.store == nil || ph.channelName == "" {
+		return nil, nil
+	}
+	groups, err := ph.store.ListGroups(ctx)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]struct{})
+	var ids []string
+	for _, group := range groups {
+		if group.ChannelName != ph.channelName {
+			continue
+		}
+		for _, id := range []string{group.HistoryKey, group.ParentHistoryKey} {
+			if id == "" {
+				continue
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
+}
+
 // SetChannelName updates the channel identity used for DB persistence.
 // DB-backed channel instances are constructed with a platform type first and
 // renamed to the instance name before start.

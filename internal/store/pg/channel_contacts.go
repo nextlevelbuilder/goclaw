@@ -78,6 +78,11 @@ func contactWhereClause(ctx context.Context, opts store.ContactListOpts) (string
 		args = append(args, opts.ContactType)
 		argIdx++
 	}
+	if opts.SnapshotAt != nil {
+		conditions = append(conditions, fmt.Sprintf("first_seen_at <= $%d", argIdx))
+		args = append(args, *opts.SnapshotAt)
+		argIdx++
+	}
 	if opts.Search != "" {
 		escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(opts.Search)
 		pattern := escaped + "%"
@@ -100,9 +105,14 @@ func (s *PGContactStore) ListContacts(ctx context.Context, opts store.ContactLis
 	where, args, argIdx := contactWhereClause(ctx, opts)
 
 	query := `SELECT id, channel_type, channel_instance, sender_id, user_id,
-		display_name, username, avatar_url, peer_kind, contact_type, thread_id, thread_type, merged_id,
+		COALESCE(NULLIF(metadata->>'display_title', ''), display_name), username, avatar_url, peer_kind, contact_type, thread_id, thread_type, merged_id,
 		first_seen_at, last_seen_at
-		FROM channel_contacts` + where + " ORDER BY last_seen_at DESC"
+		FROM channel_contacts` + where
+	if opts.OrderByFirstSeen {
+		query += " ORDER BY first_seen_at DESC, id DESC"
+	} else {
+		query += " ORDER BY last_seen_at DESC, id DESC"
+	}
 
 	limit := opts.Limit
 	if limit <= 0 {
@@ -165,7 +175,7 @@ func (s *PGContactStore) GetContactsBySenderIDs(ctx context.Context, senderIDs [
 
 	query := fmt.Sprintf(`SELECT DISTINCT ON (sender_id)
 		id, channel_type, channel_instance, sender_id, user_id,
-		display_name, username, avatar_url, peer_kind, contact_type, thread_id, thread_type, merged_id,
+		COALESCE(NULLIF(metadata->>'display_title', ''), display_name), username, avatar_url, peer_kind, contact_type, thread_id, thread_type, merged_id,
 		first_seen_at, last_seen_at
 		FROM channel_contacts
 		WHERE sender_id IN (%s) AND tenant_id = %s
@@ -196,7 +206,7 @@ func (s *PGContactStore) GetContactByID(ctx context.Context, id uuid.UUID) (*sto
 	tid := store.TenantIDFromContext(ctx)
 	row := s.db.QueryRowContext(ctx,
 		`SELECT id, channel_type, channel_instance, sender_id, user_id,
-			display_name, username, avatar_url, peer_kind, contact_type,
+			COALESCE(NULLIF(metadata->>'display_title', ''), display_name), username, avatar_url, peer_kind, contact_type,
 			thread_id, thread_type, merged_id,
 			first_seen_at, last_seen_at
 		FROM channel_contacts WHERE id = $1 AND tenant_id = $2`, id, tid)
@@ -299,7 +309,7 @@ func (s *PGContactStore) GetContactsByMergedID(ctx context.Context, mergedID uui
 	tid := store.TenantIDFromContext(ctx)
 
 	q := `SELECT id, channel_type, channel_instance, sender_id, user_id,
-		display_name, username, avatar_url, peer_kind, contact_type, thread_id, thread_type, merged_id,
+		COALESCE(NULLIF(metadata->>'display_title', ''), display_name), username, avatar_url, peer_kind, contact_type, thread_id, thread_type, merged_id,
 		first_seen_at, last_seen_at
 		FROM channel_contacts WHERE merged_id = $1 AND tenant_id = $2
 		ORDER BY last_seen_at DESC`

@@ -744,10 +744,41 @@ type GroupTitleProvider interface {
 	ResolveGroupTitle(ctx context.Context, chatID string) (string, error)
 }
 
+// MetadataRefreshFailure records one group whose presentation metadata could
+// not be refreshed.
+type MetadataRefreshFailure struct {
+	ChannelID string `json:"channel_id"`
+	Source    string `json:"source"`
+	Reason    string `json:"reason"`
+}
+
+// MetadataRefreshReport describes a manual channel metadata refresh. It keeps
+// stable IDs intact while making refresh coverage and failures observable.
+type MetadataRefreshReport struct {
+	OK                    bool                     `json:"ok"`
+	GroupsRefreshed       int                      `json:"groups_refreshed"`
+	UsersRefreshed        int                      `json:"users_refreshed"`
+	ContactTargets        int                      `json:"contact_targets"`
+	PendingMessageTargets int                      `json:"pending_message_targets"`
+	LiveTargets           int                      `json:"live_targets"`
+	DirectLookupAttempts  int                      `json:"direct_lookup_attempts"`
+	DirectLookupResolved  int                      `json:"direct_lookup_resolved"`
+	Errors                []string                 `json:"errors,omitempty"`
+	Failures              []MetadataRefreshFailure `json:"failures,omitempty"`
+}
+
 // GroupTitlesProvider is optionally implemented by channels that can resolve
 // multiple platform group/channel IDs in one best-effort operation.
 type GroupTitlesProvider interface {
 	ResolveGroupTitles(ctx context.Context, chatIDs []string) (map[string]string, error)
+}
+
+// GroupDisplayTitleProvider optionally resolves a presentation title for a
+// group/channel ID. Unlike GroupTitleProvider, the result may include a
+// platform hierarchy (for example, a Discord thread and its parent channel).
+// Routing and persistence must continue to use the stable chat ID.
+type GroupDisplayTitleProvider interface {
+	ResolveGroupDisplayTitle(ctx context.Context, chatID string) (string, error)
 }
 
 // TelegramManagerRequest describes a whitelisted Telegram Bot API management

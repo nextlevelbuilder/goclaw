@@ -10,6 +10,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -69,6 +70,53 @@ func TestCronJobHandlerInjectsPayloadCredentialUserID(t *testing.T) {
 	if gotCredentialUserID != wantCredentialUserID {
 		t.Fatalf("credential user ID in scheduled context = %q, want %q", gotCredentialUserID, wantCredentialUserID)
 	}
+}
+
+func TestCronJobHandlerResolvesGroupDisplayTitle(t *testing.T) {
+	var got agent.RunRequest
+	sched := scheduler.NewScheduler(
+		scheduler.DefaultLanes(),
+		scheduler.QueueConfig{Mode: scheduler.QueueModeQueue, Cap: 1, MaxConcurrent: 1},
+		func(_ context.Context, req agent.RunRequest) (*agent.RunResult, error) {
+			got = req
+			return &agent.RunResult{Content: "ok"}, nil
+		},
+	)
+	defer sched.Stop()
+	msgBus := bus.New()
+	defer msgBus.Close()
+	manager := channels.NewManager(nil)
+	manager.RegisterChannel("discord-main", cronDisplayTitleChannel{consumerTestChannel: consumerTestChannel{name: "discord-main", channelType: channels.TypeDiscord}, title: "launch-thread / product-planning"})
+
+	handler := makeCronJobHandler(sched, msgBus, &config.Config{}, manager, nil, nil, nil, nil, nil)
+	if _, err := handler(&store.CronJob{
+		ID:             uuid.NewString(),
+		TenantID:       uuid.New(),
+		Name:           "thread-report",
+		AgentID:        "reporter",
+		UserID:         "guild:guild-1:user:user-1",
+		Deliver:        true,
+		DeliverChannel: "discord-main",
+		DeliverTo:      "thread-1",
+		Payload:        store.CronPayload{Kind: "agent_turn", Message: "report"},
+	}); err != nil {
+		t.Fatalf("cron handler: %v", err)
+	}
+	if got.ChatID != "thread-1" {
+		t.Fatalf("chat ID = %q, want stable thread ID", got.ChatID)
+	}
+	if got.ChatTitle != "launch-thread / product-planning" {
+		t.Fatalf("chat title = %q, want qualified title", got.ChatTitle)
+	}
+}
+
+type cronDisplayTitleChannel struct {
+	consumerTestChannel
+	title string
+}
+
+func (c cronDisplayTitleChannel) ResolveGroupDisplayTitle(context.Context, string) (string, error) {
+	return c.title, nil
 }
 
 func TestCronOutputContainsNoReplySentinel(t *testing.T) {

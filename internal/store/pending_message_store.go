@@ -29,6 +29,7 @@ type PendingMessageGroup struct {
 	HistoryKey       string    `json:"history_key" db:"history_key"`
 	ParentHistoryKey string    `json:"parent_history_key,omitempty" db:"parent_history_key"`
 	GroupTitle       string    `json:"group_title,omitempty" db:"group_title"`
+	ParentGroupTitle string    `json:"parent_group_title,omitempty" db:"-"`
 	MessageCount     int       `json:"message_count" db:"message_count"`
 	HasSummary       bool      `json:"has_summary" db:"has_summary"`
 	LastActivity     time.Time `json:"last_activity" db:"last_activity"`

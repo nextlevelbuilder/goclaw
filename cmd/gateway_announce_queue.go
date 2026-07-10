@@ -11,6 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	orch "github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
@@ -71,6 +72,7 @@ func processAnnounceLoop(
 	teamStore store.TeamStore,
 	postTurn tools.PostTurnProcessor,
 	cfg *config.Config,
+	channelMgr *channels.Manager,
 ) {
 	for {
 		entries := teamAnnounceQueue.Drain(r.LeadSessionKey)
@@ -95,6 +97,7 @@ func processAnnounceLoop(
 			SessionKey: r.LeadSessionKey,
 			Message:    content,
 			Channel:    r.OrigChannel,
+			ChatTitle:  resolveGroupDisplayTitle(ctx, channelMgr, r.OrigChannel, r.OrigChatID, r.OrigPeerKind, ""),
 			ChatID:     r.OrigChatID,
 			PeerKind:   r.OrigPeerKind,
 			LocalKey:   r.OrigLocalKey,

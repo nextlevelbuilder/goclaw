@@ -65,11 +65,33 @@ func (h *PendingMessagesHandler) handleListGroups(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Resolve group titles from session metadata (best-effort, non-blocking)
-	if titles, err := h.store.ResolveGroupTitles(r.Context(), groups); err == nil {
+	// Resolve both the current group and its parent title so a Discord thread
+	// can be rendered unambiguously without changing stable history keys.
+	lookupGroups := make([]store.PendingMessageGroup, 0, len(groups)*2)
+	seen := make(map[string]struct{}, len(groups)*2)
+	for _, group := range groups {
+		key := group.ChannelName + ":" + group.HistoryKey
+		if group.ChannelName != "" && group.HistoryKey != "" {
+			if _, ok := seen[key]; !ok {
+				seen[key] = struct{}{}
+				lookupGroups = append(lookupGroups, group)
+			}
+		}
+		if group.ParentHistoryKey != "" {
+			parentKey := group.ChannelName + ":" + group.ParentHistoryKey
+			if _, ok := seen[parentKey]; !ok {
+				seen[parentKey] = struct{}{}
+				lookupGroups = append(lookupGroups, store.PendingMessageGroup{ChannelName: group.ChannelName, HistoryKey: group.ParentHistoryKey})
+			}
+		}
+	}
+	if titles, err := h.store.ResolveGroupTitles(r.Context(), lookupGroups); err == nil {
 		for i := range groups {
 			if t, ok := titles[groups[i].ChannelName+":"+groups[i].HistoryKey]; ok {
 				groups[i].GroupTitle = t
+			}
+			if groups[i].ParentHistoryKey != "" {
+				groups[i].ParentGroupTitle = titles[groups[i].ChannelName+":"+groups[i].ParentHistoryKey]
 			}
 		}
 	}

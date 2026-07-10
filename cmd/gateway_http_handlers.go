@@ -138,6 +138,7 @@ func makeChannelMemoryService(stores *store.Stores, domainBus eventbus.DomainEve
 	return &channelmemory.Service{
 		Channels:      stores.ChannelInstances,
 		Pending:       stores.PendingMessages,
+		Contacts:      stores.Contacts,
 		Extractions:   stores.ChannelMemory,
 		Episodic:      stores.Episodic,
 		EventBus:      domainBus,

@@ -123,6 +123,7 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 		if job.Payload.CredentialUserID != "" {
 			cronCtx = store.WithCredentialUserID(cronCtx, job.Payload.CredentialUserID)
 		}
+		chatTitle := resolveGroupDisplayTitle(cronCtx, channelMgr, channel, job.DeliverTo, peerKind, "")
 
 		// Reset the session before each STATELESS cron run so the run starts fresh:
 		// no carried-over history (the whole point of stateless — saves tokens) and
@@ -171,6 +172,7 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 			Channel:           channel,
 			ChannelType:       channelType,
 			ChatID:            job.DeliverTo,
+			ChatTitle:         chatTitle,
 			PeerKind:          peerKind,
 			UserID:            job.UserID,
 			RunID:             fmt.Sprintf("cron:%s", job.ID),

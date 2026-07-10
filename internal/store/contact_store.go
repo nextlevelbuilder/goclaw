@@ -29,13 +29,15 @@ type ChannelContact struct {
 
 // ContactListOpts holds pagination and filter options for listing contacts.
 type ContactListOpts struct {
-	Search          string // ILIKE on display_name, username, sender_id
-	ChannelType     string // filter by platform (telegram, discord, etc.)
-	ChannelInstance string // filter by channel instance name
-	PeerKind        string // "direct" or "group"
-	ContactType     string // "user" or "group"
-	Limit           int
-	Offset          int
+	Search           string     // ILIKE on display_name, username, sender_id
+	ChannelType      string     // filter by platform (telegram, discord, etc.)
+	ChannelInstance  string     // filter by channel instance name
+	PeerKind         string     // "direct" or "group"
+	ContactType      string     // "user" or "group"
+	SnapshotAt       *time.Time // include only contacts discovered at or before this instant
+	OrderByFirstSeen bool       // use immutable discovery order for stable background scans
+	Limit            int
+	Offset           int
 }
 
 // ContactStore manages channel contacts (auto-collected user info).
@@ -77,4 +79,11 @@ type ContactStore interface {
 	// the contact has been merged, returns the linked tenant_user's user_id.
 	// Returns ("", nil) when the contact is not found or not merged.
 	ResolveTenantUserID(ctx context.Context, channelType, senderID string) (string, error)
+}
+
+// ContactMetadataStore is an optional extension for platforms that have
+// presentation metadata beyond the stable contact fields. Callers must fall
+// back to ContactStore when an implementation does not provide it.
+type ContactMetadataStore interface {
+	UpsertContactWithMetadata(ctx context.Context, channelType, channelInstance, senderID, userID, displayName, username, peerKind, contactType, threadID, threadType string, metadata map[string]string) error
 }

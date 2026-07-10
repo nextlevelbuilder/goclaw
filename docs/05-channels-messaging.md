@@ -574,6 +574,8 @@ The Discord channel uses the `discordgo` library to connect via the Discord Gate
 - **Typing indicator**: 9-second keepalive while agent processes
 - **Group history**: Pending message buffer for context when mentioned
 - **Thread backfill**: When the bot is mentioned inside a Discord thread, the channel fetches up to 25 prior thread messages before the triggering message through Discord REST, prepends their text as context, and downloads up to 15 prior attachments for the same inbound media pipeline. This is thread-only, bounded to 5 MB per backfilled file with a 30-second timeout, and gracefully falls back to the current message when Discord lacks `READ_MESSAGE_HISTORY` or the REST request fails.
+- **Thread presentation titles**: Where a Discord thread is presented as the current chat, a session, a contact, or a delivery target, its label may be qualified as `thread / parent channel`. This is display-only; routing and selection continue to use stable IDs.
+- **Metadata refresh**: Refreshing the contact cache unions the Discord group IDs stored in contacts with group and parent IDs retained by pending-message history. It directly looks up targets not already resolved from the live guild/channel state, so titles and parent metadata can be backfilled for inactive or archived threads when Discord returns them. The API response includes per-source coverage and individual failures; the gateway emits an INFO summary for every refresh and WARN entries for individual lookup failures. If any target cannot be fetched (for example, it was deleted or the bot lacks permission), the refresh reports failure rather than false success.
 
 ---
 
@@ -726,6 +728,10 @@ Default behavior is privacy-first:
 - Discord extraction input includes best-effort channel context when available:
   channel/thread ID, channel name, parent channel, category, and history key.
   Lookup failures fall back to IDs and do not fail extraction.
+- Discord passive-memory metadata retains raw `group_title` and
+  `parent_group_title` as separate fields. A qualified thread label such as
+  `thread / parent channel` is presentation-only and is not written back into
+  either raw field.
 - New Discord pending history rows include display name, handle when available,
   and stable Discord user ID in sender/reply labels to make extracted facts less
   ambiguous when display names change.

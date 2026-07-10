@@ -144,7 +144,7 @@ func handleSubagentAnnounce(
 			// Fetch live roster for merged announce context.
 			roster := deps.SubagentMgr.RosterForParent(parentAgent)
 
-			processSubagentAnnounceLoop(ctx, routing, roster, deps.SubagentMgr, deps.Sched, deps.MsgBus, deps.Cfg)
+			processSubagentAnnounceLoop(ctx, routing, roster, deps.SubagentMgr, deps.Sched, deps.MsgBus, deps.Cfg, deps.ChannelMgr)
 		})
 	}
 
@@ -246,6 +246,7 @@ func handleTeammateMessage(
 		Channel:         origChannel,
 		ChannelType:     origChannelType,
 		ChatID:          origChatID,
+		ChatTitle:       resolveGroupDisplayTitle(schedCtx, deps.ChannelMgr, origChannel, origChatID, origPeerKind, ""),
 		PeerKind:        origPeerKind,
 		LocalKey:        origLocalKey,
 		UserID:          announceUserID,
@@ -383,7 +384,7 @@ func handleTeammateMessage(
 			ParentRootSpanID: parentRootSpanID,
 			OutMeta:          outMeta,
 		}
-		processAnnounceLoop(ctx, routing, deps.Sched, deps.MsgBus, deps.TeamStore, deps.PostTurn, deps.Cfg)
+		processAnnounceLoop(ctx, routing, deps.Sched, deps.MsgBus, deps.TeamStore, deps.PostTurn, deps.Cfg, deps.ChannelMgr)
 	}(origChannel, origChatID, msg.SenderID, taskIDStr, outMeta, msg.Metadata)
 
 	return true
