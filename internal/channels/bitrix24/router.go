@@ -330,7 +330,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	case handlerPath:
 		r.handleAppPage(w, req)
 	case userOAuthCallbackPath:
-		r.handleUserOAuthCallback(w, req)
+		r.handleUserOAuthCallback(w, req, strings.TrimSpace(req.URL.Query().Get("state")))
 	default:
 		http.NotFound(w, req)
 	}

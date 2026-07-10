@@ -189,6 +189,18 @@ func (r *Router) handleInstall(w http.ResponseWriter, req *http.Request) {
 
 	tid, name, ok := parseInstallState(stateParam)
 	if !ok {
+		// Backward-compat for dev/local Bitrix apps whose registered
+		// "Application URL" still points at /bitrix24/install. The per-user
+		// OAuth re-authorization flow now signs its own state and expects the
+		// redirect on /bitrix24/handler, but older app settings can still send
+		// that exact redirect here. Detect the signed-state shape and hand the
+		// request to the user-OAuth callback path instead of treating it as a
+		// broken app-install attempt.
+		if req.Method == http.MethodGet && strings.Contains(stateParam, ".") && !strings.Contains(stateParam, ":") {
+			slog.Info("bitrix24 install: rerouting signed user oauth callback from legacy install URL")
+			r.handleUserOAuthCallback(w, req, stateParam)
+			return
+		}
 		http.Error(w, "invalid state format", http.StatusBadRequest)
 		return
 	}
@@ -233,36 +245,24 @@ func (r *Router) handleInstall(w http.ResponseWriter, req *http.Request) {
 	_, _ = w.Write([]byte(installSuccessHTML))
 }
 
-// handleUserOAuthCallback serves /bitrix24/oauth/user/callback — where
-// Bitrix redirects a user's browser after they approve or decline the
-// per-user re-authorization link sent via DM (oauth_state_codec.go
-// BuildUserAuthorizeURL, handle.go sendOAuthInvite).
+// handleUserOAuthCallback processes an OAuth per-user re-authorization
+// redirect. Called FROM handleAppPage when it detects a `state` query param
+// on a GET to /bitrix24/handler — Bitrix always redirects here after a user
+// approves/declines, using the app's registered "Application URL"
+// (handlerPath). It does NOT honor a `redirect_uri` parameter for Local Apps
+// (confirmed against live Bitrix behavior: the redirect landed on
+// handlerPath with our signed `state` attached, not on the dedicated route
+// this function used to be mounted at — see BuildUserAuthorizeURL, which no
+// longer sends redirect_uri at all since Bitrix ignores it).
 //
-// Public — no gateway auth, same as installPath (design.md §9 Q5). Safety
-// comes entirely from the HMAC-signed + TTL-bound state (design.md §5): a
-// malformed or expired state is rejected before any Bitrix network call or
-// dispatcher lookup.
-func (r *Router) handleUserOAuthCallback(w http.ResponseWriter, req *http.Request) {
-	if req.Method == http.MethodHead {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	if req.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
+// Public — no gateway auth (handleAppPage already is). Safety comes entirely
+// from the HMAC-signed + TTL-bound state (design.md §5): a malformed or
+// expired state is rejected before any Bitrix network call or dispatcher
+// lookup.
+func (r *Router) handleUserOAuthCallback(w http.ResponseWriter, req *http.Request, stateParam string) {
 	q := req.URL.Query()
 	code := strings.TrimSpace(q.Get("code"))
-	stateParam := strings.TrimSpace(q.Get("state"))
 	errParam := strings.TrimSpace(q.Get("error"))
-
-	if stateParam == "" {
-		// Bitrix24 partner registration may validate this URL with a bare GET.
-		renderBitrixPlaceholder(w, "GoClaw — Bitrix24 OAuth Callback",
-			"This URL is invoked by Bitrix24 after a user approves or declines an access request.")
-		return
-	}
 
 	keyBytes, err := crypto.DeriveKey(r.encKey)
 	if err != nil {
@@ -281,6 +281,20 @@ func (r *Router) handleUserOAuthCallback(w http.ResponseWriter, req *http.Reques
 		slog.Info("bitrix24 oauth user callback: user declined",
 			"user_id", payload.UserID, "bot_id", payload.BotID, "error", errParam)
 		renderBitrixPlaceholder(w, "Đã từ chối cấp quyền", "Bot sẽ không truy cập được CRM thay mặt bạn. Bạn có thể nhắn lại bot để thử lại.")
+		return
+	}
+
+	// Domain check: use the redirect's OWN `domain` query param (the portal
+	// domain where authorization took place, per Bitrix's authorize-redirect
+	// contract) against the domain signed into our state at invite-build
+	// time — NOT the token-exchange response's `domain` field, which is
+	// always the OAuth server's own domain ("oauth.bitrix.info"), confirmed
+	// against live Bitrix behavior (see ExchangeUserAuthCode doc comment).
+	if redirectDomain := strings.TrimSpace(q.Get("domain")); redirectDomain != "" &&
+		!strings.EqualFold(redirectDomain, payload.Domain) {
+		slog.Warn("bitrix24 oauth user callback: domain mismatch",
+			"user_id", payload.UserID, "expected", payload.Domain, "got", redirectDomain)
+		renderBitrixPlaceholder(w, "Liên kết không hợp lệ", "Vui lòng nhắn lại cho bot để nhận link cấp quyền mới.")
 		return
 	}
 
@@ -627,11 +641,16 @@ func renderBitrixPlaceholder(w http.ResponseWriter, title, body string) {
 }
 
 // handleAppPage serves /bitrix24/handler — the URL Bitrix24 iframe-loads
-// when a user opens the GoClaw app inside their portal interface. Used as
-// the "Application URL" and "Application settings handler" in the partner
-// app registration form.
+// when a user opens the GoClaw app inside their portal interface, AND the
+// fixed "Application URL" Bitrix redirects to after a Local App user
+// completes (or declines) the OAuth per-user re-authorization flow
+// (oauth_state_codec.go BuildUserAuthorizeURL, handle.go sendOAuthInvite) —
+// Local Apps ignore any `redirect_uri` we pass and always come back here
+// instead, confirmed against live behavior. A GET carrying `state` is
+// therefore that OAuth redirect, not a plain iframe-load/registration ping,
+// and is dispatched to handleUserOAuthCallback.
 //
-// Currently responds with the 200 placeholder required by Bitrix24 app URL
+// Otherwise responds with the 200 placeholder required by Bitrix24 app URL
 // validation. A future POST handler can process the opening user's Bitrix24
 // tokens and forward them to the MCP onboarding endpoint.
 func (r *Router) handleAppPage(w http.ResponseWriter, req *http.Request) {
@@ -643,6 +662,12 @@ func (r *Router) handleAppPage(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet && req.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
+	}
+	if req.Method == http.MethodGet {
+		if stateParam := strings.TrimSpace(req.URL.Query().Get("state")); stateParam != "" {
+			r.handleUserOAuthCallback(w, req, stateParam)
+			return
+		}
 	}
 	renderBitrixPlaceholder(w,
 		"GoClaw — Bitrix24 Application",
