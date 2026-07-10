@@ -336,10 +336,21 @@ func (c *Channel) processMessage(ctx context.Context, data *chatbot.BotCallbackD
 		return
 	}
 
-	// Attachments are fetched before the mention gate so a file dropped into a
-	// group without an @ still reaches the agent when someone does @ later.
 	mediaInfos := c.resolveMedia(ctx, in)
 
+	// Unreachable in practice, and deliberately kept.
+	//
+	// DingTalk's Stream robot callback only fires for group messages that
+	// @mention the bot — verified against a live group: an un-@'d message
+	// produces no callback at all, and the docs say so ("在群中发消息并且@机器人,
+	// 就会在回调接口中收到相关信息"). So IsInAtList is always true for the group
+	// messages we see, `require_mention: false` cannot make the bot answer an
+	// un-@'d group message, and nothing ever lands in the unmentioned-history
+	// branch below.
+	//
+	// It stays because the gate is the correct behavior the moment an app gains
+	// the group-message-listening permission, and because silently answering
+	// every group message would be the worse failure if that ever changes.
 	if in.IsGroup && c.RequireMention() && !in.MentionedBot {
 		c.GroupHistory().Record(chatID, channels.HistoryEntry{
 			Sender:    senderName,

@@ -886,6 +886,23 @@ A card left at `INPUTING` spins forever in the DingTalk UI, so the channel drive
 a terminal status: on run completion, failure, and cancellation, and on gateway shutdown for
 any card still open.
 
+### Groups only deliver @mentions
+
+DingTalk's Stream robot callback fires for a group message **only when the bot is
+@mentioned**. An un-@'d group message produces no callback at all — verified against a live
+group, and stated in the platform docs.
+
+Two consequences worth knowing before you debug them:
+
+- `require_mention: false` cannot make the bot answer un-@'d group messages. The setting is
+  still enforced (the SDK's `IsInAtList` is read rather than assumed), but there is nothing for
+  it to let through.
+- Group history therefore only ever accumulates messages the bot was already addressed in. The
+  channel's record-without-reply path exists for the day an app is granted group-message
+  listening; today it never runs.
+
+DMs are unaffected: every direct message reaches the bot.
+
 ### Media
 
 Inbound attachments arrive as a `downloadCode`, exchanged for a short-lived OSS-signed URL via

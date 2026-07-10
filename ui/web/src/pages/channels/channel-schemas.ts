@@ -198,7 +198,7 @@ export const configSchema: Record<string, FieldDef[]> = {
   dingtalk: [
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
     { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "pairing" },
-    { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true },
+    { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true, help: "DingTalk only delivers group messages that @mention the bot, so turning this off does not make it answer un-@'d messages." },
     { key: "group_reply_mode", label: "Group Reply Mode", type: "select", options: [{ value: "aicard", label: "AI Card (streaming)" }, { value: "text", label: "Plain text" }, { value: "markdown", label: "Markdown" }], defaultValue: "aicard", help: "Groups only. DMs always stream into an AI Card." },
     { key: "group_session_scope", label: "Group Session Scope", type: "select", options: [{ value: "group", label: "One session per group" }, { value: "group_sender", label: "One session per sender in a group" }], defaultValue: "group" },
     { key: "streaming", label: "Stream replies", type: "boolean", defaultValue: true, help: "Type the answer into an AI Card as it is generated" },
