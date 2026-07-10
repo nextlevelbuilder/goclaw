@@ -907,10 +907,19 @@ because a stale id pasted into the console fails opaquely.
 `group_reply_mode`, `group_session_scope`, `streaming`, `history_limit`, `text_chunk_limit`,
 `media_max_mb`, `endpoint`, `chat_behavior`.
 
-`dm_policy` and `group_policy` are validated against their allowed values at instance-save
-time. BaseChannel's policy switches treat an unrecognized value as their *permissive* default,
-so a typo like `group_policy: "opne"` would otherwise open the bot to every group message with
-nothing in the logs to explain it.
+`dm_policy` and `group_policy` are validated against their allowed values **when the channel
+starts**, not when the instance row is saved. BaseChannel's policy switches treat an
+unrecognized value as their *permissive* default, so without the check a typo like
+`group_policy: "opne"` would open the bot to every group message. Instead the factory refuses
+to build the channel and the instance is recorded as failed:
+
+```
+failed to reload channel instance name=... type=dingtalk
+error="dingtalk group_policy \"opne\": want one of pairing, open, allowlist, disabled"
+```
+
+It fails closed — a misconfigured instance does not run — but the typo survives the save, so
+check the channel's health after enabling it.
 
 Not supported: the upstream connector's `accounts{}` multi-account map (one channel instance
 carries one DingTalk app; a second app is a second instance), and its `async_mode` / `ack_text`
