@@ -4,13 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Pagination } from "@/components/shared/pagination";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import type { ChannelMemoryConfig } from "@/types/channel";
 import { useChannelMemoryExtraction } from "../hooks/use-channel-memory-extraction";
 import {
@@ -99,13 +93,7 @@ export function PassiveMemorySection({ instanceId, channelType }: PassiveMemoryS
   }, [status?.config]);
 
   useEffect(() => {
-    if (promptGroupOptions.length === 0) {
-      setSelectedPromptHistoryKey("");
-      return;
-    }
-    if (selectedPromptHistoryKey && promptGroupOptions.some((group) => group.history_key === selectedPromptHistoryKey)) {
-      return;
-    }
+    if (selectedPromptHistoryKey) return;
     setSelectedPromptHistoryKey(promptGroupOptions[0]?.history_key ?? "");
   }, [promptGroupOptions, selectedPromptHistoryKey]);
 
@@ -298,22 +286,18 @@ export function PassiveMemorySection({ instanceId, channelType }: PassiveMemoryS
                 <div className="text-xs font-medium text-muted-foreground">
                   {t("detail.passiveMemory.groupCustomPrompt")}
                 </div>
-                <Select
+                <Combobox
                   value={selectedPromptHistoryKey}
-                  onValueChange={setSelectedPromptHistoryKey}
-                  disabled={promptGroupOptions.length === 0}
-                >
-                  <SelectTrigger size="sm">
-                    <SelectValue placeholder={t("detail.passiveMemory.groupCustomPromptPlaceholder")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {promptGroupOptions.map((group) => (
-                      <SelectItem key={group.history_key} value={group.history_key}>
-                        {formatPromptGroupLabel(group)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={() => undefined}
+                  onSelect={setSelectedPromptHistoryKey}
+                  options={promptGroupOptions.map((group) => ({
+                    value: group.history_key,
+                    label: formatPromptGroupLabel(group),
+                  }))}
+                  placeholder={t("detail.passiveMemory.groupCustomPromptPlaceholder")}
+                  allowCustom
+                  customLabel={t("detail.passiveMemory.useDiscordChannelId")}
+                />
                 {selectedPromptHistoryKey ? (
                   <TextareaBlock
                     label={selectedPromptGroup ? formatPromptGroupLabel(selectedPromptGroup) : selectedPromptHistoryKey}
@@ -330,22 +314,18 @@ export function PassiveMemorySection({ instanceId, channelType }: PassiveMemoryS
                 <div className="text-xs font-medium text-muted-foreground">
                   {t("detail.passiveMemory.excludeGroups")}
                 </div>
-                <Select
+                <Combobox
                   value=""
-                  onValueChange={addExcludedHistoryKey}
-                  disabled={availableExcludeGroupOptions.length === 0}
-                >
-                  <SelectTrigger size="sm">
-                    <SelectValue placeholder={t("detail.passiveMemory.excludeGroupsPlaceholder")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableExcludeGroupOptions.map((group) => (
-                      <SelectItem key={group.history_key} value={group.history_key}>
-                        {formatPromptGroupLabel(group)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onChange={() => undefined}
+                  onSelect={addExcludedHistoryKey}
+                  options={availableExcludeGroupOptions.map((group) => ({
+                    value: group.history_key,
+                    label: formatPromptGroupLabel(group),
+                  }))}
+                  placeholder={t("detail.passiveMemory.excludeGroupsPlaceholder")}
+                  allowCustom
+                  customLabel={t("detail.passiveMemory.useDiscordChannelId")}
+                />
                 {excludedGroupOptions.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {excludedGroupOptions.map((group) => {

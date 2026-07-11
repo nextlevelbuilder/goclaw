@@ -193,7 +193,18 @@ export function Combobox({
       inputDirtyRef.current = true;
       setInputDirty(true);
     }
-    if (!open && options.length > 0) setOpen(true);
+    if (!open && (options.length > 0 || allowCustom)) setOpen(true);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") {
+      setOpen(false);
+      return;
+    }
+    if (e.key === "Enter" && allowCustom && isCustomValue) {
+      e.preventDefault();
+      handleSelect(search.trim());
+    }
   };
 
   const handleFocus = (e: React.FocusEvent) => {
@@ -248,6 +259,7 @@ export function Combobox({
         ref={inputRef}
         value={search}
         onChange={handleInputChange}
+        onKeyDown={handleKeyDown}
         onFocus={handleFocus}
         disabled={disabled}
         placeholder={placeholder}

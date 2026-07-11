@@ -223,6 +223,7 @@
       "excludeGroups": "Channel Discord loại trừ",
       "excludeGroupsPlaceholder": "Chọn channel cần loại trừ",
       "manualExcludePlaceholder": "Dán Discord channel ID",
+      "useDiscordChannelId": "Dùng Discord channel ID:",
       "addExcludedGroup": "Thêm",
       "noExcludeGroups": "Chưa có lịch sử channel Discord.",
       "noExcludedGroups": "Chưa loại trừ channel nào.",
