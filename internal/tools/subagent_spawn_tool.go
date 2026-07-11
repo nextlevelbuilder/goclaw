@@ -153,6 +153,7 @@ After all spawn tool calls in this turn are complete, briefly tell the user what
 // executeSubagentSync runs a sync self-clone.
 func (t *SpawnTool) executeSubagentSync(ctx context.Context, args map[string]any, task string) *Result {
 	label, _ := args["label"].(string)
+	modelOverride, _ := args["model"].(string)
 	if label == "" {
 		label = truncate(task, 50)
 	}
@@ -165,7 +166,7 @@ func (t *SpawnTool) executeSubagentSync(ctx context.Context, args map[string]any
 		parentID = t.parentID
 	}
 
-	result, iterations, err := t.subagentMgr.RunSync(ctx, parentID, t.depth, task, label,
+	result, iterations, err := t.subagentMgr.RunSync(ctx, parentID, t.depth, task, label, modelOverride,
 		channel, chatID)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Subagent '%s' failed: %v", label, err))

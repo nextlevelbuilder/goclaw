@@ -127,7 +127,7 @@ func (sm *SubagentManager) RunSync(
 	ctx context.Context,
 	parentID string,
 	depth int,
-	task, label string,
+	task, label, modelOverride string,
 	channel, chatID string,
 ) (string, int, error) {
 	cfg := sm.effectiveConfig(ctx)
@@ -160,6 +160,7 @@ func (sm *SubagentManager) RunSync(
 		Label:            label,
 		Status:           "running",
 		Depth:            depth + 1,
+		Model:            modelOverride,
 		OriginChannel:    channel,
 		OriginChatID:     chatID,
 		OriginLocalKey:   ToolLocalKeyFromCtx(ctx),
