@@ -94,6 +94,13 @@ func (c *Channel) handleIncomingMessage(evt *events.Message) {
 
 	content := extractTextContent(evt.Message)
 
+	// Handle text commands before normal agent processing.
+	if isCommand(content) {
+		if handled := c.handleCommand(content, senderID, chatID, peerKind); handled {
+			return
+		}
+	}
+
 	var mediaList []media.MediaInfo
 	mediaList = c.downloadMedia(evt)
 
