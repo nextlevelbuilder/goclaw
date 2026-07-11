@@ -391,6 +391,23 @@ func (m *Manager) ResolveGroupTitles(ctx context.Context, channelName string, ch
 	return gtp.ResolveGroupTitles(ctx, chatIDs)
 }
 
+// ResolveGroupDisplayTitle resolves a presentation-only title for a group.
+// It is deliberately separate from ResolveGroupTitle so callers that need a
+// platform's raw title keep their existing contract.
+func (m *Manager) ResolveGroupDisplayTitle(ctx context.Context, channelName, chatID string) (string, error) {
+	m.mu.RLock()
+	ch, ok := m.channels[channelName]
+	m.mu.RUnlock()
+	if !ok {
+		return "", fmt.Errorf("channel %q not found", channelName)
+	}
+	provider, ok := ch.(GroupDisplayTitleProvider)
+	if !ok {
+		return "", fmt.Errorf("channel %q does not support resolving group display titles", channelName)
+	}
+	return provider.ResolveGroupDisplayTitle(ctx, chatID)
+}
+
 // ManageTelegram delegates a whitelisted Telegram management action to a
 // Telegram-capable channel instance.
 func (m *Manager) ManageTelegram(ctx context.Context, channelName string, req TelegramManagerRequest) (TelegramManagerResult, error) {

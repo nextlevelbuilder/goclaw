@@ -138,3 +138,35 @@ func TestMemoryExtractionGroupsUsesDBTitlesOnly(t *testing.T) {
 		t.Fatalf("parent group title = %q, want product-planning", body.Groups[0].ParentGroupTitle)
 	}
 }
+
+func TestPendingMessageGroupsIncludeParentTitle(t *testing.T) {
+	pending := &memoryExtractionPendingStore{
+		groups: []store.PendingMessageGroup{{
+			ChannelName:      "discord-main",
+			HistoryKey:       "thread-1",
+			ParentHistoryKey: "parent-1",
+		}},
+		titles: map[string]string{
+			"discord-main:thread-1": "launch-thread",
+			"discord-main:parent-1": "product-planning",
+		},
+	}
+	h := NewPendingMessagesHandler(pending, nil, nil)
+	w := httptest.NewRecorder()
+	h.handleListGroups(w, httptest.NewRequest(http.MethodGet, "/v1/pending-messages", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	var body struct {
+		Groups []store.PendingMessageGroup `json:"groups"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(body.Groups) != 1 {
+		t.Fatalf("groups = %d, want 1", len(body.Groups))
+	}
+	if got := body.Groups[0].ParentGroupTitle; got != "product-planning" {
+		t.Fatalf("parent group title = %q, want product-planning", got)
+	}
+}

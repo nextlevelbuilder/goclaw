@@ -90,6 +90,13 @@ type Channel struct {
 	notifyMu       sync.Mutex
 	notifyDebounce map[string]time.Time
 
+	// OAuth re-authorization DM debounce. Deliberately separate map/mutex
+	// from notifyDebounce above — the two notice types (generic MCP failure
+	// vs "please re-authorize") are independent; one must never suppress
+	// the other. Same TTL value (mcpUserNotifyDebounceTTL) but its own state.
+	oauthInviteMu       sync.Mutex
+	oauthInviteDebounce map[string]time.Time
+
 	// Contact-name enrichment cache. Bitrix24 webhooks don't carry
 	// display_name / username, so the channel lazily resolves them via
 	// user.get on first sight of each sender. Cache is per-channel (not

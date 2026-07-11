@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 
 export interface DeliveryTarget {
   channel: string;
@@ -85,20 +86,17 @@ export function CronDeliverySection({
               const filtered = targets.filter((tgt) => tgt.channel === channel);
               if (filtered.length > 0) {
                 return (
-                  <Select value={to || "__none__"} onValueChange={(v) => setTo(v === "__none__" ? "" : v)}>
-                    <SelectTrigger className="text-base md:text-sm">
-                      <SelectValue placeholder={t("detail.toPlaceholder")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">{t("detail.toPlaceholder")}</SelectItem>
-                      {filtered.map((tgt) => (
-                        <SelectItem key={tgt.chatId} value={tgt.chatId}
-                          title={tgt.title ? `${tgt.title} (${tgt.chatId})` : tgt.chatId}>
-                          <span className="truncate">{tgt.title ? `${tgt.title} (${tgt.chatId})` : tgt.chatId}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Combobox
+                    value={to}
+                    onChange={setTo}
+                    options={filtered.map((target) => ({
+                      value: target.chatId,
+                      label: target.title ? `${target.title} (${target.chatId})` : target.chatId,
+                    }))}
+                    placeholder={t("detail.toPlaceholder")}
+                    allowCustom
+                    className="text-base md:text-sm"
+                  />
                 );
               }
               return <Input value={to} onChange={(e) => setTo(e.target.value)}

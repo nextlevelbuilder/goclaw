@@ -11,6 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	orch "github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
@@ -129,6 +130,7 @@ func processSubagentAnnounceLoop(
 	sched *scheduler.Scheduler,
 	msgBus *bus.MessageBus,
 	cfg *config.Config,
+	channelMgr *channels.Manager,
 ) {
 	// Ensure tenant scope is always set for the scheduler.
 	if r.TenantID != uuid.Nil {
@@ -176,6 +178,7 @@ func processSubagentAnnounceLoop(
 			Channel:          r.OrigChannel,
 			ChannelType:      r.OrigChannelType,
 			ChatID:           r.OrigChatID,
+			ChatTitle:        resolveGroupDisplayTitle(ctx, channelMgr, r.OrigChannel, r.OrigChatID, r.OrigPeerKind, ""),
 			PeerKind:         r.OrigPeerKind,
 			LocalKey:         r.OrigLocalKey,
 			UserID:           r.UserID,

@@ -9,7 +9,7 @@ import (
 )
 
 type channelMetadataRefresher interface {
-	RefreshContactCache(ctx context.Context) error
+	RefreshContactCache(ctx context.Context) (channels.MetadataRefreshReport, error)
 }
 
 func (h *ChannelInstancesHandler) handleRefreshChannelMetadata(w http.ResponseWriter, r *http.Request) {
@@ -42,10 +42,13 @@ func (h *ChannelInstancesHandler) handleRefreshChannelMetadata(w http.ResponseWr
 		writeError(w, http.StatusConflict, protocol.ErrInvalidRequest, "Discord channel metadata refresh is not available")
 		return
 	}
-	if err := refresher.RefreshContactCache(r.Context()); err != nil {
-		writeError(w, http.StatusConflict, protocol.ErrInvalidRequest, err.Error())
+	report, err := refresher.RefreshContactCache(r.Context())
+	if err != nil {
+		report.OK = false
+		report.Errors = append(report.Errors, err.Error())
+		writeJSON(w, http.StatusConflict, map[string]any{"ok": false, "report": report, "error": err.Error()})
 		return
 	}
 	emitAudit(h.msgBus, r, "channel_metadata.refresh_triggered", "channel_instance", inst.ID.String())
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": report.OK, "report": report})
 }

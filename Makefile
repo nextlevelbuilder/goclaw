@@ -31,6 +31,8 @@ version:
 # ── Docker Compose ──
 # Default: backend (with embedded web UI) + Postgres. No separate nginx needed.
 # Add WITH_WEB_NGINX=1 for separate nginx on :3000 (custom SSL, reverse proxy).
+# Cloudflare Tunnel: if `.env.cloudflared` exists it is merged automatically (same as
+# docker-compose.cloudflared.yml). Set WITH_CLOUDFLARED=0 to skip.
 COMPOSE_BASE = docker compose -f docker-compose.yml -f docker-compose.postgres.yml
 ifdef WITH_WEB_NGINX
 COMPOSE_BASE += -f docker-compose.selfservice.yml
@@ -54,6 +56,11 @@ COMPOSE_EXTRA += -f docker-compose.redis.yml
 endif
 ifdef WITH_CLAUDE_CLI
 COMPOSE_EXTRA += -f docker-compose.claude-cli.yml
+endif
+ifneq ($(WITH_CLOUDFLARED),0)
+ifneq ($(wildcard .env.cloudflared),)
+COMPOSE_EXTRA += -f docker-compose.cloudflared.yml
+endif
 endif
 COMPOSE = $(COMPOSE_BASE) $(COMPOSE_EXTRA)
 UPGRADE = docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.upgrade.yml

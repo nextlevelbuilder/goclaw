@@ -224,6 +224,7 @@
       "excludeGroups": "Excluded Discord channels",
       "excludeGroupsPlaceholder": "Select a channel to exclude",
       "manualExcludePlaceholder": "Paste Discord channel ID",
+      "useDiscordChannelId": "Use Discord channel ID:",
       "addExcludedGroup": "Add",
       "noExcludeGroups": "No Discord channel history found yet.",
       "noExcludedGroups": "No channels excluded.",

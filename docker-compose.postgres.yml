@@ -7,6 +7,9 @@
 # Required env vars (set in .env or shell):
 #   GOCLAW_OPENROUTER_API_KEY (or another provider key)
 #   POSTGRES_PASSWORD (defaults to "goclaw" for dev)
+#
+# If host port 5432 is already in use, set POSTGRES_PORT (e.g. 5433) in .env.
+# The goclaw container still connects via postgres:5432 on the Docker network.
 
 services:
   postgres:

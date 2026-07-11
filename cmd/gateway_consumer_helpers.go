@@ -129,6 +129,29 @@ func extractSessionMetadata(msg bus.InboundMessage, peerKind string) map[string]
 	return meta
 }
 
+// resolveGroupDisplayTitle fills presentation context for internally
+// re-ingressed group messages that no longer carry inbound chat metadata.
+// It leaves routing identifiers untouched and silently falls back when a
+// channel cannot resolve a platform-specific display title.
+func resolveGroupDisplayTitle(ctx context.Context, mgr *channels.Manager, channel, chatID, peerKind, title string) string {
+	if title != "" || peerKind != string(sessions.PeerGroup) || mgr == nil || channel == "" || chatID == "" {
+		return title
+	}
+	resolved, err := mgr.ResolveGroupDisplayTitle(ctx, channel, chatID)
+	if err != nil {
+		return title
+	}
+	return resolved
+}
+
+func resolveInboundChatTitle(ctx context.Context, mgr *channels.Manager, msg bus.InboundMessage, peerKind string) string {
+	title := msg.Metadata[tools.MetaChatTitle]
+	if !bus.IsInternalSender(msg.SenderID) {
+		return title
+	}
+	return resolveGroupDisplayTitle(ctx, mgr, msg.Channel, msg.ChatID, peerKind, title)
+}
+
 // buildPancakeSessionLabel returns "Pancake:{senderName}:{pageName}" with non-empty parts only.
 func buildPancakeSessionLabel(senderName, pageName string) string {
 	label := "Pancake"

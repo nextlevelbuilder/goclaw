@@ -298,7 +298,7 @@ func (s *PGPendingMessageStore) resolveGroupTitlesFromContacts(ctx context.Conte
 	}
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT channel_instance, sender_id, display_name
+		`SELECT channel_instance, sender_id, COALESCE(NULLIF(metadata->>'display_title', ''), display_name)
 		 FROM channel_contacts
 		 WHERE display_name IS NOT NULL
 		   AND display_name <> ''

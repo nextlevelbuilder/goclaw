@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Send } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Combobox } from "@/components/ui/combobox";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -69,19 +70,17 @@ export function HeartbeatDeliverySection({
             const filtered = targets.filter((tgt) => tgt.channel === channel);
             if (filtered.length > 0) {
               return (
-                <Select value={chatId || "__none__"} onValueChange={(v) => setChatId(v === "__none__" ? "" : v)}>
-                  <SelectTrigger className="w-full text-base md:text-sm">
-                    <SelectValue placeholder={t("heartbeat.chatIdPlaceholder")} />
-                  </SelectTrigger>
-                  <SelectContent position="popper">
-                    <SelectItem value="__none__">{t("heartbeat.channelNone")}</SelectItem>
-                    {filtered.map((tgt) => (
-                      <SelectItem key={tgt.chatId} value={tgt.chatId}>
-                        {tgt.title ? `${tgt.title} (${tgt.chatId})` : tgt.chatId}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Combobox
+                  value={chatId}
+                  onChange={setChatId}
+                  options={filtered.map((target) => ({
+                    value: target.chatId,
+                    label: target.title ? `${target.title} (${target.chatId})` : target.chatId,
+                  }))}
+                  placeholder={t("heartbeat.chatIdPlaceholder")}
+                  allowCustom
+                  className="w-full text-base md:text-sm"
+                />
               );
             }
             return (

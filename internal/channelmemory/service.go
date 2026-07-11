@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -21,6 +22,7 @@ import (
 type Service struct {
 	Channels        store.ChannelInstanceStore
 	Pending         store.PendingMessageStore
+	Contacts        store.ContactStore
 	Extractions     store.ChannelMemoryExtractionStore
 	Episodic        store.EpisodicStore
 	EventBus        eventbus.DomainEventBus
@@ -122,10 +124,12 @@ func (s *Service) GroupOptions(ctx context.Context, inst *store.ChannelInstanceD
 		titles = nil
 	}
 	out := make([]GroupOption, 0, len(groups))
+	seen := make(map[string]int, len(groups))
 	for _, group := range groups {
 		if group.ChannelName != inst.Name || group.HistoryKey == "" {
 			continue
 		}
+		seen[group.HistoryKey] = len(out)
 		out = append(out, GroupOption{
 			ChannelName:      group.ChannelName,
 			HistoryKey:       group.HistoryKey,
@@ -135,6 +139,40 @@ func (s *Service) GroupOptions(ctx context.Context, inst *store.ChannelInstanceD
 			MessageCount:     group.MessageCount,
 			LastActivity:     group.LastActivity,
 			Excluded:         contains(cfg.ExcludeHistoryKeys, group.HistoryKey) || contains(cfg.ExcludeHistoryKeys, group.ParentHistoryKey),
+		})
+	}
+	if s.Contacts == nil {
+		return out, nil
+	}
+	contacts, err := s.Contacts.ListContacts(ctx, store.ContactListOpts{
+		ChannelType:     channels.TypeDiscord,
+		ChannelInstance: inst.Name,
+		ContactType:     "group",
+		Limit:           2000,
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, contact := range contacts {
+		if contact.SenderID == "" {
+			continue
+		}
+		title := ""
+		if contact.DisplayName != nil {
+			title = *contact.DisplayName
+		}
+		if index, ok := seen[contact.SenderID]; ok {
+			if out[index].GroupTitle == "" {
+				out[index].GroupTitle = title
+			}
+			continue
+		}
+		out = append(out, GroupOption{
+			ChannelName:  inst.Name,
+			HistoryKey:   contact.SenderID,
+			GroupTitle:   title,
+			LastActivity: contact.LastSeenAt,
+			Excluded:     contains(cfg.ExcludeHistoryKeys, contact.SenderID),
 		})
 	}
 	return out, nil

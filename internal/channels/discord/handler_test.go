@@ -91,6 +91,36 @@ func TestResolveCachedChannelTitle(t *testing.T) {
 	}
 }
 
+func TestResolveGroupDisplayTitleQualifiesDiscordThread(t *testing.T) {
+	session, err := discordgo.New("Bot test-token")
+	if err != nil {
+		t.Fatalf("discordgo.New() error = %v", err)
+	}
+	session.State = discordgo.NewState()
+	if err := session.State.GuildAdd(&discordgo.Guild{ID: "guild-1"}); err != nil {
+		t.Fatalf("GuildAdd() error = %v", err)
+	}
+	for _, channel := range []*discordgo.Channel{
+		{ID: "parent-1", GuildID: "guild-1", Name: "product-planning", Type: discordgo.ChannelTypeGuildText},
+		{ID: "thread-1", GuildID: "guild-1", Name: "launch-thread", ParentID: "parent-1", Type: discordgo.ChannelTypeGuildPublicThread},
+	} {
+		if err := session.State.ChannelAdd(channel); err != nil {
+			t.Fatalf("ChannelAdd(%s) error = %v", channel.ID, err)
+		}
+	}
+
+	ch := &Channel{session: session}
+	if got := ch.resolveCachedGroupDisplayTitle("thread-1"); got != "launch-thread / product-planning" {
+		t.Fatalf("cached display title = %q, want qualified thread title", got)
+	}
+	if got := ch.resolveCachedGroupDisplayTitle("parent-1"); got != "product-planning" {
+		t.Fatalf("parent display title = %q, want raw parent title", got)
+	}
+	if got, err := ch.ResolveGroupDisplayTitle(context.Background(), "thread-1"); err != nil || got != "launch-thread / product-planning" {
+		t.Fatalf("ResolveGroupDisplayTitle() = %q, %v", got, err)
+	}
+}
+
 func TestResolveMemoryExtractionContextIncludesThreadParentAndCategory(t *testing.T) {
 	session, err := discordgo.New("Bot test-token")
 	if err != nil {

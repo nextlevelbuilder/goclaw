@@ -223,6 +223,7 @@
       "excludeGroups": "排除的 Discord 频道",
       "excludeGroupsPlaceholder": "选择要排除的频道",
       "manualExcludePlaceholder": "粘贴 Discord 频道 ID",
+      "useDiscordChannelId": "使用 Discord 频道 ID：",
       "addExcludedGroup": "添加",
       "noExcludeGroups": "尚未发现 Discord 频道历史。",
       "noExcludedGroups": "尚未排除任何频道。",

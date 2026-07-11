@@ -166,6 +166,9 @@ chmod +x prepare-env.sh && ./prepare-env.sh
 # Add at least one GOCLAW_*_API_KEY to .env, then:
 make up
 
+# If Postgres fails to start ("port 5432 already allocated"), set another host
+# port in .env, e.g. POSTGRES_PORT=5433 (see .env.example).
+
 # Web Dashboard at http://localhost:18790 (built-in)
 # Health check: curl http://localhost:18790/health
 

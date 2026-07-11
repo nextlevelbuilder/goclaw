@@ -64,6 +64,39 @@ var (
 	ErrProvisionDebounced = errors.New("bitrix24 mcp: provisioning debounced")
 )
 
+// deadTokenCodes are Bitrix APIError.Code values (client.go:82-97) that mean
+// a refresh_token is dead beyond repair — Bitrix rejected the refresh
+// attempt outright, so no amount of retrying will succeed. Only these codes
+// escalate to ErrUserAuthRequired; any other error from selfRefreshUserCreds
+// (network, 5xx, DB persist failure) is treated as transient and falls
+// through to the existing notifyUserOfMCPIssueOnce path instead.
+var deadTokenCodes = map[string]bool{
+	"invalid_grant": true,
+	"expired_token": true,
+	"NO_AUTH_FOUND": true,
+}
+
+// isDeadTokenCode reports whether a Bitrix APIError.Code indicates the
+// stored refresh_token is permanently dead (user must re-authorize) rather
+// than a transient failure.
+func isDeadTokenCode(code string) bool {
+	return deadTokenCodes[code]
+}
+
+// ErrUserAuthRequired means goclaw has no way to obtain a working Bitrix
+// OAuth token for this user — either no mcp_user_credentials row exists yet,
+// or the stored refresh_token was rejected outright by Bitrix
+// (isDeadTokenCode). The caller (handle.go) must DM the user the URL so they
+// can re-authorize; the message must NOT reach the agent bus (no MCP access
+// to answer with yet).
+type ErrUserAuthRequired struct {
+	URL string
+}
+
+func (e *ErrUserAuthRequired) Error() string {
+	return "bitrix24 mcp: user authorization required"
+}
+
 // initMCPProvisioner wires the lazy-provisioning plumbing at Start() time.
 // Safe to call even when provisioning is disabled — in that case it just
 // returns nil without touching mcpStore.
@@ -188,7 +221,10 @@ func (c *Channel) initMCPProvisioner(ctx context.Context) error {
 // HandleMessage regardless, so user messages always get processed.
 //
 // Called from handleMessage after EnsureContact, before HandleMessage.
-func (c *Channel) provisionIfMissing(ctx context.Context, userID string, fromConnector bool, auth EventAuth) error {
+// dialogID is the inbound event's DialogID — needed to build the OAuth
+// authorize URL's state payload (oauth_state_codec.go) when this function
+// must return ErrUserAuthRequired.
+func (c *Channel) provisionIfMissing(ctx context.Context, userID string, fromConnector bool, auth EventAuth, dialogID string) error {
 	// Skip #1: Open Channel message from an external connector customer.
 	// Transient customers reach the bot via a connector (Zalo/FB/etc.) and
 	// report IS_CONNECTOR=Y — they are not Bitrix users and have no per-user
@@ -279,12 +315,39 @@ func (c *Channel) provisionIfMissing(ctx context.Context, userID string, fromCon
 	// to trace to mcp_client.go.
 	if auth.Domain == "" || auth.AccessToken == "" || auth.RefreshToken == "" {
 		// Direct/group chatbot events don't carry OAuth tokens in the top-level
-		// auth[] block — Bitrix only ships them on Open Channel events. If this
-		// user already has stored credentials, refresh the USER-context token
-		// from the stored refresh_token instead of failing, so per-user MCP
-		// stays alive without depending on the event carrying tokens.
+		// auth[] block — Bitrix only ships them on Open Channel events (see
+		// design.md — confirmed by Bitrix24 support as expected behavior, not
+		// a bug: imbot subscriptions bind with USER_ID=0).
+		//
+		// Brand-new user (never onboarded) — nothing to refresh. Send the user
+		// an OAuth re-authorize link instead of failing silently.
+		if existing == nil {
+			url, err := c.BuildUserAuthorizeURL(userID, dialogID)
+			if err != nil {
+				return fmt.Errorf("bitrix24 mcp: build authorize url: %w", err)
+			}
+			return &ErrUserAuthRequired{URL: url}
+		}
+
+		// Existing user — try refreshing the USER-context token from the
+		// stored refresh_token instead of failing, so per-user MCP stays
+		// alive without depending on the event carrying tokens.
 		if err := c.selfRefreshUserCreds(ctx, userID, existing); err != nil {
-			return err
+			var apiErr *APIError
+			if errors.As(err, &apiErr) && isDeadTokenCode(apiErr.Code) {
+				// refresh_token is dead beyond repair — same re-auth flow as
+				// the brand-new-user case above. Do NOT delete the existing
+				// credential row: SetUserCredentials upserts on
+				// (server_id, user_id, tenant_id), so completing the OAuth
+				// flow overwrites this row's env in place (design.md §12 —
+				// deleting first would be unnecessary churn).
+				url, urlErr := c.BuildUserAuthorizeURL(userID, dialogID)
+				if urlErr != nil {
+					return fmt.Errorf("bitrix24 mcp: build authorize url: %w", urlErr)
+				}
+				return &ErrUserAuthRequired{URL: url}
+			}
+			return err // transient (network/5xx/DB) — falls through to notifyUserOfMCPIssueOnce
 		}
 		return nil
 	}
@@ -484,6 +547,25 @@ const mcpUserNotifyMessage = "⚠️ Hệ thống đang gặp vấn đề với 
 	"Một số chức năng có thể không hoạt động như mong đợi. " +
 	"Vui lòng liên hệ admin kỹ thuật để xem lại. " +
 	"Tôi vẫn có thể trả lời các câu hỏi cơ bản khác."
+
+// oauthInviteMessage is the short hint sent alongside the keyboard button
+// (handle.go, sendOAuthInvite) for a user who has no MCP credentials yet or
+// whose refresh_token died. Contains NO url — the url lives only in the
+// keyboard button's LINK field, built at the call site from
+// Channel.BuildUserAuthorizeURL (oauth_state_codec.go). Vietnamese-first for
+// the same reason as mcpUserNotifyMessage above (channel doesn't thread
+// locale yet).
+const oauthInviteMessage = "🔐 Vui lòng bấm nút bên dưới để cấp quyền truy cập CRM " +
+	"(link có hiệu lực 10 phút)."
+
+// oauthInviteButtonText is the label of the single keyboard button sent with
+// oauthInviteMessage.
+const oauthInviteButtonText = "Cấp quyền truy cập CRM"
+
+// oauthInviteGroupHintMessage is sent in the ORIGINAL group/dialog only when
+// the oauth-invite trigger came from a group chat, so the user knows to check
+// their private messages. Never contains the URL.
+const oauthInviteGroupHintMessage = "Đã gửi bạn tin nhắn riêng để cấp quyền truy cập CRM."
 
 // notifyUserOfMCPIssueOnce sends a one-shot degradation notice to the
 // Bitrix24 user via imbot.message.add when provisioning fails in an

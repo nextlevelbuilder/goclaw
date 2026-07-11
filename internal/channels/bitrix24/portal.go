@@ -445,6 +445,35 @@ func (p *Portal) RefreshUserToken(ctx context.Context, refreshToken string) (*To
 	return p.client.RefreshToken(ctx, p.creds.ClientID, p.creds.ClientSecret, refreshToken)
 }
 
+// ExchangeUserAuthCode exchanges an authorization code for a per-user OAuth
+// token pair WITHOUT touching the portal's own bot-level token state — the
+// caller decides what to do with the resulting user tokens (mint MCP
+// credentials) instead of persisting them as portal state. Used by the
+// per-user OAuth re-auth flow (oauth_user_flow.go).
+//
+// Deliberately does NOT call validateTokenResponseIdentity (used by Exchange
+// for the app-install flow) — confirmed against live Bitrix behavior that for
+// THIS kind of exchange (a user-authorize code, not an app-install code),
+// the response's `domain` field is the OAuth server's own domain
+// ("oauth.bitrix.info"), never the portal's — that check would reject every
+// call, for every portal, regardless of Local App vs Marketplace app (the
+// portal type is a per-customer choice; Exchange/validateTokenResponseIdentity
+// stays untouched for both). The caller (HandleUserOAuthCallback,
+// oauth_user_flow.go) instead validates the portal domain from the redirect's
+// own `domain` query param against the signed state, and the authorizing
+// user's identity against tr.UserID — both are meaningful for this flow;
+// tr.Domain is not.
+func (p *Portal) ExchangeUserAuthCode(ctx context.Context, code string) (*TokenResponse, error) {
+	if code == "" {
+		return nil, errors.New("bitrix24 user exchange: code required")
+	}
+	tr, err := p.client.ExchangeAuthCode(ctx, p.creds.ClientID, p.creds.ClientSecret, code)
+	if err != nil {
+		return nil, fmt.Errorf("bitrix24 user exchange: %w", err)
+	}
+	return tr, nil
+}
+
 func (p *Portal) validateTokenResponseIdentity(flow string, tr *TokenResponse) error {
 	if tr == nil {
 		return fmt.Errorf("bitrix24 %s: nil token response", flow)

@@ -591,6 +591,17 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 			}
 		}
 		l.emitLLMSpanEnd(ctx, spanID, start, resp, err, opts...)
+		if err == nil && resp != nil && resp.Usage != nil {
+			effModel, effProvider := l.resolveSpan(opts)
+			state.AppendCall(providers.CallUsage{
+				Type:     "llm_call",
+				Name:     fmt.Sprintf("%s/%s #%d", effProvider, effModel, state.Iteration+1),
+				Provider: effProvider,
+				Model:    effModel,
+				Usage:    *resp.Usage,
+				CostUSD:  l.calculateLLMCost(ctx, effProvider, effModel, resp.Usage),
+			})
+		}
 		return resp, err
 	}
 }

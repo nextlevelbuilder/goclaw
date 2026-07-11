@@ -31,6 +31,12 @@ const (
 	// iframe-loads it (with POST tokens) when a user opens the app inside
 	// their portal. See handleAppPage for behavior.
 	handlerPath = "/bitrix24/handler"
+	// userOAuthCallbackPath is where Bitrix redirects a user's browser after
+	// they approve (or decline) the per-user re-authorization link sent via
+	// DM (see oauth_state_codec.go BuildUserAuthorizeURL, oauth_user_flow.go).
+	// Public — no gateway auth — same as installPath; safety comes from the
+	// HMAC-signed state, not route-level auth (design.md §9, §5).
+	userOAuthCallbackPath = "/bitrix24/oauth/user/callback"
 )
 
 const ambiguousDomainKey = "\x00ambiguous-domain"
@@ -208,6 +214,18 @@ func (r *Router) UnregisterBot(botID int) {
 	r.mu.Unlock()
 }
 
+// DispatcherByBotID returns the registered dispatcher for a bot id, if any.
+// Used by handleUserOAuthCallback to resolve which Channel should mint MCP
+// credentials for a completed per-user re-authorization — the decoded state
+// payload carries BotID (oauth_state_codec.go) since Bitrix's redirect query
+// params carry no bot_id of their own.
+func (r *Router) DispatcherByBotID(botID int) (BotDispatcher, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	d, ok := r.byBotID[botID]
+	return d, ok
+}
+
 // PortalByKey returns the portal registered under (tenant, name), if any.
 // Exported for tests and for Phase 03 channel bootstrap.
 func (r *Router) PortalByKey(tenantID uuid.UUID, name string) (*Portal, bool) {
@@ -311,6 +329,8 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		r.handleEvent(w, req)
 	case handlerPath:
 		r.handleAppPage(w, req)
+	case userOAuthCallbackPath:
+		r.handleUserOAuthCallback(w, req, strings.TrimSpace(req.URL.Query().Get("state")))
 	default:
 		http.NotFound(w, req)
 	}

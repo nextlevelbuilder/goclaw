@@ -1098,7 +1098,47 @@ Accepts partial updates. Flag keys are validated against recognized v3 flags.
 | `GET` | `/v1/channels/instances/{id}` | Get instance |
 | `PUT` | `/v1/channels/instances/{id}` | Update instance |
 | `DELETE` | `/v1/channels/instances/{id}` | Delete instance (not default) |
-| `POST` | `/v1/channels/instances/{id}/metadata/refresh` | Trigger a Discord metadata refresh into the channel contact cache |
+| `POST` | `/v1/channels/instances/{id}/metadata/refresh` | Refresh Discord group metadata and return diagnostic coverage/failures |
+
+### `POST /v1/channels/instances/{id}/metadata/refresh`
+
+Available only for a running Discord channel instance and requires tenant-admin
+access. The refresh unions IDs from the channel contact cache with group and
+parent IDs retained by pending-message history. IDs already found in the live
+Discord guild/channel state are reused; remaining IDs are fetched directly,
+including inactive or archived threads when Discord permits access.
+
+The response is always shaped as `{ "ok": boolean, "report": object }` for a
+completed refresh. `ok` is `false` when any target failed, while the HTTP status
+remains `200` so callers can inspect the complete report. Setup or execution
+failures return `409` with the same `report` plus a top-level `error`.
+
+```json
+{
+  "ok": false,
+  "report": {
+    "ok": false,
+    "groups_refreshed": 498,
+    "users_refreshed": 0,
+    "contact_targets": 501,
+    "pending_message_targets": 37,
+    "live_targets": 490,
+    "direct_lookup_attempts": 11,
+    "direct_lookup_resolved": 10,
+    "failures": [{
+      "channel_id": "1381538956478251038",
+      "source": "pending_messages",
+      "reason": "HTTP 403 Forbidden"
+    }]
+  }
+}
+```
+
+`failures[].source` identifies the ID source (`contacts`, `pending_messages`,
+or both as a comma-separated value). The report may also contain `errors` for
+failures while listing contact or pending-message targets. The gateway logs one
+INFO summary (`discord contact cache refreshed`) with the report counts and a
+WARN log for each direct lookup or thread-parent lookup failure.
 
 ### Contacts
 
@@ -1109,6 +1149,10 @@ Accepts partial updates. Flag keys are validated against recognized v3 flags.
 | `POST` | `/v1/contacts/merge` | Merge contacts into unified identity |
 | `POST` | `/v1/contacts/unmerge` | Unmerge previously merged contacts |
 | `GET` | `/v1/contacts/merged/{tenantUserId}` | List merged contacts for tenant user |
+
+Discord thread labels used in current-chat, session, contact, and delivery-target
+displays may be qualified as `thread / parent channel`. This presentation does
+not change the stable IDs used by API consumers.
 
 ### Tenant Users
 
@@ -1154,7 +1198,7 @@ require tenant admin.
 | `PUT` | `/v1/channels/instances/{id}/memory-extraction/settings` | Replace normalized `passive_memory` config in the channel instance config |
 | `POST` | `/v1/channels/instances/{id}/memory-extraction/run` | Trigger a manual extraction run for the latest eligible group |
 | `POST` | `/v1/channels/instances/{id}/memory-extraction/run-all` | Trigger manual extraction for all eligible groups, skipping groups below `min_messages` |
-| `GET` | `/v1/channels/instances/{id}/memory-extraction/groups` | List Discord history groups for tuning, including best-effort `group_title` and `parent_group_title` |
+| `GET` | `/v1/channels/instances/{id}/memory-extraction/groups` | List Discord history groups for tuning, including best-effort raw `group_title` and `parent_group_title` |
 | `GET` | `/v1/channels/instances/{id}/memory-extraction/items` | List review queue items; optional `status` filter |
 | `POST` | `/v1/channels/instances/{id}/memory-extraction/items/{itemID}/approve` | Write candidate to episodic memory and publish KG event |
 | `POST` | `/v1/channels/instances/{id}/memory-extraction/items/{itemID}/reject` | Reject candidate |
@@ -1177,6 +1221,10 @@ non-secret per-group instruction appends. For Discord threads, extraction uses
 the exact thread prompt when present, then falls back to the parent channel
 prompt. Tenant-global prompt remains stored in system config key
 `channel_memory.extraction.custom_prompt`.
+
+For Discord threads, `group_title` and `parent_group_title` remain separate raw
+metadata. A `thread / parent channel` title may be used for presentation, but
+does not alter those fields.
 
 Review queue items include `topics` and `entities` arrays for prompt tuning and
 debugging. Extraction run/item tables store candidate summaries and metadata but

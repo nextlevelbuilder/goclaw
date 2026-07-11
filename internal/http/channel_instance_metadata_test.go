@@ -27,9 +27,9 @@ func (c *metadataRefreshChannel) IsRunning() bool { return true }
 func (c *metadataRefreshChannel) IsAllowed(string) bool {
 	return true
 }
-func (c *metadataRefreshChannel) RefreshContactCache(context.Context) error {
+func (c *metadataRefreshChannel) RefreshContactCache(context.Context) (channels.MetadataRefreshReport, error) {
 	c.called = true
-	return nil
+	return channels.MetadataRefreshReport{OK: true, GroupsRefreshed: 1}, nil
 }
 
 func TestRefreshChannelMetadataCallsDiscordRefresher(t *testing.T) {

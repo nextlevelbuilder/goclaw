@@ -17,6 +17,22 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
+// recordToolCallUsage appends a tool's internal LLM call to the run breakdown.
+// No-op unless the tool actually made an LLM call (result.Usage != nil).
+func (l *Loop) recordToolCallUsage(ctx context.Context, state *pipeline.RunState, toolName string, result *tools.Result) {
+	if result == nil || result.Usage == nil {
+		return
+	}
+	state.AppendCall(providers.CallUsage{
+		Type:     "tool_call",
+		Name:     toolName,
+		Provider: result.Provider,
+		Model:    result.Model,
+		Usage:    *result.Usage,
+		CostUSD:  l.calculateLLMCost(ctx, result.Provider, result.Model, result.Usage),
+	})
+}
+
 // makeExecuteToolCall wraps tool execution: name resolution, execute, process result.
 // Uses bridgeRS to share loop detection state between the pipeline and agent's processToolResult.
 func (l *Loop) makeExecuteToolCall(req *RunRequest, bridgeRS *runState) func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall) ([]providers.Message, error) {
@@ -65,6 +81,7 @@ func (l *Loop) makeExecuteToolCall(req *RunRequest, bridgeRS *runState) func(ctx
 		toolDuration := time.Since(toolStart)
 
 		l.emitToolSpanEnd(ctx, toolSpanID, toolStart, result)
+		l.recordToolCallUsage(ctx, state, registryName, result)
 		l.recordToolUsageEvent(ctx, req, registryName, tc.Name, tc.ID, tc.Arguments, toolStart, result, toolSpanID)
 
 		// v3 evolution metrics: record tool execution non-blocking (best-effort).
@@ -190,6 +207,7 @@ func (l *Loop) makeProcessToolResult(req *RunRequest, bridgeRS *runState) func(c
 		if result == nil {
 			return []providers.Message{rawMsg}
 		}
+		l.recordToolCallUsage(ctx, state, registryName, result)
 		if rawName == "" {
 			rawName = tc.Name
 		}

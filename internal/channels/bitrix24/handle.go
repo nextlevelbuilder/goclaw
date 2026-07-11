@@ -384,7 +384,16 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	// the MCP server's tools, which is strictly better UX than the channel
 	// denying the message. The typed errors let tests assert behavior
 	// without string matching.
-	if err := c.provisionIfMissing(ctx, senderID, evt.Params.FromIsConnector, evt.Auth); err != nil {
+	if err := c.provisionIfMissing(ctx, senderID, evt.Params.FromIsConnector, evt.Auth, chatID); err != nil {
+		// ErrUserAuthRequired carries a URL (not a sentinel value), so it
+		// needs errors.As rather than errors.Is. Checked first and returns
+		// early — the user has no MCP access yet, so there's nothing useful
+		// for the agent to answer with; don't publish to the bus.
+		var authErr *ErrUserAuthRequired
+		if errors.As(err, &authErr) {
+			c.sendOAuthInvite(ctx, senderID, chatID, isGroup, authErr.URL)
+			return
+		}
 		switch {
 		case errors.Is(err, ErrProvisionDisabled),
 			errors.Is(err, ErrProvisionSkippedOpenChannel),

@@ -1,0 +1,30 @@
+# Cloudflare Tunnel (cloudflared) — expose the gateway via Cloudflare without opening host ports.
+#
+# Usage:
+#   make up  — includes this file automatically when `.env.cloudflared` exists (see Makefile).
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml -f docker-compose.cloudflared.yml up -d
+#   WITH_CLOUDFLARED=0 make up  — skip tunnel even if `.env.cloudflared` exists
+#
+# Required: file `.env.cloudflared` (see `.env.cloudflared.example`) with:
+#   TUNNEL_TOKEN=<token from Zero Trust → Networks → Tunnels → your tunnel → Install connector>
+#
+# We use a separate file so the token is not injected into the goclaw container (goclaw loads all of `.env` via env_file).
+#
+# Ingress target in the Cloudflare dashboard must reach this stack on the Docker network, e.g.:
+#   http://goclaw:18790
+# (not http://localhost:18790 — that is the host, not the goclaw container from cloudflared’s view.)
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    env_file:
+      - path: .env.cloudflared
+        required: true
+    networks:
+      - goclaw-net
+    depends_on:
+      - goclaw
+    security_opt:
+      - no-new-privileges:true

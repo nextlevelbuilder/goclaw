@@ -235,7 +235,7 @@ func (s *PGHeartbeatStore) ListDeliveryTargets(ctx context.Context, tenantID uui
 		        cc.thread_id,
 		        cc.thread_type,
 		        cc.channel_instance AS channel,
-		        COALESCE(cc.display_name, cc.sender_id) AS title,
+		        COALESCE(NULLIF(cc.metadata->>'display_title', ''), cc.display_name, cc.sender_id) AS title,
 		        CASE WHEN cc.contact_type = 'topic' THEN 'topic'
 		             WHEN cc.peer_kind = 'group' THEN 'group'
 		             ELSE 'dm' END AS kind

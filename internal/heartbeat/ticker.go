@@ -37,19 +37,23 @@ type TickerConfig struct {
 	MsgBus        EventPublisher
 	Sched         ActiveSessionChecker
 	RunAgent      func(ctx context.Context, req agent.RunRequest) <-chan scheduler.RunOutcome
+	// ResolveGroupContext optionally supplies platform context for a configured
+	// group delivery target without changing its stable route ID.
+	ResolveGroupContext func(ctx context.Context, channel, chatID string) (channelType, chatTitle string)
 }
 
 // Ticker polls for due heartbeats and runs them through the agent loop.
 type Ticker struct {
-	store         store.HeartbeatStore
-	agents        store.AgentStore
-	sessions      store.SessionStore
-	providerStore store.ProviderStore
-	providerReg   ProviderResolver
-	msgBus        EventPublisher
-	sched         ActiveSessionChecker
-	runAgent      func(ctx context.Context, req agent.RunRequest) <-chan scheduler.RunOutcome
-	onEvent       func(store.HeartbeatEvent)
+	store               store.HeartbeatStore
+	agents              store.AgentStore
+	sessions            store.SessionStore
+	providerStore       store.ProviderStore
+	providerReg         ProviderResolver
+	msgBus              EventPublisher
+	sched               ActiveSessionChecker
+	runAgent            func(ctx context.Context, req agent.RunRequest) <-chan scheduler.RunOutcome
+	resolveGroupContext func(ctx context.Context, channel, chatID string) (channelType, chatTitle string)
+	onEvent             func(store.HeartbeatEvent)
 
 	wakeCh chan uuid.UUID
 	stopCh chan struct{}
@@ -59,16 +63,17 @@ type Ticker struct {
 // NewTicker creates a new heartbeat ticker.
 func NewTicker(cfg TickerConfig) *Ticker {
 	return &Ticker{
-		store:         cfg.Store,
-		agents:        cfg.Agents,
-		sessions:      cfg.Sessions,
-		providerStore: cfg.ProviderStore,
-		providerReg:   cfg.ProviderReg,
-		msgBus:        cfg.MsgBus,
-		sched:         cfg.Sched,
-		runAgent:      cfg.RunAgent,
-		wakeCh:   make(chan uuid.UUID, 16),
-		stopCh:   make(chan struct{}),
+		store:               cfg.Store,
+		agents:              cfg.Agents,
+		sessions:            cfg.Sessions,
+		providerStore:       cfg.ProviderStore,
+		providerReg:         cfg.ProviderReg,
+		msgBus:              cfg.MsgBus,
+		sched:               cfg.Sched,
+		runAgent:            cfg.RunAgent,
+		resolveGroupContext: cfg.ResolveGroupContext,
+		wakeCh:              make(chan uuid.UUID, 16),
+		stopCh:              make(chan struct{}),
 	}
 }
 
@@ -237,6 +242,10 @@ func (t *Ticker) runOne(ctx context.Context, hb store.AgentHeartbeat) {
 	if hb.ChatID != nil {
 		chatID = *hb.ChatID
 	}
+	channelType, chatTitle := "", ""
+	if t.resolveGroupContext != nil && chatID != "" {
+		channelType, chatTitle = t.resolveGroupContext(ctx, channel, chatID)
+	}
 
 	// [5] Run through agent loop via scheduler.
 	var lastErr error
@@ -272,7 +281,10 @@ func (t *Ticker) runOne(ctx context.Context, hb store.AgentHeartbeat) {
 			SessionKey:        sessionKey,
 			Message:           prompt,
 			Channel:           channel,
+			ChannelType:       channelType,
 			ChatID:            chatID,
+			ChatTitle:         chatTitle,
+			PeerKind:          heartbeatPeerKind(chatTitle),
 			RunID:             fmt.Sprintf("heartbeat:%s", agentIDStr),
 			Stream:            false,
 			ExtraSystemPrompt: extraSystem,
@@ -329,6 +341,13 @@ func (t *Ticker) runOne(ctx context.Context, hb store.AgentHeartbeat) {
 	}
 
 	t.finishRun(ctx, hb, sessionKey, agentKey, "ok", "", truncate(cleaned, maxSummaryLen), durationMS, inputTokens, outputTokens)
+}
+
+func heartbeatPeerKind(chatTitle string) string {
+	if chatTitle != "" {
+		return "group"
+	}
+	return ""
 }
 
 func (t *Ticker) finishRun(ctx context.Context, hb store.AgentHeartbeat, sessionKey, agentKey, status, errMsg, summary string, durationMS, inputTokens, outputTokens int) {

@@ -207,22 +207,17 @@ export function CronAdvancedDialog({ open, onOpenChange, job, onUpdate }: CronAd
                     const filtered = targets.filter((tgt) => tgt.channel === channel);
                     if (filtered.length > 0) {
                       return (
-                        <Select
-                          value={to || "__none__"}
-                          onValueChange={(v) => setValue("to", v === "__none__" ? "" : v)}
-                        >
-                          <SelectTrigger className="text-base md:text-sm">
-                            <SelectValue placeholder={t("detail.toPlaceholder")} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">{t("detail.toPlaceholder")}</SelectItem>
-                            {filtered.map((tgt) => (
-                              <SelectItem key={tgt.chatId} value={tgt.chatId} title={tgt.title ? `${tgt.title} (${tgt.chatId})` : tgt.chatId}>
-                                <span className="truncate">{tgt.title ? `${tgt.title} (${tgt.chatId})` : tgt.chatId}</span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Combobox
+                          value={to}
+                          onChange={(value) => setValue("to", value)}
+                          options={filtered.map((target) => ({
+                            value: target.chatId,
+                            label: target.title ? `${target.title} (${target.chatId})` : target.chatId,
+                          }))}
+                          placeholder={t("detail.toPlaceholder")}
+                          allowCustom
+                          className="text-base md:text-sm"
+                        />
                       );
                     }
                     return (

@@ -15,6 +15,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/heartbeat"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
+	"github.com/nextlevelbuilder/goclaw/internal/sessions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -60,6 +61,10 @@ func startCronAndHeartbeat(
 		MsgBus:        msgBus,
 		Sched:         sched,
 		RunAgent:      makeHeartbeatRunFn(sched),
+		ResolveGroupContext: func(ctx context.Context, channel, chatID string) (string, string) {
+			channelType := resolveChannelType(channelMgr, channel)
+			return channelType, resolveGroupDisplayTitle(ctx, channelMgr, channel, chatID, string(sessions.PeerGroup), "")
+		},
 	})
 	heartbeatTicker.SetOnEvent(func(event store.HeartbeatEvent) {
 		server.BroadcastEvent(*protocol.NewEvent(protocol.EventHeartbeat, event))
