@@ -207,6 +207,102 @@ func TestTTSConfigSave_AcceptsLegacyAndUISchemaAliases(t *testing.T) {
 	}
 }
 
+func TestTTSConfigSave_ProviderPresenceSemantics(t *testing.T) {
+	setupTestToken(t, "")
+
+	t.Run("explicit empty provider disables TTS without clearing provider config", func(t *testing.T) {
+		sc := &validationSystemConfigStore{data: map[string]string{
+			"tts.provider":    "edge",
+			"tts.edge.voice":  "en-US-AvaMultilingualNeural",
+			"tts.edge.rate":   "+15%",
+			"tts.edge.params": `{"pitch":10,"volume":20}`,
+		}}
+		cs := &validationSecretsStore{data: map[string]string{
+			"tts.openai.api_key": "sk-existing",
+		}}
+		mux := newValidationTTSConfigMux(sc, cs)
+
+		req := httptest.NewRequest("POST", "/v1/tts/config", ttsBody(t, map[string]any{
+			"provider": "",
+			"edge": map[string]any{
+				"voice":  "",
+				"rate":   "",
+				"params": nil,
+			},
+			"openai": map[string]string{
+				"api_key": "***",
+			},
+		}))
+		rr := httptest.NewRecorder()
+		mux.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("save: want 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+		if got := sc.data["tts.provider"]; got != "" {
+			t.Fatalf("tts.provider = %q, want empty", got)
+		}
+		if got := sc.data["tts.edge.voice"]; got != "en-US-AvaMultilingualNeural" {
+			t.Errorf("tts.edge.voice = %q, want existing value preserved", got)
+		}
+		if got := sc.data["tts.edge.rate"]; got != "+15%" {
+			t.Errorf("tts.edge.rate = %q, want existing value preserved", got)
+		}
+		if got := sc.data["tts.edge.params"]; got != `{"pitch":10,"volume":20}` {
+			t.Errorf("tts.edge.params = %q, want existing value preserved", got)
+		}
+		if got := cs.data["tts.openai.api_key"]; got != "sk-existing" {
+			t.Errorf("tts.openai.api_key = %q, want existing secret preserved", got)
+		}
+
+		getReq := httptest.NewRequest("GET", "/v1/tts/config", nil)
+		getRR := httptest.NewRecorder()
+		mux.ServeHTTP(getRR, getReq)
+		if getRR.Code != http.StatusOK {
+			t.Fatalf("get: want 200, got %d: %s", getRR.Code, getRR.Body.String())
+		}
+		var response ttsConfigResponse
+		if err := json.Unmarshal(getRR.Body.Bytes(), &response); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if response.Provider != "" {
+			t.Fatalf("GET provider = %q, want empty", response.Provider)
+		}
+	})
+
+	t.Run("omitted provider leaves existing value unchanged", func(t *testing.T) {
+		sc := &validationSystemConfigStore{data: map[string]string{"tts.provider": "edge"}}
+		mux := newValidationTTSConfigMux(sc, &validationSecretsStore{data: map[string]string{}})
+
+		req := httptest.NewRequest("POST", "/v1/tts/config", strings.NewReader(`{}`))
+		rr := httptest.NewRecorder()
+		mux.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+		if got := sc.data["tts.provider"]; got != "edge" {
+			t.Fatalf("tts.provider = %q, want edge", got)
+		}
+	})
+
+	t.Run("non-empty provider still replaces existing value", func(t *testing.T) {
+		sc := &validationSystemConfigStore{data: map[string]string{"tts.provider": "edge"}}
+		mux := newValidationTTSConfigMux(sc, &validationSecretsStore{data: map[string]string{}})
+
+		req := httptest.NewRequest("POST", "/v1/tts/config", strings.NewReader(`{"provider":"openai"}`))
+		rr := httptest.NewRecorder()
+		mux.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+		if got := sc.data["tts.provider"]; got != "openai" {
+			t.Fatalf("tts.provider = %q, want openai", got)
+		}
+	})
+}
+
 func TestTTSConfigGet_RoundTripsCompatibilityFields(t *testing.T) {
 	setupTestToken(t, "")
 

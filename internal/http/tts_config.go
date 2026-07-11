@@ -220,7 +220,7 @@ func (h *TTSConfigHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 
 // ttsConfigSaveRequest is the request body for POST /v1/tts/config.
 type ttsConfigSaveRequest struct {
-	Provider   string                  `json:"provider"`
+	Provider   *string                 `json:"provider"`
 	Auto       string                  `json:"auto"`
 	Mode       string                  `json:"mode"`
 	MaxLength  int                     `json:"max_length"`
@@ -269,7 +269,7 @@ func (h *TTSConfigHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 		set := func(key, val, label string) bool {
 			return saveOrFail(w, ctx, h.systemConfigs.Set, key, val, label)
 		}
-		if req.Provider != "" && !set("tts.provider", req.Provider, "provider") {
+		if req.Provider != nil && !set("tts.provider", *req.Provider, "provider") {
 			return
 		}
 		if req.Auto != "" && !set("tts.auto", req.Auto, "auto") {
@@ -407,7 +407,11 @@ func (h *TTSConfigHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	slog.Info("tts.config: saved", "tenant", tid, "provider", req.Provider)
+	provider := ""
+	if req.Provider != nil {
+		provider = *req.Provider
+	}
+	slog.Info("tts.config: saved", "tenant", tid, "provider", provider)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"ok": true})
 }
