@@ -136,10 +136,19 @@ func (s *PublicURLSnapshot) Middleware(next http.Handler) http.Handler {
 // shared package just for one function.
 func derivePublicURLFromRequest(r *http.Request) string {
 	scheme := "https"
-	if proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); proto != "" {
-		scheme = strings.ToLower(proto)
-	} else if r.TLS == nil {
+	if r.TLS == nil {
 		scheme = "http"
+	}
+	if proto := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))); proto != "" {
+		switch proto {
+		case "http", "https":
+			scheme = proto
+		case "ws":
+			scheme = "http"
+		case "wss":
+			scheme = "https"
+		}
+		// any other value is left ignored — keeps the TLS-derived default
 	}
 	host := strings.TrimSpace(r.Header.Get("X-Forwarded-Host"))
 	if host == "" {

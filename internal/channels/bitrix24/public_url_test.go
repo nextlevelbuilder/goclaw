@@ -117,6 +117,18 @@ func TestDerivePublicURL_TableDriven(t *testing.T) {
 			proto:   "https",
 			wantErr: errPublicURLEmpty,
 		},
+		{
+			name:  "websocket_upgrade_wss_normalizes_to_https",
+			host:  "goclaw.tamgiac.com",
+			proto: "wss",
+			want:  "https://goclaw.tamgiac.com",
+		},
+		{
+			name:  "websocket_upgrade_ws_normalizes_to_http",
+			host:  "goclaw.tamgiac.com",
+			proto: "ws",
+			want:  "http://goclaw.tamgiac.com",
+		},
 	}
 
 	for _, tc := range cases {

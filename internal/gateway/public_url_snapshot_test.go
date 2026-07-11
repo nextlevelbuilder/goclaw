@@ -65,6 +65,20 @@ func TestPublicURLSnapshot_Update_FromRequest(t *testing.T) {
 			fwdProto: "https",
 			wantURL:  "https://edge1.example.com",
 		},
+		{
+			name:     "websocket_upgrade_wss_normalizes_to_https",
+			host:     "internal-lb:8080",
+			fwdHost:  "goclaw.tamgiac.com",
+			fwdProto: "wss",
+			wantURL:  "https://goclaw.tamgiac.com",
+		},
+		{
+			name:     "websocket_upgrade_ws_normalizes_to_http",
+			host:     "internal-lb:8080",
+			fwdHost:  "goclaw.tamgiac.com",
+			fwdProto: "ws",
+			wantURL:  "http://goclaw.tamgiac.com",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
