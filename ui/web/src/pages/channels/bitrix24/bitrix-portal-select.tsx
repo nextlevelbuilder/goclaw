@@ -150,9 +150,16 @@ export function BitrixPortalSelect({ value, onChange, onCreateRequest, onResumeA
                         type="button"
                         aria-label={t("bitrix24.portalSelect.deleteAria", { name: p.name, defaultValue: `Delete portal ${p.name}` })}
                         className="ml-auto rounded p-1 text-muted-foreground hover:text-destructive"
+                        // Trigger on pointerdown, not click: Radix Select closes
+                        // the popover on the SelectItem's own pointerdown, so
+                        // by the time click fires the item is gone. stopPropagation
+                        // keeps the parent SelectItem from selecting the pending
+                        // portal; the paired click handler stays for keyboard-
+                        // driven activation (Enter/Space on focused button).
                         onPointerDown={(e) => {
                           e.stopPropagation();
                           e.preventDefault();
+                          setPendingDeleteName(p.name);
                         }}
                         onClick={(e) => {
                           e.stopPropagation();
