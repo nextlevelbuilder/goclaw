@@ -41,6 +41,11 @@ type Channel struct {
 	client   *Client
 	audioMgr *audio.Manager
 
+	// agentStore and configPermStore back /new's group permission check. Both
+	// may be nil; a nil configPermStore denies group resets (fail-closed).
+	agentStore      store.AgentStore
+	configPermStore store.ConfigPermissionStore
+
 	// newTransport builds the Stream-mode connection. It is a field rather
 	// than a direct call so tests can substitute a fake and drive the inbound
 	// pipeline without a socket.
@@ -120,9 +125,20 @@ var _ interface {
 	HealthSnapshot() channels.ChannelHealth      // :438
 } = (*Channel)(nil)
 
+// Option configures a Channel at construction.
+type Option func(*Channel)
+
+// WithAgentStore lets the channel resolve its agent_key to a UUID for /new.
+func WithAgentStore(s store.AgentStore) Option { return func(c *Channel) { c.agentStore = s } }
+
+// WithConfigPermStore enables the group file-writer check for /new.
+func WithConfigPermStore(s store.ConfigPermissionStore) Option {
+	return func(c *Channel) { c.configPermStore = s }
+}
+
 // New builds a DingTalk channel from a resolved config.
 func New(cfg Config, msgBus *bus.MessageBus, pairingSvc store.PairingStore,
-	pendingStore store.PendingMessageStore, audioMgr *audio.Manager) (*Channel, error) {
+	pendingStore store.PendingMessageStore, audioMgr *audio.Manager, opts ...Option) (*Channel, error) {
 
 	cfg.applyDefaults()
 	if err := cfg.validate(); err != nil {
@@ -154,6 +170,9 @@ func New(cfg Config, msgBus *bus.MessageBus, pairingSvc store.PairingStore,
 	ch.SetHistoryLimit(historyLimit)
 	ch.SetRequireMention(cfg.RequireMentionOrDefault())
 
+	for _, opt := range opts {
+		opt(ch)
+	}
 	return ch, nil
 }
 

@@ -336,6 +336,13 @@ func (c *Channel) processMessage(ctx context.Context, data *chatbot.BotCallbackD
 		return
 	}
 
+	// Commands run after the policy gates — an unpaired stranger must not wipe a
+	// session — and before media is fetched, so /new does not download an
+	// attachment it is about to discard.
+	if c.handleCommand(ctx, in, chatID) {
+		return
+	}
+
 	mediaInfos := c.resolveMedia(ctx, in)
 
 	// Unreachable in practice, and deliberately kept.

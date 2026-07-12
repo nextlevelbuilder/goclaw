@@ -925,6 +925,29 @@ Two consequences worth knowing before you debug them:
 
 DMs are unaffected: every direct message reaches the bot.
 
+### Commands
+
+Slash commands and their Chinese aliases reset or interrupt the conversation without running the
+agent:
+
+| Command | Aliases | Effect |
+|---|---|---|
+| `/new` | `/reset`, `/clear`, `新会话`, `重新开始`, `清空对话` | Clear history and the compaction summary; start fresh |
+| `/stop` | — | Cancel the sender's current run |
+| `/stopall` | — | Cancel all of the sender's runs |
+
+Auto-compaction bounds a long session's token count but never forgets it; `/new` is the only
+way to drop the context deliberately.
+
+In a group, `/new` wipes a session shared by everyone in it, so it is gated on the group
+**file-writer** permission and fails closed — a nil or erroring permission store denies the
+reset rather than allowing it. `/stop` and `/stopall` touch only the sender's own run and are
+ungated. DMs are never gated.
+
+Parsing is per-channel (Telegram, WhatsApp, and DingTalk each do their own); the reset and
+cancel themselves run in the shared consumer, which rebuilds the session key exactly as a
+normal turn would.
+
 ### Thinking reaction
 
 While a run is in flight the bot posts a 🤔 reaction on the user's own message and recalls it

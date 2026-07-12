@@ -110,7 +110,7 @@ func FactoryWithPendingStore(pendingStore store.PendingMessageStore) channels.Ch
 }
 
 // FactoryWithPendingStoreAndAudio returns a ChannelFactory with persistent group
-// history and speech-to-text. This is the variant the gateway registers.
+// history and speech-to-text.
 func FactoryWithPendingStoreAndAudio(pendingStore store.PendingMessageStore, audioMgr *audio.Manager) channels.ChannelFactory {
 	return func(name string, creds json.RawMessage, cfg json.RawMessage,
 		msgBus *bus.MessageBus, pairingSvc store.PairingStore) (channels.Channel, error) {
@@ -118,16 +118,28 @@ func FactoryWithPendingStoreAndAudio(pendingStore store.PendingMessageStore, aud
 	}
 }
 
+// FactoryWithStoresAndAudio is the variant the gateway registers. The agent and
+// config-permission stores let /new gate a group reset on the file-writer
+// permission; without them a group reset is denied outright.
+func FactoryWithStoresAndAudio(agentStore store.AgentStore, configPermStore store.ConfigPermissionStore,
+	pendingStore store.PendingMessageStore, audioMgr *audio.Manager) channels.ChannelFactory {
+	return func(name string, creds json.RawMessage, cfg json.RawMessage,
+		msgBus *bus.MessageBus, pairingSvc store.PairingStore) (channels.Channel, error) {
+		return build(name, creds, cfg, msgBus, pairingSvc, pendingStore, audioMgr,
+			WithAgentStore(agentStore), WithConfigPermStore(configPermStore))
+	}
+}
+
 func build(name string, creds json.RawMessage, cfg json.RawMessage,
 	msgBus *bus.MessageBus, pairingSvc store.PairingStore,
-	pendingStore store.PendingMessageStore, audioMgr *audio.Manager) (channels.Channel, error) {
+	pendingStore store.PendingMessageStore, audioMgr *audio.Manager, opts ...Option) (channels.Channel, error) {
 
 	resolved, err := resolve(creds, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	ch, err := New(resolved, msgBus, pairingSvc, pendingStore, audioMgr)
+	ch, err := New(resolved, msgBus, pairingSvc, pendingStore, audioMgr, opts...)
 	if err != nil {
 		return nil, err
 	}
