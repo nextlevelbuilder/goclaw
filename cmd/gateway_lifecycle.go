@@ -10,6 +10,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/cache"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/bitrix24"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/heartbeat"
@@ -257,6 +258,21 @@ func (d *gatewayDeps) runLifecycle(
 	for _, route := range d.channelMgr.WebhookHandlers() {
 		mux.Handle(route.Path, route.Handler)
 		slog.Info("webhook route mounted on gateway", "path", route.Path)
+	}
+
+	// Bitrix24: also claim+mount the shared webhook router directly, even if
+	// no channel_instances row has finished setup yet (bot_code/bot_name
+	// still empty, or the portal hasn't completed OAuth). /bitrix24/install
+	// is what completes portal OAuth — gating the route behind a
+	// fully-configured bot creates a deadlock where an admin can never
+	// finish installing the first portal on a fresh gateway. ClaimWebhookRoute
+	// is idempotent (first-claim-wins via CompareAndSwap), so this is a no-op
+	// if a bitrix24 Channel already claimed the route in the loop above.
+	if router := bitrix24.WebhookRouter(); router != nil {
+		if path, handler := router.ClaimWebhookRoute(); path != "" && handler != nil {
+			mux.Handle(path, handler)
+			slog.Info("webhook route mounted on gateway", "path", path)
+		}
 	}
 
 	tsCleanup := initTailscale(ctx, d.cfg, mux)
