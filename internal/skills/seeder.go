@@ -3,6 +3,8 @@ package skills
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -55,6 +57,7 @@ func (s *Seeder) Seed(ctx context.Context) (seeded int, skipped int, skills []se
 	if err != nil {
 		return 0, 0, nil, fmt.Errorf("read bundled dir: %w", err)
 	}
+	var seedErrs []error
 
 	for _, e := range entries {
 		if !e.IsDir() {
@@ -119,6 +122,20 @@ func (s *Seeder) Seed(ctx context.Context) (seeded int, skipped int, skills []se
 
 		id, changed, actualDir, upsertErr := s.store.UpsertSystemSkill(ctx, p)
 		if upsertErr != nil {
+			if errors.Is(upsertErr, store.ErrMisclassifiedCustomSkill) {
+				if err := s.restoreCustomSkillMetadata(ctx, id, p); err != nil {
+					slog.Warn("seeder: failed to restore custom skill metadata", "slug", slug, "error", err)
+					seedErrs = append(seedErrs, fmt.Errorf("restore custom skill %q: %w", slug, err))
+				}
+				slog.Warn("seeder: skip bundled skill with custom slug", "slug", slug)
+				skipped++
+				continue
+			}
+			if errors.Is(upsertErr, store.ErrSystemSkillSlugConflict) {
+				slog.Warn("seeder: skip bundled skill with custom slug", "slug", slug)
+				skipped++
+				continue
+			}
 			slog.Error("seeder: failed to upsert skill", "slug", slug, "error", upsertErr)
 			continue
 		}
@@ -153,7 +170,123 @@ func (s *Seeder) Seed(ctx context.Context) (seeded int, skipped int, skills []se
 	if seeded > 0 {
 		s.store.BumpVersion()
 	}
-	return seeded, skipped, skills, nil
+	return seeded, skipped, skills, errors.Join(seedErrs...)
+}
+
+// restoreCustomSkillMetadata repairs a row that the older slug-only seeder
+// converted from custom to system. The store calls this only for rows marked
+// by the repair migration. Ambiguous history is left private and archived for
+// manual recovery instead of guessing which version was custom.
+func (s *Seeder) restoreCustomSkillMetadata(ctx context.Context, id uuid.UUID, p store.SkillCreateParams) error {
+	if id == uuid.Nil {
+		return errors.New("custom skill ID is missing")
+	}
+	if p.Version <= 1 {
+		return fmt.Errorf("invalid bundled version %d", p.Version)
+	}
+
+	if p.FileHash == nil || len(*p.FileHash) < 12 {
+		return errors.New("bundled skill hash is missing or invalid")
+	}
+	quarantineDir := filepath.Join(
+		filepath.Dir(p.FilePath),
+		".goclaw-bundled-"+filepath.Base(p.FilePath)+"-"+(*p.FileHash)[:12],
+	)
+	overwrittenDir := p.FilePath
+	alreadyQuarantined := false
+	if _, err := os.Stat(overwrittenDir); errors.Is(err, os.ErrNotExist) {
+		overwrittenDir = quarantineDir
+		alreadyQuarantined = true
+	} else if err != nil {
+		return fmt.Errorf("inspect overwritten bundled version: %w", err)
+	}
+
+	overwrittenFile := filepath.Join(overwrittenDir, "SKILL.md")
+	overwrittenContent, err := os.ReadFile(overwrittenFile)
+	if err != nil {
+		return fmt.Errorf("read overwritten bundled skill: %w", err)
+	}
+	overwrittenHash := fmt.Sprintf("%x", sha256.Sum256(overwrittenContent))
+	if overwrittenHash != *p.FileHash {
+		return errors.New("next managed version does not match the current bundled skill")
+	}
+
+	customVersion := p.Version - 1
+	customDir := filepath.Join(filepath.Dir(p.FilePath), fmt.Sprintf("%d", customVersion))
+	skillFile := filepath.Join(customDir, "SKILL.md")
+	content, err := os.ReadFile(skillFile)
+	if err != nil {
+		return fmt.Errorf("read previous custom skill: %w", err)
+	}
+	meta := parseMetadata(skillFile)
+	if meta == nil || meta.Name == "" {
+		return errors.New("previous custom skill has no name")
+	}
+
+	frontmatter := map[string]string{}
+	if fm := extractFrontmatter(string(content)); fm != "" {
+		frontmatter = parseSimpleYAML(fm)
+	}
+	if looksLikeBundledVersion(meta, frontmatter, p) {
+		return errors.New("previous managed version still looks bundled; custom version is ambiguous")
+	}
+	frontmatterJSON, err := json.Marshal(frontmatter)
+	if err != nil {
+		return fmt.Errorf("marshal custom skill frontmatter: %w", err)
+	}
+	hash := fmt.Sprintf("%x", sha256.Sum256(content))
+
+	if !alreadyQuarantined {
+		if err := os.Rename(p.FilePath, quarantineDir); err != nil {
+			return fmt.Errorf("quarantine overwritten bundled version: %w", err)
+		}
+	}
+
+	if err := s.store.UpdateSkill(
+		store.WithTenantID(ctx, store.MasterTenantID),
+		id,
+		map[string]any{
+			"name":        meta.Name,
+			"description": meta.Description,
+			"frontmatter": frontmatterJSON,
+			"visibility":  "private",
+			"status":      "archived",
+			"version":     customVersion,
+			"file_path":   customDir,
+			"file_size":   int64(len(content)),
+			"file_hash":   hash,
+		},
+	); err != nil {
+		if !alreadyQuarantined {
+			if rollbackErr := os.Rename(quarantineDir, p.FilePath); rollbackErr != nil {
+				return errors.Join(
+					fmt.Errorf("update custom skill metadata: %w", err),
+					fmt.Errorf("restore bundled version after failed update: %w", rollbackErr),
+				)
+			}
+		}
+		return fmt.Errorf("update custom skill metadata: %w", err)
+	}
+	return nil
+}
+
+func looksLikeBundledVersion(meta *Metadata, frontmatter map[string]string, p store.SkillCreateParams) bool {
+	// Auto-recovery requires an explicit custom version marker. Without it,
+	// historical bundled content cannot be distinguished reliably from a user
+	// skill that reused the same name or description.
+	if strings.TrimSpace(frontmatter["version"]) == "" {
+		return true
+	}
+	description := ""
+	if p.Description != nil {
+		description = *p.Description
+	}
+	if strings.TrimSpace(meta.Name) == strings.TrimSpace(p.Name) &&
+		strings.TrimSpace(meta.Description) == strings.TrimSpace(description) {
+		return true
+	}
+	bundledLicense := strings.TrimSpace(p.Frontmatter["license"])
+	return bundledLicense != "" && strings.TrimSpace(frontmatter["license"]) == bundledLicense
 }
 
 // CheckDepsAsync checks dependencies for seeded skills in a background goroutine.

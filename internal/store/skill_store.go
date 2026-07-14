@@ -2,9 +2,20 @@ package store
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 )
+
+const SkillRecoveryBundledSlugCollision = "bundled_slug_collision"
+
+// ErrSystemSkillSlugConflict prevents a bundled skill from replacing or
+// shadowing an existing custom skill with the same slug.
+var ErrSystemSkillSlugConflict = errors.New("system skill slug conflicts with custom skill")
+
+// ErrMisclassifiedCustomSkill marks a custom row repaired by the schema
+// migration that still needs its metadata restored from managed files.
+var ErrMisclassifiedCustomSkill = errors.New("custom skill requires bundled collision recovery")
 
 // SkillInfo describes a discovered skill.
 type SkillInfo struct {

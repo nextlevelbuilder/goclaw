@@ -2,6 +2,8 @@ package pg
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -14,12 +16,15 @@ import (
 // When hash is unchanged, returns the existing file_path from DB so the caller
 // uses the correct directory for dep scanning (not a non-existent next-version dir).
 func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillCreateParams) (uuid.UUID, bool, string, error) {
-	// Check if skill already exists
+	// System skills always live in the master tenant. Do not match a custom
+	// skill from another tenant just because it happens to share a slug.
 	var existingID uuid.UUID
 	var existingHash *string
 	var existingFilePath string
 	err := s.db.QueryRowContext(ctx,
-		"SELECT id, file_hash, file_path FROM skills WHERE slug = $1", p.Slug,
+		`SELECT id, file_hash, file_path FROM skills
+		 WHERE slug = $1 AND tenant_id = $2 AND is_system = true`,
+		p.Slug, store.MasterTenantID,
 	).Scan(&existingID, &existingHash, &existingFilePath)
 
 	if err == nil {
@@ -50,6 +55,28 @@ func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillCreat
 		}
 		s.BumpVersion()
 		return existingID, true, p.FilePath, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return uuid.Nil, false, "", fmt.Errorf("find system skill: %w", err)
+	}
+
+	// The master tenant has a unique slug index. Preserve a custom skill that
+	// already owns the bundled slug instead of replacing it.
+	var customID uuid.UUID
+	var recoveryMarker string
+	err = s.db.QueryRowContext(ctx,
+		`SELECT id, COALESCE(frontmatter->>'_goclaw_recovery', '') FROM skills
+		 WHERE slug = $1 AND tenant_id = $2 AND is_system = false`,
+		p.Slug, store.MasterTenantID,
+	).Scan(&customID, &recoveryMarker)
+	if err == nil {
+		if recoveryMarker == store.SkillRecoveryBundledSlugCollision {
+			return customID, false, "", store.ErrMisclassifiedCustomSkill
+		}
+		return customID, false, "", store.ErrSystemSkillSlugConflict
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return uuid.Nil, false, "", fmt.Errorf("find custom skill conflict: %w", err)
 	}
 
 	// New skill — insert

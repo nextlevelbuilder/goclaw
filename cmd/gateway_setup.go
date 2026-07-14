@@ -562,15 +562,14 @@ func setupSkillsSystem(
 					seeded, skipped, seededSkills, err := seeder.Seed(context.Background())
 					if err != nil {
 						slog.Warn("system skills seed failed", "error", err)
-					} else {
-						if seeded > 0 {
-							slog.Info("system skills seeded", "seeded", seeded, "skipped", skipped)
-						}
-						// Check dependencies asynchronously — does not block startup.
-						// Emits WS events per-skill so UI updates in realtime.
-						if len(seededSkills) > 0 {
-							seeder.CheckDepsAsync(seededSkills, msgBus)
-						}
+					}
+					if seeded > 0 {
+						slog.Info("system skills seeded", "seeded", seeded, "skipped", skipped)
+					}
+					// Check dependencies for successful partial results even when another
+					// bundled skill needs manual recovery.
+					if len(seededSkills) > 0 {
+						seeder.CheckDepsAsync(seededSkills, msgBus)
 					}
 				}
 			}

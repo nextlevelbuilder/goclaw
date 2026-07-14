@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -109,6 +110,41 @@ func TestStoreSkill_CreateAndGet(t *testing.T) {
 	}
 	if ownerID2 != "test-owner" {
 		t.Errorf("OwnerIDBySlug = %q, want %q", ownerID2, "test-owner")
+	}
+}
+
+func TestStoreSkill_UpsertSystemSkillPreservesCustomCollision(t *testing.T) {
+	s := newSkillStore(t)
+	ctx := store.WithTenantID(context.Background(), store.MasterTenantID)
+	slug := "system-collision-" + uuid.NewString()[:8]
+	customID := seedSkill(t, s, ctx, slug, "Custom Skill")
+	bundledHash := "bundled-hash"
+
+	returnedID, changed, _, err := s.UpsertSystemSkill(ctx, store.SkillCreateParams{
+		Name:       "Bundled Skill",
+		Slug:       slug,
+		Status:     "active",
+		Version:    2,
+		FilePath:   "/tmp/skills/" + slug + "/2",
+		FileHash:   &bundledHash,
+		Visibility: "public",
+	})
+	if !errors.Is(err, store.ErrSystemSkillSlugConflict) {
+		t.Fatalf("UpsertSystemSkill error = %v, want ErrSystemSkillSlugConflict", err)
+	}
+	if changed {
+		t.Fatal("UpsertSystemSkill changed the custom skill")
+	}
+	if returnedID != customID {
+		t.Fatalf("UpsertSystemSkill ID = %s, want custom ID %s", returnedID, customID)
+	}
+
+	got, ok := s.GetSkillByID(ctx, customID)
+	if !ok {
+		t.Fatal("custom skill disappeared after system collision")
+	}
+	if got.IsSystem || got.Name != "Custom Skill" || got.Version != 1 || got.Visibility != "private" {
+		t.Fatalf("custom skill changed after system collision: %+v", got)
 	}
 }
 
