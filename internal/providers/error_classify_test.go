@@ -111,6 +111,14 @@ func TestClassifyContextWindowExceeded(t *testing.T) {
 	}
 }
 
+func TestClassifyContextWindowOllama(t *testing.T) {
+	classifier := NewDefaultClassifier()
+	result := classifier.Classify(nil, 400, `{"error":"exceed_context_size_error"}`)
+	if result.Kind != "context_overflow" {
+		t.Errorf("expected context_overflow kind for Ollama, got %s", result.Kind)
+	}
+}
+
 func TestClassifyContextWindowEnglish(t *testing.T) {
 	classifier := NewDefaultClassifier()
 	result := classifier.Classify(nil, 400, "error: maximum context length reached")
