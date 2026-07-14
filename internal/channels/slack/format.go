@@ -113,8 +113,17 @@ func extractCodeBlocks(text string) (blocks []string, result string) {
 		return nil, text
 	}
 
+	// An odd number of ``` fences makes Split return an even number of parts;
+	// the final segment then follows an unpaired opening fence and must stay
+	// literal (it is re-appended verbatim below), so exclude it from the
+	// paired-scan loop instead of misclassifying it as a closed code block.
+	scanEnd := len(parts)
+	if scanEnd%2 == 0 {
+		scanEnd--
+	}
 	var sb strings.Builder
-	for i, part := range parts {
+	for i := 0; i < scanEnd; i++ {
+		part := parts[i]
 		if i%2 == 1 {
 			blocks = append(blocks, part)
 			sb.WriteString(fmt.Sprintf("\x00CB%d\x00", len(blocks)-1))

@@ -319,6 +319,14 @@ func TestExtractCodeBlocks(t *testing.T) {
 			expectedCount: 0,
 		},
 		{
+			// A closed block followed by an unpaired opening fence: 3 fences ->
+			// 4 parts. Only the middle part is a real code block; the trailing
+			// segment must stay literal, not be counted (and re-emitted) as one.
+			name:          "closed block then unpaired trailing fence",
+			input:         "a```b```c```d",
+			expectedCount: 1,
+		},
+		{
 			name:          "empty code block",
 			input:         "```\n\n```",
 			expectedCount: 1,
