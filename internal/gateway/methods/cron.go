@@ -107,6 +107,13 @@ func (m *CronMethods) handleCreate(ctx context.Context, client *gateway.Client, 
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, err.Error()))
 		return
 	}
+	// Anti-panic guard: a store may return (nil, nil) if the insert succeeded but
+	// the tenant-scoped readback failed (e.g. tenant asymmetry). Never dereference
+	// a nil job below.
+	if job == nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "cron job created but could not be loaded")))
+		return
+	}
 
 	// Apply extra fields not in AddJob signature via an immediate patch.
 	// Default stateless=true for new crons (saves tokens); override with explicit false.
@@ -122,7 +129,13 @@ func (m *CronMethods) handleCreate(ctx context.Context, client *gateway.Client, 
 		if isCommand {
 			patch.Command = params.Command
 		}
-		if updated, pErr := m.service.UpdateJob(ctx, job.ID, patch); pErr == nil {
+		// Patch under a tenant-consistent context: the job was inserted under
+		// job.TenantID (which falls back to MasterTenantID for nil-tenant /
+		// master-scope connections). Using the raw ctx here would make
+		// lockCronJobForMutation miss the row for nil-tenant callers, silently
+		// dropping the stateless/command patch.
+		updateCtx := store.WithTenantID(ctx, job.TenantID)
+		if updated, pErr := m.service.UpdateJob(updateCtx, job.ID, patch); pErr == nil {
 			job = updated
 		}
 	}
