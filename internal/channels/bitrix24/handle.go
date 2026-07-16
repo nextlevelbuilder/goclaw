@@ -303,6 +303,11 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		// Bitrix replyId.
 		MetaKeyMessageID:  evt.Params.MessageID,
 		MetaKeyVisibility: visibility,
+		// Generic run-tracking key the gateway consumer reads to thread
+		// streaming / status-reaction events back to this message (all other
+		// channels set it). Distinct from bitrix_message_id above (same value
+		// here, but that key is Bitrix-specific reply-link routing).
+		"message_id": evt.Params.MessageID,
 	}
 	// Echo the connector sender tag back on the reply so the Open Channel
 	// connector routes the answer to the right external message:

@@ -56,6 +56,12 @@ type Channel struct {
 	mentionMu sync.Mutex
 	mentionRe *mentionMatcher
 
+	// reactions tracks the current status-reaction emoji per user message so
+	// OnReactionEvent can replace the previous one as the agent's status
+	// progresses (thinking → tool → done). Keyed by "<chatID>:<messageID>";
+	// values are *reactionState. See reactions.go.
+	reactions sync.Map
+
 	// MCP lazy provisioner (Phase C). All fields nil / zero when
 	// provisioning is disabled — channel then works exactly as before
 	// (messages flow through without trying to mint MCP credentials).
