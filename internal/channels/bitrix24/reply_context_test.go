@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 )
 
 func TestSanitizeQuotedText(t *testing.T) {
@@ -72,17 +74,50 @@ func TestQuotedKindVN(t *testing.T) {
 }
 
 func TestQuotedMediaNote(t *testing.T) {
-	single := quotedMediaNote([]EventFile{{Name: "voice.ogg", Type: "audio"}}, "Tình")
+	single := quotedMediaNote([]EventFile{{Name: "voice.ogg", Type: "audio"}}, nil, "Tình")
 	if want := "[Đang trả lời một tin nhắn thoại \"voice.ogg\" của Tình]\n"; single != want {
 		t.Errorf("single = %q; want %q", single, want)
 	}
-	noName := quotedMediaNote([]EventFile{{Type: "image"}}, "Tình")
+	noName := quotedMediaNote([]EventFile{{Type: "image"}}, nil, "Tình")
 	if want := "[Đang trả lời một hình ảnh của Tình]\n"; noName != want {
 		t.Errorf("noName = %q; want %q", noName, want)
 	}
-	multi := quotedMediaNote([]EventFile{{Name: "a"}, {Name: "b"}}, "Tình")
+	multi := quotedMediaNote([]EventFile{{Name: "a"}, {Name: "b"}}, nil, "Tình")
 	if want := "[Đang trả lời 2 tệp đính kèm của Tình]\n"; multi != want {
 		t.Errorf("multi = %q; want %q", multi, want)
+	}
+}
+
+// Regression: im.dialog.messages.get returns blank type/name for voice notes,
+// so the note must derive the kind (and filename) from the downloaded MIME
+// instead of falling back to the generic "tệp".
+func TestQuotedMediaNote_PrefersDownloadedMIME(t *testing.T) {
+	files := []EventFile{{ID: "32728"}} // blank Type + Name (as messages.get returned)
+	downloaded := []bus.MediaFile{{MimeType: "audio/x-m4a", Filename: "voice.m4a"}}
+	got := quotedMediaNote(files, downloaded, "Đình Chinh")
+	if want := "[Đang trả lời một tin nhắn thoại \"voice.m4a\" của Đình Chinh]\n"; got != want {
+		t.Errorf("got %q; want %q", got, want)
+	}
+
+	// Blank downloaded filename → kind still upgraded, no filename shown.
+	got2 := quotedMediaNote([]EventFile{{ID: "1"}}, []bus.MediaFile{{MimeType: "image/png"}}, "Tình")
+	if want := "[Đang trả lời một hình ảnh của Tình]\n"; got2 != want {
+		t.Errorf("got2 %q; want %q", got2, want)
+	}
+}
+
+func TestMediaKindVN(t *testing.T) {
+	cases := map[string]string{
+		"audio/x-m4a":     "tin nhắn thoại",
+		"image/png":       "hình ảnh",
+		"video/mp4":       "video",
+		"application/pdf": "tệp",
+		"":                "tệp",
+	}
+	for mime, want := range cases {
+		if got := mediaKindVN(mime); got != want {
+			t.Errorf("mediaKindVN(%q) = %q; want %q", mime, got, want)
+		}
 	}
 }
 

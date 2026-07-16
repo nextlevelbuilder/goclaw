@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 )
 
 // quotedTextMaxRunes caps how much of a quoted text message we inline into the
@@ -55,26 +56,59 @@ func (c *Channel) resolveReplyContext(ctx context.Context, evt *Event) (string, 
 		return fmt.Sprintf("[Đang trả lời một tin nhắn của %s]\n", author), nil
 	}
 
-	note := quotedMediaNote(files, author)
 	// Re-inject through the SAME pipeline as inbound files: oversized files are
 	// skipped (note-only fallback) and the rest flow into the media tags /
 	// read_* tools exactly like a directly-attached upload. DRY — no new size
-	// or MIME logic here.
+	// or MIME logic here. Download BEFORE building the note so the note's kind
+	// label can use the authoritative downloaded MIME (im.dialog.messages.get
+	// often returns a blank type/name for voice notes).
 	extra := c.downloadEventFiles(ctx, c.BotID(), files)
+	note := quotedMediaNote(files, extra, author)
 	return note, extra
 }
 
 // quotedMediaNote builds the "[Đang trả lời một <loại> ...]" prefix for a
 // media-only quoted message. Single file → name + kind; multiple → a count.
-func quotedMediaNote(files []EventFile, author string) string {
-	if len(files) == 1 {
-		f := files[0]
-		if f.Name != "" {
-			return fmt.Sprintf("[Đang trả lời một %s \"%s\" của %s]\n", quotedKindVN(f.Type), f.Name, author)
-		}
-		return fmt.Sprintf("[Đang trả lời một %s của %s]\n", quotedKindVN(f.Type), author)
+// Prefers the downloaded file's MIME for the kind label + its filename, since
+// im.dialog.messages.get metadata (type/name) is frequently blank for voice
+// notes; falls back to the Bitrix file type from the message payload.
+func quotedMediaNote(files []EventFile, downloaded []bus.MediaFile, author string) string {
+	if len(files) > 1 {
+		return fmt.Sprintf("[Đang trả lời %d tệp đính kèm của %s]\n", len(files), author)
 	}
-	return fmt.Sprintf("[Đang trả lời %d tệp đính kèm của %s]\n", len(files), author)
+	kind := "tệp"
+	name := ""
+	if len(files) == 1 {
+		name = files[0].Name
+		if files[0].Type != "" {
+			kind = quotedKindVN(files[0].Type)
+		}
+	}
+	if len(downloaded) >= 1 {
+		kind = mediaKindVN(downloaded[0].MimeType) // authoritative
+		if name == "" {
+			name = downloaded[0].Filename
+		}
+	}
+	if name != "" {
+		return fmt.Sprintf("[Đang trả lời một %s \"%s\" của %s]\n", kind, name, author)
+	}
+	return fmt.Sprintf("[Đang trả lời một %s của %s]\n", kind, author)
+}
+
+// mediaKindVN maps a MIME type to a Vietnamese noun for the reply note, reusing
+// classifyMediaType so the label matches the <media:*> tag the agent receives.
+func mediaKindVN(mime string) string {
+	switch classifyMediaType(mime) {
+	case media.TypeImage:
+		return "hình ảnh"
+	case media.TypeVideo:
+		return "video"
+	case media.TypeAudio:
+		return "tin nhắn thoại"
+	default:
+		return "tệp"
+	}
 }
 
 // quotedAuthorName resolves a Bitrix user id to a display name for the reply
