@@ -321,9 +321,6 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 	if participantSenderID != "" {
 		meta[MetaKeyParticipantUserID] = participantSenderID
 	}
-	if evt.Params.ReplyToMID != "" {
-		meta["bitrix_reply_to_mid"] = evt.Params.ReplyToMID
-	}
 	if evt.Params.ChatID != "" {
 		meta["bitrix_chat_id"] = evt.Params.ChatID
 	}
@@ -417,10 +414,19 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		}
 	}
 
+	// Reply/quote context: when the user replied to an earlier message, Bitrix
+	// ships the quoted text inline (REPLY_MESSAGE); a media-only original carries
+	// only an id, which we resolve via im.dialog.messages.get. resolveReplyContext
+	// returns a short note to prepend so the agent knows what's being answered,
+	// plus any quoted attachment re-injected through the SAME download pipeline as
+	// a direct upload (bounded by media_max_mb, best-effort). No-op when not a reply.
+	replyPrefix, replyMedia := c.resolveReplyContext(ctx, evt)
+
 	// Download any attachments via imbot.v2.File.download and forward them to
 	// the agent with their MIME type preserved. Best-effort: failures are logged
 	// inside downloadEventFiles and never block the text from reaching the agent.
 	mediaFiles := c.downloadEventFiles(ctx, c.BotID(), evt.Params.Files)
+	mediaFiles = append(mediaFiles, replyMedia...)
 	// Prepend <media:*> tags so the LLM sees the attachment alongside the body
 	// text. The agent loop's enrichInputMedia REPLACES tags it finds (it does
 	// NOT insert new ones), so without this step a Bitrix-borne PDF / audio
@@ -436,6 +442,11 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 				text = tags + "\n" + text
 			}
 		}
+	}
+	// Reply note goes at the very front so the agent reads "who/what is being
+	// answered" before the (possibly quoted) media tags and the user's own text.
+	if replyPrefix != "" {
+		text = replyPrefix + text
 	}
 	slog.Info("bitrix24 message: publish to bus",
 		"sender_id", senderID,
