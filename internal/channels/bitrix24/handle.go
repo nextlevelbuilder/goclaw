@@ -13,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/systemmessages"
 )
 
 // mentionMatcher is the compiled-once regex + rendered tag string used to
@@ -91,8 +92,8 @@ func (c *Channel) DispatchEvent(ctx context.Context, evt *Event) {
 //  2. Group-only: require-mention gate + strip the mention from the text.
 //  3. Skip empty payloads (no text + no media).
 //  4. Policy: DM vs Group via BaseChannel.CheckDMPolicy / CheckGroupPolicy.
-//     Pairing policies trigger a pairing-reply stub (Phase 07 will wire up
-//     the full pairing flow; Phase 03 logs and drops).
+//     Pairing policies send a pairing reply (code + approve instructions) via
+//     sendPairingReply; deny drops silently.
 //  5. Build metadata map with bitrix_* keys so the agent can echo / reply
 //     to the right dialog + message ID later.
 //  6. Forward to BaseChannel.HandleMessage → publishes bus.InboundMessage.
@@ -258,16 +259,17 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		peerKind = "group"
 	}
 
-	// Policy gating. BaseChannel reports PolicyNeedsPairing for unpaired DMs
-	// under the default "pairing" policy. Phase 07 will answer with a real
-	// pairing reply; Phase 03 logs the intent so the flow is visible while
-	// the rest of the channel comes online.
+	// Policy gating. BaseChannel reports PolicyNeedsPairing for unpaired senders
+	// under the "pairing" policy. Answer with a real pairing reply (code + how to
+	// approve) via the v2 chat API, matching the other channels (Discord/Zalo/
+	// WhatsApp/Slack/Feishu). Group pairings are keyed by "group:<chatID>" so the
+	// generated code matches what CheckGroupPolicy.IsPaired later verifies.
 	if peerKind == "direct" {
 		switch c.CheckDMPolicy(ctx, senderID, c.cfg.DMPolicy) {
 		case channels.PolicyDeny:
 			return
 		case channels.PolicyNeedsPairing:
-			c.logPairingNeeded(senderID, chatID, peerKind)
+			c.sendPairingReply(ctx, senderID, chatID, peerKind)
 			return
 		}
 	} else {
@@ -275,7 +277,7 @@ func (c *Channel) handleMessage(ctx context.Context, evt *Event) {
 		case channels.PolicyDeny:
 			return
 		case channels.PolicyNeedsPairing:
-			c.logPairingNeeded(senderID, chatID, peerKind)
+			c.sendPairingReply(ctx, "group:"+chatID, chatID, peerKind)
 			return
 		}
 	}
@@ -597,16 +599,45 @@ func (c *Channel) mention() *mentionMatcher {
 	return c.mentionRe
 }
 
-// logPairingNeeded is the Phase 03 stand-in for a real pairing reply.
-// Phase 07 replaces this with a proper pairing message via imbot.message.add;
-// until then we log the intent so operators can see unpaired attempts.
-func (c *Channel) logPairingNeeded(senderID, chatID, peerKind string) {
-	if !c.CanSendPairingNotif(senderID, pairingDebounce) {
+// sendPairingReply requests a pairing code for an unpaired sender and sends it
+// back into the chat via the v2 API (imbot.v2.Chat.Message.send) so an admin can
+// approve access. Mirrors the pairing reply the other channels already send
+// (Discord/Zalo/WhatsApp/Slack/Feishu) using the shared pairing.account_required
+// system message. Debounced per-sender so a spammy sender can't flood the chat.
+//
+// pairingSenderID is the id the pairing is keyed by — the raw senderID for DMs,
+// "group:<chatID>" for groups — so the generated code matches what CheckDMPolicy
+// / CheckGroupPolicy later verify via IsPaired.
+func (c *Channel) sendPairingReply(ctx context.Context, pairingSenderID, chatID, peerKind string) {
+	ps := c.PairingService()
+	if ps == nil {
 		return
 	}
-	c.MarkPairingNotifSent(senderID)
-	slog.Info("bitrix24: pairing required (Phase 07 will send pairing reply)",
-		"sender_id", senderID, "chat_id", chatID, "peer_kind", peerKind,
+	if !c.CanSendPairingNotif(pairingSenderID, pairingDebounce) {
+		return
+	}
+
+	code, err := ps.RequestPairing(ctx, pairingSenderID, c.Name(), chatID, "default", nil)
+	if err != nil {
+		slog.Debug("bitrix24 pairing: request failed",
+			"sender_id", pairingSenderID, "chat_id", chatID, "err", err)
+		return
+	}
+
+	replyText := c.SystemMessage("", systemmessages.KeyPairingAccountRequired, systemmessages.Vars{
+		"platform":  "Bitrix24",
+		"sender_id": pairingSenderID,
+		"code":      code,
+	})
+
+	if err := c.sendChunkV2Public(ctx, chatID, replyText, 0); err != nil {
+		slog.Warn("bitrix24 pairing: reply send failed",
+			"sender_id", pairingSenderID, "chat_id", chatID, "err", err)
+		return
+	}
+	c.MarkPairingNotifSent(pairingSenderID)
+	slog.Info("bitrix24 pairing: reply sent",
+		"sender_id", pairingSenderID, "chat_id", chatID, "peer_kind", peerKind,
 		"portal", c.cfg.Portal)
 }
 
