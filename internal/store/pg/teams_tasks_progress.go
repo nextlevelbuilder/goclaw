@@ -71,15 +71,14 @@ func (s *PGTeamStore) RenewTaskLock(ctx context.Context, taskID, teamID uuid.UUI
 }
 
 // ============================================================
-// Stale recovery (batch — all v2 active teams in one query)
+// Stale recovery (batch — all active teams in one query)
 // ============================================================
 
-// v2ActiveTeamJoin is the JOIN clause that filters to v2 active teams.
-const v2ActiveTeamJoin = `JOIN agent_teams tm ON tm.id = t.team_id
-		 AND tm.status = 'active'
-		 AND COALESCE((tm.settings->>'version')::int, 0) >= 2`
+// activeTeamJoin is the JOIN clause that filters to active teams.
+const activeTeamJoin = `JOIN agent_teams tm ON tm.id = t.team_id
+		 AND tm.status = 'active'`
 
-// RecoverAllStaleTasks resets in_progress tasks with expired locks across all v2 active teams.
+// RecoverAllStaleTasks resets in_progress tasks with expired locks across all active teams.
 func (s *PGTeamStore) RecoverAllStaleTasks(ctx context.Context) ([]store.RecoveredTaskInfo, error) {
 	now := time.Now()
 	rows, err := s.db.QueryContext(ctx,
@@ -89,7 +88,6 @@ func (s *PGTeamStore) RecoverAllStaleTasks(ctx context.Context) ([]store.Recover
 		     followup_channel = NULL, followup_chat_id = NULL, updated_at = $2
 		 FROM agent_teams tm
 		 WHERE t.team_id = tm.id AND tm.status = 'active'
-		   AND COALESCE((tm.settings->>'version')::int, 0) >= 2
 		   AND t.status = $3
 		   AND t.lock_expires_at IS NOT NULL AND t.lock_expires_at < $2
 		 RETURNING t.id, t.team_id, t.tenant_id, t.task_number, t.subject, COALESCE(t.channel, ''), COALESCE(t.chat_id, '')`,
@@ -102,7 +100,7 @@ func (s *PGTeamStore) RecoverAllStaleTasks(ctx context.Context) ([]store.Recover
 	return scanRecoveredTaskInfoRows(rows)
 }
 
-// ForceRecoverAllTasks resets ALL in_progress tasks across v2 active teams (startup).
+// ForceRecoverAllTasks resets ALL in_progress tasks across active teams (startup).
 func (s *PGTeamStore) ForceRecoverAllTasks(ctx context.Context) ([]store.RecoveredTaskInfo, error) {
 	now := time.Now()
 	rows, err := s.db.QueryContext(ctx,
@@ -112,7 +110,6 @@ func (s *PGTeamStore) ForceRecoverAllTasks(ctx context.Context) ([]store.Recover
 		     followup_channel = NULL, followup_chat_id = NULL, updated_at = $2
 		 FROM agent_teams tm
 		 WHERE t.team_id = tm.id AND tm.status = 'active'
-		   AND COALESCE((tm.settings->>'version')::int, 0) >= 2
 		   AND t.status = $3
 		 RETURNING t.id, t.team_id, t.tenant_id, t.task_number, t.subject, COALESCE(t.channel, ''), COALESCE(t.chat_id, '')`,
 		store.TeamTaskStatusPending, now, store.TeamTaskStatusInProgress,
@@ -148,7 +145,7 @@ func (s *PGTeamStore) ListRecoverableTasks(ctx context.Context, teamID uuid.UUID
 	return scanTaskRowsJoined(rows)
 }
 
-// MarkAllStaleTasks marks pending tasks older than olderThan as stale across all v2 active teams.
+// MarkAllStaleTasks marks pending tasks older than olderThan as stale across all active teams.
 func (s *PGTeamStore) MarkAllStaleTasks(ctx context.Context, olderThan time.Time) ([]store.RecoveredTaskInfo, error) {
 	now := time.Now()
 	rows, err := s.db.QueryContext(ctx,
@@ -156,7 +153,6 @@ func (s *PGTeamStore) MarkAllStaleTasks(ctx context.Context, olderThan time.Time
 		 SET status = $1, updated_at = $2
 		 FROM agent_teams tm
 		 WHERE t.team_id = tm.id AND tm.status = 'active'
-		   AND COALESCE((tm.settings->>'version')::int, 0) >= 2
 		   AND t.status = $3 AND t.updated_at < $4
 		 RETURNING t.id, t.team_id, t.tenant_id, t.task_number, t.subject, COALESCE(t.channel, ''), COALESCE(t.chat_id, '')`,
 		store.TeamTaskStatusStale, now, store.TeamTaskStatusPending, olderThan,
@@ -168,7 +164,7 @@ func (s *PGTeamStore) MarkAllStaleTasks(ctx context.Context, olderThan time.Time
 	return scanRecoveredTaskInfoRows(rows)
 }
 
-// MarkInReviewStaleTasks marks in_review tasks older than olderThan as stale across all v2 active teams.
+// MarkInReviewStaleTasks marks in_review tasks older than olderThan as stale across all active teams.
 func (s *PGTeamStore) MarkInReviewStaleTasks(ctx context.Context, olderThan time.Time) ([]store.RecoveredTaskInfo, error) {
 	now := time.Now()
 	rows, err := s.db.QueryContext(ctx,
@@ -176,7 +172,6 @@ func (s *PGTeamStore) MarkInReviewStaleTasks(ctx context.Context, olderThan time
 		 SET status = $1, updated_at = $2
 		 FROM agent_teams tm
 		 WHERE t.team_id = tm.id AND tm.status = 'active'
-		   AND COALESCE((tm.settings->>'version')::int, 0) >= 2
 		   AND t.status = $3 AND t.updated_at < $4
 		 RETURNING t.id, t.team_id, t.tenant_id, t.task_number, t.subject, COALESCE(t.channel, ''), COALESCE(t.chat_id, '')`,
 		store.TeamTaskStatusStale, now, store.TeamTaskStatusInReview, olderThan,
@@ -197,7 +192,6 @@ func (s *PGTeamStore) FixOrphanedBlockedTasks(ctx context.Context) ([]store.Reco
 		 SET blocked_by = '{}', status = $1, updated_at = $2
 		 FROM agent_teams tm
 		 WHERE t.team_id = tm.id AND tm.status = 'active'
-		   AND COALESCE((tm.settings->>'version')::int, 0) >= 2
 		   AND t.status = 'blocked'
 		   AND array_length(t.blocked_by, 1) > 0
 		   AND NOT EXISTS (

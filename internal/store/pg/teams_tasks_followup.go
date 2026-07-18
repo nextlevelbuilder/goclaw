@@ -52,7 +52,7 @@ func (s *PGTeamStore) ListAllFollowupDueTasks(ctx context.Context) ([]store.Team
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+taskSelectCols+`
 		 `+taskJoinClause+`
-		 `+v2ActiveTeamJoin+`
+		 `+activeTeamJoin+`
 		 WHERE t.followup_at IS NOT NULL
 		   AND t.followup_at <= $1
 		   AND t.status = $2
