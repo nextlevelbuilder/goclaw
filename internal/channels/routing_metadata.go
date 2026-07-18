@@ -16,6 +16,13 @@ var routingMetaKeys = []string{
 	"pancake_mode",           // pancake inbox vs comment routing
 	"post_id",                // pancake: post id for template vars
 	"display_name",           // pancake: commenter display name for template vars
+	// bitrix24 whisper/public visibility. MUST survive into intermediate
+	// replies (quick-ack, progress, reasoning bubbles, block replies) so a
+	// whisper-mode turn doesn't leak its FIRST (intermediate) message to the
+	// external connector while only the final answer is whispered. Literal
+	// string mirrors bitrix24.MetaKeyVisibility (kept as a string here to
+	// avoid a channels→bitrix24 import cycle). Non-bitrix channels ignore it.
+	"bitrix_visibility",
 }
 
 var finalReplyMetaKeys = append([]string{
