@@ -45,6 +45,7 @@ type MCPHandler struct {
 	db            *sql.DB                  // for export/import direct queries
 	oauthProvider MCPOAuthTokenProvider    // optional, nil when OAuth not configured
 	oauthStore    store.MCPOAuthTokenStore // optional, nil when OAuth not configured
+	discoverTools func(context.Context, string, string, []string, map[string]string, string, map[string]string) ([]mcp.ToolInfo, error)
 }
 
 // MCPOAuthTokenProvider retrieves a valid OAuth Bearer token for an MCP server.
@@ -55,7 +56,12 @@ type MCPOAuthTokenProvider interface {
 
 // NewMCPHandler creates a handler for MCP server management endpoints.
 func NewMCPHandler(s store.MCPServerStore, msgBus *bus.MessageBus, mgr MCPToolLister) *MCPHandler {
-	return &MCPHandler{store: s, msgBus: msgBus, mgr: mgr}
+	return &MCPHandler{
+		store:         s,
+		msgBus:        msgBus,
+		mgr:           mgr,
+		discoverTools: mcp.DiscoverTools,
+	}
 }
 
 // SetPoolEvictor sets the pool evictor for credential rotation handling.
