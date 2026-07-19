@@ -578,6 +578,12 @@ func runGateway() {
 	var mediaStore *media.Store
 	var postTurn tools.PostTurnProcessor
 	contextFileInterceptor, mcpPool, mediaStore, postTurn = wireExtras(pgStores, agentRouter, providerRegistry, modelReg, msgBus, pgStores.Sessions, toolsReg, toolPE, skillsLoader, hasMemory, traceCollector, workspace, cfg.Gateway.InjectionAction, cfg, sandboxMgr, redisClient, domainBus, usageCapSvc, mcpOAuthRefresher)
+	// Wired after wireExtras because the pool is created there: the CRUD MCP
+	// server's goclaw_mcp_servers_* tools evict pooled connections when a
+	// server's credentials or URL change.
+	if pgStores != nil && pgStores.MCP != nil {
+		server.SetMCPServerDeps(pgStores.MCP, mcpMgr, mcpPool, mcpOAuthRefresher)
+	}
 	if mcpPool != nil {
 		defer mcpPool.Stop()
 	}

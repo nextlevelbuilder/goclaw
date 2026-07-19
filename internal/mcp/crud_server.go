@@ -5,9 +5,9 @@
 // API keys, config permissions, Bitrix24 portals, run timelines, teams,
 // teams tasks, teams workspace, channels, channel instances, hooks,
 // heartbeat, pairing, exec approval, usage, quota, chat/chat-behavior, LLM
-// completion, runtime logs, outbound send, and TTS voices — as MCP tools
-// backed directly by the real store/subsystem implementations used by the
-// gateway's own WebSocket RPC methods.
+// completion, runtime logs, outbound send, TTS voices, and MCP servers
+// themselves — as MCP tools backed directly by the real store/subsystem
+// implementations used by the gateway's own WebSocket RPC methods.
 //
 // Tenant scope: the CRUD MCP server is gated by a single shared bearer
 // secret (gateway.mcp_server_token) with no per-caller identity, so it is
@@ -96,6 +96,15 @@ type CRUDDeps struct {
 	Activity        store.ActivityStore
 	SystemConfigs   store.SystemConfigStore
 	SecureCLI       store.SecureCLIStore
+
+	// Phase 5: MCP-server self-management (goclaw_mcp_servers_*). MCPServers
+	// alone enables the family; MCPManager/MCPPool/MCPOAuth refine it (live
+	// tool listing, pool eviction, OAuth-backed discovery) and are each
+	// optional — see mcpServerCRUDDeps in crud_mcp_servers.go.
+	MCPServers store.MCPServerStore
+	MCPManager *Manager
+	MCPPool    *Pool
+	MCPOAuth   OAuthTokenProvider
 }
 
 // NewCRUDServer builds a StreamableHTTPServer exposing goclaw's CRUD
@@ -283,6 +292,16 @@ func NewCRUDServer(deps CRUDDeps, version string) *mcpserver.StreamableHTTPServe
 	if deps.SecureCLI != nil {
 		registerSecureCLICRUDTools(srv, deps.SecureCLI)
 		registered += 5
+	}
+	if deps.MCPServers != nil {
+		registerMCPServerCRUDTools(srv, mcpServerCRUDDeps{
+			Servers:    deps.MCPServers,
+			Manager:    deps.MCPManager,
+			Pool:       deps.MCPPool,
+			OAuth:      deps.MCPOAuth,
+			MessageBus: deps.MessageBus,
+		})
+		registered += 8
 	}
 	registerHealthCRUDTool(srv, deps.DB, version)
 	registered++
