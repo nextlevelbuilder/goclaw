@@ -30,7 +30,10 @@ export function SystemMessagesSection({ data, schema, onSave, saving }: Props) {
   const definitions = useMemo(() => systemMessageDefinitionsFromSchema(schema), [schema]);
   const [draft, setDraft] = useState<SystemMessagesDraft>(() => normalizeSystemMessagesDraft(data, definitions));
   const [selectedKey, setSelectedKey] = useState("");
-  const [selectedLocale, setSelectedLocale] = useState<(typeof SYSTEM_MESSAGE_LOCALES)[number]["code"]>("vi");
+  const initialLocale = (i18n.resolvedLanguage || i18n.language || "en").slice(0, 2) as (typeof SYSTEM_MESSAGE_LOCALES)[number]["code"];           
+  const [selectedLocale, setSelectedLocale] = useState<(typeof SYSTEM_MESSAGE_LOCALES)[number]["code"]>(                                                                                                                                
+       SYSTEM_MESSAGE_LOCALES.some((l) => l.code === initialLocale) ? initialLocale : "en",                                                                                                                                                
+     );        
   const [defaultLocale, setDefaultLocale] = useState<(typeof SYSTEM_MESSAGE_LOCALES)[number]["code"]>(
     (data?.default_locale as (typeof SYSTEM_MESSAGE_LOCALES)[number]["code"]) || "en",
   );
