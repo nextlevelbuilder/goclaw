@@ -18,15 +18,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { CreateWorkstationParams } from "./hooks/use-workstations";
+import { Textarea } from "@/components/ui/textarea";
+import type { CreateWorkstationParams, WorkstationBackendType } from "./hooks/use-workstations";
+import {
+  buildWorkstationCreatePayload,
+  type SshAuthMethod,
+} from "./workstation-create-dialog-helpers";
 
 interface WorkstationCreateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreate: (params: CreateWorkstationParams) => Promise<void>;
 }
-
-type BackendType = "ssh" | "docker";
 
 export function WorkstationCreateDialog({
   open,
@@ -37,15 +40,18 @@ export function WorkstationCreateDialog({
 
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
-  const [backend, setBackend] = useState<BackendType>("ssh");
+  const [backend, setBackend] = useState<WorkstationBackendType>("ssh");
   // SSH fields
   const [host, setHost] = useState("");
   const [port, setPort] = useState("22");
   const [user, setUser] = useState("");
-  const [identityFile, setIdentityFile] = useState("");
+  const [authMethod, setAuthMethod] = useState<SshAuthMethod>("privateKey");
+  const [privateKey, setPrivateKey] = useState("");
+  const [password, setPassword] = useState("");
   // Docker fields
   const [container, setContainer] = useState("");
-  const [dockerHost, setDockerHost] = useState("");
+  const [image, setImage] = useState("");
+  const [socketPath, setSocketPath] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
@@ -57,48 +63,45 @@ export function WorkstationCreateDialog({
     setHost("");
     setPort("22");
     setUser("");
-    setIdentityFile("");
+    setAuthMethod("privateKey");
+    setPrivateKey("");
+    setPassword("");
     setContainer("");
-    setDockerHost("");
+    setImage("");
+    setSocketPath("");
     setFieldError(null);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !key.trim()) return;
 
-    // Build backend metadata
-    let metadata: Record<string, unknown>;
-    if (backend === "ssh") {
-      if (!host.trim() || !user.trim()) {
-        setFieldError("Host and SSH user are required for SSH backend.");
-        return;
-      }
-      metadata = {
-        host: host.trim(),
-        port: parseInt(port, 10) || 22,
-        user: user.trim(),
-        ...(identityFile.trim() ? { identity_file: identityFile.trim() } : {}),
-      };
-    } else {
-      if (!container.trim()) {
-        setFieldError("Container name is required for Docker backend.");
-        return;
-      }
-      metadata = {
-        container: container.trim(),
-        ...(dockerHost.trim() ? { docker_host: dockerHost.trim() } : {}),
-      };
+    const built = buildWorkstationCreatePayload({
+      key,
+      name,
+      backend,
+      host,
+      port,
+      user,
+      authMethod,
+      privateKey,
+      password,
+      container,
+      image,
+      socketPath,
+    });
+    if (built.kind === "error") {
+      setFieldError(t(`createDialog.errors.${built.errorKey}`));
+      return;
     }
 
     setFieldError(null);
     setSubmitting(true);
     try {
-      await onCreate({ workstation_key: key.trim(), name: name.trim(), backend_type: backend, metadata });
+      await onCreate(built.payload);
       resetForm();
       onOpenChange(false);
     } catch (err) {
-      setFieldError(err instanceof Error ? err.message : "Failed to create workstation.");
+      setFieldError(err instanceof Error ? err.message : t("createDialog.errors.createFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -141,7 +144,7 @@ export function WorkstationCreateDialog({
 
             <div className="space-y-1.5">
               <Label>{t("createDialog.backendLabel")}</Label>
-              <Select value={backend} onValueChange={(v) => setBackend(v as BackendType)}>
+              <Select value={backend} onValueChange={(v) => setBackend(v as WorkstationBackendType)}>
                 <SelectTrigger className="text-base md:text-sm">
                   <SelectValue />
                 </SelectTrigger>
@@ -189,15 +192,48 @@ export function WorkstationCreateDialog({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="ws-identity">{t("createDialog.identityFileLabel")}</Label>
-                  <Input
-                    id="ws-identity"
-                    value={identityFile}
-                    onChange={(e) => setIdentityFile(e.target.value)}
-                    placeholder={t("createDialog.identityFilePlaceholder")}
-                    className="text-base md:text-sm"
-                  />
+                  <Label>{t("createDialog.authMethodLabel")}</Label>
+                  <Select value={authMethod} onValueChange={(v) => setAuthMethod(v as SshAuthMethod)}>
+                    <SelectTrigger className="text-base md:text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="privateKey">{t("createDialog.authPrivateKeyOption")}</SelectItem>
+                      <SelectItem value="password">{t("createDialog.authPasswordOption")}</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+
+                {authMethod === "privateKey" ? (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ws-private-key">{t("createDialog.privateKeyLabel")}</Label>
+                    <Textarea
+                      id="ws-private-key"
+                      value={privateKey}
+                      onChange={(e) => setPrivateKey(e.target.value)}
+                      placeholder={t("createDialog.privateKeyPlaceholder")}
+                      rows={5}
+                      spellCheck={false}
+                      autoComplete="off"
+                      className="font-mono text-base md:text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">{t("createDialog.privateKeyHint")}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ws-password">{t("createDialog.passwordLabel")}</Label>
+                    <Input
+                      id="ws-password"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder={t("createDialog.passwordPlaceholder")}
+                      autoComplete="new-password"
+                      className="text-base md:text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">{t("createDialog.passwordHint")}</p>
+                  </div>
+                )}
               </>
             )}
 
@@ -214,12 +250,22 @@ export function WorkstationCreateDialog({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="ws-docker-host">{t("createDialog.dockerHostLabel")}</Label>
+                  <Label htmlFor="ws-image">{t("createDialog.imageLabel")}</Label>
                   <Input
-                    id="ws-docker-host"
-                    value={dockerHost}
-                    onChange={(e) => setDockerHost(e.target.value)}
-                    placeholder={t("createDialog.dockerHostPlaceholder")}
+                    id="ws-image"
+                    value={image}
+                    onChange={(e) => setImage(e.target.value)}
+                    placeholder={t("createDialog.imagePlaceholder")}
+                    className="text-base md:text-sm"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="ws-socket-path">{t("createDialog.socketPathLabel")}</Label>
+                  <Input
+                    id="ws-socket-path"
+                    value={socketPath}
+                    onChange={(e) => setSocketPath(e.target.value)}
+                    placeholder={t("createDialog.socketPathPlaceholder")}
                     className="text-base md:text-sm"
                   />
                 </div>

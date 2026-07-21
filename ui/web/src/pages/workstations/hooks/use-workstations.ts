@@ -3,20 +3,28 @@ import { useWs } from "@/hooks/use-ws";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { Methods } from "@/api/protocol";
 
+export type WorkstationBackendType = "ssh" | "docker";
+
+/**
+ * Subset of store.SanitizedWorkstation that this page consumes. Field names are
+ * camelCase to match the Go json tags — the WS client sends and receives params
+ * verbatim, so any divergence here silently yields undefined rather than a
+ * decode error.
+ */
 export interface Workstation {
   id: string;
-  workstation_key: string;
+  workstationKey: string;
   name: string;
-  backend_type: "ssh" | "docker";
+  backendType: WorkstationBackendType;
   active: boolean;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreateWorkstationParams {
-  workstation_key: string;
+  workstationKey: string;
   name: string;
-  backend_type: "ssh" | "docker";
+  backendType: WorkstationBackendType;
   metadata?: Record<string, unknown>;
 }
 
@@ -62,7 +70,9 @@ export function useWorkstations() {
 
   const updateWorkstation = useCallback(
     async (id: string, params: UpdateWorkstationParams): Promise<void> => {
-      await ws.call(Methods.WORKSTATIONS_UPDATE, { id, ...params });
+      // The handler reads a nested `updates` map; a flattened body decodes to an
+      // empty map and is rejected with "no updates provided".
+      await ws.call(Methods.WORKSTATIONS_UPDATE, { id, updates: params });
       await load();
     },
     [ws, load],

@@ -91,9 +91,9 @@ export function WorkstationsPage() {
                           )}
                         </td>
                         <td className="px-4 py-3 font-medium">{ws.name}</td>
-                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{ws.workstation_key}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{ws.workstationKey}</td>
                         <td className="px-4 py-3">
-                          <Badge variant="outline">{t(`backend.${ws.backend_type}`)}</Badge>
+                          <Badge variant="outline">{t(`backend.${ws.backendType}`)}</Badge>
                         </td>
                         <td className="px-4 py-3">
                           <Badge variant={ws.active ? "default" : "secondary"}>
@@ -101,7 +101,7 @@ export function WorkstationsPage() {
                           </Badge>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">
-                          {formatDate(new Date(ws.created_at))}
+                          {formatDate(new Date(ws.createdAt))}
                         </td>
                         <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                           <Button
