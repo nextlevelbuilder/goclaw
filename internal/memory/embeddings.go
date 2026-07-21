@@ -143,7 +143,7 @@ type OpenAIEmbeddingProvider struct {
 	model      string
 	apiKey     string
 	apiURL     string
-	dimensions int // optional: truncate output to this many dimensions (0 = use model default)
+	dimensions int // optional local truncation target (0 = use model output as-is)
 }
 
 // NewOpenAIEmbeddingProvider creates a provider for OpenAI-compatible embedding APIs.
@@ -163,7 +163,7 @@ func NewOpenAIEmbeddingProvider(name, apiKey, apiURL, model string) *OpenAIEmbed
 	}
 }
 
-// WithDimensions sets the output dimensions for models that support dimension truncation.
+// WithDimensions sets the local output target used to truncate larger embeddings after fetch.
 func (p *OpenAIEmbeddingProvider) WithDimensions(d int) *OpenAIEmbeddingProvider {
 	p.dimensions = d
 	return p
@@ -176,9 +176,6 @@ func (p *OpenAIEmbeddingProvider) Embed(ctx context.Context, texts []string) ([]
 	reqBody := map[string]any{
 		"input": texts,
 		"model": p.model,
-	}
-	if p.dimensions > 0 {
-		reqBody["dimensions"] = p.dimensions
 	}
 
 	bodyJSON, err := json.Marshal(reqBody)
@@ -215,9 +212,27 @@ func (p *OpenAIEmbeddingProvider) Embed(ctx context.Context, texts []string) ([]
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
+	// Convert response vectors to float32 and apply local truncation.
 	embeddings := make([][]float32, len(result.Data))
 	for i, d := range result.Data {
-		embeddings[i] = d.Embedding
+		vec := make([]float32, len(d.Embedding))
+		for j, v := range d.Embedding {
+			vec[j] = v
+		}
+		if p.dimensions > 0 {
+			if len(vec) < p.dimensions {
+				return nil, fmt.Errorf(
+					"embedding dimension mismatch: provider %s model %s returned %d dimensions, need at least %d for local truncation",
+					p.name, p.model, len(vec), p.dimensions,
+				)
+			}
+			if len(vec) > p.dimensions {
+				truncated := make([]float32, p.dimensions)
+				copy(truncated, vec[:p.dimensions])
+				vec = truncated
+			}
+		}
+		embeddings[i] = vec
 	}
 
 	return embeddings, nil

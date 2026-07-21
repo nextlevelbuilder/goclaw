@@ -66,8 +66,8 @@ func (h *ProvidersHandler) handleVerifyEmbedding(w http.ResponseWriter, r *http.
 
 	ep := memory.NewOpenAIEmbeddingProvider(p.Name, p.APIKey, apiBase, model)
 
-	// Apply dimension truncation: request body → provider settings → none.
-	// Clamp to reasonable range to avoid sending absurd values upstream.
+	// Apply local dimension truncation: request body → provider settings → none.
+	// Clamp to reasonable range to avoid nonsensical truncation targets.
 	truncDims := req.Dimensions
 	if truncDims <= 0 && es != nil && es.Dimensions > 0 {
 		truncDims = es.Dimensions

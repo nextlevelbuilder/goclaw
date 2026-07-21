@@ -89,7 +89,7 @@ func TestSubagentExecTool_NilStoreIsSafe(t *testing.T) {
 	}
 }
 
-func captureEmbeddingRequest(t *testing.T, es *store.EmbeddingSettings) map[string]any {
+func captureEmbeddingRequest(t *testing.T, es *store.EmbeddingSettings, responseDim int) (map[string]any, [][]float32) {
 	t.Helper()
 
 	var requestBody map[string]any
@@ -98,7 +98,7 @@ func captureEmbeddingRequest(t *testing.T, es *store.EmbeddingSettings) map[stri
 			t.Fatalf("Decode() error = %v", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data":[{"embedding":[0.1,0.2]}]}`))
+		_, _ = w.Write([]byte(`{"data":[{"embedding":` + makeEmbeddingJSON(responseDim) + `}]}`))
 	}))
 	defer server.Close()
 
@@ -114,26 +114,42 @@ func captureEmbeddingRequest(t *testing.T, es *store.EmbeddingSettings) map[stri
 	if ep == nil {
 		t.Fatal("buildEmbeddingProvider() = nil, want provider")
 	}
-	if _, err := ep.Embed(context.Background(), []string{"hello"}); err != nil {
+	embeddings, err := ep.Embed(context.Background(), []string{"hello"})
+	if err != nil {
 		t.Fatalf("Embed() error = %v", err)
 	}
-	return requestBody
+	return requestBody, embeddings
 }
 
-func TestBuildEmbeddingProviderDefaultsTo1536Dimensions(t *testing.T) {
-	requestBody := captureEmbeddingRequest(t, nil)
-	if got := requestBody["dimensions"]; got != float64(1536) {
-		t.Fatalf("dimensions = %v, want 1536", got)
+func makeEmbeddingJSON(dim int) string {
+	values := make([]float64, dim)
+	for i := range values {
+		values[i] = float64(i)
+	}
+	encoded, _ := json.Marshal(values)
+	return string(encoded)
+}
+
+func TestBuildEmbeddingProviderOmitsDimensionsByDefault(t *testing.T) {
+	requestBody, embeddings := captureEmbeddingRequest(t, nil, 3072)
+	if _, ok := requestBody["dimensions"]; ok {
+		t.Fatalf("request body unexpectedly included dimensions: %v", requestBody)
+	}
+	if got := len(embeddings[0]); got != store.RequiredMemoryEmbeddingDimensions {
+		t.Fatalf("embedding length = %d, want %d", got, store.RequiredMemoryEmbeddingDimensions)
 	}
 }
 
-func TestBuildEmbeddingProviderIgnoresIncompatibleStoredDimensions(t *testing.T) {
-	requestBody := captureEmbeddingRequest(t, &store.EmbeddingSettings{
+func TestBuildEmbeddingProviderOmitsDimensionsWithIncompatibleStoredValue(t *testing.T) {
+	requestBody, embeddings := captureEmbeddingRequest(t, &store.EmbeddingSettings{
 		Enabled:    true,
 		Model:      "voyage-4-nano",
 		Dimensions: 2048,
-	})
-	if got := requestBody["dimensions"]; got != float64(1536) {
-		t.Fatalf("dimensions = %v, want fallback 1536", got)
+	}, 3072)
+	if _, ok := requestBody["dimensions"]; ok {
+		t.Fatalf("request body unexpectedly included dimensions: %v", requestBody)
+	}
+	if got := len(embeddings[0]); got != store.RequiredMemoryEmbeddingDimensions {
+		t.Fatalf("embedding length = %d, want %d", got, store.RequiredMemoryEmbeddingDimensions)
 	}
 }
