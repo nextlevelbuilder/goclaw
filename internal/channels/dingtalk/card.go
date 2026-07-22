@@ -44,6 +44,10 @@ const cardContentKey = "msgContent"
 //
 // minCardUpdateInterval keeps a misconfigured instance from queueing behind the
 // QPS gate, where it would look like a hang rather than a rate limit.
+// cardMaxQPS is metered per app, so this interval also decides how many
+// conversations can stream at once: 20 QPS / (1s / interval). At 800ms that
+// ceiling is ~16 concurrent streams; a bot shared by a whole org wants
+// card_update_interval_ms raised well above the default.
 const (
 	defaultCardUpdateInterval = 800 * time.Millisecond
 	minCardUpdateInterval     = 100 * time.Millisecond
