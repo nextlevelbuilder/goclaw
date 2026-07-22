@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 57
+const SchemaVersion = 58
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -30,6 +30,25 @@ const SchemaVersion = 57
 //
 // Then bump SchemaVersion to 2.
 var migrations = map[int]string{
+	// Version 57 → 58: restore custom skills previously converted by the bundled skill seeder.
+	57: `UPDATE skills
+SET is_system = 0,
+    visibility = 'private',
+    status = 'archived',
+    frontmatter = json_set(
+        CASE WHEN json_valid(frontmatter) THEN frontmatter ELSE '{}' END,
+        '$._goclaw_recovery',
+        'bundled_slug_collision'
+    ),
+    version = CASE WHEN version > 1 THEN version - 1 ELSE 1 END,
+    file_path = CASE
+        WHEN file_path LIKE '%/' || version THEN
+            substr(file_path, 1, length(file_path) - length(CAST(version AS TEXT))) ||
+            CAST(CASE WHEN version > 1 THEN version - 1 ELSE 1 END AS TEXT)
+        ELSE file_path
+    END,
+    updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE is_system = 1 AND owner_id <> 'system';`,
 	// Version 49 → 50: per-cron-job LLM provider/model override (mirrors agent_heartbeats).
 	49: `ALTER TABLE cron_jobs ADD COLUMN provider_id TEXT REFERENCES llm_providers(id) ON DELETE SET NULL;
 ALTER TABLE cron_jobs ADD COLUMN model VARCHAR(200);`,

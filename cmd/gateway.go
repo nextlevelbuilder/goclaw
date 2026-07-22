@@ -279,6 +279,10 @@ func runGateway() {
 		browserMgr.SetCookieProvider(newStoreBrowserCookieProvider(pgStores.BrowserCookies))
 	}
 
+	if ttsTool != nil && pgStores.SystemConfigs != nil {
+		ttsTool.SetSystemConfigStore(pgStores.SystemConfigs)
+	}
+
 	// Recover from crashes: flip ghost 'summoning' rows to 'summon_failed'.
 	// Summon goroutines don't survive process restart; stale DB rows would trap the UI.
 	if pgStores.Agents != nil {
@@ -492,6 +496,7 @@ func runGateway() {
 	server.SetToolPolicy(toolPE)
 	server.SetPairingService(pgStores.Pairing)
 	server.SetMessageBus(msgBus)
+	server.SetExecApprovalManager(execApprovalMgr)
 	server.SetOAuthHandler(httpapi.NewOAuthHandler(pgStores.Providers, pgStores.ConfigSecrets, providerRegistry, msgBus))
 
 	// contextFileInterceptor is created inside wireExtras.
@@ -503,6 +508,66 @@ func runGateway() {
 	if pgStores.Agents != nil {
 		server.SetAgentStore(pgStores.Agents)
 	}
+	// Wire the skill/cron stores used by the CRUD MCP server (see
+	// internal/mcp/crud_server.go, mounted at /api/mcp/ in BuildMux()).
+	if pgStores.Skills != nil {
+		server.SetSkillStore(pgStores.Skills)
+	}
+	if pgStores.Cron != nil {
+		server.SetCronStore(pgStores.Cron)
+	}
+	if pgStores.AgentLinks != nil {
+		server.SetAgentLinkStore(pgStores.AgentLinks)
+	}
+	if pgStores.ConfigPermissions != nil {
+		server.SetConfigPermissionStore(pgStores.ConfigPermissions)
+	}
+	if pgStores.BitrixPortals != nil {
+		server.SetBitrixPortalStore(pgStores.BitrixPortals)
+	}
+	if pgStores.RunTimeline != nil {
+		server.SetRunTimelineStore(pgStores.RunTimeline)
+	}
+	if pgStores.Teams != nil {
+		server.SetTeamStore(pgStores.Teams)
+	}
+	if pgStores.ChannelInstances != nil {
+		server.SetChannelInstanceStore(pgStores.ChannelInstances)
+	}
+	if pgStores.Heartbeats != nil {
+		server.SetHeartbeatStore(pgStores.Heartbeats)
+	}
+	if pgStores.Providers != nil {
+		server.SetProviderStore(pgStores.Providers)
+	}
+	if pgStores.Tenants != nil {
+		server.SetTenantStore(pgStores.Tenants)
+	}
+	if pgStores.Memory != nil {
+		server.SetMemoryStore(pgStores.Memory)
+	}
+	if pgStores.KnowledgeGraph != nil {
+		server.SetKnowledgeGraphStore(pgStores.KnowledgeGraph)
+	}
+	if pgStores.Tracing != nil {
+		server.SetTracingStore(pgStores.Tracing)
+	}
+	if pgStores.Contacts != nil {
+		server.SetContactStore(pgStores.Contacts)
+	}
+	if pgStores.PendingMessages != nil {
+		server.SetPendingMessageStore(pgStores.PendingMessages)
+	}
+	if pgStores.Activity != nil {
+		server.SetActivityStore(pgStores.Activity)
+	}
+	if pgStores.SystemConfigs != nil {
+		server.SetSystemConfigStore(pgStores.SystemConfigs)
+	}
+	if pgStores.SecureCLI != nil {
+		server.SetSecureCLIStore(pgStores.SecureCLI)
+	}
+	server.SetSQLDB(pgStores.DB)
 
 	// Build OAuth token refresher before wireExtras so the resolver can inject tokens.
 	var mcpOAuthRefresher mcpbridge.OAuthTokenProvider
@@ -655,6 +720,7 @@ func runGateway() {
 			hm.SetTestRunner(methods.NewDispatcherTestRunner(sharedHookHandlers))
 		}
 		hm.Register(server.Router())
+		server.SetHookStore(hs)
 		slog.Info("registered hooks RPC methods")
 	}
 
@@ -697,6 +763,7 @@ func runGateway() {
 	channelMgr := channels.NewManager(msgBus)
 	channelMgr.SetSystemMessages(systemmessages.NewResolver(cfg))
 	deps.channelMgr = channelMgr
+	server.SetChannelManager(channelMgr)
 
 	// Wire channel member resolver into permission grant paths (WS + HTTP) so
 	// file_writer grants coming from the Web UI auto-enrich their metadata.
@@ -941,6 +1008,7 @@ func runGateway() {
 
 	// Register quota usage RPC.
 	methods.NewQuotaMethods(quotaChecker, pgStores.DB).Register(server.Router())
+	server.SetQuotaChecker(quotaChecker)
 
 	// API key management RPC
 	if pgStores.APIKeys != nil {

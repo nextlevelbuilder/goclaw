@@ -62,3 +62,20 @@ func TestCopyRoutingMeta_PreservesPancakePrivateReplyKeys(t *testing.T) {
 		}
 	}
 }
+
+// TestCopyRoutingMeta_PreservesBitrixVisibility guards the whisper-leak
+// regression: intermediate replies (quick-ack, progress, reasoning bubbles,
+// block replies) must carry bitrix_visibility so a whisper-mode turn does not
+// leak its FIRST (intermediate) message to the external connector while only
+// the final answer is whispered. copyRoutingMeta is the path used by every
+// intermediate publish site; CopyFinalRoutingMeta must keep it too.
+func TestCopyRoutingMeta_PreservesBitrixVisibility(t *testing.T) {
+	src := map[string]string{"bitrix_visibility": "whisper"}
+
+	if got := copyRoutingMeta(src); got["bitrix_visibility"] != "whisper" {
+		t.Fatalf("copyRoutingMeta()[%q] = %q, want %q", "bitrix_visibility", got["bitrix_visibility"], "whisper")
+	}
+	if got := CopyFinalRoutingMeta(src); got["bitrix_visibility"] != "whisper" {
+		t.Fatalf("CopyFinalRoutingMeta()[%q] = %q, want %q", "bitrix_visibility", got["bitrix_visibility"], "whisper")
+	}
+}

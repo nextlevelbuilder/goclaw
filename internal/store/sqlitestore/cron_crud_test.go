@@ -300,6 +300,39 @@ func TestSQLiteCronStore_EnableJob_IgnoresMalformedPayload(t *testing.T) {
 	}
 }
 
+// TestSQLiteCronStore_AddJobNilTenantContext_ReturnsJob is a regression test for
+// the cron-create nil-pointer bug (B24:2794). A connection without a tenant in
+// context (gateway-token / CLI / master-scope UI session) inserts the row under
+// MasterTenantID via the insert-tenant fallback, but the readback previously
+// used the raw nil-tenant context and hit scanJob's "tenant_id required" guard.
+// AddJob therefore returned (nil, nil), which the handler dereferenced → panic.
+// The fix reads back under a tenant-consistent context, so AddJob must now
+// return a non-nil job with nil error.
+func TestSQLiteCronStore_AddJobNilTenantContext_ReturnsJob(t *testing.T) {
+	cronStore, _, _ := newTestSQLiteCronStore(t)
+	// Bare context: NO tenant, NO cross-tenant flag — exactly the shape a
+	// gateway-token / master-scope connection produces.
+	ctx := context.Background()
+	everyMS := int64(time.Minute / time.Millisecond)
+
+	job, err := cronStore.AddJob(ctx, "job-nil-tenant", store.CronSchedule{
+		Kind:    "every",
+		EveryMS: &everyMS,
+	}, "hello", false, "", "", "", "user-1")
+	if err != nil {
+		t.Fatalf("AddJob error: %v", err)
+	}
+	if job == nil {
+		t.Fatal("AddJob returned (nil, nil) for nil-tenant context — readback swallowed the created job")
+	}
+	if job.TenantID != store.MasterTenantID {
+		t.Fatalf("job tenant = %v, want MasterTenantID %v", job.TenantID, store.MasterTenantID)
+	}
+	if job.Name != "job-nil-tenant" {
+		t.Fatalf("job name = %q, want %q", job.Name, "job-nil-tenant")
+	}
+}
+
 func newTestSQLiteCronStore(t *testing.T) (*SQLiteCronStore, context.Context, *sql.DB) {
 	t.Helper()
 

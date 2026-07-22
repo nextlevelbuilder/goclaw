@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	ollamaapi "github.com/ollama/ollama/api"
 )
@@ -22,6 +23,12 @@ type OllamaProvider struct {
 	numCtx       *int
 	client       *ollamaapi.Client
 	retryConfig  RetryConfig
+
+	// ctxCache memoises each model's context window as reported by /api/show,
+	// keyed by model name. Resolution happens on the first request for a model
+	// rather than at startup, because the model an agent uses is only known then.
+	ctxMu    sync.RWMutex
+	ctxCache map[string]int
 
 	// thinkingEnabled is the provider-level override for whether requests
 	// should ask Ollama to emit visible reasoning/thinking tokens.
@@ -59,7 +66,40 @@ func NewOllamaProvider(name, apiBase, defaultModel string, numCtx *int, httpClie
 		numCtx:       numCtx,
 		client:       ollamaapi.NewClient(parsedURL, httpClient),
 		retryConfig:  DefaultRetryConfig(),
+		ctxCache:     make(map[string]int),
 	}
+}
+
+// resolveNumCtx returns the context window to request for a given model.
+//
+// An explicitly configured num_ctx always wins — it is the operator's lever for
+// capping the KV cache when a model's full window would not fit in VRAM.
+// Otherwise the model's own context length is read from /api/show and cached,
+// bounded by OllamaDefaultNumCtx so an enormous advertised window (Qwen3.5
+// reports 262144) cannot balloon the KV cache allocation.
+//
+// Never returns less than the caller would need: on any lookup failure it falls
+// back to OllamaDefaultNumCtx rather than to Ollama's 4096 default, which
+// silently rejects any prompt larger than a few thousand tokens.
+func (p *OllamaProvider) resolveNumCtx(ctx context.Context, model string) int {
+	if p.numCtx != nil {
+		return *p.numCtx
+	}
+
+	p.ctxMu.RLock()
+	cached, ok := p.ctxCache[model]
+	p.ctxMu.RUnlock()
+	if ok {
+		return cached
+	}
+
+	numCtx := min(FetchOllamaModelContext(ctx, p.apiBase, model, p.apiKey), OllamaDefaultNumCtx)
+
+	p.ctxMu.Lock()
+	p.ctxCache[model] = numCtx
+	p.ctxMu.Unlock()
+
+	return numCtx
 }
 
 // WithThinkingEnabled sets the provider-level override for whether native
@@ -113,7 +153,7 @@ func (p *OllamaProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRespon
 			}
 			return nil
 		}
-		if err := p.client.Chat(ctx, p.buildRequest(req, false), streamFn); err != nil {
+		if err := p.client.Chat(ctx, p.buildRequest(ctx, req, false), streamFn); err != nil {
 			return nil, fmt.Errorf("%s: chat: %w", p.name, err)
 		}
 		if finalResp == nil {
@@ -171,7 +211,7 @@ func (p *OllamaProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 			return nil
 		}
 
-		if err := p.client.Chat(ctx, p.buildRequest(req, true), streamFn); err != nil {
+		if err := p.client.Chat(ctx, p.buildRequest(ctx, req, true), streamFn); err != nil {
 			return nil, fmt.Errorf("%s: chat stream: %w", p.name, err)
 		}
 		return acc, nil
@@ -183,7 +223,7 @@ func (p *OllamaProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 }
 
 // buildRequest converts a generic ChatRequest into an Ollama-native api.ChatRequest.
-func (p *OllamaProvider) buildRequest(req ChatRequest, stream bool) *ollamaapi.ChatRequest {
+func (p *OllamaProvider) buildRequest(ctx context.Context, req ChatRequest, stream bool) *ollamaapi.ChatRequest {
 	model := req.Model
 	if model == "" {
 		model = p.defaultModel
@@ -268,13 +308,11 @@ func (p *OllamaProvider) buildRequest(req ChatRequest, stream bool) *ollamaapi.C
 	// Build options map: num_ctx + caller overrides.
 	// Always set num_ctx so Ollama uses a large context window even when the caller
 	// did not configure a specific value. Without this, Ollama defaults to 4096 and
-	// rejects conversations that exceed that limit.
+	// rejects conversations that exceed that limit. Note this only works because the
+	// request goes to the native /api/chat endpoint — the OpenAI-compat shim at
+	// /v1/chat/completions drops options.num_ctx on the floor.
 	opts := make(map[string]any)
-	if p.numCtx != nil {
-		opts["num_ctx"] = *p.numCtx
-	} else {
-		opts["num_ctx"] = OllamaDefaultNumCtx
-	}
+	opts["num_ctx"] = p.resolveNumCtx(ctx, model)
 	if temp, ok := req.Options[OptTemperature]; ok {
 		opts["temperature"] = temp
 	}

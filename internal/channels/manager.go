@@ -58,6 +58,15 @@ type RunContext struct {
 	tagParsePending      string        // raw trailing text withheld because it may be a split <think> tag
 	reasoningBubbles     *reasoningBubbleBuffer
 	reasoningBubbleTimer *time.Timer
+
+	// Activity indicator state (for ActivityIndicatorChannel, e.g. Bitrix24).
+	// Ephemeral "agent is working" indicator driven by agent events + a conditional
+	// heartbeat ticker. All fields guarded by mu.
+	activityStatus  string        // current platform-native status code (e.g. THINKING)
+	lastActivityAt  time.Time     // last time a notify was sent (throttle + heartbeat gate)
+	activityStarted bool          // true once the heartbeat ticker is running (start-once guard)
+	activityTicker  *time.Ticker  // heartbeat ticker; nil when not running
+	activityStop    chan struct{} // closed to stop the heartbeat goroutine
 }
 
 // Manager manages all registered channels, handling their lifecycle

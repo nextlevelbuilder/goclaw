@@ -83,6 +83,10 @@ type ObserveState struct {
 	// in iter N and responds text-only in iter N+1, reading only LastResponse.Images
 	// would lose the image.
 	AssistantImages []providers.ImageContent
+
+	// Post-model-response hook blocking.
+	BlockedByHook       bool   // true if post_model_response hook blocked delivery
+	HookRejectionReason string // rejection reason from hook, injected as user message
 }
 
 // CompactState: owned by CheckpointStage + MemoryFlushStage.

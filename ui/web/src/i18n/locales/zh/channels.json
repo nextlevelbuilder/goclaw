@@ -394,6 +394,10 @@
     "reaction_level": {
       "label": "表情回应级别"
     },
+    "activity_indicator": {
+      "label": "活动指示器",
+      "help": "在智能体处理时显示原生的“智能体工作中”指示器（思考/搜索/生成…）。临时显示，不是聊天消息。"
+    },
     "media_max_mb": {
       "label": "最大媒体大小 (MB)"
     },

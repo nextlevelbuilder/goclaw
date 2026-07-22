@@ -7,6 +7,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/audio/elevenlabs"
 	geminiaudio "github.com/nextlevelbuilder/goclaw/internal/audio/gemini"
 	minimaxaudio "github.com/nextlevelbuilder/goclaw/internal/audio/minimax"
+	"github.com/nextlevelbuilder/goclaw/internal/audio/openaicompat"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/memory"
@@ -273,6 +274,26 @@ func setupTTS(cfg *config.Config) *tts.Manager {
 		}))
 	}
 
+	// OpenAI-compatible self-hosted endpoint. api_base is the enable switch —
+	// unlike the vendor providers there is no API key to gate on, since these
+	// endpoints commonly have no auth.
+	if base := ttsCfg.OpenAICompat.APIBase; base != "" {
+		provider, err := openaicompat.NewTTSProvider(openaicompat.Config{
+			APIBase:   base,
+			APIKey:    ttsCfg.OpenAICompat.APIKey,
+			TTSModel:  ttsCfg.OpenAICompat.Model,
+			TTSVoice:  ttsCfg.OpenAICompat.Voice,
+			TTSFormat: ttsCfg.OpenAICompat.Format,
+			TimeoutMs: ttsCfg.TimeoutMs,
+		})
+		if err != nil {
+			slog.Warn("audio.tts: openai_compat not registered", "error", err)
+		} else {
+			mgr.RegisterProvider(provider)
+			slog.Info("audio.tts: openai_compat registered", "api_base", base)
+		}
+	}
+
 	if key := ttsCfg.ElevenLabs.APIKey; key != "" {
 		mgr.RegisterProvider(tts.NewElevenLabsProvider(tts.ElevenLabsConfig{
 			APIKey:    key,
@@ -357,6 +378,29 @@ func setupAudioExtras(cfg *config.Config, mgr *tts.Manager) {
 		}
 	}
 
+	// STT chain. Built from what actually registered, so Transcribe never walks
+	// a name it will only skip with a warning. "proxy" is always appended: it is
+	// registered later, per channel, by BridgeLegacySTT.
+	var sttChain []string
+
+	// OpenAI-compatible self-hosted endpoint, first when present: it is an
+	// explicit operator choice, and it keeps audio on the local network.
+	if base := cfg.Tts.OpenAICompat.APIBase; base != "" {
+		provider, err := openaicompat.NewSTTProvider(openaicompat.Config{
+			APIBase:   base,
+			APIKey:    cfg.Tts.OpenAICompat.APIKey,
+			STTModel:  cfg.Tts.OpenAICompat.STTModel,
+			TimeoutMs: cfg.Tts.TimeoutMs,
+		})
+		if err != nil {
+			slog.Warn("audio.stt: openai_compat not registered", "error", err)
+		} else {
+			mgr.RegisterSTT(provider)
+			sttChain = append(sttChain, provider.Name())
+			slog.Info("audio.stt: openai_compat registered", "api_base", base)
+		}
+	}
+
 	// ElevenLabs STT (Scribe v2) — reuse TTS credentials. Registered as tenant-scope
 	// default; per-request tenant override lands via builtin_tools[stt] in Phase 5
 	// channel migration. Legacy per-channel STTProxyURL is bridged separately.
@@ -365,7 +409,13 @@ func setupAudioExtras(cfg *config.Config, mgr *tts.Manager) {
 			APIKey:  ellKey,
 			BaseURL: ellBase,
 		}))
-		mgr.SetSTTChain([]string{"elevenlabs", "proxy"})
+		sttChain = append(sttChain, "elevenlabs")
 		slog.Info("audio.stt: elevenlabs registered")
+	}
+
+	if len(sttChain) > 0 {
+		sttChain = append(sttChain, "proxy")
+		mgr.SetSTTChain(sttChain)
+		slog.Info("audio.stt: chain configured", "chain", sttChain)
 	}
 }

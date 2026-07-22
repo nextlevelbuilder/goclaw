@@ -209,7 +209,7 @@ func (d *stdDispatcher) runSync(ctx context.Context, ev Event, chain []HookConfi
 			slog.Warn("hooks.dispatch.decision",
 				"hook_id", cfg.ID, "decision", "block", "reason", "circuit breaker open")
 			d.writeExec(ctx, cfg, evMut, DecisionBlock, 0, "circuit breaker open", "")
-			return FireResult{Decision: DecisionBlock}, nil
+			return FireResult{Decision: DecisionBlock, DecisionReason: "circuit breaker open"}, nil
 		}
 		pf := d.prefilter(cfg, evMut)
 		if pf.errored {
@@ -222,7 +222,7 @@ func (d *stdDispatcher) runSync(ctx context.Context, ev Event, chain []HookConfi
 			slog.Warn("hooks.dispatch.decision",
 				"hook_id", cfg.ID, "decision", "block", "reason", blockMsg)
 			d.writeExec(ctx, cfg, evMut, DecisionBlock, 0, blockMsg, "")
-			return FireResult{Decision: DecisionBlock}, nil
+			return FireResult{Decision: DecisionBlock, DecisionReason: blockMsg}, nil
 		}
 		if !pf.match {
 			slog.Debug("hooks.dispatch.decision",
@@ -263,21 +263,21 @@ func (d *stdDispatcher) runSync(ctx context.Context, ev Event, chain []HookConfi
 		switch dec {
 		case DecisionBlock:
 			d.cb.record(ctx, cfg.ID, d.now(), d.store)
-			return FireResult{Decision: DecisionBlock}, nil
+			return FireResult{Decision: DecisionBlock, DecisionReason: scriptRes.Reason}, nil
 		case DecisionTimeout:
 			d.cb.record(ctx, cfg.ID, d.now(), d.store)
 			if cfg.OnTimeout == DecisionBlock {
-				return FireResult{Decision: DecisionBlock}, nil
+				return FireResult{Decision: DecisionBlock, DecisionReason: "hook timeout"}, nil
 			}
 			// OnTimeout=allow: degrade gracefully but keep scanning.
 		case DecisionError:
 			// Unexpected error in a blocking chain → fail-closed.
-			return FireResult{Decision: DecisionBlock}, nil
+			return FireResult{Decision: DecisionBlock, DecisionReason: "hook execution error: " + errMsg}, nil
 		}
 
 		if chainCtx.Err() != nil {
 			// Chain wall-time budget exhausted (H3): fail-closed.
-			return FireResult{Decision: DecisionBlock}, nil
+			return FireResult{Decision: DecisionBlock, DecisionReason: "hook chain timeout"}, nil
 		}
 	}
 

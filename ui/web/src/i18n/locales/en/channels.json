@@ -395,6 +395,10 @@
     "reaction_level": {
       "label": "Reaction Level"
     },
+    "activity_indicator": {
+      "label": "Activity Indicator",
+      "help": "Show a native \"agent is working\" indicator (thinking/searching/generating…) while the agent processes. Ephemeral, not a chat message."
+    },
     "media_max_mb": {
       "label": "Max Media Size (MB)"
     },

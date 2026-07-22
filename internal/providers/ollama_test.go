@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,7 +14,7 @@ import (
 func TestOllamaBuildRequest_ThinkDefaultsToFalse(t *testing.T) {
 	p := NewOllamaProvider("ollama", "http://localhost:11434", "llama3.3", nil, nil)
 	req := ChatRequest{Messages: []Message{{Role: "user", Content: "hi"}}}
-	ollamaReq := p.buildRequest(req, false)
+	ollamaReq := p.buildRequest(context.Background(), req, false)
 
 	require.NotNil(t, ollamaReq.Think)
 	value, ok := ollamaReq.Think.Value.(bool)
@@ -41,7 +42,7 @@ func TestOllamaBuildRequest_ThinkOverride(t *testing.T) {
 			p := NewOllamaProvider("ollama", "http://localhost:11434", "llama3.3", nil, nil).
 				WithThinkingEnabled(tc.override)
 			req := ChatRequest{Messages: []Message{{Role: "user", Content: "hi"}}}
-			ollamaReq := p.buildRequest(req, false)
+			ollamaReq := p.buildRequest(context.Background(), req, false)
 
 			require.NotNil(t, ollamaReq.Think)
 			value, ok := ollamaReq.Think.Value.(bool)

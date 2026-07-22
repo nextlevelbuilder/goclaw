@@ -314,6 +314,7 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "history_limit", label: "Group History Limit", type: "number", defaultValue: 0, help: "Max pending group messages for context (0 = disabled)" },
     { key: "streaming", label: "Streaming", type: "boolean", defaultValue: true, help: "Stream response progressively." },
     { key: "reaction_level", label: "Reaction Level", type: "select", options: [{ value: "off", label: "Off" }, { value: "minimal", label: "Minimal" }, { value: "full", label: "Full" }], defaultValue: "minimal", help: "Typing/status reactions while the agent is processing." },
+    { key: "activity_indicator", label: "Activity Indicator", type: "boolean", defaultValue: true, help: "Show a native \"agent is working\" indicator (thinking/searching/generating…) while the agent processes. Ephemeral, not a chat message." },
     { key: "text_chunk_limit", label: "Text Chunk Limit", type: "number", defaultValue: 4000, help: "Max characters per outbound message." },
     { key: "media_max_mb", label: "Max Media Size (MB)", type: "number", defaultValue: 20, help: "Max inbound media download size." },
     { key: "allow_from", label: "Allowed Users (DM)", type: "tags", help: "Bitrix24 user IDs allowed to DM the bot. Empty = no allowlist filter." },

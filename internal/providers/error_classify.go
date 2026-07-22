@@ -169,6 +169,7 @@ func isContextOverflow(lower string) bool {
 		"prompt exceeds max length", // ZAI/GLM-5
 		"request_too_large",         // Generic
 		"input is too long",         // DashScope
+		"exceed_context_size",       // Ollama native /api/chat 400
 		"请求输入过长",                    // Chinese generic
 	)
 }

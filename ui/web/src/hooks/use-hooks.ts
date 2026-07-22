@@ -200,7 +200,9 @@ export function useTestHook() {
       sampleEvent,
     }: {
       config: Partial<HookConfig>;
-      sampleEvent: { toolName: string; toolInput: Record<string, unknown>; rawInput?: string };
+      sampleEvent:
+        | { toolName: string; toolInput: Record<string, unknown>; rawInput?: string }
+        | { modelResponse: Record<string, unknown>; thinking?: string; toolCalls?: Array<Record<string, unknown>>; rawInput?: string };
     }) =>
       ws.call<{ result: HookTestResult }>("hooks.test", { config, sampleEvent }),
     onError: (err) => {

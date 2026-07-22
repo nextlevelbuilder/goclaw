@@ -35,7 +35,7 @@ func ctxWithAgentAudio(t *testing.T, voiceID, modelID string) context.Context {
 func TestResolveVoiceAndModel_ArgsWinOverAgent(t *testing.T) {
 	tool := NewTtsTool(makeTTSManager("elevenlabs"))
 	ctx := ctxWithAgentAudio(t, "AGENT_V", "AGENT_M")
-	v, m, _ := tool.resolveVoiceAndModel(ctx, "ARG_V", "ARG_M")
+	v, m, _ := tool.resolveVoiceAndModel(ctx, "edge", "ARG_V", "ARG_M")
 	if v != "ARG_V" {
 		t.Errorf("voice: got %q, want ARG_V (args must win)", v)
 	}
@@ -50,7 +50,7 @@ func TestResolveVoiceAndModel_AgentWinsOverTenantWhenArgsEmpty(t *testing.T) {
 	ctx = WithBuiltinToolSettings(ctx, BuiltinToolSettings{
 		"tts": rawJSON(t, map[string]string{"default_voice_id": "TENANT_V", "default_model": "TENANT_M"}),
 	})
-	v, m, _ := tool.resolveVoiceAndModel(ctx, "", "")
+	v, m, _ := tool.resolveVoiceAndModel(ctx, "edge", "", "")
 	if v != "AGENT_V" {
 		t.Errorf("voice: got %q, want AGENT_V (agent > tenant)", v)
 	}
@@ -65,7 +65,7 @@ func TestResolveVoiceAndModel_TenantFallbackWhenAgentSilent(t *testing.T) {
 	ctx := WithBuiltinToolSettings(context.Background(), BuiltinToolSettings{
 		"tts": rawJSON(t, map[string]string{"default_voice_id": "TENANT_V", "default_model": "TENANT_M"}),
 	})
-	v, m, _ := tool.resolveVoiceAndModel(ctx, "", "")
+	v, m, _ := tool.resolveVoiceAndModel(ctx, "edge", "", "")
 	if v != "TENANT_V" {
 		t.Errorf("voice: got %q, want TENANT_V", v)
 	}
@@ -76,7 +76,7 @@ func TestResolveVoiceAndModel_TenantFallbackWhenAgentSilent(t *testing.T) {
 
 func TestResolveVoiceAndModel_EmptyAllMeansDefault(t *testing.T) {
 	tool := NewTtsTool(makeTTSManager("elevenlabs"))
-	v, m, _ := tool.resolveVoiceAndModel(context.Background(), "", "")
+	v, m, _ := tool.resolveVoiceAndModel(context.Background(), "edge", "", "")
 	if v != "" {
 		t.Errorf("voice: got %q, want empty (no sources → provider default)", v)
 	}
@@ -92,7 +92,7 @@ func TestResolveVoiceAndModel_PartialAgentConfig(t *testing.T) {
 	ctx = WithBuiltinToolSettings(ctx, BuiltinToolSettings{
 		"tts": rawJSON(t, map[string]string{"default_model": "TENANT_M"}),
 	})
-	v, m, _ := tool.resolveVoiceAndModel(ctx, "", "")
+	v, m, _ := tool.resolveVoiceAndModel(ctx, "edge", "", "")
 	if v != "AGENT_V" {
 		t.Errorf("voice: got %q, want AGENT_V", v)
 	}

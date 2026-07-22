@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -8,7 +9,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 
@@ -298,7 +298,7 @@ func (h *SkillsHandler) handleWriteFile(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	filePath, slug, currentVersion, isSystem, ok := h.skills.GetSkillFilePath(r.Context(), id)
+	_, _, _, isSystem, ok := h.skills.GetSkillFilePath(r.Context(), id)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "skill", id.String())})
 		return
@@ -318,109 +318,25 @@ func (h *SkillsHandler) handleWriteFile(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	slugDir := store.SkillSlugDir(filePath)
-	if slugDir == "" {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgFileNotFound)})
-		return
-	}
-	currentDir := filepath.Join(slugDir, strconv.Itoa(currentVersion))
-	if info, err := os.Stat(currentDir); err != nil || !info.IsDir() {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgFileNotFound)})
-		return
-	}
-
-	cleanRelPath := filepath.Clean(relPath)
-	// Validate the path against the CURRENT version directory before staging
-	// a copy — cheaper failure path and keeps the escape/symlink checks close
-	// to the original request path.
-	checkPath := filepath.Join(currentDir, cleanRelPath)
-	if !strings.HasPrefix(checkPath, currentDir+string(filepath.Separator)) {
-		slog.Warn("security.skill_files_escape", "resolved", checkPath, "root", currentDir)
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
-		return
-	}
-	if fi, err := os.Lstat(checkPath); err == nil {
-		if fi.Mode()&os.ModeSymlink != 0 {
-			slog.Warn("security.skill_files_symlink", "path", checkPath)
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
-			return
-		}
-		if fi.IsDir() {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
-			return
-		}
-	}
-	if skills.IsSystemArtifact(filepath.Base(cleanRelPath)) {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
-		return
-	}
-
-	// Create a new immutable version: lock the next version number, stage a
-	// copy of the current version directory, write the edited file into the
-	// staged copy, then atomically rename it into place and repoint the
-	// skill's DB row — same convention as skill_manage's patch action and
-	// applySkillSuggestionPatch.
-	newVersion, commitLock, err := h.skills.GetNextVersionLocked(r.Context(), slug)
+	path, newVersion, err := skills.WriteVersionedFile(r.Context(), h.skills, h.tenantSkillsDir(r), id, relPath, body.Content)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	defer commitLock() //nolint:errcheck
-
-	destDir := filepath.Join(h.tenantSkillsDir(r), slug, strconv.Itoa(newVersion))
-	tmpDir := destDir + ".tmp-" + uuid.NewString()
-	if err := copyDir(currentDir, tmpDir); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	removeDestOnError := true
-	defer func() {
-		_ = os.RemoveAll(tmpDir)
-		if removeDestOnError {
-			_ = os.RemoveAll(destDir)
+		switch {
+		case errors.Is(err, skills.ErrSkillFileNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgFileNotFound)})
+		case errors.Is(err, skills.ErrSkillIsSystem):
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "cannot edit a system skill"})
+		case errors.Is(err, skills.ErrSkillInvalidPath):
+			slog.Warn("security.skill_files_escape", "path", relPath, "skill_id", id.String())
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
+		default:
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
-	}()
-
-	absPath := filepath.Join(tmpDir, cleanRelPath)
-	if !strings.HasPrefix(absPath, tmpDir+string(filepath.Separator)) {
-		slog.Warn("security.skill_files_escape", "resolved", absPath, "root", tmpDir)
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidPath)})
-		return
-	}
-	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	if err := os.WriteFile(absPath, []byte(body.Content), 0o644); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	if err := os.Rename(tmpDir, destDir); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	hash, size, err := hashSkillDir(destDir)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	if err := h.skills.UpdateSkill(r.Context(), id, map[string]any{
-		"version":    newVersion,
-		"file_path":  destDir,
-		"file_size":  size,
-		"file_hash":  &hash,
-		"updated_at": time.Now(),
-	}); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	removeDestOnError = false
-
-	h.skills.BumpVersion()
 	h.emitCacheInvalidate(bus.CacheKindSkills, id.String(), uuid.Nil)
 	emitAudit(h.msgBus, r, "skill.file_updated", "skill", id.String())
-	writeJSON(w, http.StatusOK, map[string]any{"ok": "true", "path": relPath, "version": newVersion})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": "true", "path": path, "version": newVersion})
 }
 
 func readableSkillRoots(versionDir, slug string, isSystem bool, bundledDir string) []string {

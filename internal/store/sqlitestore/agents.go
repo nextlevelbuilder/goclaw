@@ -231,10 +231,12 @@ func (s *SQLiteAgentStore) List(ctx context.Context, ownerID string) ([]store.Ag
 
 	if !store.IsCrossTenant(ctx) {
 		tid := store.TenantIDFromContext(ctx)
-		if tid != uuid.Nil {
-			q += " AND tenant_id = ?"
-			args = append(args, tid)
+		if tid == uuid.Nil {
+			slog.Warn("agents.List: tenant context missing, returning empty (fail-closed)")
+			return nil, nil
 		}
+		q += " AND tenant_id = ?"
+		args = append(args, tid)
 	}
 
 	q += " ORDER BY created_at DESC"

@@ -5,6 +5,7 @@ export const HookEventEnum = z.enum([
   "user_prompt_submit",
   "pre_tool_use",
   "post_tool_use",
+  "post_model_response",
   "stop",
   "subagent_start",
   "subagent_stop",

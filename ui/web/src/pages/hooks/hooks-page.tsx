@@ -27,7 +27,7 @@ import type { HookFormData } from "@/schemas/hooks.schema";
 
 const HOOK_EVENTS = [
   "session_start", "user_prompt_submit", "pre_tool_use",
-  "post_tool_use", "stop", "subagent_start", "subagent_stop",
+  "post_tool_use", "post_model_response", "stop", "subagent_start", "subagent_stop",
 ] as const;
 
 // parseHeaders accepts an empty string, an empty object string, or a JSON

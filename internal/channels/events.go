@@ -428,9 +428,26 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 		}
 	}
 
+	// Forward to ActivityIndicatorChannel — ephemeral "agent is working" indicator
+	// (e.g. Bitrix24 imbot InputAction.notify). Events set the status content; a
+	// conditional heartbeat ticker (started here) fills LLM-inference gaps. Best-effort:
+	// fireActivity never blocks and drops on error/rate-limit.
+	if actCh, ok := ch.(ActivityIndicatorChannel); ok {
+		switch eventType {
+		case protocol.AgentEventRunStarted:
+			m.fireActivity(rc, actCh, ActivityStatusThinking)
+			m.startActivityTicker(rc, actCh)
+		case protocol.AgentEventToolCall:
+			m.fireActivity(rc, actCh, resolveToolActivityStatus(extractPayloadString(payload, "name")))
+		case protocol.AgentEventToolResult:
+			m.fireActivity(rc, actCh, ActivityStatusAnalyzing)
+		}
+	}
+
 	// Clean up on terminal events
 	if eventType == protocol.AgentEventRunCompleted || eventType == protocol.AgentEventRunFailed || eventType == protocol.AgentEventRunCancelled {
 		m.cancelQuickAck(rc)
+		m.stopActivityTicker(rc)
 		rc.mu.Lock()
 		stopReasoningBubbleTimerLocked(rc)
 		rc.mu.Unlock()

@@ -45,6 +45,11 @@ func (m *Manager) UnregisterRun(runID string) {
 	if val, ok := m.runs.LoadAndDelete(runID); ok {
 		if rc, ok := val.(*RunContext); ok {
 			m.cancelQuickAck(rc)
+			// Also stop the activity heartbeat here (not only in the terminal-event
+			// branch) — terminal AgentEvents are not guaranteed to reach
+			// HandleAgentEvent, and without this the heartbeat goroutine leaks and
+			// keeps firing InputAction.notify forever. stopActivityTicker is idempotent.
+			m.stopActivityTicker(rc)
 			m.flushReasoningBubblesForContext(rc)
 		}
 	}

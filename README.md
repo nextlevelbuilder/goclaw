@@ -27,10 +27,10 @@ Single binary. Production-tested. Agents that orchestrate for you.
 </p>
 
 🌐 **Languages:**
+[🇻🇳 Tiếng Việt](_readmes/README.vi.md) ·
 [🇨🇳 简体中文](_readmes/README.zh-CN.md) ·
 [🇯🇵 日本語](_readmes/README.ja.md) ·
 [🇰🇷 한국어](_readmes/README.ko.md) ·
-[🇻🇳 Tiếng Việt](_readmes/README.vi.md) ·
 [🇵🇭 Tagalog](_readmes/README.tl.md) ·
 [🇪🇸 Español](_readmes/README.es.md) ·
 [🇧🇷 Português](_readmes/README.pt.md) ·

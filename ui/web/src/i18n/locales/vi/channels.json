@@ -394,6 +394,10 @@
     "reaction_level": {
       "label": "Mức độ reaction"
     },
+    "activity_indicator": {
+      "label": "Chỉ báo hoạt động",
+      "help": "Hiển thị chỉ báo \"agent đang làm việc\" (đang nghĩ/tìm/tạo…) trong lúc agent xử lý. Tạm thời, không phải tin nhắn."
+    },
     "media_max_mb": {
       "label": "Kích thước media tối đa (MB)"
     },

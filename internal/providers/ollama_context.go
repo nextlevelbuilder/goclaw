@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -28,14 +29,19 @@ func FetchOllamaModelContext(ctx context.Context, apiBase, model, apiKey string)
 
 	slog.Debug("ollama.context: querying /api/show", "api_base", apiBase, "resolved_base", base, "model", model)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	// /api/show is POST-only: a GET is answered with "405 method not allowed",
+	// which silently degraded every lookup to the fallback.
+	payload, err := json.Marshal(map[string]string{"model": model})
+	if err != nil {
+		slog.Warn("ollama.context: encode request failed", "model", model, "error", err, "fallback", OllamaDefaultNumCtx)
+		return OllamaDefaultNumCtx
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
 		slog.Warn("ollama.context: build request failed", "model", model, "error", err, "fallback", OllamaDefaultNumCtx)
 		return OllamaDefaultNumCtx
 	}
-	q := req.URL.Query()
-	q.Set("model", model)
-	req.URL.RawQuery = q.Encode()
+	req.Header.Set("Content-Type", "application/json")
 	if apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+apiKey)
 	}
@@ -61,21 +67,41 @@ func FetchOllamaModelContext(ctx context.Context, apiBase, model, apiKey string)
 	slog.Debug("ollama.context: /api/show raw response", "model", model, "response", string(rawBody))
 
 	var result struct {
-		ModelInfo struct {
-			ContextLength int `json:"context_length"`
-		} `json:"model_info"`
+		ModelInfo map[string]json.RawMessage `json:"model_info"`
 	}
 	if err := json.Unmarshal(rawBody, &result); err != nil {
 		slog.Warn("ollama.context: decode failed", "model", model, "error", fmt.Sprintf("%v", err), "fallback", OllamaDefaultNumCtx)
 		return OllamaDefaultNumCtx
 	}
 
-	slog.Debug("ollama.context: extracted context_length", "model", model, "context_length", result.ModelInfo.ContextLength)
+	contextLength := extractContextLength(result.ModelInfo)
+	slog.Debug("ollama.context: extracted context_length", "model", model, "context_length", contextLength)
 
-	if result.ModelInfo.ContextLength <= 0 {
+	if contextLength <= 0 {
 		slog.Debug("ollama.context: context_length not positive, using default", "model", model, "fallback", OllamaDefaultNumCtx)
 		return OllamaDefaultNumCtx
 	}
-	slog.Info("ollama.context: resolved context window", "model", model, "num_ctx", result.ModelInfo.ContextLength)
-	return result.ModelInfo.ContextLength
+	slog.Info("ollama.context: resolved context window", "model", model, "num_ctx", contextLength)
+	return contextLength
+}
+
+// extractContextLength pulls the context window out of an /api/show model_info map.
+// Ollama namespaces the key by model architecture ("gemma4.context_length",
+// "qwen35.context_length", "llama.context_length"), so a fixed "context_length"
+// lookup never matches a real server response; the bare key is still accepted
+// because it is what hand-written fixtures and older stubs return.
+func extractContextLength(modelInfo map[string]json.RawMessage) int {
+	for key, raw := range modelInfo {
+		if key != "context_length" && !strings.HasSuffix(key, ".context_length") {
+			continue
+		}
+		var length int
+		if err := json.Unmarshal(raw, &length); err != nil {
+			continue
+		}
+		if length > 0 {
+			return length
+		}
+	}
+	return 0
 }

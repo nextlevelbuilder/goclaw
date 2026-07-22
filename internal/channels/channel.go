@@ -200,6 +200,19 @@ type ReactionChannel interface {
 	ClearReaction(ctx context.Context, chatID string, messageID string) error
 }
 
+// ActivityIndicatorChannel is optionally implemented by channels that can show an
+// ephemeral "agent is working" indicator (e.g. Bitrix24 imbot InputAction.notify)
+// while the agent thinks or runs tools — without persisting a chat message.
+//
+// statusCode is a platform-native activity code (see activity_indicator.go); an empty
+// string means "keep the current / default working indicator". Implementations MUST be
+// best-effort and non-blocking on the caller's side: the indicator is cosmetic, so a
+// failed or rate-limited call must be dropped silently and never affect the real reply.
+type ActivityIndicatorChannel interface {
+	Channel
+	OnActivityEvent(ctx context.Context, chatID string, statusCode string) error
+}
+
 // BaseChannel provides shared functionality for all channel implementations.
 // Channel implementations should embed this struct.
 type BaseChannel struct {

@@ -72,6 +72,11 @@ type bitrixInstanceConfig struct {
 	Streaming     *bool  `json:"streaming,omitempty"`
 	ReactionLevel string `json:"reaction_level,omitempty"` // off|minimal|full
 
+	// ActivityIndicator toggles the ephemeral "agent is working" indicator
+	// (imbot.v2.Chat.InputAction.notify) shown while the agent thinks / runs
+	// tools. nil = enabled (default on). Best-effort, dropped on rate limit.
+	ActivityIndicator *bool `json:"activity_indicator,omitempty"`
+
 	// Misc
 	HistoryLimit int                        `json:"history_limit,omitempty"`
 	BlockReply   *bool                      `json:"block_reply,omitempty"`

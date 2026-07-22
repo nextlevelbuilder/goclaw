@@ -168,11 +168,34 @@ Every channel must implement the base interface:
 | `StreamingChannel` | Real-time streaming updates | Telegram, Slack, DingTalk (AI Card) |
 | `WebhookChannel` | Webhook HTTP handler mounting | Facebook, Feishu/Lark, Pancake |
 | `ReactionChannel` | Status reactions on messages | Telegram, Slack, Feishu, DingTalk |
+| `ActivityIndicatorChannel` | Ephemeral "agent is working" indicator | Bitrix24 |
 | `BlockReplyChannel` | Override gateway block_reply setting | Discord, Feishu/Lark, Pancake, Slack, Zalo OA, Zalo Personal |
 | `ChatBehaviorChannel` | Override gateway chat_behavior setting | Bitrix24, Discord, Feishu/Lark, Pancake, Slack, Telegram, WhatsApp, Zalo OA, Zalo Personal |
 | `ReasoningDeliveryChannel` | Override channel-visible reasoning delivery | Telegram |
 
 `BaseChannel` provides a shared implementation that all channels embed: allowlist matching, `HandleMessage()`, `CheckPolicy()`, and user ID extraction.
+
+### Activity Indicator (`ActivityIndicatorChannel`)
+
+Shows a native, ephemeral "agent is working" indicator while the agent thinks or runs tools,
+so users on non-streaming channels aren't left staring at silence until the final reply. It is
+**not** a chat message — nothing is persisted, no extra LLM call is made.
+
+Driven by the existing agent event stream in `Manager.HandleAgentEvent`:
+
+- `run.started` → `THINKING`, and a conditional heartbeat ticker starts.
+- `tool.call` → status mapped from the tool name (`SEARCHING`, `READING_DOCS`, `GENERATING`,
+  `CONNECTING`, `PROCESSING`) via `resolveToolActivityStatus`.
+- `tool.result` → `ANALYZING`.
+- terminal events → ticker stops.
+
+Because non-streaming turns emit no events during LLM inference, a **conditional heartbeat
+ticker** re-sends the current status only when the run has been idle beyond a threshold — filling
+the gap without spamming. Calls are **best-effort and dropped on rate limit** (they never retry
+into the portal's leaky bucket, so real message sends are never starved).
+
+**Bitrix24** implements it via `imbot.v2.Chat.InputAction.notify` (status codes
+`IMBOT_AGENT_ACTION_*`). Toggle per channel with `activity_indicator` (default on).
 
 ### Webhook Mount
 

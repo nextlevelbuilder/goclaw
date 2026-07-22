@@ -316,7 +316,7 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			if host == "" {
 				host = "http://localhost:11434"
 			}
-			numCtx := resolveOllamaNumCtx(&p, config.DockerLocalhost(host), "")
+			numCtx := resolveOllamaNumCtx(&p)
 			prov := providers.NewOllamaProvider(p.Name, config.DockerLocalhost(host), "llama3.3", numCtx, nil).
 				WithThinkingEnabled(store.ParseThinkingEnabled(p.Settings))
 			registry.RegisterForTenant(p.TenantID, prov)
@@ -397,7 +397,7 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			if base == "" {
 				base = "https://ollama.com"
 			}
-			numCtx := resolveOllamaNumCtx(&p, base, p.APIKey)
+			numCtx := resolveOllamaNumCtx(&p)
 			prov := providers.NewOllamaProvider(p.Name, base, "llama3.3", numCtx, nil).
 				WithThinkingEnabled(store.ParseThinkingEnabled(p.Settings))
 			registry.RegisterForTenant(p.TenantID, prov)
@@ -466,23 +466,17 @@ func openAIProviderDefaults(providerType, apiBase string) (string, string) {
 	}
 }
 
-// resolveOllamaNumCtx returns the num_ctx to use for an Ollama provider, or nil
-// when the built-in default should be used (provider handles it internally).
-// Priority:
-//  1. User-configured num_ctx from provider settings JSONB (explicit override wins).
-//  2. Value queried from Ollama /api/show for the provider's default model.
-//  3. nil when neither is available (OllamaProvider omits options.num_ctx, using Ollama's default).
-func resolveOllamaNumCtx(p *store.LLMProviderData, apiBase, apiKey string) *int {
+// resolveOllamaNumCtx returns the operator-configured num_ctx for an Ollama
+// provider, or nil to let the provider resolve it per model at request time.
+//
+// Only the explicit settings JSONB override is honoured here. Probing /api/show
+// at startup cannot work: the model an agent will use is not known until it
+// sends a request, so the probe had to guess a model name, and a wrong guess
+// resolved to nothing. OllamaProvider.resolveNumCtx does the lookup against the
+// real model instead, and caches it.
+func resolveOllamaNumCtx(p *store.LLMProviderData) *int {
 	if s := store.ParseOllamaSettings(p.Settings); s != nil {
 		return s.NumCtx
-	}
-	// Query the Ollama API for the model's native context length.
-	// Use a short timeout so startup is not blocked by a slow/absent Ollama server.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	numCtx := providers.FetchOllamaModelContext(ctx, apiBase, "llama3.3", apiKey)
-	if numCtx != providers.OllamaDefaultNumCtx {
-		return &numCtx
 	}
 	return nil
 }

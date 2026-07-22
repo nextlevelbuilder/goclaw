@@ -426,6 +426,7 @@ type GatewayConfig struct {
 	Host                    string              `json:"host"`
 	Port                    int                 `json:"port"`
 	Token                   string              `json:"token,omitempty"`                      // bearer token for WS/HTTP auth
+	MCPServerToken          string              `json:"mcp_server_token,omitempty"`           // bearer token gating the CRUD MCP server mounted at /api/mcp/; callers may pass an optional "X-GoClaw-Tenant-Id" header (UUID or slug) to scope a request to a tenant, defaulting to the master tenant when absent (see internal/mcp/crud_server.go)
 	OwnerIDs                []string            `json:"owner_ids,omitempty"`                  // sender IDs considered "owner"
 	AllowedOrigins          []string            `json:"allowed_origins,omitempty"`            // WebSocket CORS whitelist (empty = allow all)
 	MCPAllowedHosts         []string            `json:"mcp_allowed_hosts,omitempty"`          // trusted MCP server hostnames exempt from the private-IP SSRF block during config validation (empty = none)
@@ -575,16 +576,33 @@ type SessionsConfig struct {
 // TtsConfig configures text-to-speech.
 // Matching TS src/config/types.tts.ts.
 type TtsConfig struct {
-	Provider   string              `json:"provider,omitempty"`   // "openai", "elevenlabs", "edge", "minimax", "gemini"
-	Auto       string              `json:"auto,omitempty"`       // "off" (default), "always", "inbound", "tagged"
-	Mode       string              `json:"mode,omitempty"`       // "final" (default), "all"
-	MaxLength  int                 `json:"max_length,omitempty"` // max text length before truncation (default 1500)
-	TimeoutMs  int                 `json:"timeout_ms,omitempty"` // API timeout in ms (default 30000)
-	OpenAI     TtsOpenAIConfig     `json:"openai"`
-	ElevenLabs TtsElevenLabsConfig `json:"elevenlabs"`
-	Edge       TtsEdgeConfig       `json:"edge"`
-	MiniMax    TtsMiniMaxConfig    `json:"minimax"`
-	Gemini     TtsGeminiConfig     `json:"gemini"`
+	Provider     string                `json:"provider,omitempty"`   // "openai", "openai_compat", "elevenlabs", "edge", "minimax", "gemini"
+	Auto         string                `json:"auto,omitempty"`       // "off" (default), "always", "inbound", "tagged"
+	Mode         string                `json:"mode,omitempty"`       // "final" (default), "all"
+	MaxLength    int                   `json:"max_length,omitempty"` // max text length before truncation (default 1500)
+	TimeoutMs    int                   `json:"timeout_ms,omitempty"` // API timeout in ms (default 30000)
+	OpenAI       TtsOpenAIConfig       `json:"openai"`
+	OpenAICompat TtsOpenAICompatConfig `json:"openai_compat"`
+	ElevenLabs   TtsElevenLabsConfig   `json:"elevenlabs"`
+	Edge         TtsEdgeConfig         `json:"edge"`
+	MiniMax      TtsMiniMaxConfig      `json:"minimax"`
+	Gemini       TtsGeminiConfig       `json:"gemini"`
+}
+
+// TtsOpenAICompatConfig configures a self-hosted OpenAI-compatible audio
+// endpoint (gpu-manager, Speaches, vLLM, LocalAI, llama.cpp, Ollama) for both
+// TTS and STT. Kept separate from TtsOpenAIConfig because the voice namespace
+// is the engine's own — see internal/audio/openaicompat for why the provider
+// name must not be "openai".
+//
+// Setting api_base is what enables the provider; there is no vendor default.
+type TtsOpenAICompatConfig struct {
+	APIBase  string `json:"api_base,omitempty"`  // required to enable, e.g. "http://gpu-manager:8080/v1"
+	APIKey   string `json:"api_key,omitempty"`   // optional; omitted entirely when empty
+	Model    string `json:"model,omitempty"`     // TTS model; optional when the engine picks it from the voice
+	Voice    string `json:"voice,omitempty"`     // engine-specific voice ID, e.g. "fr_FR-gilles-low"
+	Format   string `json:"format,omitempty"`    // response_format; default "mp3", use "wav" for engines without an encoder
+	STTModel string `json:"stt_model,omitempty"` // transcription model; optional
 }
 
 // TtsGeminiConfig configures the Google Gemini TTS provider.

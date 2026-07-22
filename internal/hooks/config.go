@@ -35,6 +35,7 @@ var knownEvents = map[HookEvent]struct{}{
 	EventStop:             {},
 	EventSubagentStart:    {},
 	EventSubagentStop:     {},
+	EventPostModelResponse: {},
 }
 
 // Validate checks a HookConfig for semantic correctness and fills in defaults.

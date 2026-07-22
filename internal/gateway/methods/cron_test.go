@@ -16,6 +16,7 @@ import (
 type stubCronStore struct {
 	jobs      map[string]*store.CronJob
 	addErr    error
+	addNilJob bool // simulate insert-ok-but-readback-failed: AddJob returns (nil, nil)
 	removeErr error
 	updateErr error
 	enableErr error
@@ -37,6 +38,9 @@ func (s *stubCronStore) AddJob(_ context.Context, name string, schedule store.Cr
 	deliver bool, channel, to, agentID, userID string) (*store.CronJob, error) {
 	if s.addErr != nil {
 		return nil, s.addErr
+	}
+	if s.addNilJob {
+		return nil, nil
 	}
 	job := &store.CronJob{
 		ID:       "new-job-id",
@@ -216,6 +220,27 @@ func TestCronCreate_ValidParams_CreatesJob(t *testing.T) {
 	}
 	if svc.addedJob != nil && svc.addedJob.Name != "my-daily-job" {
 		t.Errorf("job name = %q, want %q", svc.addedJob.Name, "my-daily-job")
+	}
+}
+
+// Regression (B24:2794): when the store's AddJob returns (nil, nil) — the
+// insert succeeded but the tenant-scoped readback failed — handleCreate must
+// NOT dereference the nil job (previously panicked at job.ID). It must return
+// an error response and never call UpdateJob with a nil job.
+func TestCronCreate_NilJobFromStore_NoPanic_ReturnsError(t *testing.T) {
+	svc := newStubCronStore()
+	svc.addNilJob = true
+	m := buildCronMethods(t, svc)
+	client := nullClient()
+	req := cronReqFrame(t, protocol.MethodCronCreate, map[string]any{
+		"name":     "nil-job",
+		"message":  "do the thing",
+		"schedule": map[string]any{"kind": "every", "everyMs": 60000},
+	})
+	m.handleCreate(context.Background(), client, req)
+	// No panic = nil-guard hit before job.ID dereference.
+	if svc.updateCnt != 0 {
+		t.Fatalf("UpdateJob called %d times after nil job, want 0", svc.updateCnt)
 	}
 }
 

@@ -27,12 +27,19 @@ import (
 // Implements Tool + ContextualTool interfaces.
 // Per-call channel is read from ctx for thread-safety.
 type TtsTool struct {
-	mu        sync.RWMutex
-	manager   *tts.Manager
-	vaultIntc *VaultInterceptor
+	mu            sync.RWMutex
+	manager       *tts.Manager
+	vaultIntc     *VaultInterceptor
+	systemConfigs store.SystemConfigStore
 }
 
 func (t *TtsTool) SetVaultInterceptor(v *VaultInterceptor) { t.vaultIntc = v }
+
+func (t *TtsTool) SetSystemConfigStore(s store.SystemConfigStore) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.systemConfigs = s
+}
 
 // NewTtsTool creates a TTS tool backed by the given manager.
 func NewTtsTool(mgr *tts.Manager) *TtsTool {
@@ -98,7 +105,7 @@ type agentAudioConfig struct {
 // resolveVoiceAndModel computes the effective voice + model IDs for the
 // request using the documented precedence order:
 //
-//	args > agent (store.AgentAudioFromCtx OtherConfig) > tenant (BuiltinToolSettings) > empty.
+//	args > agent (store.AgentAudioFromCtx OtherConfig) > tenant (BuiltinToolSettings) > system_configs > empty.
 //
 // Empty return values signal "use provider default" downstream — they are not
 // errors. Missing agent snapshot emits slog.Warn so operators can spot
@@ -108,7 +115,7 @@ type agentAudioConfig struct {
 // tts_voice_id override (not from tool args or tenant defaults). Callers use
 // this flag to emit a warning when the voice is later found incompatible with
 // the selected provider.
-func (t *TtsTool) resolveVoiceAndModel(ctx context.Context, argVoice, argModel string) (voice, model string, voiceFromAgent bool) {
+func (t *TtsTool) resolveVoiceAndModel(ctx context.Context, providerName, argVoice, argModel string) (voice, model string, voiceFromAgent bool) {
 	voice, model = argVoice, argModel
 
 	// Pull agent-level config from the dispatcher-injected snapshot.
@@ -151,6 +158,22 @@ func (t *TtsTool) resolveVoiceAndModel(ctx context.Context, argVoice, argModel s
 			model = agentCfg.TTSModelID
 		} else if tenantCfg.DefaultModel != "" {
 			model = tenantCfg.DefaultModel
+		}
+	}
+
+	t.mu.RLock()
+	systemConfigs := t.systemConfigs
+	t.mu.RUnlock()
+	if (voice == "" || model == "") && systemConfigs != nil && providerName != "" {
+		if voice == "" {
+			if v, err := systemConfigs.Get(ctx, "tts."+providerName+".voice"); err == nil && v != "" {
+				voice = v
+			}
+		}
+		if model == "" {
+			if m, err := systemConfigs.Get(ctx, "tts."+providerName+".model"); err == nil && m != "" {
+				model = m
+			}
 		}
 	}
 	return voice, model, voiceFromAgent
@@ -252,9 +275,6 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 	argModel, _ := args["model"].(string)
 	providerName, _ := args["provider"].(string)
 
-	// Resolve voice/model via args > agent (ctx snapshot) > tenant > default.
-	voice, model, voiceFromAgent := t.resolveVoiceAndModel(ctx, argVoice, argModel)
-
 	// Read generic agent TTS params once; adapt PER-ATTEMPT below (Finding #1 CRITICAL).
 	// Storing generic keys here so each fallback provider gets its own adapted copy.
 	genericAgentParams := t.resolveAgentGenericTTSParams(ctx)
@@ -263,6 +283,12 @@ func (t *TtsTool) Execute(ctx context.Context, args map[string]any) *Result {
 	t.mu.RLock()
 	mgr := t.manager
 	t.mu.RUnlock()
+
+	effectiveProvider := providerName
+	if effectiveProvider == "" {
+		effectiveProvider = t.resolvePrimary(ctx, mgr)
+	}
+	voice, model, voiceFromAgent := t.resolveVoiceAndModel(ctx, effectiveProvider, argVoice, argModel)
 
 	// Determine format based on channel (read from ctx — thread-safe)
 	channel := ToolChannelFromCtx(ctx)
