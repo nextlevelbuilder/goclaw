@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -103,8 +104,144 @@ func isExemptable(ip net.IP) bool {
 	return false
 }
 
+// SSRFAllowedCIDRsEnv names the operator escape hatch for deployments where a
+// transparent proxy makes DNS resolution stop describing the real destination.
+const SSRFAllowedCIDRsEnv = "GOCLAW_SSRF_ALLOWED_CIDRS"
+
+// operatorAllowedCIDRs are ranges an operator has explicitly un-blocked via
+// GOCLAW_SSRF_ALLOWED_CIDRS (comma-separated). Empty by default, which leaves
+// the block list exactly as it ships.
+//
+// The case this exists for: a TUN/fake-IP proxy answers every DNS query with a
+// synthetic address out of a reserved range and then routes that address to the
+// real public host. The resolved IP is a handle, not a destination, so the
+// "resolve, then judge the IP" model this package is built on reports a false
+// positive on traffic that never touches an internal network. Without a way to
+// say so, web_fetch is unusable in that environment and no configuration can
+// fix it.
+//
+// This widens what LLM- and admin-supplied URLs can reach, so it is opt-in,
+// logged at startup, and refuses the ranges an SSRF actually targets.
+var operatorAllowedCIDRs []*net.IPNet
+
+// neverAllowlistableCIDRs can never be un-blocked, whatever the operator sets.
+// Cloud metadata (169.254.169.254) is the canonical SSRF target and must stay
+// unreachable; multicast and unspecified are meaningless as proxy handles.
+// This mirrors what exemptableCIDRs already refuses to cover.
+var neverAllowlistableCIDRs []*net.IPNet
+
+func init() {
+	for _, cidr := range []string{
+		"169.254.0.0/16", "fe80::/10", // link-local incl. cloud metadata
+		"224.0.0.0/4", "ff00::/8", // multicast
+		"0.0.0.0/32", "::/128", // unspecified
+	} {
+		_, ipNet, err := net.ParseCIDR(cidr)
+		if err != nil {
+			panic(fmt.Sprintf("security: bad never-allowlistable CIDR %q: %v", cidr, err))
+		}
+		neverAllowlistableCIDRs = append(neverAllowlistableCIDRs, ipNet)
+	}
+
+	nets, rejected := parseOperatorAllowedCIDRs(os.Getenv(SSRFAllowedCIDRsEnv))
+	operatorAllowedCIDRs = nets
+	operatorAllowlistRejected = rejected
+}
+
+// operatorAllowlistRejected records entries refused at parse time so startup
+// can report them. A silently dropped entry would read as "configured".
+var operatorAllowlistRejected []string
+
+// parseOperatorAllowedCIDRs parses a comma-separated CIDR list, dropping
+// entries that are malformed or that overlap a never-allowlistable range.
+// Returns the accepted nets and a human-readable reason per rejected entry.
+func parseOperatorAllowedCIDRs(spec string) (nets []*net.IPNet, rejected []string) {
+	for _, raw := range strings.Split(spec, ",") {
+		entry := strings.TrimSpace(raw)
+		if entry == "" {
+			continue
+		}
+		_, ipNet, err := net.ParseCIDR(entry)
+		if err != nil {
+			rejected = append(rejected, fmt.Sprintf("%s (not a CIDR)", entry))
+			continue
+		}
+		if blocked := overlappingNeverAllowlistable(ipNet); blocked != "" {
+			rejected = append(rejected, fmt.Sprintf("%s (overlaps %s)", entry, blocked))
+			continue
+		}
+		nets = append(nets, ipNet)
+	}
+	return nets, rejected
+}
+
+// overlappingNeverAllowlistable returns the never-allowlistable range that
+// candidate overlaps, or "" when it overlaps none. Both directions are checked
+// so neither a wider nor a narrower entry can slip a protected range through.
+func overlappingNeverAllowlistable(candidate *net.IPNet) string {
+	for _, protected := range neverAllowlistableCIDRs {
+		if candidate.Contains(protected.IP) || protected.Contains(candidate.IP) {
+			return protected.String()
+		}
+	}
+	return ""
+}
+
+// SetOperatorAllowlistForTest replaces the operator allowlist with the parsed
+// form of spec and returns a function restoring the previous value.
+//
+// This function MUST only be called from test code, and not from tests marked
+// t.Parallel(): unlike allowLoopbackForTest it swaps slices rather than an
+// atomic. It exists so packages that carry their own SSRF gate — internal/tools
+// — can cover the allowlist without duplicating the parser.
+func SetOperatorAllowlistForTest(spec string) func() {
+	prevNets, prevRejected := operatorAllowedCIDRs, operatorAllowlistRejected
+	operatorAllowedCIDRs, operatorAllowlistRejected = parseOperatorAllowedCIDRs(spec)
+	return func() {
+		operatorAllowedCIDRs, operatorAllowlistRejected = prevNets, prevRejected
+	}
+}
+
+// OperatorAllowlistStatus reports the configured allowlist and any rejected
+// entries, for the startup warning. Callers must not mutate the result.
+func OperatorAllowlistStatus() (allowed []string, rejected []string) {
+	for _, n := range operatorAllowedCIDRs {
+		allowed = append(allowed, n.String())
+	}
+	return allowed, operatorAllowlistRejected
+}
+
+// isOperatorAllowed reports whether an operator has un-blocked ip's range.
+func isOperatorAllowed(ip net.IP) bool {
+	for _, cidr := range operatorAllowedCIDRs {
+		if cidr.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsOperatorAllowed reports whether an operator has explicitly un-blocked ip's
+// range via GOCLAW_SSRF_ALLOWED_CIDRS.
+//
+// Exported for the separate SSRF check in internal/tools, which carries its own
+// private-range list. Both gates have to honour the same operator setting, or
+// relaxing one leaves the other rejecting the very traffic it was configured
+// to permit.
+func IsOperatorAllowed(ip net.IP) bool {
+	return isOperatorAllowed(ip)
+}
+
 // isBlocked returns true if ip falls within any blocked CIDR.
+//
+// The operator allowlist is consulted first and deliberately applies here
+// rather than only in validate(): NewSafeClient re-checks the pinned IP at dial
+// time through this same function, so relaxing only the pre-flight check would
+// pass validation and then fail to connect.
 func isBlocked(ip net.IP) bool {
+	if isOperatorAllowed(ip) {
+		return false
+	}
 	for _, cidr := range blockedCIDRs {
 		if cidr.Contains(ip) {
 			return true

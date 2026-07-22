@@ -16,6 +16,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/heartbeat"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
+	"github.com/nextlevelbuilder/goclaw/internal/security"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tasks"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -293,6 +294,16 @@ func (d *gatewayDeps) runLifecycle(
 		slog.Info("cors: allowed_origins configured", "origins", d.cfg.Gateway.AllowedOrigins)
 	} else if !edition.Current().IsLimited() {
 		slog.Warn("security.cors_open: no allowed_origins configured — all WebSocket origins accepted. Set gateway.allowed_origins or GOCLAW_ALLOWED_ORIGINS for production")
+	}
+	if allowed, rejected := security.OperatorAllowlistStatus(); len(allowed) > 0 || len(rejected) > 0 {
+		if len(allowed) > 0 {
+			slog.Warn("security.ssrf_allowlist: SSRF protection relaxed for operator-configured ranges — tool- and admin-supplied URLs may reach them",
+				"env", security.SSRFAllowedCIDRsEnv, "allowed", allowed)
+		}
+		if len(rejected) > 0 {
+			slog.Warn("security.ssrf_allowlist_rejected: entries refused; cloud-metadata, multicast and unspecified ranges can never be allowlisted",
+				"env", security.SSRFAllowedCIDRsEnv, "rejected", rejected)
+		}
 	}
 
 	if err := d.server.Start(ctx); err != nil {
