@@ -9,7 +9,15 @@ var routingMetaKeys = []string{
 	"local_key",              // composite chat-id suffix
 	"group_id",               // legacy group identifier
 	"feishu_reply_target_id", // feishu/lark thread reply routing
-	"fb_mode",                // facebook messenger vs comment routing
+	// DingTalk replies prefer the inbound message's session webhook, which is
+	// cheap but per-message and short-lived; once it expires the channel falls
+	// back to the proactive robot OpenAPI, which needs the conversation id and
+	// whether the peer is a group.
+	"dingtalk_session_webhook",
+	"dingtalk_webhook_expires_at",
+	"dingtalk_conversation_id",
+	"dingtalk_chat_type",
+	"fb_mode", // facebook messenger vs comment routing
 	"sender_id",              // facebook sender for first-inbox / pancake sender for private-reply
 	"page_id",                // facebook page routing
 	"reply_to_comment_id",    // facebook/pancake comment reply target

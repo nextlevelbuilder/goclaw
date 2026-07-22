@@ -22,6 +22,7 @@ const CHANNEL_PREFIX_LABELS: Array<[string, string]> = [
   ["zalo-oa", "Zalo OA"],
   ["bitrix24", "Bitrix24"],
   ["bitrix", "Bitrix24"],
+  ["dingtalk", "DingTalk"],
   ["telegram", "Telegram"],
   ["tele", "Telegram"],
   ["tg", "Telegram"],

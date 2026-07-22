@@ -1,5 +1,6 @@
 export const CHANNEL_TYPES = [
   { value: "bitrix24", label: "Bitrix24" },
+  { value: "dingtalk", label: "DingTalk" },
   { value: "discord", label: "Discord" },
   { value: "facebook", label: "Facebook" },
   { value: "feishu", label: "Feishu / Lark" },
