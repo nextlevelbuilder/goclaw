@@ -102,11 +102,26 @@ func (h *AgentsHandler) handleSubmitConnectionLoginCode(w http.ResponseWriter, r
 	// Pass the code via env (never interpolated into the shell).
 	res, err := sb.Exec(r.Context(), []string{"bash", "-lc", submitCodeScript}, "", sandbox.WithEnv(map[string]string{"CODE": code}))
 	if err != nil || res.ExitCode != 0 {
-		writeError(w, http.StatusBadGateway, protocol.ErrInternal, "login did not complete — the code may be wrong or expired; start again")
+		msg := "login did not complete — start the login again"
+		if res != nil && res.ExitCode == 2 {
+			msg = "that code was invalid or expired — start the login again"
+		}
+		// stderr is safe to log (script diagnostics, never the token); stdout is
+		// not logged here — on a token-less run it could still contain one.
+		stderr := ""
+		if res != nil {
+			stderr = res.Stderr
+		}
+		slog.Warn("connected_login_submit_failed", "connection", conn.ID, "error", err, "exit", exitOf(res), "stderr", truncate(stderr, 200))
+		h.releaseLoginSandbox(conn.ID)
+		writeError(w, http.StatusBadGateway, protocol.ErrInternal, msg)
 		return
 	}
 	token := extractOAuthToken(res.Stdout)
 	if token == "" {
+		// Don't log stdout content (may contain the token); length only.
+		slog.Warn("connected_login_no_token", "connection", conn.ID, "stdout_len", len(res.Stdout))
+		h.releaseLoginSandbox(conn.ID)
 		writeError(w, http.StatusBadGateway, protocol.ErrInternal, "login finished but no token was returned; start again")
 		return
 	}
@@ -205,11 +220,14 @@ exit 1`
 // the printed OAuth token.
 const submitCodeScript = `D=/tmp/claude-login
 [ -p "$D/in" ] || { echo "no login in progress" >&2; exit 1; }
-printf '%s\n' "$CODE" > "$D/in"
-for i in $(seq 1 40); do
-  T=$(sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' "$D/out" 2>/dev/null | tr -d '\r' \
-        | grep -aoE 'sk-ant-oat[0-9A-Za-z_-]+' | tail -1)
+# \r (carriage return) is the Enter key in the PTY. \n (LF) does NOT submit the
+# code in Claude Code's Ink input prompt — it just fills the field and waits.
+printf '%s\r' "$CODE" > "$D/in"
+for i in $(seq 1 45); do
+  CLEAN=$(sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' "$D/out" 2>/dev/null | tr -d '\r')
+  T=$(printf '%s' "$CLEAN" | grep -aoE 'sk-ant-oat[0-9A-Za-z_-]+' | tail -1)
   [ -n "$T" ] && { printf '%s\n' "$T"; exit 0; }
+  printf '%s' "$CLEAN" | grep -qiE 'invalid code|expired|not authorized|failed to' && { echo "invalid or expired code" >&2; exit 2; }
   sleep 1
 done
 echo "timed out waiting for token" >&2

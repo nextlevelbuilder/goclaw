@@ -635,6 +635,22 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		h.syncIdentityName(r.Context(), ag, newName)
 	}
 
+	// Cascade: if the connections changed, delete stored credentials for any
+	// connection that was removed. The secret lives outside connected_agents
+	// (in the credential store), so without this it would orphan on disconnect.
+	if h.credStore != nil {
+		if rawNew, ok := allowed["connected_agents"]; ok {
+			newIDs := connectedAgentIDsFromAny(rawNew)
+			for _, c := range ag.ParseConnectedAgents() { // ag = pre-update state
+				if _, kept := newIDs[c.ID]; !kept {
+					if err := h.credStore.Delete(r.Context(), id, c.ID); err != nil {
+						slog.Warn("connected_agent_credential_cascade_delete_failed", "agent", id, "connection", c.ID, "error", err)
+					}
+				}
+			}
+		}
+	}
+
 	// Invalidate caches: agent Loop + bootstrap files
 	h.emitCacheInvalidate(bus.CacheKindAgent, ag.AgentKey)
 	h.emitCacheInvalidate(bus.CacheKindBootstrap, id.String())
