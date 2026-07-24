@@ -24,6 +24,7 @@ type fakeManager struct{ sb *fakeSandbox }
 func (m *fakeManager) Get(context.Context, string, string, *sandbox.Config) (sandbox.Sandbox, error) {
 	return m.sb, nil
 }
+func (m *fakeManager) BaseConfig() sandbox.Config            { return sandbox.Config{} }
 func (m *fakeManager) Release(context.Context, string) error { return nil }
 func (m *fakeManager) ReleaseAll(context.Context) error      { return nil }
 func (m *fakeManager) Stop()                                 {}

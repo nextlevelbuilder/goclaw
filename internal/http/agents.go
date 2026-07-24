@@ -19,6 +19,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -46,6 +47,8 @@ type AgentsHandler struct {
 	summoner         *AgentSummoner                      // LLM-based agent setup (nil = disabled)
 	isOwner          func(string) bool                   // checks if user ID is a system owner (nil = no owners configured)
 	credStore        store.ConnectedAgentCredentialStore // per-connection BYOK creds (nil = feature off)
+	sandboxMgr       sandbox.Manager                     // for "Log in with Claude" (nil = login disabled)
+	sandboxWorkspace string                              // workspace path for login containers
 }
 
 // NewAgentsHandler creates a handler for agent management endpoints.
@@ -86,6 +89,14 @@ func (h *AgentsHandler) SetEpisodicStore(ep store.EpisodicStore) {
 // 501 and delegate_external falls back to the platform credential.
 func (h *AgentsHandler) SetConnectedAgentCredentialStore(cs store.ConnectedAgentCredentialStore) {
 	h.credStore = cs
+}
+
+// SetSandbox attaches the sandbox manager + workspace used by the "Log in with
+// Claude" flow (runs claude setup-token in a per-connection container). nil is
+// safe — the login endpoints then return 501.
+func (h *AgentsHandler) SetSandbox(mgr sandbox.Manager, workspace string) {
+	h.sandboxMgr = mgr
+	h.sandboxWorkspace = workspace
 }
 
 // SetVaultStore attaches the vault store for Knowledge Vault import.
@@ -153,6 +164,9 @@ func (h *AgentsHandler) RegisterRoutes(mux *http.ServeMux) {
 	// Connected-agent credentials (BYOK) — admin+; secret write, never returned
 	mux.HandleFunc("PUT /v1/agents/{id}/connections/{connID}/credential", h.adminMiddleware(h.handleSetConnectionCredential))
 	mux.HandleFunc("DELETE /v1/agents/{id}/connections/{connID}/credential", h.adminMiddleware(h.handleDeleteConnectionCredential))
+	// "Log in with Claude" (subscription OAuth) — admin+; two-phase login
+	mux.HandleFunc("POST /v1/agents/{id}/connections/{connID}/login", h.adminMiddleware(h.handleStartConnectionLogin))
+	mux.HandleFunc("POST /v1/agents/{id}/connections/{connID}/login/code", h.adminMiddleware(h.handleSubmitConnectionLoginCode))
 	// Agent operations (admin+)
 	mux.HandleFunc("POST /v1/agents/{id}/regenerate", h.adminMiddleware(h.handleRegenerate))
 	mux.HandleFunc("POST /v1/agents/{id}/resummon", h.adminMiddleware(h.handleResummon))
