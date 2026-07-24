@@ -262,6 +262,13 @@ func NewDockerManager(cfg Config) *DockerManager {
 	return m
 }
 
+// BaseConfig returns a copy of the manager's global sandbox config.
+func (m *DockerManager) BaseConfig() Config {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.config
+}
+
 // Get returns an existing sandbox or creates a new one for the given key.
 // If cfgOverride is non-nil, it is used for new containers instead of the global config.
 func (m *DockerManager) Get(ctx context.Context, key string, workspace string, cfgOverride *Config) (Sandbox, error) {

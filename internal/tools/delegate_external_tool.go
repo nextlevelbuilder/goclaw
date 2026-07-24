@@ -22,6 +22,10 @@ type DelegateExternalTool struct {
 	agents     store.AgentCRUDStore
 	sandboxMgr sandbox.Manager
 	workspace  string
+	// creds holds per-connection BYOK credentials (a user's own API key or
+	// subscription OAuth token). Resolved first; the platform creds below are the
+	// fallback. May be nil (e.g. desktop/SQLite) → always fall back to platform.
+	creds store.ConnectedAgentCredentialStore
 	// Platform Anthropic credentials, used when a connection has no credential
 	// of its own. Either may be empty; at least one is required to run Claude
 	// Code. When both are set the OAuth token (subscription billing) is
@@ -31,12 +35,14 @@ type DelegateExternalTool struct {
 }
 
 // NewDelegateExternalTool wires the tool. sandboxMgr may be nil (no sandbox →
-// external delegation returns a clear error rather than crashing).
-func NewDelegateExternalTool(agents store.AgentCRUDStore, sandboxMgr sandbox.Manager, workspace, anthropicKey, anthropicOAuthToken string) *DelegateExternalTool {
+// external delegation returns a clear error rather than crashing). creds may be
+// nil (per-connection BYOK unavailable → platform fallback only).
+func NewDelegateExternalTool(agents store.AgentCRUDStore, sandboxMgr sandbox.Manager, workspace string, creds store.ConnectedAgentCredentialStore, anthropicKey, anthropicOAuthToken string) *DelegateExternalTool {
 	return &DelegateExternalTool{
 		agents:              agents,
 		sandboxMgr:          sandboxMgr,
 		workspace:           workspace,
+		creds:               creds,
 		anthropicKey:        anthropicKey,
 		anthropicOAuthToken: anthropicOAuthToken,
 	}
@@ -123,6 +129,38 @@ func findConnection(conns []config.ConnectedAgentSpec, arg string) *config.Conne
 	return nil
 }
 
+// injectConnectionCredential loads THIS connection's own BYOK credential (if
+// any) and injects it into env per its descriptor. Returns true when a usable
+// credential was applied; false → the caller falls back to the platform
+// credential. Never returns the secret to the caller.
+func (t *DelegateExternalTool) injectConnectionCredential(ctx context.Context, conn *config.ConnectedAgentSpec, env map[string]string) bool {
+	if t.creds == nil {
+		return false
+	}
+	agentID := store.AgentIDFromContext(ctx)
+	if agentID == uuid.Nil {
+		return false
+	}
+	cred, err := t.creds.Get(ctx, agentID, conn.ID)
+	if err != nil {
+		slog.Warn("security.connected_agent_credential_load_failed", "connection", conn.ID, "error", err)
+		return false
+	}
+	if cred == nil || cred.Secret == "" {
+		return false
+	}
+	kind, target, ok := strings.Cut(cred.Inject, ":")
+	if ok && kind == "env" && target != "" {
+		env[target] = cred.Secret
+		return true
+	}
+	// file:PATH injection (for file-based CLIs like Codex/Gemini) is not wired
+	// yet; fall back to a platform credential rather than failing the run.
+	slog.Warn("connected-agent credential injection descriptor not supported yet",
+		"connection", conn.ID, "inject", cred.Inject)
+	return false
+}
+
 // runCLI runs a connected CLI agent inside the sandbox. Network is enabled ONLY
 // for this exec (regular code exec stays --network none); the sandbox container
 // is keyed separately so it never shares the network-isolated exec container.
@@ -136,19 +174,23 @@ func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.Connecte
 		// NOTE: not --bare, so CLAUDE_CODE_OAUTH_TOKEN is honoured (bare mode
 		// ignores it and requires ANTHROPIC_API_KEY).
 		command = []string{"claude", "-p", task, "--permission-mode", "bypassPermissions", "--output-format", "text"}
-		// Resolve exactly one credential and inject only its env var. The CLI's
-		// own precedence has ANTHROPIC_API_KEY beating CLAUDE_CODE_OAUTH_TOKEN,
-		// so setting both would make the choice implicit — we make it explicit.
-		// Order: OAuth token (subscription billing) → API key (metered).
-		// TODO(byok): a per-connection credential (conn.CredentialRef) resolved
-		// here would win over both platform creds below.
+		// Credential resolution, in order:
+		//   1. per-connection BYOK credential (the user's own key/token)
+		//   2. platform subscription OAuth token (GOCLAW_ANTHROPIC_OAUTH_TOKEN)
+		//   3. platform API key (GOCLAW_ANTHROPIC_API_KEY)
+		// We inject exactly ONE credential per exec: the CLI's own precedence has
+		// ANTHROPIC_API_KEY beating CLAUDE_CODE_OAUTH_TOKEN, so setting more than
+		// one would make the choice implicit. NOTE: not --bare, so the OAuth token
+		// env var is honoured (bare mode ignores it).
 		switch {
+		case t.injectConnectionCredential(ctx, conn, env):
+			// used the connection's own credential
 		case t.anthropicOAuthToken != "":
 			env["CLAUDE_CODE_OAUTH_TOKEN"] = t.anthropicOAuthToken
 		case t.anthropicKey != "":
 			env["ANTHROPIC_API_KEY"] = t.anthropicKey
 		default:
-			return ErrorResult("Claude Code needs an Anthropic credential — set the platform subscription token (GOCLAW_ANTHROPIC_OAUTH_TOKEN), the platform API key (GOCLAW_ANTHROPIC_API_KEY), or a connection credential")
+			return ErrorResult("Claude Code needs an Anthropic credential — connect the agent with your Anthropic API key or a \"Log in with Claude\" subscription, or set a platform credential (GOCLAW_ANTHROPIC_OAUTH_TOKEN / GOCLAW_ANTHROPIC_API_KEY)")
 		}
 	default:
 		return ErrorResult(fmt.Sprintf("connected CLI provider %q is not available in the sandbox yet", conn.Provider))

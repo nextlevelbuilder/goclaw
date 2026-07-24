@@ -19,6 +19,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -31,20 +32,23 @@ type AgentsHandler struct {
 	providerReg      *providers.Registry
 	db               *sql.DB
 	tracingStore     store.TracingStore
-	memoryStore      store.MemoryStore         // for import (nil = disabled)
-	kgStore          store.KnowledgeGraphStore // for import (nil = disabled)
-	episodicStore    store.EpisodicStore       // for import (nil in SQLite/lite builds)
-	vaultStore       store.VaultStore          // for vault import (nil = disabled)
-	toolsReg         ToolPreviewLister          // for system prompt preview tool resolution (nil = fallback)
-	skillsLoader     SkillPreviewBuilder        // for system prompt preview pinned skills (nil = skip)
-	skillAccessStore store.SkillAccessStore     // for system prompt preview skill filtering (nil = skip)
-	teamStore        store.TeamStore           // for system prompt preview team context (nil = skip)
-	agentLinkStore   store.AgentLinkStore      // for system prompt preview delegation targets (nil = skip)
-	defaultWorkspace string                   // default workspace path template (e.g. "~/.goclaw/workspace")
-	dataDir          string                   // resolved data directory (e.g. "~/.goclaw/data") — for team workspace export
-	msgBus           *bus.MessageBus          // for cache invalidation events (nil = no events)
-	summoner         *AgentSummoner           // LLM-based agent setup (nil = disabled)
-	isOwner          func(string) bool        // checks if user ID is a system owner (nil = no owners configured)
+	memoryStore      store.MemoryStore                   // for import (nil = disabled)
+	kgStore          store.KnowledgeGraphStore           // for import (nil = disabled)
+	episodicStore    store.EpisodicStore                 // for import (nil in SQLite/lite builds)
+	vaultStore       store.VaultStore                    // for vault import (nil = disabled)
+	toolsReg         ToolPreviewLister                   // for system prompt preview tool resolution (nil = fallback)
+	skillsLoader     SkillPreviewBuilder                 // for system prompt preview pinned skills (nil = skip)
+	skillAccessStore store.SkillAccessStore              // for system prompt preview skill filtering (nil = skip)
+	teamStore        store.TeamStore                     // for system prompt preview team context (nil = skip)
+	agentLinkStore   store.AgentLinkStore                // for system prompt preview delegation targets (nil = skip)
+	defaultWorkspace string                              // default workspace path template (e.g. "~/.goclaw/workspace")
+	dataDir          string                              // resolved data directory (e.g. "~/.goclaw/data") — for team workspace export
+	msgBus           *bus.MessageBus                     // for cache invalidation events (nil = no events)
+	summoner         *AgentSummoner                      // LLM-based agent setup (nil = disabled)
+	isOwner          func(string) bool                   // checks if user ID is a system owner (nil = no owners configured)
+	credStore        store.ConnectedAgentCredentialStore // per-connection BYOK creds (nil = feature off)
+	sandboxMgr       sandbox.Manager                     // for "Log in with Claude" (nil = login disabled)
+	sandboxWorkspace string                              // workspace path for login containers
 }
 
 // NewAgentsHandler creates a handler for agent management endpoints.
@@ -78,6 +82,21 @@ func (h *AgentsHandler) SetImportStores(mem store.MemoryStore, kg store.Knowledg
 // Not available in SQLite/lite builds — nil is safe (episodic import is skipped).
 func (h *AgentsHandler) SetEpisodicStore(ep store.EpisodicStore) {
 	h.episodicStore = ep
+}
+
+// SetConnectedAgentCredentialStore attaches the encrypted per-connection
+// credential store (BYOK). nil is safe — the credential endpoints then return
+// 501 and delegate_external falls back to the platform credential.
+func (h *AgentsHandler) SetConnectedAgentCredentialStore(cs store.ConnectedAgentCredentialStore) {
+	h.credStore = cs
+}
+
+// SetSandbox attaches the sandbox manager + workspace used by the "Log in with
+// Claude" flow (runs claude setup-token in a per-connection container). nil is
+// safe — the login endpoints then return 501.
+func (h *AgentsHandler) SetSandbox(mgr sandbox.Manager, workspace string) {
+	h.sandboxMgr = mgr
+	h.sandboxWorkspace = workspace
 }
 
 // SetVaultStore attaches the vault store for Knowledge Vault import.
@@ -142,6 +161,13 @@ func (h *AgentsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/agents/{id}/shares", h.authMiddleware(h.handleListShares))
 	mux.HandleFunc("POST /v1/agents/{id}/shares", h.adminMiddleware(h.handleShare))
 	mux.HandleFunc("DELETE /v1/agents/{id}/shares/{userID}", h.adminMiddleware(h.handleRevokeShare))
+	// Connected-agent credentials (BYOK) — admin+; secret write, never returned
+	mux.HandleFunc("GET /v1/agents/{id}/connections/credentials", h.authMiddleware(h.handleListConnectionCredentials))
+	mux.HandleFunc("PUT /v1/agents/{id}/connections/{connID}/credential", h.adminMiddleware(h.handleSetConnectionCredential))
+	mux.HandleFunc("DELETE /v1/agents/{id}/connections/{connID}/credential", h.adminMiddleware(h.handleDeleteConnectionCredential))
+	// "Log in with Claude" (subscription OAuth) — admin+; two-phase login
+	mux.HandleFunc("POST /v1/agents/{id}/connections/{connID}/login", h.adminMiddleware(h.handleStartConnectionLogin))
+	mux.HandleFunc("POST /v1/agents/{id}/connections/{connID}/login/code", h.adminMiddleware(h.handleSubmitConnectionLoginCode))
 	// Agent operations (admin+)
 	mux.HandleFunc("POST /v1/agents/{id}/regenerate", h.adminMiddleware(h.handleRegenerate))
 	mux.HandleFunc("POST /v1/agents/{id}/resummon", h.adminMiddleware(h.handleResummon))

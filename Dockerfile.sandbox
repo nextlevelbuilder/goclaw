@@ -12,6 +12,8 @@ RUN apt-get update \
     python3 \
     python3-pip \
     ripgrep \
+    util-linux \
+    bsdextrautils \
   && rm -rf /var/lib/apt/lists/*
 
 # Pre-install the libraries agents reach for on data/office tasks so they don't

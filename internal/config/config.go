@@ -463,9 +463,17 @@ type ConnectedAgentSpec struct {
 	Provider string `json:"provider,omitempty"` // external_cli: claude_code|aider|codex|gemini · aos_agent: target agent_key · mcp/a2a/http: endpoint id
 	Mode     string `json:"mode,omitempty"`     // delegate (default) | engine
 	Endpoint string `json:"endpoint,omitempty"` // for mcp/a2a/http transports
-	// CredentialRef references a stored connector credential; empty = use the
-	// platform key for that provider (e.g. the platform Anthropic key).
+	// CredentialRef references a per-connection credential held in the encrypted
+	// credential store (never inline — connected_agents is returned to clients).
+	// Empty = fall back to the platform key/token for that provider.
 	CredentialRef string `json:"credential_ref,omitempty"`
+	// CredentialType records WHAT kind of credential is stored, so the runtime
+	// knows how to inject it and the UI knows what to show. Non-secret.
+	//   "" = none (platform fallback) · "api_key" · "oauth" (subscription)
+	CredentialType string `json:"credential_type,omitempty"`
+	// CredentialStatus is a UI-facing, non-secret state for the credential:
+	//   "" = none · "pending" (OAuth login started, not finished) · "connected"
+	CredentialStatus string `json:"credential_status,omitempty"`
 }
 
 // AgentSpec is the per-agent configuration override.

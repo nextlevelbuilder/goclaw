@@ -203,6 +203,11 @@ type Manager interface {
 	// If cfgOverride is non-nil, it is used instead of the global config for new containers.
 	Get(ctx context.Context, key string, workspace string, cfgOverride *Config) (Sandbox, error)
 
+	// BaseConfig returns a copy of the manager's global sandbox config. Callers
+	// that need to run a one-off container with a tweaked setting (e.g. network
+	// enabled) start from this so the image and other defaults are preserved.
+	BaseConfig() Config
+
 	// Release destroys a sandbox by key.
 	Release(ctx context.Context, key string) error
 
