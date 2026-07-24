@@ -545,7 +545,7 @@ func wireExtras(
 	// connected_agents at runtime; platform Anthropic key used when a connection
 	// has no credential of its own.
 	if stores.Agents != nil {
-		extTool := tools.NewDelegateExternalTool(stores.Agents, sandboxMgr, workspace, appCfg.Providers.Anthropic.APIKey, appCfg.Providers.Anthropic.OAuthToken)
+		extTool := tools.NewDelegateExternalTool(stores.Agents, sandboxMgr, workspace, stores.ConnectedAgentCredentials, appCfg.Providers.Anthropic.APIKey, appCfg.Providers.Anthropic.OAuthToken)
 		toolsReg.Register(extTool)
 		slog.Info("delegate_external tool wired", "sandbox", sandboxMgr != nil)
 	}

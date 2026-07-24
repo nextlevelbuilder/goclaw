@@ -32,6 +32,7 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 		}
 		agentsH = httpapi.NewAgentsHandler(stores.Agents, stores.Providers, providerReg, stores.DB, stores.Tracing, defaultWorkspace, msgBus, summoner, isOwner)
 		agentsH.SetImportStores(stores.Memory, stores.KnowledgeGraph)
+		agentsH.SetConnectedAgentCredentialStore(stores.ConnectedAgentCredentials)
 		agentsH.SetDataDir(dataDir)
 	}
 
