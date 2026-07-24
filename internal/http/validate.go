@@ -69,6 +69,8 @@ var agentAllowedFields = map[string]bool{
 	// website's Manage modal can save edits to existing agents — clone
 	// pre-fills from this same field on the source.
 	"system_prompt": true,
+	// connected_agents: external/other agents this agent can delegate to.
+	"connected_agents": true,
 }
 
 var providerAllowedFields = map[string]bool{

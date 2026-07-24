@@ -74,6 +74,7 @@ type AgentData struct {
 	CompactionConfig json.RawMessage `json:"compaction_config,omitempty" db:"compaction_config"`
 	ContextPruning   json.RawMessage `json:"context_pruning,omitempty" db:"context_pruning"`
 	OtherConfig      json.RawMessage `json:"other_config,omitempty" db:"other_config"` // extensibility bag for future fields
+	ConnectedAgents  json.RawMessage `json:"connected_agents,omitempty" db:"connected_agents"` // JSON array of config.ConnectedAgentSpec — external/other agents this agent can delegate to
 
 	// Promoted from other_config (migration 000037 v3)
 	Emoji               string          `json:"emoji" db:"emoji"`
@@ -131,6 +132,19 @@ func (a *AgentData) ParseSubagentsConfig() *config.SubagentsConfig {
 		return nil
 	}
 	return &c
+}
+
+// ParseConnectedAgents returns the external/other agents wired into this agent
+// (empty if none). Malformed JSON yields nil so callers degrade to "no reach".
+func (a *AgentData) ParseConnectedAgents() []config.ConnectedAgentSpec {
+	if len(a.ConnectedAgents) == 0 {
+		return nil
+	}
+	var specs []config.ConnectedAgentSpec
+	if json.Unmarshal(a.ConnectedAgents, &specs) != nil {
+		return nil
+	}
+	return specs
 }
 
 // ParseCompactionConfig returns per-agent compaction config, or nil if not configured.

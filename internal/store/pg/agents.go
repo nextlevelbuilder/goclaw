@@ -95,7 +95,8 @@ const agentSelectCols = `id, agent_key, display_name, frontmatter, owner_id, pro
 		 reasoning_config, workspace_sharing, chatgpt_oauth_routing,
 		 shell_deny_groups, kg_dedup_config,
 		 COALESCE(system_prompt, '') AS system_prompt,
-		 agent_type, is_default, is_locked, status, budget_monthly_cents, created_at, updated_at, tenant_id`
+		 agent_type, is_default, is_locked, status, budget_monthly_cents, created_at, updated_at, tenant_id,
+		 connected_agents`
 
 func (s *PGAgentStore) Create(ctx context.Context, agent *store.AgentData) error {
 	if agent.ID == uuid.Nil {
@@ -132,9 +133,10 @@ func (s *PGAgentStore) Create(ctx context.Context, agent *store.AgentData) error
 		 self_evolve, skill_evolve, skill_nudge_interval,
 		 reasoning_config, workspace_sharing, chatgpt_oauth_routing,
 		 shell_deny_groups, kg_dedup_config, system_prompt,
-		 agent_type, is_default, is_locked, status, budget_monthly_cents, created_at, updated_at, tenant_id)
+		 agent_type, is_default, is_locked, status, budget_monthly_cents, created_at, updated_at, tenant_id,
+		 connected_agents)
 		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
-		         $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39)`,
+		         $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40)`,
 		agent.ID, agent.AgentKey, agent.DisplayName, sql.NullString{String: agent.Frontmatter, Valid: agent.Frontmatter != ""}, agent.OwnerID, agent.Provider, agent.Model,
 		agent.ContextWindow, agent.MaxToolIterations, agent.Workspace, agent.RestrictToWorkspace,
 		jsonOrEmpty(agent.ToolsConfig), jsonOrNull(agent.SandboxConfig), jsonOrNull(agent.SubagentsConfig), jsonOrNull(agent.MemoryConfig),
@@ -144,6 +146,7 @@ func (s *PGAgentStore) Create(ctx context.Context, agent *store.AgentData) error
 		jsonOrEmpty(agent.ReasoningConfig), jsonOrEmpty(agent.WorkspaceSharing), jsonOrEmpty(agent.ChatGPTOAuthRouting),
 		jsonOrEmpty(agent.ShellDenyGroups), jsonOrEmpty(agent.KGDedupConfig), sysPrompt,
 		agent.AgentType, agent.IsDefault, agent.IsLocked, agent.Status, agent.BudgetMonthlyCents, now, now, tenantID,
+		jsonOrNull(agent.ConnectedAgents),
 	)
 	if err != nil {
 		return err
@@ -521,6 +524,7 @@ func scanAgentRow(row agentRowScanner) (*store.AgentData, error) {
 	// pgx: scan nullable JSONB into *[]byte (NOT *json.RawMessage — pgx can't scan NULL into defined types)
 	var toolsCfg, sandboxCfg, subagentsCfg, memoryCfg, compactionCfg, pruningCfg, otherCfg *[]byte
 	var reasoningCfg, wsCfg, oauthCfg, shellCfg, kgCfg *[]byte
+	var connectedAgents *[]byte
 	// system_prompt is scanned as plain string (COALESCE in SELECT) so we
 	// don't need sql.NullString gymnastics on the scan side.
 	err := row.Scan(&d.ID, &d.AgentKey, &d.DisplayName, &frontmatter, &d.OwnerID, &d.Provider, &d.Model,
@@ -529,9 +533,13 @@ func scanAgentRow(row agentRowScanner) (*store.AgentData, error) {
 		&d.Emoji, &d.AgentDescription, &d.ThinkingLevel, &d.MaxTokens,
 		&d.SelfEvolve, &d.SkillEvolve, &d.SkillNudgeInterval,
 		&reasoningCfg, &wsCfg, &oauthCfg, &shellCfg, &kgCfg, &d.SystemPrompt,
-		&d.AgentType, &d.IsDefault, &d.IsLocked, &d.Status, &d.BudgetMonthlyCents, &d.CreatedAt, &d.UpdatedAt, &d.TenantID)
+		&d.AgentType, &d.IsDefault, &d.IsLocked, &d.Status, &d.BudgetMonthlyCents, &d.CreatedAt, &d.UpdatedAt, &d.TenantID,
+		&connectedAgents)
 	if err != nil {
 		return nil, err
+	}
+	if connectedAgents != nil {
+		d.ConnectedAgents = *connectedAgents
 	}
 	if frontmatter.Valid {
 		d.Frontmatter = frontmatter.String
