@@ -136,6 +136,25 @@ func findConnectedAgent(agent *store.AgentData, connID string) *config.Connected
 	return nil
 }
 
+// connectedAgentIDsFromAny extracts the set of connection ids from a
+// connected_agents update value (a JSON array of specs as decoded into `any`).
+func connectedAgentIDsFromAny(v any) map[string]struct{} {
+	ids := map[string]struct{}{}
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return ids
+	}
+	var specs []config.ConnectedAgentSpec
+	if json.Unmarshal(raw, &specs) == nil {
+		for _, s := range specs {
+			if s.ID != "" {
+				ids[s.ID] = struct{}{}
+			}
+		}
+	}
+	return ids
+}
+
 // injectForConnection maps (provider, credType) to the sandbox injection
 // descriptor. Empty = unsupported combination.
 func injectForConnection(provider, credType string) string {
