@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 26
+const SchemaVersion = 27
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -520,6 +520,9 @@ CREATE TRIGGER IF NOT EXISTS trg_vault_docs_scope_consistency_upd
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);`,
+
+	// Version 26 → 27: agents.connected_agents (mirrors PG migration 000079).
+	26: `ALTER TABLE agents ADD COLUMN connected_agents TEXT;`,
 }
 
 // addHooksTables is the SQLite incremental migration for schema v19 → v20.

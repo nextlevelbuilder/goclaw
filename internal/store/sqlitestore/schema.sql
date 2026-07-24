@@ -116,6 +116,7 @@ CREATE TABLE IF NOT EXISTS agents (
     compaction_config     TEXT,
     context_pruning       TEXT,
     other_config          TEXT NOT NULL DEFAULT '{}',
+    connected_agents      TEXT,
     emoji                 TEXT NOT NULL DEFAULT '',
     agent_description     TEXT NOT NULL DEFAULT '',
     thinking_level        TEXT NOT NULL DEFAULT '',

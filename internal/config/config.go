@@ -452,6 +452,22 @@ type SubagentsConfig struct {
 	MaxTokens           int    `json:"maxTokens,omitempty"`           // per-iteration LLM response budget (default 8192)
 }
 
+// ConnectedAgentSpec is one external (or other AOS) agent wired into an agent
+// at creation time — a specialist this agent can delegate work to. Stored as a
+// JSON array in agents.connected_agents. Kept transport-agnostic so CLI tools
+// (Claude Code, Aider…), other AOS agents, and MCP/A2A/HTTP endpoints all fit.
+type ConnectedAgentSpec struct {
+	ID       string `json:"id"`                 // stable connection id (client-generated)
+	Kind     string `json:"kind"`               // external_cli | aos_agent | mcp | a2a | http
+	Name     string `json:"name"`               // display label, e.g. "Claude Code"
+	Provider string `json:"provider,omitempty"` // external_cli: claude_code|aider|codex|gemini · aos_agent: target agent_key · mcp/a2a/http: endpoint id
+	Mode     string `json:"mode,omitempty"`     // delegate (default) | engine
+	Endpoint string `json:"endpoint,omitempty"` // for mcp/a2a/http transports
+	// CredentialRef references a stored connector credential; empty = use the
+	// platform key for that provider (e.g. the platform Anthropic key).
+	CredentialRef string `json:"credential_ref,omitempty"`
+}
+
 // AgentSpec is the per-agent configuration override.
 // All fields optional — zero values mean "inherit from defaults".
 type AgentSpec struct {
