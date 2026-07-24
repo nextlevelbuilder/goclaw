@@ -77,6 +77,29 @@ func (h *AgentsHandler) handleSetConnectionCredential(w http.ResponseWriter, r *
 	})
 }
 
+// handleListConnectionCredentials returns the credential status of each of an
+// agent's connections — type + "connected" presence, never the secret. Lets the
+// UI show "Connected ✓" after a reload.
+func (h *AgentsHandler) handleListConnectionCredentials(w http.ResponseWriter, r *http.Request) {
+	out := map[string]map[string]string{}
+	if h.credStore == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"credentials": out})
+		return
+	}
+	agent, status, err := h.lookupAccessibleAgent(r)
+	if err != nil {
+		writeError(w, status, protocol.ErrNotFound, err.Error())
+		return
+	}
+	for _, c := range agent.ParseConnectedAgents() {
+		cred, err := h.credStore.Get(r.Context(), agent.ID, c.ID)
+		if err == nil && cred != nil {
+			out[c.ID] = map[string]string{"type": cred.Type, "status": "connected"}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"credentials": out})
+}
+
 // handleDeleteConnectionCredential removes a connection's stored credential.
 func (h *AgentsHandler) handleDeleteConnectionCredential(w http.ResponseWriter, r *http.Request) {
 	if h.credStore == nil {

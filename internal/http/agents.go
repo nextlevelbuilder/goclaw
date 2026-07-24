@@ -162,6 +162,7 @@ func (h *AgentsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/agents/{id}/shares", h.adminMiddleware(h.handleShare))
 	mux.HandleFunc("DELETE /v1/agents/{id}/shares/{userID}", h.adminMiddleware(h.handleRevokeShare))
 	// Connected-agent credentials (BYOK) — admin+; secret write, never returned
+	mux.HandleFunc("GET /v1/agents/{id}/connections/credentials", h.authMiddleware(h.handleListConnectionCredentials))
 	mux.HandleFunc("PUT /v1/agents/{id}/connections/{connID}/credential", h.adminMiddleware(h.handleSetConnectionCredential))
 	mux.HandleFunc("DELETE /v1/agents/{id}/connections/{connID}/credential", h.adminMiddleware(h.handleDeleteConnectionCredential))
 	// "Log in with Claude" (subscription OAuth) — admin+; two-phase login
