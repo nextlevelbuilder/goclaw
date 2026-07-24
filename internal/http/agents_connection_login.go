@@ -171,8 +171,10 @@ func (h *AgentsHandler) releaseLoginSandbox(connID string) {
 // startLoginScript launches `claude setup-token` under a PTY (via `script`) with
 // FIFO stdin, all disowned so it outlives this exec, then polls for the auth URL.
 // A wide PTY (stty cols) keeps the URL on one line.
-const startLoginScript = `set -e
-D=/tmp/claude-login
+// NOTE: no `set -e` — the `[ -n "$U" ] && { …; exit 0 }` test fails on early
+// loop iterations (URL not printed yet), which under `set -e` would exit the
+// script with code 1 even though it later captures the URL fine.
+const startLoginScript = `D=/tmp/claude-login
 rm -rf "$D"; mkdir -p "$D"; mkfifo "$D/in"
 setsid sh -c "sleep 1800 > $D/in" </dev/null >/dev/null 2>&1 &
 setsid script -qfc "stty cols 1000 rows 50 2>/dev/null; claude setup-token" "$D/out" < "$D/in" >/dev/null 2>&1 &
@@ -188,8 +190,7 @@ exit 1`
 
 // submitCodeScript writes the pasted code (from $CODE) to the FIFO and polls for
 // the printed OAuth token.
-const submitCodeScript = `set -e
-D=/tmp/claude-login
+const submitCodeScript = `D=/tmp/claude-login
 [ -p "$D/in" ] || { echo "no login in progress" >&2; exit 1; }
 printf '%s\n' "$CODE" > "$D/in"
 for i in $(seq 1 40); do
