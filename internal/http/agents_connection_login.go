@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
@@ -45,17 +46,24 @@ func (h *AgentsHandler) handleStartConnectionLogin(w http.ResponseWriter, r *htt
 	}
 	sb, err := h.loginSandbox(r.Context(), conn.ID)
 	if err != nil {
+		slog.Warn("security.connected_login_sandbox_unavailable", "connection", conn.ID, "error", err)
 		writeError(w, http.StatusServiceUnavailable, protocol.ErrInternal, "login sandbox unavailable: "+err.Error())
 		return
 	}
 	res, err := sb.Exec(r.Context(), []string{"bash", "-lc", startLoginScript}, "")
 	if err != nil || res.ExitCode != 0 {
+		stderr := ""
+		if res != nil {
+			stderr = res.Stderr
+		}
+		slog.Warn("connected_login_start_exec_failed", "connection", conn.ID, "error", err, "exit", exitOf(res), "stderr", truncate(stderr, 300))
 		h.releaseLoginSandbox(conn.ID)
 		writeError(w, http.StatusBadGateway, protocol.ErrInternal, "could not start Claude login")
 		return
 	}
 	url := strings.TrimSpace(res.Stdout)
 	if !strings.HasPrefix(url, "https://") {
+		slog.Warn("connected_login_no_url", "connection", conn.ID, "stdout", truncate(res.Stdout, 200), "stderr", truncate(res.Stderr, 300))
 		h.releaseLoginSandbox(conn.ID)
 		writeError(w, http.StatusBadGateway, protocol.ErrInternal, "login did not produce an authorization URL")
 		return
@@ -159,7 +167,12 @@ type connLogin struct {
 func (h *AgentsHandler) loginSandbox(ctx context.Context, connID string) (sandbox.Sandbox, error) {
 	cfg := h.sandboxMgr.BaseConfig()
 	cfg.NetworkEnabled = true
-	return h.sandboxMgr.Get(ctx, loginSandboxKeyPrefix+connID, h.sandboxWorkspace, &cfg)
+	// The login runs `claude setup-token` and touches nothing in the workspace,
+	// so skip the workspace mount entirely. This also avoids a container-create
+	// failure if the configured workspace path can't be mounted for this
+	// one-off container (the earlier bug: a non-absolute workspace template).
+	cfg.WorkspaceAccess = sandbox.AccessNone
+	return h.sandboxMgr.Get(ctx, loginSandboxKeyPrefix+connID, "", &cfg)
 }
 
 func (h *AgentsHandler) releaseLoginSandbox(connID string) {
@@ -201,6 +214,21 @@ for i in $(seq 1 40); do
 done
 echo "timed out waiting for token" >&2
 exit 1`
+
+func exitOf(res *sandbox.ExecResult) int {
+	if res == nil {
+		return -1
+	}
+	return res.ExitCode
+}
+
+func truncate(s string, n int) string {
+	s = strings.TrimSpace(s)
+	if len(s) > n {
+		return s[:n] + "…"
+	}
+	return s
+}
 
 // oauthTokenRe matches a Claude Code OAuth token. Primary form is the sk-ant-oat
 // prefix; the bare long-token fallback covers a prefix change.
