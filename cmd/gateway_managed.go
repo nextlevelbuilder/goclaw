@@ -539,6 +539,17 @@ func wireExtras(
 		slog.Info("delegate tool wired")
 	}
 
+	// Wire the external-delegate tool: lets an agent hand tasks to its connected
+	// external agents (Claude Code, …). v1 runs the connected CLI in the sandbox
+	// with network enabled for that exec only. Reads the calling agent's
+	// connected_agents at runtime; platform Anthropic key used when a connection
+	// has no credential of its own.
+	if stores.Agents != nil {
+		extTool := tools.NewDelegateExternalTool(stores.Agents, sandboxMgr, workspace, appCfg.Providers.Anthropic.APIKey)
+		toolsReg.Register(extTool)
+		slog.Info("delegate_external tool wired", "sandbox", sandboxMgr != nil)
+	}
+
 	// --- Cache invalidation event subscribers ---
 
 	// Context file cache: invalidate on agent/context data changes
