@@ -94,6 +94,7 @@ func (c *Config) applyEnvOverrides() {
 	}
 	envStr("GOCLAW_PUBLIC_WEBHOOK_BASE", &c.Gateway.PublicWebhookBase)
 	envStr("GOCLAW_ANTHROPIC_API_KEY", &c.Providers.Anthropic.APIKey)
+	envStr("GOCLAW_ANTHROPIC_OAUTH_TOKEN", &c.Providers.Anthropic.OAuthToken)
 	envStr("GOCLAW_ANTHROPIC_BASE_URL", &c.Providers.Anthropic.APIBase)
 	envStr("GOCLAW_OPENAI_API_KEY", &c.Providers.OpenAI.APIKey)
 	envStr("GOCLAW_OPENAI_BASE_URL", &c.Providers.OpenAI.APIBase)
@@ -306,7 +307,6 @@ func (c *Config) applyEnvOverrides() {
 		c.Tools.Browser.Enabled = true
 	}
 }
-
 
 // Save writes the config to a JSON file.
 func Save(path string, cfg *Config) error {

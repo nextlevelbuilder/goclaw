@@ -132,6 +132,18 @@ func TestLoad_EnvVarAPIKeys(t *testing.T) {
 	}
 }
 
+func TestLoad_EnvVarAnthropicOAuthToken(t *testing.T) {
+	t.Setenv("GOCLAW_ANTHROPIC_OAUTH_TOKEN", "oauth-test-token")
+
+	cfg, err := Load("/nonexistent/path")
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if cfg.Providers.Anthropic.OAuthToken != "oauth-test-token" {
+		t.Fatalf("anthropic oauth token: got %q", cfg.Providers.Anthropic.OAuthToken)
+	}
+}
+
 // --- Allowed origins from JSON5 ---
 
 func TestLoad_AllowedOrigins_JSON5(t *testing.T) {

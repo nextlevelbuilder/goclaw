@@ -19,16 +19,27 @@ import (
 // external_cli transport: run the connected agent's CLI inside the sandbox.
 // MCP / A2A / HTTP transports are recognised but not yet dispatched.
 type DelegateExternalTool struct {
-	agents       store.AgentCRUDStore
-	sandboxMgr   sandbox.Manager
-	workspace    string
-	anthropicKey string // platform Anthropic key; used when a connection has no credential_ref
+	agents     store.AgentCRUDStore
+	sandboxMgr sandbox.Manager
+	workspace  string
+	// Platform Anthropic credentials, used when a connection has no credential
+	// of its own. Either may be empty; at least one is required to run Claude
+	// Code. When both are set the OAuth token (subscription billing) is
+	// preferred — see runCLI.
+	anthropicKey        string // GOCLAW_ANTHROPIC_API_KEY → ANTHROPIC_API_KEY
+	anthropicOAuthToken string // GOCLAW_ANTHROPIC_OAUTH_TOKEN → CLAUDE_CODE_OAUTH_TOKEN
 }
 
 // NewDelegateExternalTool wires the tool. sandboxMgr may be nil (no sandbox →
 // external delegation returns a clear error rather than crashing).
-func NewDelegateExternalTool(agents store.AgentCRUDStore, sandboxMgr sandbox.Manager, workspace, anthropicKey string) *DelegateExternalTool {
-	return &DelegateExternalTool{agents: agents, sandboxMgr: sandboxMgr, workspace: workspace, anthropicKey: anthropicKey}
+func NewDelegateExternalTool(agents store.AgentCRUDStore, sandboxMgr sandbox.Manager, workspace, anthropicKey, anthropicOAuthToken string) *DelegateExternalTool {
+	return &DelegateExternalTool{
+		agents:              agents,
+		sandboxMgr:          sandboxMgr,
+		workspace:           workspace,
+		anthropicKey:        anthropicKey,
+		anthropicOAuthToken: anthropicOAuthToken,
+	}
 }
 
 func (t *DelegateExternalTool) Name() string { return "delegate_external" }
@@ -122,11 +133,22 @@ func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.Connecte
 	switch strings.ToLower(conn.Provider) {
 	case "claude_code", "claude", "claudecode":
 		// Headless, auto-approve inside the isolated sandbox. Plain-text output.
+		// NOTE: not --bare, so CLAUDE_CODE_OAUTH_TOKEN is honoured (bare mode
+		// ignores it and requires ANTHROPIC_API_KEY).
 		command = []string{"claude", "-p", task, "--permission-mode", "bypassPermissions", "--output-format", "text"}
-		// TODO(byok): resolve conn.CredentialRef → per-connector key. v1 uses the platform key.
-		env["ANTHROPIC_API_KEY"] = t.anthropicKey
-		if env["ANTHROPIC_API_KEY"] == "" {
-			return ErrorResult("Claude Code needs an Anthropic API key — set the platform key (GOCLAW_ANTHROPIC_API_KEY) or a connection credential")
+		// Resolve exactly one credential and inject only its env var. The CLI's
+		// own precedence has ANTHROPIC_API_KEY beating CLAUDE_CODE_OAUTH_TOKEN,
+		// so setting both would make the choice implicit — we make it explicit.
+		// Order: OAuth token (subscription billing) → API key (metered).
+		// TODO(byok): a per-connection credential (conn.CredentialRef) resolved
+		// here would win over both platform creds below.
+		switch {
+		case t.anthropicOAuthToken != "":
+			env["CLAUDE_CODE_OAUTH_TOKEN"] = t.anthropicOAuthToken
+		case t.anthropicKey != "":
+			env["ANTHROPIC_API_KEY"] = t.anthropicKey
+		default:
+			return ErrorResult("Claude Code needs an Anthropic credential — set the platform subscription token (GOCLAW_ANTHROPIC_OAUTH_TOKEN), the platform API key (GOCLAW_ANTHROPIC_API_KEY), or a connection credential")
 		}
 	default:
 		return ErrorResult(fmt.Sprintf("connected CLI provider %q is not available in the sandbox yet", conn.Provider))
