@@ -19,12 +19,12 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	hookbuiltin "github.com/nextlevelbuilder/goclaw/internal/hooks/builtin"
-	"github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	kg "github.com/nextlevelbuilder/goclaw/internal/knowledgegraph"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	memorypkg "github.com/nextlevelbuilder/goclaw/internal/memory"
+	"github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/secret"
@@ -545,7 +545,7 @@ func wireExtras(
 	// connected_agents at runtime; platform Anthropic key used when a connection
 	// has no credential of its own.
 	if stores.Agents != nil {
-		extTool := tools.NewDelegateExternalTool(stores.Agents, sandboxMgr, workspace, appCfg.Providers.Anthropic.APIKey)
+		extTool := tools.NewDelegateExternalTool(stores.Agents, sandboxMgr, workspace, appCfg.Providers.Anthropic.APIKey, appCfg.Providers.Anthropic.OAuthToken)
 		toolsReg.Register(extTool)
 		slog.Info("delegate_external tool wired", "sandbox", sandboxMgr != nil)
 	}
