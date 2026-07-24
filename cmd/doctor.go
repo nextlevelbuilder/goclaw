@@ -187,6 +187,10 @@ func checkDBChannels(db *sql.DB) {
 		label := fmt.Sprintf("%s/%s", channelType, name)
 		fmt.Printf("    %-24s %s\n", label+":", status)
 	}
+	if err := rows.Err(); err != nil {
+		fmt.Printf("    (could not read channels: %s)\n", err)
+		return
+	}
 	if !found {
 		fmt.Println("    (none configured in database)")
 	}
@@ -217,6 +221,10 @@ func checkDBProviders(db *sql.DB) {
 			status += " (no API key)"
 		}
 		fmt.Printf("    %-16s %s\n", displayName+":", status)
+	}
+	if err := rows.Err(); err != nil {
+		fmt.Printf("    (could not read providers: %s)\n", err)
+		return
 	}
 	if !found {
 		fmt.Println("    (none configured in database)")

@@ -14,11 +14,14 @@ func buildMergedSubagentAnnounce(entries []subagentAnnounceEntry, roster tools.S
 
 	if len(entries) == 1 {
 		e := entries[0]
-		statusLabel := "completed successfully"
-		if e.Status == "failed" {
+		var statusLabel string
+		switch e.Status {
+		case "failed":
 			statusLabel = "failed"
-		} else if e.Status == "cancelled" {
+		case "cancelled":
 			statusLabel = "was cancelled"
+		default:
+			statusLabel = "completed successfully"
 		}
 		fmt.Fprintf(&sb, "[System Message] A subagent task %q just %s.\n\nResult:\n%s\n\nStats: runtime %s, iterations %d, tokens %d in / %d out\n",
 			e.Label, statusLabel, e.Content,

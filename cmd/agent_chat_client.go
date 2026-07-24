@@ -76,6 +76,10 @@ func runClientMode(cfg *config.Config, addr, agentName, message, sessionKey stri
 		}
 		fmt.Printf("\n%s\n\n", resp)
 	}
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "Input error: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 // wsConnect sends the connect RPC and waits for auth response.
