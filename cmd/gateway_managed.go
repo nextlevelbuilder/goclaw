@@ -550,6 +550,11 @@ func wireExtras(
 		slog.Info("delegate_external tool wired", "sandbox", sandboxMgr != nil)
 	}
 
+	// check_integration: lets the agent report which third-party integrations
+	// the user has connected (via composio-mcp /accounts) instead of guessing.
+	toolsReg.Register(tools.NewCheckIntegrationTool("http://composio-mcp:9300"))
+	slog.Info("check_integration tool wired")
+
 	// --- Cache invalidation event subscribers ---
 
 	// Context file cache: invalidate on agent/context data changes
