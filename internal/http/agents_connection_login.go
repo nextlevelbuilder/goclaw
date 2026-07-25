@@ -208,7 +208,7 @@ setsid sh -c "sleep 1800 > $D/in" </dev/null >/dev/null 2>&1 &
 setsid script -qfc "stty cols 1000 rows 50 2>/dev/null; claude setup-token" "$D/out" < "$D/in" >/dev/null 2>&1 &
 for i in $(seq 1 40); do
   if [ -f "$D/out" ]; then
-    U=$(sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' "$D/out" 2>/dev/null | tr -d '\r' | grep -aoE 'https://[^[:space:]]+' | head -1)
+    U=$(sed -E 's#\x1b\[[0-9;?]*[ -/]*[@-~]##g' "$D/out" 2>/dev/null | sed 's/.*\r//' | grep -aoE 'https://[^[:space:]]+' | head -1)
     [ -n "$U" ] && { printf '%s\n' "$U"; exit 0; }
   fi
   sleep 1
@@ -232,10 +232,14 @@ printf '%s' "$CODE" > "$D/in"
 sleep 1
 printf '\r' > "$D/in"
 for i in $(seq 1 45); do
-  CLEAN=$(sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' "$D/out" 2>/dev/null | tr -d '\r')
-  # Any sk-ant-* token. The auth URL in the output contains no "sk-ant-", so
-  # this won't false-match its code_challenge/state params.
-  T=$(printf '%s' "$CLEAN" | grep -aoE 'sk-ant-[A-Za-z0-9_-]{20,}' | tail -1)
+  # Sanitize robustly: strip full CSI escapes (params + intermediates + final),
+  # and treat \r as line-OVERWRITE (keep text after the last \r), not delete —
+  # a mid-render redraw was dropping a token character (sk-ant-oat… → sk-ant-at…),
+  # producing an invalid token that Anthropic rejects with 401.
+  CLEAN=$(sed -E 's#\x1b\[[0-9;?]*[ -/]*[@-~]##g' "$D/out" 2>/dev/null | sed 's/.*\r//')
+  # Require the EXACT token shape sk-ant-oat<NN>-<long>. A partial/corrupted
+  # render never matches, so we keep polling until a clean token is rendered.
+  T=$(printf '%s' "$CLEAN" | grep -aoE 'sk-ant-oat[0-9]{2}-[A-Za-z0-9_-]{60,}' | tail -1)
   [ -n "$T" ] && { printf '%s\n' "$T"; exit 0; }
   printf '%s' "$CLEAN" | grep -qiE 'invalid code|expired|not authorized|oauth error|request failed' && { echo "invalid or expired code" >&2; exit 2; }
   sleep 1
@@ -243,7 +247,7 @@ done
 # Timed out. Emit a redacted tail (every long token run masked) so we can see
 # the SHAPE of the success output in logs without ever leaking a real token.
 echo "timed out waiting for token; redacted tail:" >&2
-sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' "$D/out" 2>/dev/null | tr -d '\r' \
+sed -E 's#\x1b\[[0-9;?]*[ -/]*[@-~]##g' "$D/out" 2>/dev/null | sed 's/.*\r//' \
   | sed -E 's/[A-Za-z0-9_-]{20,}/<REDACTED>/g' | grep -viE '^[[:space:]]*$' | tail -15 >&2
 exit 1`
 
@@ -262,25 +266,16 @@ func truncate(s string, n int) string {
 	return s
 }
 
-// oauthTokenRe matches a Claude Code OAuth token. Primary form is the sk-ant-oat
-// prefix; the bare long-token fallback covers a prefix change.
-var oauthTokenRe = regexp.MustCompile(`sk-ant-[A-Za-z0-9_-]{20,}`)
-var oauthTokenFallbackRe = regexp.MustCompile(`^[A-Za-z0-9_-]{40,}$`)
+// oauthTokenRe matches a Claude Code OAuth token EXACTLY: sk-ant-oat<NN>-<long>.
+// We deliberately do NOT accept a looser/bare-token fallback — a mid-render
+// terminal redraw can drop a character (sk-ant-oat… → sk-ant-at…), and a loose
+// matcher would happily store that corrupted token, which Anthropic then rejects
+// with 401. Requiring the exact shape means a partial render simply doesn't match
+// and we keep polling until a clean token renders (fail loud, never store junk).
+var oauthTokenRe = regexp.MustCompile(`sk-ant-oat[0-9]{2}-[A-Za-z0-9_-]{40,}`)
 
 // extractOAuthToken pulls the token out of the (already ANSI-stripped) phase-2
 // output. Never logs the token.
 func extractOAuthToken(out string) string {
-	out = strings.TrimSpace(out)
-	if m := oauthTokenRe.FindString(out); m != "" {
-		return m
-	}
-	// Fallback: last line that looks like a bare long token.
-	lines := strings.Split(out, "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		s := strings.TrimSpace(lines[i])
-		if oauthTokenFallbackRe.MatchString(s) {
-			return s
-		}
-	}
-	return ""
+	return oauthTokenRe.FindString(strings.TrimSpace(out))
 }
