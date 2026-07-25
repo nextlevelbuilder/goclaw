@@ -197,9 +197,14 @@ func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.Connecte
 	}
 
 	// Network-enabled sandbox config for this exec only, dedicated container key.
+	// Start from the per-session config if present, else the manager's base
+	// config — otherwise a zero Config has an empty Image and docker run fails
+	// with "invalid reference format".
 	var netCfg sandbox.Config
 	if cfg := SandboxConfigFromCtx(ctx); cfg != nil {
 		netCfg = *cfg
+	} else {
+		netCfg = t.sandboxMgr.BaseConfig()
 	}
 	netCfg.NetworkEnabled = true
 	sandboxKey := "external:" + conn.ID
