@@ -15,9 +15,9 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
-	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
+	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
@@ -279,8 +279,8 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 		// web-backend organizations.id stamped by auth-proxy on each
 		// login; empty until the first login after the stamp lands.
 		var (
-			tenantSlug     string
-			externalOrgID  string
+			tenantSlug    string
+			externalOrgID string
 		)
 		if ag.TenantID != store.MasterTenantID && ag.TenantID != uuid.Nil {
 			tenantSlug, externalOrgID = resolveTenantSlugAndExternalOrgID(deps.TenantStore, ag.TenantID)
@@ -475,6 +475,17 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			}
 		}
 
+		// Connected external agents (agents.connected_agents) for prompt
+		// awareness — so the agent knows it can delegate to Claude Code etc.
+		var connectedAgents []ConnectedAgentSummary
+		for _, ca := range ag.ParseConnectedAgents() {
+			connectedAgents = append(connectedAgents, ConnectedAgentSummary{
+				Name:     ca.Name,
+				Provider: ca.Provider,
+				Mode:     ca.Mode,
+			})
+		}
+
 		// v3 evolution metrics: only wire store when feature flag enabled
 		var evoMetricsStore store.EvolutionMetricsStore
 		if v3f.EvolutionMetrics && deps.EvolutionMetricsStore != nil {
@@ -494,7 +505,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			IsTeamLead:             isTeamLead,
 			CustomInstructions:     ag.SystemPrompt,
 			IsLocked:               ag.IsLocked,
-			AutoInjector:          deps.AutoInjector,
+			AutoInjector:           deps.AutoInjector,
 			Provider:               provider,
 			Model:                  ag.Model,
 			ModelRegistry:          deps.ModelRegistry,
@@ -565,6 +576,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			MCPSSMResolver:         deps.MCPSSMResolver,
 			OrchMode:               orchMode,
 			DelegateTargets:        delegateTargets,
+			ConnectedAgents:        connectedAgents,
 			EvolutionMetricsStore:  evoMetricsStore,
 			UserResolver:           newContactResolver(deps.ContactStore),
 		})
