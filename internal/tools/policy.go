@@ -30,6 +30,7 @@ var builtinToolGroups = map[string][]string{
 		"knowledge_graph_search", "vault_search",
 		"sessions_list", "sessions_history", "sessions_send", "spawn", "session_status",
 		"delegate", "delegate_external",
+		"check_integration",
 		"cron", "datetime", "heartbeat",
 		"message", "create_forum_topic", "list_group_members",
 		"read_image", "read_document", "read_audio", "read_video",
