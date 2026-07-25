@@ -112,7 +112,7 @@ func (h *AgentsHandler) handleSubmitConnectionLoginCode(w http.ResponseWriter, r
 		if res != nil {
 			stderr = res.Stderr
 		}
-		slog.Warn("connected_login_submit_failed", "connection", conn.ID, "error", err, "exit", exitOf(res), "stderr", truncate(stderr, 200))
+		slog.Warn("connected_login_submit_failed", "connection", conn.ID, "error", err, "exit", exitOf(res), "stderr", truncate(stderr, 600))
 		h.releaseLoginSandbox(conn.ID)
 		writeError(w, http.StatusBadGateway, protocol.ErrInternal, msg)
 		return
@@ -225,12 +225,18 @@ const submitCodeScript = `D=/tmp/claude-login
 printf '%s\r' "$CODE" > "$D/in"
 for i in $(seq 1 45); do
   CLEAN=$(sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' "$D/out" 2>/dev/null | tr -d '\r')
-  T=$(printf '%s' "$CLEAN" | grep -aoE 'sk-ant-oat[0-9A-Za-z_-]+' | tail -1)
+  # Any sk-ant-* token. The auth URL in the output contains no "sk-ant-", so
+  # this won't false-match its code_challenge/state params.
+  T=$(printf '%s' "$CLEAN" | grep -aoE 'sk-ant-[A-Za-z0-9_-]{20,}' | tail -1)
   [ -n "$T" ] && { printf '%s\n' "$T"; exit 0; }
   printf '%s' "$CLEAN" | grep -qiE 'invalid code|expired|not authorized|failed to' && { echo "invalid or expired code" >&2; exit 2; }
   sleep 1
 done
-echo "timed out waiting for token" >&2
+# Timed out. Emit a redacted tail (every long token run masked) so we can see
+# the SHAPE of the success output in logs without ever leaking a real token.
+echo "timed out waiting for token; redacted tail:" >&2
+sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' "$D/out" 2>/dev/null | tr -d '\r' \
+  | sed -E 's/[A-Za-z0-9_-]{20,}/<REDACTED>/g' | grep -viE '^[[:space:]]*$' | tail -15 >&2
 exit 1`
 
 func exitOf(res *sandbox.ExecResult) int {
@@ -250,7 +256,7 @@ func truncate(s string, n int) string {
 
 // oauthTokenRe matches a Claude Code OAuth token. Primary form is the sk-ant-oat
 // prefix; the bare long-token fallback covers a prefix change.
-var oauthTokenRe = regexp.MustCompile(`sk-ant-oat[0-9A-Za-z_-]+`)
+var oauthTokenRe = regexp.MustCompile(`sk-ant-[A-Za-z0-9_-]{20,}`)
 var oauthTokenFallbackRe = regexp.MustCompile(`^[A-Za-z0-9_-]{40,}$`)
 
 // extractOAuthToken pulls the token out of the (already ANSI-stripped) phase-2
