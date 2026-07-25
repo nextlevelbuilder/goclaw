@@ -222,14 +222,22 @@ const submitCodeScript = `D=/tmp/claude-login
 [ -p "$D/in" ] || { echo "no login in progress" >&2; exit 1; }
 # \r (carriage return) is the Enter key in the PTY. \n (LF) does NOT submit the
 # code in Claude Code's Ink input prompt — it just fills the field and waits.
-printf '%s\r' "$CODE" > "$D/in"
+# Send the code, then Enter as a SEPARATE write. Sending code+\r in one write
+# makes Claude Code's Ink prompt treat it as a bracketed paste and absorb the
+# Enter (especially once the prompt has sat idle while the user approves in the
+# browser), so the code is typed but never submitted. Two writes = a paste
+# followed by a distinct Enter keypress. Verified on the real sandbox image
+# with a ~40s idle gap.
+printf '%s' "$CODE" > "$D/in"
+sleep 1
+printf '\r' > "$D/in"
 for i in $(seq 1 45); do
   CLEAN=$(sed 's/\x1b\[[0-9;?]*[a-zA-Z]//g' "$D/out" 2>/dev/null | tr -d '\r')
   # Any sk-ant-* token. The auth URL in the output contains no "sk-ant-", so
   # this won't false-match its code_challenge/state params.
   T=$(printf '%s' "$CLEAN" | grep -aoE 'sk-ant-[A-Za-z0-9_-]{20,}' | tail -1)
   [ -n "$T" ] && { printf '%s\n' "$T"; exit 0; }
-  printf '%s' "$CLEAN" | grep -qiE 'invalid code|expired|not authorized|failed to' && { echo "invalid or expired code" >&2; exit 2; }
+  printf '%s' "$CLEAN" | grep -qiE 'invalid code|expired|not authorized|oauth error|request failed' && { echo "invalid or expired code" >&2; exit 2; }
   sleep 1
 done
 # Timed out. Emit a redacted tail (every long token run masked) so we can see
