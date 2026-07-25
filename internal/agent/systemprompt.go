@@ -176,6 +176,11 @@ type SystemPromptConfig struct {
 	// targets are wired for proactive delivery (cron, message, sessions_send)
 	// and doesn't ask the user to re-connect an already-active bot.
 	ConnectedChannels []ConnectedChannelSummary
+
+	// ConnectedAgents lists the external agents wired into this agent
+	// (agents.connected_agents) so the prompt can tell it what it may delegate
+	// to via delegate_external — and stop it claiming they aren't connected.
+	ConnectedAgents []ConnectedAgentSummary
 }
 
 // ConnectedChannelSummary is the minimum shape buildConnectedChannelsSection
@@ -538,6 +543,20 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 	if isFull {
 		if section := buildConnectedChannelsSection(cfg.ConnectedChannels); len(section) > 0 {
 			lines = append(lines, section...)
+		}
+
+		// Connected external agents (Claude Code, …) the agent can delegate to.
+		if section := buildConnectedAgentsSection(cfg.ConnectedAgents); len(section) > 0 {
+			lines = append(lines, section...)
+		}
+
+		// Integration-awareness: never assume connection status — check it.
+		for _, tn := range cfg.ToolNames {
+			if tn == "check_integration" {
+				lines = append(lines,
+					"To find out whether a third-party integration (GitHub, Gmail, Google Drive/Docs/Sheets/Calendar, Slack, Notion, …) is connected, call the `check_integration` tool — never assume it isn't. When one is connected, read its data with the provider's own tools (e.g. `GITHUB_GET_REPOSITORY_CONTENT` to read repo files), not by shelling out.")
+				break
+			}
 		}
 
 		if hint := buildChannelFormattingHint(cfg.ChannelType); hint != nil {

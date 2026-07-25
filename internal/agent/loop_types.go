@@ -86,20 +86,20 @@ type Loop struct {
 	// agentUUID is the canonical DB primary key. Use for SQL WHERE/JOIN,
 	// DomainEvent.AgentID, OTel span attributes, and context propagation via
 	// store.WithAgentID. See docs/agent-identity-conventions.md.
-	agentUUID        uuid.UUID
-	tenantID         uuid.UUID // agent's owning tenant
-	tenantSlug       string    // canonical tenant slug — see Config.TenantSlug
+	agentUUID  uuid.UUID
+	tenantID   uuid.UUID // agent's owning tenant
+	tenantSlug string    // canonical tenant slug — see Config.TenantSlug
 	// externalOrgID is the web-backend organizations.id (UUID) for this
 	// tenant, sourced from tenants.settings.external_org_id. When non-empty
 	// it overrides tenantSlug in outbound X-Actor-Org-ID headers, removing
 	// the slug-format coupling between goclaw and downstream attribution.
 	// Empty during rollout for tenants the auth-proxy hasn't stamped yet —
 	// loop_context.go falls back to the slug in that case.
-	externalOrgID    string
+	externalOrgID string
 	// agentOtherConfig is a defensive byte copy of agents.other_config JSONB.
 	// Copied once at Loop construction; used to build AgentAudioSnapshot at tool dispatch.
 	agentOtherConfig json.RawMessage
-	agentType        string    // "open" or "predefined"
+	agentType        string // "open" or "predefined"
 	// customInstructions holds the agent's agents.system_prompt (migration 000063).
 	// Empty for the tenant default agent. Threaded into SystemPromptConfig
 	// on every BuildSystemPrompt call from loop_history.go.
@@ -107,8 +107,8 @@ type Loop struct {
 	// isLocked mirrors agents.is_locked; threaded into SystemPromptConfig
 	// so BuildSystemPrompt can decide whether to inject the locked-agent
 	// preamble (lockedAgentPreamble const).
-	isLocked bool
-	defaultTimezone  string    // system default timezone for bootstrap pre-fill
+	isLocked         bool
+	defaultTimezone  string // system default timezone for bootstrap pre-fill
 	provider         providers.Provider
 	model            string
 	modelRegistry    providers.ModelRegistry // resolves per-model context window at run time (nil = use static contextWindow)
@@ -137,7 +137,7 @@ type Loop struct {
 	// Memory flush runs if callback != nil; auto-inject runs if AutoInjector != nil.
 	autoInjector memory.AutoInjector // v3 L0 memory auto-inject (nil = disabled)
 
-	eventPub        bus.EventPublisher // currently unused by Loop; kept for future use
+	eventPub        bus.EventPublisher      // currently unused by Loop; kept for future use
 	domainBus       eventbus.DomainEventBus // V3 domain event bus for consolidation pipeline
 	sessions        store.SessionStore
 	tools           tools.ToolExecutor
@@ -156,9 +156,9 @@ type Loop struct {
 	// skillAccess sources per-tenant skills (DB) for the prompt summary. The
 	// loader is filesystem-only and never sees DB-stored / per-tenant skills,
 	// so when this is set the summary is built from ListAccessible instead.
-	skillAccess    store.SkillAccessStore
-	hasMemory      bool
-	contextFiles   []bootstrap.ContextFile
+	skillAccess  store.SkillAccessStore
+	hasMemory    bool
+	contextFiles []bootstrap.ContextFile
 
 	// Per-user profile + file seeding + dynamic context loading
 	ensureUserProfile EnsureUserProfileFunc // create/resolve user profile + workspace
@@ -170,10 +170,10 @@ type Loop struct {
 	userSetups        sync.Map            // userID → *userSetup (workspace + seeding state, per Loop instance)
 
 	// Per-user MCP tools: servers requiring user credentials get connected per-request.
-	mcpStore        store.MCPServerStore    // for credential lookup
-	mcpPool         *mcpbridge.Pool         // user-keyed connection pool
-	mcpUserCredSrvs []store.MCPAccessInfo   // servers needing per-user creds
-	mcpUserTools    sync.Map                // userID → []tools.Tool (legacy cache, kept until callers migrate)
+	mcpStore        store.MCPServerStore  // for credential lookup
+	mcpPool         *mcpbridge.Pool       // user-keyed connection pool
+	mcpUserCredSrvs []store.MCPAccessInfo // servers needing per-user creds
+	mcpUserTools    sync.Map              // userID → []tools.Tool (legacy cache, kept until callers migrate)
 	// mcpServerToolNames maps mcp_server.id → []registeredToolName. Used to
 	// know whether the BridgeTools for a given user-cred server are already
 	// installed in the shared registry, so getUserMCPTools doesn't pay the
@@ -279,8 +279,9 @@ type Loop struct {
 	memStore store.MemoryStore
 
 	// v3 orchestration mode (spawn/delegate/team) — controls tool visibility
-	orchMode          OrchestrationMode
-	delegateTargets   []DelegateTargetEntry // delegation targets for prompt injection
+	orchMode        OrchestrationMode
+	delegateTargets []DelegateTargetEntry   // delegation targets for prompt injection
+	connectedAgents []ConnectedAgentSummary // connected external agents (delegate_external) for prompt awareness
 
 	// v3 evolution metrics store (nil = disabled)
 	evolutionMetricsStore store.EvolutionMetricsStore
@@ -316,7 +317,7 @@ type AgentEvent struct {
 	// without falling back to a full sessions.preview reload. Zero when
 	// the event was emitted on a code path that bypasses the router
 	// (legacy / tests / channel handlers).
-	Seq     int64 `json:"seq,omitempty"`
+	Seq int64 `json:"seq,omitempty"`
 
 	// Delegation context (omitempty — only present when agent runs inside a delegation)
 	DelegationID  string `json:"delegationId,omitempty"`
@@ -336,15 +337,15 @@ type AgentEvent struct {
 
 // LoopConfig configures a new Loop.
 type LoopConfig struct {
-	ID               string
-	Provider         providers.Provider
-	Model            string
-	ContextWindow    int
-	MaxTokens        int // max output tokens per LLM call (0 = default 8192)
-	MaxIterations    int
-	MaxToolCalls     int
-	Workspace        string
-	DataDir          string // global workspace root for team workspace resolution
+	ID                   string
+	Provider             providers.Provider
+	Model                string
+	ContextWindow        int
+	MaxTokens            int // max output tokens per LLM call (0 = default 8192)
+	MaxIterations        int
+	MaxToolCalls         int
+	Workspace            string
+	DataDir              string // global workspace root for team workspace resolution
 	WorkspaceSharing     *store.WorkspaceSharingConfig
 	ChannelInstanceStore store.ChannelInstanceStore
 
@@ -381,8 +382,8 @@ type LoopConfig struct {
 	SkillAllowList []string // nil = all, [] = none, ["x","y"] = filter
 	// SkillAccessStore sources per-tenant skills (DB) for the prompt summary.
 	SkillAccessStore store.SkillAccessStore
-	HasMemory      bool
-	ContextFiles   []bootstrap.ContextFile
+	HasMemory        bool
+	ContextFiles     []bootstrap.ContextFile
 
 	// Compaction config
 	CompactionCfg *config.CompactionConfig
@@ -400,13 +401,13 @@ type LoopConfig struct {
 
 	// Agent UUID + tenant for context propagation to tools
 	AgentUUID        uuid.UUID
-	TenantID         uuid.UUID        // agent's owning tenant — injected into execution context
-	TenantSlug       string           // canonical tenant slug, e.g. "org-team-acme"; pre-resolved at construction so the loop has a stable identifier for downstream service-token calls when the per-request context doesn't carry one (Telegram path).
-	ExternalOrgID    string           // web-backend organizations.id (UUID), stamped onto tenants.settings.external_org_id by auth-proxy. Preferred over TenantSlug for outbound X-Actor-Org-ID; empty until first login after the stamp lands.
-	AgentOtherConfig json.RawMessage  // raw other_config JSONB — copied defensively in NewLoop
-	AgentType        string           // "open" or "predefined"
-	DisplayName string    // human-readable agent display name (for runtime section)
-	IsTeamLead bool      // agent leads a team (from resolver detection)
+	TenantID         uuid.UUID       // agent's owning tenant — injected into execution context
+	TenantSlug       string          // canonical tenant slug, e.g. "org-team-acme"; pre-resolved at construction so the loop has a stable identifier for downstream service-token calls when the per-request context doesn't carry one (Telegram path).
+	ExternalOrgID    string          // web-backend organizations.id (UUID), stamped onto tenants.settings.external_org_id by auth-proxy. Preferred over TenantSlug for outbound X-Actor-Org-ID; empty until first login after the stamp lands.
+	AgentOtherConfig json.RawMessage // raw other_config JSONB — copied defensively in NewLoop
+	AgentType        string          // "open" or "predefined"
+	DisplayName      string          // human-readable agent display name (for runtime section)
+	IsTeamLead       bool            // agent leads a team (from resolver detection)
 	// CustomInstructions is the agent's own configured system prompt
 	// (agents.system_prompt column from migration 000063). Threaded
 	// through to BuildSystemPrompt so it's injected near the top of the
@@ -490,15 +491,16 @@ type LoopConfig struct {
 	MemoryStore store.MemoryStore
 
 	// Per-user MCP tools (servers requiring per-user credentials)
-	MCPStore        store.MCPServerStore    // for credential lookup
-	MCPPool         *mcpbridge.Pool         // user-keyed connection pool
-	MCPUserCredSrvs []store.MCPAccessInfo   // servers needing per-user creds
-	MCPGrantChecker mcpbridge.GrantChecker  // runtime grant verification (nil = skip)
-	MCPSSMResolver  *secret.SSMResolver     // ${ssm:/path} expansion in headers (nil = passthrough)
+	MCPStore        store.MCPServerStore   // for credential lookup
+	MCPPool         *mcpbridge.Pool        // user-keyed connection pool
+	MCPUserCredSrvs []store.MCPAccessInfo  // servers needing per-user creds
+	MCPGrantChecker mcpbridge.GrantChecker // runtime grant verification (nil = skip)
+	MCPSSMResolver  *secret.SSMResolver    // ${ssm:/path} expansion in headers (nil = passthrough)
 
 	// V3 orchestration mode (resolved by resolver, controls tool visibility)
-	OrchMode          OrchestrationMode
-	DelegateTargets   []DelegateTargetEntry // delegation targets for prompt injection
+	OrchMode        OrchestrationMode
+	DelegateTargets []DelegateTargetEntry   // delegation targets for prompt injection
+	ConnectedAgents []ConnectedAgentSummary // connected external agents (delegate_external) for prompt awareness
 
 	// V3 evolution metrics store for recording tool/retrieval/feedback metrics
 	EvolutionMetricsStore store.EvolutionMetricsStore
@@ -628,6 +630,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		mcpGrantChecker:        cfg.MCPGrantChecker,
 		orchMode:               cfg.OrchMode,
 		delegateTargets:        cfg.DelegateTargets,
+		connectedAgents:        cfg.ConnectedAgents,
 		evolutionMetricsStore:  cfg.EvolutionMetricsStore,
 		userResolver:           cfg.UserResolver,
 	}
@@ -706,7 +709,7 @@ type RunRequest struct {
 // RunResult is the output of a completed agent run.
 type RunResult struct {
 	Content        string           `json:"content"`
-	Thinking       string           `json:"thinking,omitempty"`       // reasoning content from thinking models (Claude, o3, DeepSeek-R1, Kimi)
+	Thinking       string           `json:"thinking,omitempty"` // reasoning content from thinking models (Claude, o3, DeepSeek-R1, Kimi)
 	RunID          string           `json:"runId"`
 	Iterations     int              `json:"iterations"`
 	Usage          *providers.Usage `json:"usage,omitempty"`
