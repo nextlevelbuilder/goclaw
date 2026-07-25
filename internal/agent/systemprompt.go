@@ -554,7 +554,7 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		for _, tn := range cfg.ToolNames {
 			if tn == "check_integration" {
 				lines = append(lines,
-					"To find out whether a third-party integration (GitHub, Gmail, Google Drive/Docs/Sheets/Calendar, Slack, Notion, …) is connected, call the `check_integration` tool — never assume it isn't. When one is connected, read its data with the provider's own tools (e.g. `GITHUB_GET_REPOSITORY_CONTENT` to read repo files), not by shelling out.")
+					"To find out whether a third-party integration (GitHub, Gmail, Google Drive/Docs/Sheets/Calendar, Slack, Notion, …) is connected, call the `check_integration` tool — never assume it isn't. Do ALL GitHub work with your own GitHub tools: read files (`GITHUB_GET_REPOSITORY_CONTENT`, `GITHUB_GET_A_TREE`), edit and commit (`GITHUB_CREATE_OR_UPDATE_FILE_CONTENTS`), and open pull requests (`GITHUB_CREATE_A_PULL_REQUEST`). These run through the user's connected account, so they work on private repos too. Never shell out for GitHub, and never delegate GitHub work to a connected agent — its sandbox has no access to the user's GitHub connection.")
 				break
 			}
 		}
