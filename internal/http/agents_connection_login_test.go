@@ -8,8 +8,8 @@ func TestExtractOAuthToken(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"sk-ant-oat prefix", "Success! Your token:\nsk-ant-oat01-AbC_dEf-123\nDone.", "sk-ant-oat01-AbC_dEf-123"},
-		{"prefix amid noise", "blah sk-ant-oat01-XYZ789 blah", "sk-ant-oat01-XYZ789"},
+		{"sk-ant-oat token", "Success! Your token:\nsk-ant-oat01-AbC_dEf123XyZ_456QwErTyUiOp\nDone.", "sk-ant-oat01-AbC_dEf123XyZ_456QwErTyUiOp"},
+		{"token amid noise", "blah sk-ant-api03-ZZZ111222333444555666777 blah", "sk-ant-api03-ZZZ111222333444555666777"},
 		{"bare long-token fallback", "Token:\nAbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-ABCDEFON\n", "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-ABCDEFON"},
 		{"no token", "timed out waiting for token", ""},
 		{"empty", "", ""},
