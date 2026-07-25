@@ -32,12 +32,16 @@ type DelegateExternalTool struct {
 	// preferred — see runCLI.
 	anthropicKey        string // GOCLAW_ANTHROPIC_API_KEY → ANTHROPIC_API_KEY
 	anthropicOAuthToken string // GOCLAW_ANTHROPIC_OAUTH_TOKEN → CLAUDE_CODE_OAUTH_TOKEN
+	// githubToken lets the delegated agent clone/push and open PRs. Injected as
+	// GH_TOKEN (for gh) + an env-only git credential helper (the sandbox root is
+	// read-only, so no ~/.gitconfig). Empty = no git write access.
+	githubToken string // GOCLAW_GITHUB_TOKEN
 }
 
 // NewDelegateExternalTool wires the tool. sandboxMgr may be nil (no sandbox →
 // external delegation returns a clear error rather than crashing). creds may be
 // nil (per-connection BYOK unavailable → platform fallback only).
-func NewDelegateExternalTool(agents store.AgentCRUDStore, sandboxMgr sandbox.Manager, workspace string, creds store.ConnectedAgentCredentialStore, anthropicKey, anthropicOAuthToken string) *DelegateExternalTool {
+func NewDelegateExternalTool(agents store.AgentCRUDStore, sandboxMgr sandbox.Manager, workspace string, creds store.ConnectedAgentCredentialStore, anthropicKey, anthropicOAuthToken, githubToken string) *DelegateExternalTool {
 	return &DelegateExternalTool{
 		agents:              agents,
 		sandboxMgr:          sandboxMgr,
@@ -45,6 +49,7 @@ func NewDelegateExternalTool(agents store.AgentCRUDStore, sandboxMgr sandbox.Man
 		creds:               creds,
 		anthropicKey:        anthropicKey,
 		anthropicOAuthToken: anthropicOAuthToken,
+		githubToken:         githubToken,
 	}
 }
 
@@ -191,6 +196,16 @@ func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.Connecte
 			env["ANTHROPIC_API_KEY"] = t.anthropicKey
 		default:
 			return ErrorResult("Claude Code needs an Anthropic credential — connect the agent with your Anthropic API key or a \"Log in with Claude\" subscription, or set a platform credential (GOCLAW_ANTHROPIC_OAUTH_TOKEN / GOCLAW_ANTHROPIC_API_KEY)")
+		}
+		// Give the delegated agent GitHub write access (clone/push/open PR) when a
+		// token is configured. GH_TOKEN powers `gh`; the env-only git credential
+		// helper powers `git` (the sandbox root is read-only, so no ~/.gitconfig).
+		if t.githubToken != "" {
+			env["GH_TOKEN"] = t.githubToken
+			env["GITHUB_TOKEN"] = t.githubToken
+			env["GIT_CONFIG_COUNT"] = "1"
+			env["GIT_CONFIG_KEY_0"] = "credential.https://github.com.helper"
+			env["GIT_CONFIG_VALUE_0"] = `!f() { echo username=x-access-token; echo password=$GH_TOKEN; }; f`
 		}
 	default:
 		return ErrorResult(fmt.Sprintf("connected CLI provider %q is not available in the sandbox yet", conn.Provider))
