@@ -240,30 +240,93 @@ const submitCodeScript = `D=/tmp/claude-login
 printf '%s' "$CODE" > "$D/in"
 sleep 1
 printf '\r' > "$D/in"
+
+# The setup-token success screen does NOT print the token left-to-right: Ink
+# lays it out with absolute cursor moves (e.g. ESC[10G — Cursor Horizontal
+# Absolute to column 10), so naive escape-stripping GLUES fragments together and
+# drops the character the cursor jumped over (sk-ant-oat… → sk-ant-at…, a token
+# Anthropic then rejects with 401). To recover the true text we replay the byte
+# stream through a tiny terminal-cursor emulator: honour CR / BS / CHA(G) /
+# CUF(C) / CUB(D), write each printable char at its real column, strip the rest.
+# python3 ships in the sandbox image, so no rebuild is needed.
+cat > "$D/emu.py" <<'PYEOF'
+import sys, re
+data = sys.stdin.buffer.read().decode('utf-8', 'replace')
+CSI = re.compile(r'\x1b\[([0-9;?]*)[ -/]*([@-~])')
+def num(p, d=1):
+    try:
+        return int(p) if p else d
+    except ValueError:
+        return d
+def render(cells):
+    if not cells:
+        return ''
+    return ''.join(cells.get(k, ' ') for k in range(max(cells) + 1)).rstrip()
+lines, cells, col, i, n = [], {}, 0, 0, len(data)
+while i < n:
+    ch = data[i]
+    if ch == '\x1b':
+        m = CSI.match(data, i)
+        if m:
+            f, p = m.group(2), m.group(1)
+            if f == 'G':
+                col = max(0, num(p) - 1)
+            elif f == 'C':
+                col += num(p)
+            elif f == 'D':
+                col = max(0, col - num(p))
+            i = m.end()
+            continue
+        nxt = data[i + 1] if i + 1 < n else ''
+        i += 3 if nxt in '()' else 2      # skip charset designators / 2-byte escapes
+        continue
+    i += 1
+    if ch == '\n':
+        lines.append(render(cells)); cells, col = {}, 0; continue
+    if ch == '\r':
+        col = 0; continue
+    if ch == '\b':
+        col = max(0, col - 1); continue
+    if ord(ch) < 32:
+        continue
+    cells[col] = ch; col += 1
+lines.append(render(cells))
+sys.stdout.write('\n'.join(lines))
+PYEOF
+
+# Prefer pyte, a real/complete VT emulator, over the minimal hand-rolled one.
+# The login sandbox has network, and pyte may not be baked into the image yet,
+# so best-effort pip-install it into a tmpfs dir (no-op if already present or if
+# offline — we then fall back to emu.py). Screen geometry matches the PTY's
+# stty cols 1000 rows 50 so absolute cursor moves land on the same columns.
+pip install --quiet --disable-pip-version-check --target /tmp/pylib pyte >/dev/null 2>&1 || true
+cat > "$D/render.py" <<'PYEOF'
+import sys, pyte
+data = open('/tmp/claude-login/out', 'rb').read().decode('utf-8', 'replace')
+screen = pyte.Screen(1000, 50)
+stream = pyte.Stream(screen)
+stream.feed(data)
+sys.stdout.write('\n'.join(screen.display))
+PYEOF
+
+render() {
+  if PYTHONPATH=/tmp/pylib python3 -c 'import pyte' 2>/dev/null; then
+    PYTHONPATH=/tmp/pylib python3 "$D/render.py" 2>/dev/null
+  else
+    python3 "$D/emu.py" < "$D/out" 2>/dev/null
+  fi
+}
+
 for i in $(seq 1 45); do
-  # Sanitize robustly: strip full CSI escapes (params + intermediates + final),
-  # then convert each \r to \n so every carriage-return redraw frame lands on its
-  # OWN line. This never glues characters across frames (the bug that dropped a
-  # token char, sk-ant-oat… → sk-ant-at…, yielding a 401) and never deletes a
-  # frame (an earlier sed 's/.*\r//' wiped a line whose content preceded a
-  # trailing \r). grep then finds the full token in whichever frame holds it.
-  CLEAN=$(sed -E 's#\x1b\[[0-9;?]*[ -/]*[@-~]##g' "$D/out" 2>/dev/null | tr '\r' '\n')
+  CLEAN=$(render)
   # Match the Anthropic token shape format-agnostically: sk-ant-<tag><NN>-<long>.
-  # The real setup-token prefix is sk-ant-atNN- (NOT sk-ant-oatNN- — an earlier
-  # over-strict "oat" regex rejected the valid token and hung the login), and the
-  # auth URL above contains no "sk-ant-", so this can't false-match its params.
-  # The {40,} body floor still rejects a partial mid-render frame.
+  # The auth URL above contains no "sk-ant-", so this can't false-match its
+  # params; the {40,} body floor rejects a partial mid-render frame.
   T=$(printf '%s' "$CLEAN" | grep -aoE 'sk-ant-[a-z]+[0-9]{2}-[A-Za-z0-9_-]{40,}' | tail -1)
   if [ -n "$T" ]; then
-    # DIAG (temporary): dump the RAW (unsanitized) bytes at each "sk-ant"
-    # occurrence — 14 bytes = prefix + 1 secret char — so we can see exactly how
-    # the prefix renders (escapes/CR) and where the "o" of sk-ant-oat… is lost.
-    # Goes to stderr (logged, never stored); reveals the drop mechanism.
-    grep -aboE 'sk-ant' "$D/out" 2>/dev/null | head -4 | while IFS=: read OFF _; do
-      printf 'TOKENDBG off=%s hex=' "$OFF" >&2
-      dd if="$D/out" bs=1 skip="$OFF" count=14 2>/dev/null | od -An -tx1 | tr -d '\n' >&2
-      printf '\n' >&2
-    done
+    # Log the reconstructed prefix (through the tag + 4 body chars, rest masked)
+    # so we can confirm the emulator recovered sk-ant-oat01- and not sk-ant-at01-.
+    printf 'TOKENDBG recon=%s\n' "$(printf '%s' "$T" | sed -E 's/(sk-ant-[a-z]+[0-9]{2}-.{4}).*/\1<MASK>/')" >&2
     printf '%s\n' "$T"; exit 0
   fi
   printf '%s' "$CLEAN" | grep -qiE 'invalid code|expired|not authorized|oauth error|request failed' && { echo "invalid or expired code" >&2; exit 2; }
@@ -272,8 +335,7 @@ done
 # Timed out. Emit a redacted tail (every long token run masked) so we can see
 # the SHAPE of the success output in logs without ever leaking a real token.
 echo "timed out waiting for token; redacted tail:" >&2
-sed -E 's#\x1b\[[0-9;?]*[ -/]*[@-~]##g' "$D/out" 2>/dev/null | tr '\r' '\n' \
-  | sed -E 's/[A-Za-z0-9_-]{20,}/<REDACTED>/g' | grep -viE '^[[:space:]]*$' | tail -15 >&2
+render | sed -E 's/[A-Za-z0-9_-]{20,}/<REDACTED>/g' | grep -viE '^[[:space:]]*$' | tail -15 >&2
 exit 1`
 
 func exitOf(res *sandbox.ExecResult) int {

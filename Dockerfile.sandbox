@@ -32,7 +32,8 @@ RUN pip3 install --break-system-packages --no-cache-dir \
     python-docx \
     reportlab \
     tabulate \
-    pyyaml
+    pyyaml \
+    pyte
 
 # Node.js + connected external-agent CLIs. Installed globally as root so the
 # sandbox user can invoke them. Claude Code is the first connected agent; add
