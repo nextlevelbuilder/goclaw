@@ -208,7 +208,7 @@ setsid sh -c "sleep 1800 > $D/in" </dev/null >/dev/null 2>&1 &
 setsid script -qfc "stty cols 1000 rows 50 2>/dev/null; claude setup-token" "$D/out" < "$D/in" >/dev/null 2>&1 &
 for i in $(seq 1 40); do
   if [ -f "$D/out" ]; then
-    U=$(sed -E 's#\x1b\[[0-9;?]*[ -/]*[@-~]##g' "$D/out" 2>/dev/null | sed 's/.*\r//' | grep -aoE 'https://[^[:space:]]+' | head -1)
+    U=$(sed -E 's#\x1b\[[0-9;?]*[ -/]*[@-~]##g' "$D/out" 2>/dev/null | tr '\r' '\n' | grep -aoE 'https://[^[:space:]]+' | head -1)
     [ -n "$U" ] && { printf '%s\n' "$U"; exit 0; }
   fi
   sleep 1
@@ -233,10 +233,12 @@ sleep 1
 printf '\r' > "$D/in"
 for i in $(seq 1 45); do
   # Sanitize robustly: strip full CSI escapes (params + intermediates + final),
-  # and treat \r as line-OVERWRITE (keep text after the last \r), not delete —
-  # a mid-render redraw was dropping a token character (sk-ant-oat… → sk-ant-at…),
-  # producing an invalid token that Anthropic rejects with 401.
-  CLEAN=$(sed -E 's#\x1b\[[0-9;?]*[ -/]*[@-~]##g' "$D/out" 2>/dev/null | sed 's/.*\r//')
+  # then convert each \r to \n so every carriage-return redraw frame lands on its
+  # OWN line. This never glues characters across frames (the bug that dropped a
+  # token char, sk-ant-oat… → sk-ant-at…, yielding a 401) and never deletes a
+  # frame (an earlier sed 's/.*\r//' wiped a line whose content preceded a
+  # trailing \r). grep then finds the full token in whichever frame holds it.
+  CLEAN=$(sed -E 's#\x1b\[[0-9;?]*[ -/]*[@-~]##g' "$D/out" 2>/dev/null | tr '\r' '\n')
   # Require the EXACT token shape sk-ant-oat<NN>-<long>. A partial/corrupted
   # render never matches, so we keep polling until a clean token is rendered.
   T=$(printf '%s' "$CLEAN" | grep -aoE 'sk-ant-oat[0-9]{2}-[A-Za-z0-9_-]{60,}' | tail -1)
@@ -247,7 +249,7 @@ done
 # Timed out. Emit a redacted tail (every long token run masked) so we can see
 # the SHAPE of the success output in logs without ever leaking a real token.
 echo "timed out waiting for token; redacted tail:" >&2
-sed -E 's#\x1b\[[0-9;?]*[ -/]*[@-~]##g' "$D/out" 2>/dev/null | sed 's/.*\r//' \
+sed -E 's#\x1b\[[0-9;?]*[ -/]*[@-~]##g' "$D/out" 2>/dev/null | tr '\r' '\n' \
   | sed -E 's/[A-Za-z0-9_-]{20,}/<REDACTED>/g' | grep -viE '^[[:space:]]*$' | tail -15 >&2
 exit 1`
 
