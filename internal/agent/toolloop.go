@@ -47,7 +47,7 @@ var mutatingTools = map[string]bool{
 	"spawn": true, "message": true,
 	"create_image": true, "create_video": true, "create_audio": true,
 	"tts": true, "cron": true, "publish_skill": true,
-	"sessions_send": true,
+	"sessions_send":    true,
 	"execute_action":   true, // browser-page mutation (fill/click/select/hover/keyboard)
 	"execute_actions":  true, // batched browser-page mutations
 	"scroll_into_view": true, // browser-page viewport change
@@ -275,6 +275,14 @@ func (s *toolLoopState) detectSameResult(toolName, resultHash string) (level, me
 	// actually mutates the DOM. Counting these as "no progress" breaks the
 	// snapshot → act → snapshot verify pattern.
 	if toolName == "refresh_page_content" {
+		return "", ""
+	}
+	// Media generation (generate_image / generate_video) is already rate-limited
+	// by a per-user cooldown in document-mcp: repeats return an identical
+	// "already generated" message by design, so counting them as a runaway loop
+	// would append a scary CRITICAL notice to an otherwise-successful turn.
+	// Suffix match tolerates the MCP tool-name prefix.
+	if strings.HasSuffix(toolName, "generate_image") || strings.HasSuffix(toolName, "generate_video") {
 		return "", ""
 	}
 	var count int
