@@ -117,6 +117,11 @@ func (h *AgentsHandler) handleSubmitConnectionLoginCode(w http.ResponseWriter, r
 		writeError(w, http.StatusBadGateway, protocol.ErrInternal, msg)
 		return
 	}
+	// DIAG (temporary): the submit script writes TOKENDBG rawhex lines to stderr;
+	// log them so we can see the raw prefix bytes and fix the "o"-drop precisely.
+	if strings.Contains(res.Stderr, "TOKENDBG") {
+		slog.Info("connected_login_token_dbg", "connection", conn.ID, "stderr", truncate(res.Stderr, 500))
+	}
 	token := extractOAuthToken(res.Stdout)
 	if token == "" {
 		// Don't log stdout content (may contain the token); length only.
@@ -249,7 +254,18 @@ for i in $(seq 1 45); do
   # auth URL above contains no "sk-ant-", so this can't false-match its params.
   # The {40,} body floor still rejects a partial mid-render frame.
   T=$(printf '%s' "$CLEAN" | grep -aoE 'sk-ant-[a-z]+[0-9]{2}-[A-Za-z0-9_-]{40,}' | tail -1)
-  [ -n "$T" ] && { printf '%s\n' "$T"; exit 0; }
+  if [ -n "$T" ]; then
+    # DIAG (temporary): dump the RAW (unsanitized) bytes at each "sk-ant"
+    # occurrence — 14 bytes = prefix + 1 secret char — so we can see exactly how
+    # the prefix renders (escapes/CR) and where the "o" of sk-ant-oat… is lost.
+    # Goes to stderr (logged, never stored); reveals the drop mechanism.
+    grep -aboE 'sk-ant' "$D/out" 2>/dev/null | head -4 | while IFS=: read OFF _; do
+      printf 'TOKENDBG off=%s hex=' "$OFF" >&2
+      dd if="$D/out" bs=1 skip="$OFF" count=14 2>/dev/null | od -An -tx1 | tr -d '\n' >&2
+      printf '\n' >&2
+    done
+    printf '%s\n' "$T"; exit 0
+  fi
   printf '%s' "$CLEAN" | grep -qiE 'invalid code|expired|not authorized|oauth error|request failed' && { echo "invalid or expired code" >&2; exit 2; }
   sleep 1
 done
