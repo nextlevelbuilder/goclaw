@@ -125,6 +125,10 @@ func (h *AgentsHandler) handleSubmitConnectionLoginCode(w http.ResponseWriter, r
 		writeError(w, http.StatusBadGateway, protocol.ErrInternal, "login finished but no token was returned; start again")
 		return
 	}
+	// Log the token's SHAPE (prefix through the tag + total length), never the
+	// secret — so a future capture/format regression is diagnosable straight from
+	// logs without ever exec'ing into the sandbox to reverse-engineer the format.
+	slog.Info("connected_login_token_captured", "connection", conn.ID, "shape", tokenShape(token), "len", len(token))
 	if err := h.credStore.Put(r.Context(), store.ConnectedAgentCredential{
 		AgentID:      agentID,
 		ConnectionID: conn.ID,
@@ -239,9 +243,12 @@ for i in $(seq 1 45); do
   # frame (an earlier sed 's/.*\r//' wiped a line whose content preceded a
   # trailing \r). grep then finds the full token in whichever frame holds it.
   CLEAN=$(sed -E 's#\x1b\[[0-9;?]*[ -/]*[@-~]##g' "$D/out" 2>/dev/null | tr '\r' '\n')
-  # Require the EXACT token shape sk-ant-oat<NN>-<long>. A partial/corrupted
-  # render never matches, so we keep polling until a clean token is rendered.
-  T=$(printf '%s' "$CLEAN" | grep -aoE 'sk-ant-oat[0-9]{2}-[A-Za-z0-9_-]{60,}' | tail -1)
+  # Match the Anthropic token shape format-agnostically: sk-ant-<tag><NN>-<long>.
+  # The real setup-token prefix is sk-ant-atNN- (NOT sk-ant-oatNN- — an earlier
+  # over-strict "oat" regex rejected the valid token and hung the login), and the
+  # auth URL above contains no "sk-ant-", so this can't false-match its params.
+  # The {40,} body floor still rejects a partial mid-render frame.
+  T=$(printf '%s' "$CLEAN" | grep -aoE 'sk-ant-[a-z]+[0-9]{2}-[A-Za-z0-9_-]{40,}' | tail -1)
   [ -n "$T" ] && { printf '%s\n' "$T"; exit 0; }
   printf '%s' "$CLEAN" | grep -qiE 'invalid code|expired|not authorized|oauth error|request failed' && { echo "invalid or expired code" >&2; exit 2; }
   sleep 1
@@ -268,13 +275,34 @@ func truncate(s string, n int) string {
 	return s
 }
 
-// oauthTokenRe matches a Claude Code OAuth token EXACTLY: sk-ant-oat<NN>-<long>.
-// We deliberately do NOT accept a looser/bare-token fallback — a mid-render
-// terminal redraw can drop a character (sk-ant-oat… → sk-ant-at…), and a loose
-// matcher would happily store that corrupted token, which Anthropic then rejects
-// with 401. Requiring the exact shape means a partial render simply doesn't match
-// and we keep polling until a clean token renders (fail loud, never store junk).
-var oauthTokenRe = regexp.MustCompile(`sk-ant-oat[0-9]{2}-[A-Za-z0-9_-]{40,}`)
+// tokenShape returns a NON-secret descriptor of an sk-ant token: the prefix up
+// to and including the "<tag><NN>-" segment, then an ellipsis. For
+// sk-ant-at01-<90 secret chars> it returns "sk-ant-at01-…". If the value doesn't
+// look like an sk-ant token, only the leading char class is described so no
+// secret bytes leak. Safe to log.
+func tokenShape(tok string) string {
+	// Everything up to and including the 3rd hyphen is the non-secret prefix
+	// (sk "-" ant "-" tag "-"); the body after it is the secret.
+	hy := 0
+	for i := 0; i < len(tok); i++ {
+		if tok[i] == '-' {
+			hy++
+			if hy == 3 {
+				return tok[:i+1] + "…"
+			}
+		}
+	}
+	return "(unrecognized token shape)"
+}
+
+// oauthTokenRe matches a Claude Code OAuth token format-agnostically:
+// sk-ant-<tag><NN>-<long>. The real `claude setup-token` prefix is sk-ant-at<NN>-;
+// an earlier version hard-required sk-ant-oat<NN>- on a mistaken "dropped-o
+// corruption" theory, which rejected the VALID token and hung the login at
+// "Finishing…". We keep a generous body-length floor so a partial mid-render
+// frame still can't match, but we no longer assume the exact tag. tr '\r' '\n'
+// in the capture loop is what actually prevents cross-frame character gluing.
+var oauthTokenRe = regexp.MustCompile(`sk-ant-[a-z]+[0-9]{2}-[A-Za-z0-9_-]{40,}`)
 
 // extractOAuthToken pulls the token out of the (already ANSI-stripped) phase-2
 // output. Never logs the token.
