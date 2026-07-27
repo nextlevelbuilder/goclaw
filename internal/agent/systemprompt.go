@@ -564,6 +564,21 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 			}
 		}
 
+		// Hybrid recipe: a large multi-file coding job (port/refactor a whole repo)
+		// is split — the connected coding agent has a compiler but no GitHub access;
+		// github_publish_dir has GitHub but writes no code. Only add this when BOTH
+		// tools are present so the model gets a concrete, correct sequence instead
+		// of writing code itself or shelling out to git.
+		if slices.Contains(cfg.ToolNames, "delegate_external") && slices.Contains(cfg.ToolNames, "github_publish_dir") {
+			lines = append(lines,
+				"## Porting or refactoring a whole repository (→ one PR)\n"+
+					"For a large multi-file coding job (e.g. \"port this repo to Go and open a PR\"), do NOT write the code yourself and do NOT push with git. Split it:\n"+
+					"1. DELEGATE the coding to your connected coding agent with `delegate_external`. Instruct it to: for a PUBLIC repo, clone it (its sandbox has network + git + the Go toolchain); refactor/port the code into a NEW directory under the workspace (e.g. `port/`); run `go build`/tests in a loop until it compiles; and NOT push or open a PR. Ask it to report the workspace-relative directory it wrote the result to.\n"+
+					"   - For a PRIVATE repo the coding agent cannot clone it (no GitHub credentials in its sandbox): first read the source with your own GitHub tools (`GITHUB_GET_A_TREE` + `GITHUB_GET_REPOSITORY_CONTENT`), write it into the workspace, then tell the coding agent that local path to work from.\n"+
+					"2. PUBLISH with `github_publish_dir` (owner, repo, source_dir = the directory the coding agent wrote to, branch, commit_message, pr_title). It commits every file and opens the PR through the user's connected GitHub — no PAT — and returns the PR URL. Report that URL.\n"+
+					"This is the correct way to ship a large refactor: the coding agent compiles the result, and `github_publish_dir` gets it onto GitHub through the user's account.")
+		}
+
 		if hint := buildChannelFormattingHint(cfg.ChannelType); hint != nil {
 			lines = append(lines, hint...)
 		}
