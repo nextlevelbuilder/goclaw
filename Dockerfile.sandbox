@@ -40,12 +40,28 @@ RUN pip3 install --break-system-packages --no-cache-dir \
 # other CLIs (aider, codex, gemini-cli, …) here as they're supported. These
 # only reach their APIs when the sandbox exec has network enabled (the
 # delegate_external path) — regular code exec stays --network none.
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-  && apt-get install -y --no-install-recommends nodejs \
-  && npm install -g @anthropic-ai/claude-code \
-  && npm cache clean --force \
-  && apt-get clean \
-  && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+  ARCH="$(dpkg --print-architecture)"; \
+  case "$ARCH" in amd64) NODEARCH=x64 ;; arm64) NODEARCH=arm64 ;; *) echo "unsupported arch $ARCH" >&2; exit 1 ;; esac; \
+  curl -fsSL "https://nodejs.org/dist/v20.18.0/node-v20.18.0-linux-${NODEARCH}.tar.gz" -o /tmp/node.tar.gz; \
+  tar -xzf /tmp/node.tar.gz -C /usr/local --strip-components=1; \
+  rm /tmp/node.tar.gz; \
+  node --version; npm --version; \
+  npm install -g @anthropic-ai/claude-code; \
+  npm cache clean --force
+
+# Go toolchain — so a delegated agent (Claude Code) can `go build`/test its
+# refactor in a loop inside the sandbox before the result is pushed. Fetched
+# directly from go.dev (no flaky third-party apt repos). Added to PATH below.
+RUN set -eux; \
+  ARCH="$(dpkg --print-architecture)"; \
+  case "$ARCH" in amd64) GOARCH=amd64 ;; arm64) GOARCH=arm64 ;; *) echo "unsupported arch $ARCH" >&2; exit 1 ;; esac; \
+  curl -fsSL "https://go.dev/dl/go1.23.4.linux-${GOARCH}.tar.gz" -o /tmp/go.tar.gz; \
+  tar -xzf /tmp/go.tar.gz -C /usr/local; \
+  rm /tmp/go.tar.gz; \
+  /usr/local/go/bin/go version
+ENV PATH="/usr/local/go/bin:${PATH}"
+ENV GOTOOLCHAIN=local
 
 # GitHub CLI — lets the delegated agent clone/push and open PRs (with GH_TOKEN
 # injected at exec time by delegate_external).
