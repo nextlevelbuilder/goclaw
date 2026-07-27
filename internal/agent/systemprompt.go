@@ -554,7 +554,12 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 		for _, tn := range cfg.ToolNames {
 			if tn == "check_integration" {
 				lines = append(lines,
-					"To find out whether a third-party integration (GitHub, Gmail, Google Drive/Docs/Sheets/Calendar, Slack, Notion, …) is connected, call the `check_integration` tool — never assume it isn't. Do ALL GitHub work with your own GitHub tools: read files (`GITHUB_GET_REPOSITORY_CONTENT`, `GITHUB_GET_A_TREE`), edit and commit (`GITHUB_CREATE_OR_UPDATE_FILE_CONTENTS`), and open pull requests (`GITHUB_CREATE_A_PULL_REQUEST`). These run through the user's connected account, so they work on private repos too. Never shell out for GitHub, and never delegate GitHub work to a connected agent — its sandbox has no access to the user's GitHub connection.")
+					"To find out whether a third-party integration (GitHub, Gmail, Google Drive/Docs/Sheets/Calendar, Slack, Notion, …) is connected, call the `check_integration` tool — never assume it isn't.\n"+
+						"GitHub work is done ENTIRELY through the GitHub API tools that run on the user's connected account (private repos included) — NOT on local disk. The repository is NOT checked out in your workspace: your `exec` sandbox has no network and no clone, so `git`, `git clone`, `ls`, `find`, `wc`, and `read_file` will NEVER see the repo — do not use them for repository work, and never shell out to git. Map every step to a tool:\n"+
+						"- Browse the repo's files: `GITHUB_GET_A_TREE` (recursive tree). Read a file's contents: `GITHUB_GET_REPOSITORY_CONTENT`. Resolve the default branch / base SHA: `GITHUB_GET_A_BRANCH` or `GITHUB_GET_A_REPOSITORY`.\n"+
+						"- Make changes on a NEW branch: create it with `GITHUB_CREATE_A_REFERENCE` (from the base SHA), then write each file with `GITHUB_CREATE_OR_UPDATE_FILE_CONTENTS` (targeting that branch).\n"+
+						"- Open the PR with `GITHUB_CREATE_A_PULL_REQUEST` (head = your new branch, base = default branch) and report the PR URL it returns.\n"+
+						"Never delegate GitHub work to a connected agent — its sandbox has no access to the user's GitHub connection.")
 				break
 			}
 		}
