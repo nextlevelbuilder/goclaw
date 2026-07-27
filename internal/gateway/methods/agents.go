@@ -124,6 +124,16 @@ func (m *AgentsMethods) handleList(ctx context.Context, client *gateway.Client, 
 			if a.Status != store.AgentStatusActive {
 				continue
 			}
+			// The website's agent editor hydrates its "Connected agents" section
+			// from this list. If connected_agents is absent here, the editor loads
+			// it as [] and the next save writes [] back — silently wiping the user's
+			// connected agents (and orphaning their per-connection credential). So
+			// include it; default an empty/nil value to [] (not null) so the client's
+			// Array.isArray() hydration guard treats it as "no connections", not junk.
+			connectedAgents := a.ConnectedAgents
+			if len(connectedAgents) == 0 {
+				connectedAgents = json.RawMessage("[]")
+			}
 			// Keep legacy keys (id/name) for backwards compat with any
 			// existing client; also expose the underlying DB row UUID +
 			// the picker-friendly fields (agent_key, display_name, emoji,
@@ -151,7 +161,8 @@ func (m *AgentsMethods) handleList(ctx context.Context, client *gateway.Client, 
 				// Agent's custom instructions (migration 000063). The website's
 				// Manage modal's Clone button pre-fills the create form from
 				// this field — must round-trip or clones lose the prompt.
-				"system_prompt": a.SystemPrompt,
+				"system_prompt":    a.SystemPrompt,
+				"connected_agents": connectedAgents,
 			})
 		}
 		client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
