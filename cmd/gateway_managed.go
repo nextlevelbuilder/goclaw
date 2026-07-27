@@ -550,6 +550,14 @@ func wireExtras(
 		slog.Info("delegate_external tool wired", "sandbox", sandboxMgr != nil)
 	}
 
+	// github_publish_dir: publish a directory of workspace files to GitHub as a
+	// branch + PR through the user's connected GitHub (Composio), reading the
+	// files server-side so their contents never enter the model context. Pairs
+	// with delegate_external: a connected coding agent refactors into the
+	// workspace, then this ships it as a PR with no PAT.
+	toolsReg.Register(tools.NewGithubPublishDirTool(workspace))
+	slog.Info("github_publish_dir tool wired")
+
 	// check_integration: lets the agent report which third-party integrations
 	// the user has connected (via composio-mcp /accounts) instead of guessing.
 	toolsReg.Register(tools.NewCheckIntegrationTool("http://composio-mcp:9300"))

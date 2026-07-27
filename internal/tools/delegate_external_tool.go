@@ -179,6 +179,16 @@ func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.Connecte
 		// NOTE: not --bare, so CLAUDE_CODE_OAUTH_TOKEN is honoured (bare mode
 		// ignores it and requires ANTHROPIC_API_KEY).
 		command = []string{"claude", "-p", task, "--permission-mode", "bypassPermissions", "--output-format", "text"}
+		// The sandbox root is read-only; point everything that wants to write to a
+		// config/cache dir at the writable tmpfs. HOME=/tmp lets Claude Code persist
+		// its own state, and the Go env vars let a delegated `go build`/test loop
+		// work (the Go toolchain otherwise writes its cache under ~/.cache and its
+		// module cache under ~/go, both read-only here). Verified: with these,
+		// Claude Code compiles Go in the locked-down sandbox.
+		env["HOME"] = "/tmp"
+		env["GOCACHE"] = "/tmp/go-build"
+		env["GOPATH"] = "/tmp/go"
+		env["GOMODCACHE"] = "/tmp/go/pkg/mod"
 		// Credential resolution, in order:
 		//   1. per-connection BYOK credential (the user's own key/token)
 		//   2. platform subscription OAuth token (GOCLAW_ANTHROPIC_OAUTH_TOKEN)
