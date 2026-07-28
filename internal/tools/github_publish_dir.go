@@ -60,6 +60,10 @@ const (
 
 var prURLRe = regexp.MustCompile(`https://github\.com/[^\s"']+/pull/\d+`)
 
+// shaRe matches a git commit SHA — the first one in a GITHUB_GET_A_BRANCH
+// response is the branch's tip commit.
+var shaRe = regexp.MustCompile(`\b[0-9a-f]{40}\b`)
+
 func (t *GithubPublishDirTool) Execute(ctx context.Context, args map[string]any) *Result {
 	owner, _ := args["owner"].(string)
 	repo, _ := args["repo"].(string)
@@ -79,9 +83,6 @@ func (t *GithubPublishDirTool) Execute(ctx context.Context, args map[string]any)
 	reg := ParentRegistryFromCtx(ctx)
 	if reg == nil {
 		return ErrorResult("github_publish_dir: no tool registry in context — cannot reach the GitHub tools")
-	}
-	if _, ok := reg.Get(composioToolPrefix + "GITHUB_COMMIT_MULTIPLE_FILES"); !ok {
-		return ErrorResult("GitHub isn't connected for this agent — connect GitHub (Composio) first, then retry")
 	}
 
 	root, err := t.resolveDir(sourceDir)
@@ -103,21 +104,51 @@ func (t *GithubPublishDirTool) Execute(ctx context.Context, args map[string]any)
 		baseBranch = "main"
 	}
 
-	// 1) Commit every file to the new branch. GITHUB_COMMIT_MULTIPLE_FILES creates
-	//    the branch from base_branch when it doesn't yet exist.
-	commitRes := reg.Execute(ctx, composioToolPrefix+"GITHUB_COMMIT_MULTIPLE_FILES", map[string]any{
-		"owner":       owner,
-		"repo":        repo,
-		"branch":      branch,
-		"base_branch": baseBranch,
-		"message":     commitMsg,
-		"upserts":     upserts,
+	// The whole flow uses only the curated/granted GitHub tools (get-branch,
+	// create-reference, create-or-update-file, create-pull-request) — the same
+	// ones the agent can call directly — via reg.Execute, which resolves and
+	// activates them (inline or deferred) with the caller's Composio identity.
+
+	// 1) Resolve the base branch's tip commit SHA.
+	brRes := reg.Execute(ctx, composioToolPrefix+"GITHUB_GET_A_BRANCH", map[string]any{
+		"owner": owner, "repo": repo, "branch": baseBranch,
 	})
-	if commitRes == nil || commitRes.IsError {
-		return ErrorResult("failed to commit files to GitHub: " + resultText(commitRes))
+	if brRes == nil || brRes.IsError {
+		return ErrorResult(fmt.Sprintf("couldn't read the base branch %q from GitHub (is GitHub connected for this agent?): %s", baseBranch, resultText(brRes)))
+	}
+	baseSHA := shaRe.FindString(resultText(brRes))
+	if baseSHA == "" {
+		return ErrorResult(fmt.Sprintf("couldn't resolve the tip commit SHA of base branch %q", baseBranch))
 	}
 
-	// 2) Open the PR.
+	// 2) Create the new branch off that SHA.
+	refRes := reg.Execute(ctx, composioToolPrefix+"GITHUB_CREATE_A_REFERENCE", map[string]any{
+		"owner": owner, "repo": repo, "ref": "refs/heads/" + branch, "sha": baseSHA,
+	})
+	if refRes == nil || refRes.IsError {
+		return ErrorResult(fmt.Sprintf("couldn't create branch %q (it may already exist — pick a new name): %s", branch, resultText(refRes)))
+	}
+
+	// 3) Write each file onto the new branch (content is raw text; Composio
+	//    encodes it). One commit per file — the curated set has no multi-file
+	//    commit, and this is exactly what works by hand.
+	for i, u := range upserts {
+		path, _ := u["path"].(string)
+		content, _ := u["content"].(string)
+		fileMsg := commitMsg
+		if len(upserts) > 1 {
+			fileMsg = fmt.Sprintf("%s (%d/%d: %s)", commitMsg, i+1, len(upserts), path)
+		}
+		wRes := reg.Execute(ctx, composioToolPrefix+"GITHUB_CREATE_OR_UPDATE_FILE_CONTENTS", map[string]any{
+			"owner": owner, "repo": repo, "branch": branch,
+			"path": path, "message": fileMsg, "content": content,
+		})
+		if wRes == nil || wRes.IsError {
+			return ErrorResult(fmt.Sprintf("created branch %q and wrote %d/%d files, then failed on %q: %s", branch, i, len(upserts), path, resultText(wRes)))
+		}
+	}
+
+	// 4) Open the PR.
 	prRes := reg.Execute(ctx, composioToolPrefix+"GITHUB_CREATE_A_PULL_REQUEST", map[string]any{
 		"owner": owner,
 		"repo":  repo,
@@ -127,7 +158,7 @@ func (t *GithubPublishDirTool) Execute(ctx context.Context, args map[string]any)
 		"body":  prBody,
 	})
 	if prRes == nil || prRes.IsError {
-		return ErrorResult(fmt.Sprintf("committed %d files to branch %q, but opening the PR failed: %s", len(upserts), branch, resultText(prRes)))
+		return ErrorResult(fmt.Sprintf("published %d files to branch %q, but opening the PR failed: %s", len(upserts), branch, resultText(prRes)))
 	}
 
 	msg := fmt.Sprintf("Published %d files to %s/%s on branch %q (base %q) and opened a pull request.", len(upserts), owner, repo, branch, baseBranch)
