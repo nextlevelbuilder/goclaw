@@ -56,7 +56,7 @@ RUN set -eux; \
 RUN set -eux; \
   ARCH="$(dpkg --print-architecture)"; \
   case "$ARCH" in amd64) GOARCH=amd64 ;; arm64) GOARCH=arm64 ;; *) echo "unsupported arch $ARCH" >&2; exit 1 ;; esac; \
-  curl -fsSL "https://go.dev/dl/go1.23.4.linux-${GOARCH}.tar.gz" -o /tmp/go.tar.gz; \
+  curl -fsSL "https://go.dev/dl/go1.25.0.linux-${GOARCH}.tar.gz" -o /tmp/go.tar.gz; \
   tar -xzf /tmp/go.tar.gz -C /usr/local; \
   rm /tmp/go.tar.gz; \
   /usr/local/go/bin/go version
