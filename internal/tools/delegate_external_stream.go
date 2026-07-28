@@ -51,6 +51,7 @@ type streamContent struct {
 	Input     json.RawMessage `json:"input"`       // tool_use input
 	ToolUseID string          `json:"tool_use_id"` // tool_result → the use it answers
 	IsError   bool            `json:"is_error"`
+	Text      string          `json:"text"`    // assistant text block
 	Content   json.RawMessage `json:"content"` // tool_result content (string or [{text}])
 }
 
@@ -68,9 +69,16 @@ func (s *delegateStreamer) onLine(line string) {
 	switch ev.Type {
 	case "assistant":
 		for _, c := range ev.Message.Content {
-			if c.Type == "tool_use" {
+			switch c.Type {
+			case "tool_use":
 				s.pending[c.ID] = c.Name
 				s.emitCall(c.ID, c.Name, c.Input)
+			case "text":
+				// Stream the connected agent's own narration so the user sees
+				// real progress ("I'll clone the repo…", "build failed, fixing
+				// the import…"), not just a list of tool names. Each stream-json
+				// assistant event carries a full turn's text, so append it.
+				s.emitText(c.Text)
 			}
 		}
 	case "user":
@@ -89,6 +97,25 @@ func (s *delegateStreamer) onLine(line string) {
 		s.finalResult = ev.Result
 		s.finalIsError = ev.IsError
 	}
+}
+
+// emitText streams a block of the connected agent's narration to the user as a
+// subagent.chunk under this delegation's card (the website appends it to the
+// live progress text). A trailing newline keeps successive turns readable.
+func (s *delegateStreamer) emitText(text string) {
+	if s.emit == nil || s.parentID == "" {
+		return
+	}
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return
+	}
+	s.emit("subagent.chunk", map[string]any{
+		"content":             text + "\n",
+		"parent_tool_call_id": s.parentID,
+		"subagent_id":         s.subagentID,
+		"subagent_label":      s.label,
+	})
 }
 
 func (s *delegateStreamer) emitCall(id, name string, input json.RawMessage) {
