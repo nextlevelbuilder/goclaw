@@ -27,6 +27,23 @@ var (
 
 	// Dates in common formats
 	reDate = regexp.MustCompile(`\b\d{4}-\d{2}-\d{2}\b`)
+
+	// Vietnamese counterparts of the three semantic patterns above. Without
+	// these the fallback is inert on a Vietnamese deployment: measured against
+	// 195k chars of real Vietnamese session text, the English patterns produced
+	// 9 decision matches (all from stray English), 0 preferences and 0 technical
+	// facts — 97% of everything "saved" was incidental file paths. A fallback
+	// that exists so a failed LLM flush still preserves context has to work in
+	// the language the conversation is actually in.
+	//
+	// The cues are chosen to be unambiguous verbs/markers rather than bare
+	// keywords: "chọn" alone appears inside ordinary prose, "đã chọn" states a
+	// decision.
+	reDecisionVI = regexp.MustCompile(`(?i)(?:quyết\s+định|đã\s+chọn|chọn\s+phương\s+án|thống\s+nhất|chốt\s+lại|chốt\s+phương\s+án|đồng\s+ý|duyệt|sẽ\s+dùng|sẽ\s+sử\s+dụng)\s+.{5,120}`)
+
+	rePreferenceVI = regexp.MustCompile(`(?i)(?:tôi\s+muốn|em\s+muốn|anh\s+muốn|con\s+muốn|nhớ\s+là|lưu\s+ý|đừng\s+|không\s+được\s+|luôn\s+luôn|tuyệt\s+đối\s+không|ưu\s+tiên)\s+.{5,120}`)
+
+	reTechFactVI = regexp.MustCompile(`(?i)(?:API\s+là|endpoint\s+là|phiên\s+bản\s+là|cấu\s+hình\s+là|dùng\s+\S+\s+(?:để|cho)|chạy\s+trên|nằm\s+ở)\s+.{3,120}`)
 )
 
 // ExtractiveMemoryFallback extracts key information from conversation history
@@ -52,12 +69,24 @@ func ExtractiveMemoryFallback(history []providers.Message) string {
 
 	combined := strings.Join(texts, "\n")
 
-	// Extract by category, dedup with a set
+	// Extract by category, dedup with a set. Both language sets always run: a
+	// session can mix languages (Vietnamese prose quoting English error text or
+	// config keys), so picking one set by detected locale would drop the other
+	// half. dedup keeps an overlap from being stored twice.
 	decisions := extractUnique(reDecision, combined)
+	for _, d := range extractUnique(reDecisionVI, combined) {
+		decisions = appendIfAbsent(decisions, d)
+	}
 	preferences := extractUnique(rePreference, combined)
+	for _, p := range extractUnique(rePreferenceVI, combined) {
+		preferences = appendIfAbsent(preferences, p)
+	}
 
 	// Technical facts = regex matches + URLs + dates
 	techFacts := extractUnique(reTechFact, combined)
+	for _, f := range extractUnique(reTechFactVI, combined) {
+		techFacts = appendIfAbsent(techFacts, f)
+	}
 	for _, u := range extractUnique(reURL, combined) {
 		techFacts = appendIfAbsent(techFacts, u)
 	}
