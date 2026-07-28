@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -12,6 +14,19 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
+
+// delegateExecTimeoutSec is how long a delegated connected-agent run may take
+// before the sandbox exec is killed. The sandbox default is 5 minutes, which is
+// far too short for a real coding task (cloning + porting + a go-build loop over
+// a whole repo). Default to 30 minutes; override with GOCLAW_DELEGATE_TIMEOUT_SEC.
+func delegateExecTimeoutSec() int {
+	if v := os.Getenv("GOCLAW_DELEGATE_TIMEOUT_SEC"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 1800
+}
 
 // DelegateExternalTool hands a task to one of the calling agent's CONNECTED
 // external agents (Claude Code, Aider, …) — the specialists a user wires into
@@ -232,6 +247,10 @@ func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.Connecte
 		netCfg = t.sandboxMgr.BaseConfig()
 	}
 	netCfg.NetworkEnabled = true
+	// A real coding delegation (clone + port + build loop) runs far longer than
+	// the sandbox's default 5-minute exec timeout, which would otherwise kill the
+	// connected agent mid-task and yield no output. Give it a generous window.
+	netCfg.TimeoutSec = delegateExecTimeoutSec()
 	sandboxKey := "external:" + conn.ID
 
 	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, &netCfg)
@@ -248,9 +267,17 @@ func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.Connecte
 	if result.Stderr != "" && result.ExitCode != 0 {
 		out += "\n[stderr]\n" + strings.TrimSpace(result.Stderr)
 	}
+	slog.Info("external delegation completed", "provider", conn.Provider, "connection", conn.ID, "exit", result.ExitCode, "stdout_len", len(result.Stdout))
+
+	// exit=-1 means the exec was killed — almost always the time limit. Tell the
+	// caller clearly (an ERROR, not a benign empty result) so it can scope the
+	// task down or retry rather than hunting for output that was never produced.
+	if result.ExitCode == -1 {
+		mins := delegateExecTimeoutSec() / 60
+		return ErrorResult(fmt.Sprintf("the connected agent %q ran past the %d-minute time limit and was stopped before it finished — it produced no result. Give it a smaller, self-contained slice of the work (e.g. one module/package at a time) and delegate again, or raise GOCLAW_DELEGATE_TIMEOUT_SEC.", conn.Name, mins))
+	}
 	if out == "" {
 		out = "(the connected agent produced no output)"
 	}
-	slog.Info("external delegation completed", "provider", conn.Provider, "connection", conn.ID, "exit", result.ExitCode)
 	return NewResult(fmt.Sprintf("Delegated to %s (%s):\n\n%s", conn.Name, conn.Provider, out))
 }
