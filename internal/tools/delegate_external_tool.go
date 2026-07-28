@@ -193,7 +193,10 @@ func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.Connecte
 		// Headless, auto-approve inside the isolated sandbox. Plain-text output.
 		// NOTE: not --bare, so CLAUDE_CODE_OAUTH_TOKEN is honoured (bare mode
 		// ignores it and requires ANTHROPIC_API_KEY).
-		command = []string{"claude", "-p", task, "--permission-mode", "bypassPermissions", "--output-format", "text"}
+		// stream-json emits one JSON event per line AS the run progresses (tool
+		// uses, results, final answer), which we tail to stream live progress back
+		// to the user. --verbose is required for stream-json under -p.
+		command = []string{"claude", "-p", task, "--permission-mode", "bypassPermissions", "--output-format", "stream-json", "--verbose"}
 		// The sandbox root is read-only; point everything that wants to write to a
 		// config/cache dir at the writable tmpfs. HOME=/tmp lets Claude Code persist
 		// its own state, and the Go env vars let a delegated `go build`/test loop
@@ -258,12 +261,30 @@ func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.Connecte
 		slog.Warn("security.external_delegate_sandbox_unavailable", "provider", conn.Provider, "error", err)
 		return ErrorResult(fmt.Sprintf("external delegation sandbox unavailable: %v", err))
 	}
-	result, err := sb.Exec(ctx, command, "", sandbox.WithEnv(env))
+	// Stream the run's progress to the user live. streamer parses each stream-json
+	// line as it arrives, emits tool.call/tool.result chips under this delegation's
+	// card, and captures the final "result" event as the delegation's output.
+	streamer := newDelegateStreamer(ctx, conn.Name)
+	result, err := sb.Exec(ctx, command, "", sandbox.WithEnv(env), sandbox.WithStdoutLine(streamer.onLine))
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("connected agent %q failed to run: %v", conn.Name, err))
 	}
+	slog.Info("external delegation completed", "provider", conn.Provider, "connection", conn.ID, "exit", result.ExitCode, "events", streamer.eventCount, "stdout_len", len(result.Stdout))
 
-	out := strings.TrimSpace(result.Stdout)
+	// exit=-1 means the exec was killed — almost always the time limit. Tell the
+	// caller clearly (an ERROR, not a benign empty result) so it can scope the
+	// task down or retry rather than hunting for output that was never produced.
+	if result.ExitCode == -1 {
+		mins := delegateExecTimeoutSec() / 60
+		return ErrorResult(fmt.Sprintf("the connected agent %q ran past the %d-minute time limit and was stopped before it finished — it produced no result. Give it a smaller, self-contained slice of the work (e.g. one module/package at a time) and delegate again, or raise GOCLAW_DELEGATE_TIMEOUT_SEC.", conn.Name, mins))
+	}
+
+	// Prefer the parsed final answer (from the stream's "result" event); fall back
+	// to raw stdout if the stream didn't yield one (e.g. non-JSON output).
+	out := strings.TrimSpace(streamer.finalResult)
+	if out == "" {
+		out = strings.TrimSpace(result.Stdout)
+	}
 	if result.Stderr != "" && result.ExitCode != 0 {
 		out += "\n[stderr]\n" + strings.TrimSpace(result.Stderr)
 	}

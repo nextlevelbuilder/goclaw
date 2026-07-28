@@ -164,12 +164,23 @@ type ExecOption func(*ExecOpts)
 // ExecOpts holds optional settings applied via ExecOption.
 type ExecOpts struct {
 	Env map[string]string // extra env vars injected into the container exec
+	// StdoutLine, when set, is called with each complete line of stdout AS IT IS
+	// PRODUCED (not just at the end) — used to stream a long exec's progress
+	// (e.g. a delegated Claude Code run) back to the user in real time. The full
+	// stdout is still buffered and returned in ExecResult.
+	StdoutLine func(line string)
 }
 
 // WithEnv injects additional environment variables into the sandbox exec call.
 // Used by credentialed exec to pass credentials without shell interpretation.
 func WithEnv(env map[string]string) ExecOption {
 	return func(o *ExecOpts) { o.Env = env }
+}
+
+// WithStdoutLine streams each complete stdout line to cb as it is produced,
+// while still buffering the full output for the returned ExecResult.
+func WithStdoutLine(cb func(line string)) ExecOption {
+	return func(o *ExecOpts) { o.StdoutLine = cb }
 }
 
 // ApplyExecOpts resolves variadic ExecOption into ExecOpts.

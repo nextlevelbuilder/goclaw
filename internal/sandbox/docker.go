@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"maps"
 	"os/exec"
@@ -201,7 +202,15 @@ func (s *DockerSandbox) Exec(ctx context.Context, command []string, workDir stri
 	}
 	stdout := &limitedBuffer{max: maxOut}
 	stderr := &limitedBuffer{max: maxOut}
-	cmd.Stdout = stdout
+	if o.StdoutLine != nil {
+		// Tee stdout to a line splitter so the caller sees each line live while
+		// the full output is still captured for the result.
+		lw := &lineWriter{cb: o.StdoutLine}
+		cmd.Stdout = io.MultiWriter(stdout, lw)
+		defer lw.flush()
+	} else {
+		cmd.Stdout = stdout
+	}
 	cmd.Stderr = stderr
 
 	err := cmd.Run()
@@ -467,6 +476,37 @@ func sanitizeKey(key string) string {
 
 // limitedBuffer is a bytes.Buffer that stops accepting writes after max bytes.
 // Prevents OOM when commands produce large output.
+// lineWriter splits a byte stream into lines and invokes cb once per complete
+// line as bytes arrive. Any partial trailing line is held until the next Write
+// or a final flush(). Used to stream a long exec's stdout to the caller live.
+type lineWriter struct {
+	cb  func(string)
+	buf []byte
+}
+
+func (w *lineWriter) Write(p []byte) (int, error) {
+	w.buf = append(w.buf, p...)
+	for {
+		i := bytes.IndexByte(w.buf, '\n')
+		if i < 0 {
+			break
+		}
+		line := string(w.buf[:i])
+		w.buf = w.buf[i+1:]
+		if w.cb != nil {
+			w.cb(line)
+		}
+	}
+	return len(p), nil
+}
+
+func (w *lineWriter) flush() {
+	if len(w.buf) > 0 && w.cb != nil {
+		w.cb(string(w.buf))
+		w.buf = nil
+	}
+}
+
 type limitedBuffer struct {
 	buf       bytes.Buffer
 	max       int
