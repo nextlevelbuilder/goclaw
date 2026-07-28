@@ -76,6 +76,7 @@ type Manager struct {
 	health           map[string]ChannelHealth
 	bus              *bus.MessageBus
 	runs             sync.Map // runID string → *RunContext
+	workflowDelivery sync.Map // workflow_delivery_id → dedupe expiry time.Time
 	dispatchTask     *asyncTask
 	mu               sync.RWMutex
 	contactCollector *store.ContactCollector

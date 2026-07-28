@@ -32,9 +32,24 @@ const (
 	ctxAgentKey                   toolContextKey = "tool_agent_key"
 	ctxAgentPolicy                toolContextKey = "tool_agent_policy" // per-agent tool policy for MCP bridge enforcement
 	ctxSessionKey                 toolContextKey = "tool_session_key"  // origin session key for announce routing
-	ctxRunKind                    toolContextKey = "tool_run_kind"     // "notification", "announce", "delegation"
+	ctxRunID                      toolContextKey = "tool_run_id"
+	ctxRunKind                    toolContextKey = "tool_run_kind" // "notification", "announce", "delegation"
+	ctxRoutingMetadata            toolContextKey = "tool_routing_metadata"
+	ctxTeamWorkOwnerConstraint    toolContextKey = "team_work_owner_constraint"
+	ctxTeamWorkPlanConstraint     toolContextKey = "team_work_plan_constraint"
+	ctxTeamWorkDisabled           toolContextKey = "team_work_disabled"
+	ctxTeamWorkClassifyAuditID    toolContextKey = "team_work_classification_audit_id"
 	ctxTelegramManagerPermissions toolContextKey = "telegram_manager_permissions"
 )
+
+func WithToolRoutingMetadata(ctx context.Context, metadata map[string]string) context.Context {
+	return context.WithValue(ctx, ctxRoutingMetadata, maps.Clone(metadata))
+}
+
+func ToolRoutingMetadataFromCtx(ctx context.Context) map[string]string {
+	metadata, _ := ctx.Value(ctxRoutingMetadata).(map[string]string)
+	return maps.Clone(metadata)
+}
 
 // ctxRateLimitOverride carries a per-agent tool rate limit (calls/hour) that
 // overrides the global tools.rate_limit_per_hour. 0 means "use the global".
@@ -217,6 +232,106 @@ func RunKindFromCtx(ctx context.Context) string {
 // RunKindNotification is the run kind for team task notification runs.
 // Leader agents in this mode can only relay status — mutations are blocked.
 const RunKindNotification = "notification"
+
+// TeamWorkOwnerConstraint locks a classifier-directed team workflow to the
+// validated owner. It prevents weaker model follow-up tool calls from creating
+// a request for a different assignee after the classifier has already selected
+// the specialist.
+type TeamWorkOwnerConstraint struct {
+	OwnerID  uuid.UUID
+	OwnerKey string
+}
+
+// TeamWorkPlanConstraint is the validated, canonical planner output carried
+// into team_tasks. The create_workflow action accepts no graph arguments from
+// the model and can only persist this backend-provided plan.
+type TeamWorkPlanConstraint struct {
+	SchemaVersion       int
+	Goal                string
+	CoordinatorAgentID  uuid.UUID
+	CoordinatorAgentKey string
+	FinalOwnerAgentID   uuid.UUID
+	FinalOwnerAgentKey  string
+	TerminalStepID      string
+	CanonicalPlan       []byte
+	PlanHash            string
+	Steps               []TeamWorkPlanStepConstraint
+}
+
+type TeamWorkPlanStepConstraint struct {
+	ID             string
+	Title          string
+	Instruction    string
+	OwnerAgentID   uuid.UUID
+	OwnerAgentKey  string
+	RequiredTools  []string
+	DependsOn      []string
+	RequiredOutput bool
+	Terminal       bool
+}
+
+func WithTeamWorkPlanConstraint(ctx context.Context, constraint TeamWorkPlanConstraint) context.Context {
+	return context.WithValue(ctx, ctxTeamWorkPlanConstraint, constraint)
+}
+
+func TeamWorkPlanConstraintFromCtx(ctx context.Context) *TeamWorkPlanConstraint {
+	if TeamWorkDisabledFromCtx(ctx) {
+		return nil
+	}
+	if constraint, ok := ctx.Value(ctxTeamWorkPlanConstraint).(TeamWorkPlanConstraint); ok {
+		return &constraint
+	}
+	return nil
+}
+
+// WithTeamWorkClassificationAuditID carries the ID of the audit row written on
+// the gate path before scheduling, so a workflow created during the run can be
+// linked back to the classification decision that authorized it.
+func WithTeamWorkClassificationAuditID(ctx context.Context, auditID uuid.UUID) context.Context {
+	return context.WithValue(ctx, ctxTeamWorkClassifyAuditID, auditID)
+}
+
+// TeamWorkClassificationAuditIDFromCtx returns the audit ID set on the gate
+// path, or uuid.Nil when none was recorded (self/degraded runs, or a disabled
+// gate).
+func TeamWorkClassificationAuditIDFromCtx(ctx context.Context) uuid.UUID {
+	if id, ok := ctx.Value(ctxTeamWorkClassifyAuditID).(uuid.UUID); ok {
+		return id
+	}
+	return uuid.Nil
+}
+
+func WithToolRunID(ctx context.Context, runID string) context.Context {
+	return context.WithValue(ctx, ctxRunID, runID)
+}
+
+func ToolRunIDFromCtx(ctx context.Context) string {
+	v, _ := ctx.Value(ctxRunID).(string)
+	return v
+}
+
+func WithTeamWorkOwnerConstraint(ctx context.Context, constraint TeamWorkOwnerConstraint) context.Context {
+	return context.WithValue(ctx, ctxTeamWorkOwnerConstraint, constraint)
+}
+
+func TeamWorkOwnerConstraintFromCtx(ctx context.Context) *TeamWorkOwnerConstraint {
+	if TeamWorkDisabledFromCtx(ctx) {
+		return nil
+	}
+	if constraint, ok := ctx.Value(ctxTeamWorkOwnerConstraint).(TeamWorkOwnerConstraint); ok {
+		return &constraint
+	}
+	return nil
+}
+
+func WithTeamWorkDisabled(ctx context.Context) context.Context {
+	return context.WithValue(ctx, ctxTeamWorkDisabled, true)
+}
+
+func TeamWorkDisabledFromCtx(ctx context.Context) bool {
+	disabled, _ := ctx.Value(ctxTeamWorkDisabled).(bool)
+	return disabled
+}
 
 // --- Builtin tool settings (3-tier overlay, tier-1 reserved) ---
 //
@@ -591,11 +706,20 @@ const ctxPendingDispatch toolContextKey = "tool_pending_team_dispatch"
 // After the turn ends, the consumer drains and dispatches them.
 // Thread-safe: tools may execute in parallel goroutines.
 type PendingTeamDispatch struct {
-	mu       sync.Mutex
-	tasks    map[uuid.UUID][]uuid.UUID // teamID → []taskID
-	listed   bool                      // true after list called in this turn
-	teamLock *sync.Mutex               // acquired on list, released before post-turn dispatch
+	mu          sync.Mutex
+	tasks       map[uuid.UUID][]uuid.UUID // teamID → []taskID
+	listing     pendingListingState
+	listingDone chan struct{}
+	teamLock    *sync.Mutex // retained after successful search/list until post-turn dispatch
 }
+
+type pendingListingState uint8
+
+const (
+	pendingListingIdle pendingListingState = iota
+	pendingListingQuerying
+	pendingListingListed
+)
 
 func NewPendingTeamDispatch() *PendingTeamDispatch {
 	return &PendingTeamDispatch{tasks: make(map[uuid.UUID][]uuid.UUID)}
@@ -617,35 +741,71 @@ func (p *PendingTeamDispatch) Drain() map[uuid.UUID][]uuid.UUID {
 	return out
 }
 
-// MarkListed records that list was called in this turn.
-func (p *PendingTeamDispatch) MarkListed() {
+// BeginListing claims the current turn's search/list query. Callers that do not
+// win receive a channel that closes when the in-flight query succeeds or fails.
+func (p *PendingTeamDispatch) BeginListing() (bool, <-chan struct{}) {
 	p.mu.Lock()
-	p.listed = true
+	defer p.mu.Unlock()
+	switch p.listing {
+	case pendingListingListed:
+		return false, nil
+	case pendingListingQuerying:
+		return false, p.listingDone
+	default:
+		p.listing = pendingListingQuerying
+		p.listingDone = make(chan struct{})
+		return true, nil
+	}
+}
+
+// MarkListed records a successful search/list in this turn.
+func (p *PendingTeamDispatch) MarkListed() {
+	p.MarkListedWithLock(nil)
+}
+
+func (p *PendingTeamDispatch) MarkListedWithLock(teamLock *sync.Mutex) {
+	p.mu.Lock()
+	if p.listing == pendingListingQuerying && p.listingDone != nil {
+		close(p.listingDone)
+	}
+	p.listing = pendingListingListed
+	p.listingDone = nil
+	if teamLock != nil {
+		p.teamLock = teamLock
+	}
 	p.mu.Unlock()
+}
+
+// FailListing releases the cross-run create lock and allows a waiter to retry.
+func (p *PendingTeamDispatch) FailListing(teamLock *sync.Mutex) {
+	p.mu.Lock()
+	if p.listing == pendingListingQuerying && p.listingDone != nil {
+		close(p.listingDone)
+	}
+	p.listing = pendingListingIdle
+	p.listingDone = nil
+	p.mu.Unlock()
+	if teamLock != nil {
+		teamLock.Unlock()
+	}
 }
 
 // HasListed reports whether list was called in this turn.
 func (p *PendingTeamDispatch) HasListed() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.listed
-}
-
-// SetTeamLock stores the acquired team create lock so it can be released post-turn.
-func (p *PendingTeamDispatch) SetTeamLock(m *sync.Mutex) {
-	p.mu.Lock()
-	p.teamLock = m
-	p.mu.Unlock()
+	return p.listing == pendingListingListed
 }
 
 // ReleaseTeamLock releases the held team create lock, if any.
 func (p *PendingTeamDispatch) ReleaseTeamLock() {
 	p.mu.Lock()
-	if p.teamLock != nil {
-		p.teamLock.Unlock()
-		p.teamLock = nil
-	}
+	teamLock := p.teamLock
+	p.teamLock = nil
 	p.mu.Unlock()
+	if teamLock != nil {
+		teamLock.Unlock()
+	}
 }
 
 func WithPendingTeamDispatch(ctx context.Context, ptd *PendingTeamDispatch) context.Context {

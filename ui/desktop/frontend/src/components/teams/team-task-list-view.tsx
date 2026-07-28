@@ -74,9 +74,23 @@ export function TeamTaskListView({
                     />
                   </td>
                   <td className="py-2 pr-2 font-mono text-text-muted">{task.identifier || task.task_number}</td>
-                  <td className="py-2 pr-2 text-text-primary truncate max-w-[250px]">{task.subject}</td>
+                  <td className="py-2 pr-2 text-text-primary max-w-[250px]">
+                    <span className="truncate block">{task.subject}</span>
+                    {task.workflow_id && (
+                      <span className="mt-0.5 flex flex-wrap items-center gap-1">
+                        {task.workflow_step_id && (
+                          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded border border-border text-text-muted">
+                            {task.workflow_step_id}
+                          </span>
+                        )}
+                        <span className="font-mono text-[10px] px-1.5 py-0.5 rounded border border-border text-text-muted">
+                          r{task.plan_revision ?? 1}
+                        </span>
+                      </span>
+                    )}
+                  </td>
                   <td className="py-2 pr-2">
-                    <span className="capitalize text-text-secondary">{task.status.replace('_', ' ')}</span>
+                    <span className="capitalize text-text-secondary">{t(`taskStatus.${task.status}`)}</span>
                   </td>
                   <td className="py-2 pr-2 text-text-secondary">{member?.display_name || task.owner_agent_key || '—'}</td>
                   <td className="py-2 text-text-secondary">P-{task.priority}</td>

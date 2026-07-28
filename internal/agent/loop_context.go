@@ -27,6 +27,15 @@ type contextSetupResult struct {
 // values needed by the agent loop and tool execution. Also runs input guard and message
 // truncation. Returns error only if input guard blocks the message.
 func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetupResult, error) {
+	if req.RunID != "" {
+		ctx = tools.WithToolRunID(ctx, req.RunID)
+	}
+	if len(req.RoutingMetadata) > 0 {
+		ctx = tools.WithToolRoutingMetadata(ctx, req.RoutingMetadata)
+	}
+	if req.DisableTeamWork {
+		ctx = tools.WithTeamWorkDisabled(ctx)
+	}
 	// Inject agent UUID + key into context for tool routing
 	if l.agentUUID != uuid.Nil {
 		ctx = store.WithAgentID(ctx, l.agentUUID)
@@ -230,6 +239,22 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 	}
 	if req.LeaderAgentID != "" {
 		ctx = tools.WithLeaderAgentID(ctx, req.LeaderAgentID)
+	}
+	// Workflow-work attempt identity: inject the backend-derived attempt so every
+	// downstream mutation (heartbeat, progress, blocker, complete, post-turn
+	// settlement) fences on this exact tuple. A superseded attempt that reaches a
+	// tool gets a typed Stale outcome and never mutates the task or fails the
+	// workflow. Set only after AcceptWorkflowTaskAttempt; nil for non-workflow runs.
+	if req.WorkflowAttempt != nil {
+		ctx = store.WithWorkflowTaskAttempt(ctx, *req.WorkflowAttempt)
+	}
+	// Coordinator recovery identity: inject the backend-derived blocked-step target
+	// so the coordinator's bounded recovery actions (retry_blocked / cancel_workflow
+	// / fail_workflow) resolve the workflow and blocked task from context. The
+	// recovery prompt hides task IDs and tokens from the model, so this is the only
+	// authoritative source — never a tool/model arg. Set only for recovery runs.
+	if req.WorkflowRecovery != nil {
+		ctx = store.WithWorkflowRecoveryContext(ctx, *req.WorkflowRecovery)
 	}
 
 	// Team workspace: auto-resolve for agents with team membership (not dispatched).

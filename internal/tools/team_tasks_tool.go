@@ -17,7 +17,7 @@ func NewTeamTasksTool(manager TeamToolBackend, policy TeamActionPolicy) *TeamTas
 	return &TeamTasksTool{manager: manager, policy: policy}
 }
 
-func (t *TeamTasksTool) Name() string { return "team_tasks" }
+func (t *TeamTasksTool) Name() string { return ToolNameTeamTasks }
 
 func (t *TeamTasksTool) Description() string {
 	return "Manage the shared team task list (create, claim, complete, track progress). See TEAM.md for available actions and team context."
@@ -35,6 +35,10 @@ func (t *TeamTasksTool) Parameters() map[string]any {
 			"task_id": map[string]any{
 				"type":        "string",
 				"description": "Task UUID (required for most actions except list, create, search). When working on a dispatched task, this is auto-resolved from context — you can omit it for complete/progress/comment.",
+			},
+			"workflow_id": map[string]any{
+				"type":        "string",
+				"description": "Workflow UUID (required only for get_workflow).",
 			},
 			"subject": map[string]any{
 				"type":        "string",
@@ -54,7 +58,7 @@ func (t *TeamTasksTool) Parameters() map[string]any {
 			},
 			"type": map[string]any{
 				"type":        "string",
-				"description": "Comment type for action=comment: 'note' (default, share findings) or 'blocker' (you are BLOCKED and need leader input — auto-fails task and notifies leader)",
+				"description": "Comment type for action=comment: 'note' (default, share findings) or 'blocker' (you are BLOCKED and need coordinator input). For a workflow step a blocker marks the step blocked and asks the coordinator to resolve it (retry/replan/cancel/fail) — it does NOT fail the whole workflow. For a standalone task it escalates to the leader.",
 			},
 			"status": map[string]any{
 				"type":        "string",
@@ -116,23 +120,30 @@ func (t *TeamTasksTool) buildActionDescription() string {
 	// Per-action param guide — only list actions allowed by policy.
 	base.WriteString("\n\nParams per action (only send listed params):\n")
 	guide := map[string]string{
-		"list":           "- list: status?, page?\n",
-		"get":            "- get: task_id\n",
-		"create":         "- create: subject, description, assignee, priority?, blocked_by?, require_approval?, task_type?\n",
-		"claim":          "- claim: task_id\n",
-		"complete":       "- complete: task_id?, result\n",
-		"cancel":         "- cancel: task_id, text\n",
-		"search":         "- search: query, page?\n",
-		"review":         "- review: task_id\n",
-		"comment":        "- comment: task_id?, text, type?\n",
-		"progress":       "- progress: task_id?, percent, text?\n",
-		"attach":         "- attach: task_id, path\n",
-		"update":         "- update: task_id, subject?, description?, priority?, blocked_by?\n",
-		"approve":        "- approve: task_id\n",
-		"reject":         "- reject: task_id, text\n",
-		"ask_user":       "- ask_user: task_id, text\n",
-		"clear_ask_user": "- clear_ask_user: task_id\n",
-		"retry":          "- retry: task_id\n",
+		"list":             "- list: status?, page?\n",
+		"get":              "- get: task_id\n",
+		"create":           "- create: subject, description, assignee, priority?, blocked_by?, require_approval?, task_type?\n",
+		"create_workflow":  "- create_workflow: no additional parameters; backend uses the validated canonical plan\n",
+		"get_workflow":     "- get_workflow: workflow_id\n",
+		"claim":            "- claim: task_id\n",
+		"complete":         "- complete: task_id?, result\n",
+		"cancel":           "- cancel: task_id, text\n",
+		"search":           "- search: query, page?\n",
+		"review":           "- review: task_id\n",
+		"comment":          "- comment: task_id?, text, type?\n",
+		"progress":         "- progress: task_id?, percent, text?\n",
+		"attach":           "- attach: task_id, path\n",
+		"update":           "- update: task_id, subject?, description?, priority?, blocked_by?\n",
+		"approve":          "- approve: task_id\n",
+		"reject":           "- reject: task_id, text\n",
+		"ask_user":         "- ask_user: task_id, text\n",
+		"clear_ask_user":   "- clear_ask_user: task_id\n",
+		"retry":            "- retry: task_id\n",
+		"retry_blocked":    "- retry_blocked: text (revised instruction for the blocked workflow step; the target is resolved from the recovery context)\n",
+		"request_revision": "- request_revision: text (why the current plan needs revision; the target is resolved from the recovery context)\n",
+		"apply_replan":     "- apply_replan: text (replacement-plan requirements; the backend rebuilds and validates the plan from recovery context)\n",
+		"cancel_workflow":  "- cancel_workflow: text (reason; the workflow is resolved from the recovery context)\n",
+		"fail_workflow":    "- fail_workflow: text (user-facing failure reason; the workflow is resolved from the recovery context)\n",
 	}
 	for _, action := range t.policy.AllowedActions() {
 		if line, ok := guide[action]; ok {
@@ -145,7 +156,12 @@ func (t *TeamTasksTool) buildActionDescription() string {
 func (t *TeamTasksTool) Execute(ctx context.Context, args map[string]any) *Result {
 	action, _ := args["action"].(string)
 
-	// Edition policy guard — reject actions not allowed in this edition.
+	// Distinguish an action that exists but is edition-gated from a value outside
+	// the action contract. This keeps policy denials precise without masking malformed
+	// tool calls as edition differences.
+	if !actionAllowed(fullActions, action) {
+		return ErrorResult(fmt.Sprintf("unknown action: %s", action))
+	}
 	if !t.policy.IsAllowed(action) {
 		return ErrorResult(fmt.Sprintf("action %q is not available in this edition", action))
 	}
@@ -153,7 +169,7 @@ func (t *TeamTasksTool) Execute(ctx context.Context, args map[string]any) *Resul
 	// Block mutations during notification runs — leader may only relay status.
 	if RunKindFromCtx(ctx) == RunKindNotification {
 		switch action {
-		case "list", "get", "search":
+		case "list", "get", "get_workflow", "search":
 			// Read-only actions allowed.
 		default:
 			return ErrorResult("This is a notification run. Your role is to relay task status to the user in a natural, conversational style. Do not modify tasks.")
@@ -167,6 +183,10 @@ func (t *TeamTasksTool) Execute(ctx context.Context, args map[string]any) *Resul
 		return t.executeGet(ctx, args)
 	case "create":
 		return t.executeCreate(ctx, args)
+	case "create_workflow":
+		return t.executeCreateWorkflow(ctx, args)
+	case "get_workflow":
+		return t.executeGetWorkflow(ctx, args)
 	case "claim":
 		return t.executeClaim(ctx, args)
 	case "complete":
@@ -195,7 +215,17 @@ func (t *TeamTasksTool) Execute(ctx context.Context, args map[string]any) *Resul
 		return t.executeClearAskUser(ctx, args)
 	case "retry":
 		return t.executeRetry(ctx, args)
+	case "retry_blocked":
+		return t.executeRetryBlocked(ctx, args)
+	case "request_revision":
+		return t.executeRequestRevision(ctx, args)
+	case "apply_replan":
+		return t.executeApplyReplan(ctx, args)
+	case "cancel_workflow":
+		return t.executeCancelWorkflow(ctx, args)
+	case "fail_workflow":
+		return t.executeFailWorkflow(ctx, args)
 	default:
-		return ErrorResult(fmt.Sprintf("unknown action: %s (use list, get, create, claim, complete, cancel, search, review, comment, progress, attach, update, ask_user, clear_ask_user, or retry)", action))
+		return ErrorResult(fmt.Sprintf("unknown action: %s", action))
 	}
 }

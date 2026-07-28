@@ -41,6 +41,9 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 	// 2. NO_REPLY detection: save to session for context but mark as silent.
 	// Must run BEFORE session flush so the agent message is persisted even if suppressed.
 	isSilent := s.deps.IsSilentReply != nil && s.deps.IsSilentReply(state.Observe.FinalContent)
+	if state.Tool.SuppressUserOutput {
+		isSilent = true
+	}
 
 	// 2b. Fallback for empty content (matching v2: channels need non-empty content to deliver).
 	if state.Observe.FinalContent == "" && !isSilent {

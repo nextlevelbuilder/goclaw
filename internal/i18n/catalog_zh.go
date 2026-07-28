@@ -133,9 +133,15 @@ func init() {
 		MsgInvalidLinkStatus:  "状态必须是 active 或 disabled",
 
 		// Teams
-		MsgTeamsNotConfigured:   "团队未配置",
-		MsgAgentIsTeamLead:      "该Agent已是团队负责人",
-		MsgCannotRemoveTeamLead: "无法移除团队负责人",
+		MsgTeamsNotConfigured:             "团队未配置",
+		MsgAgentIsTeamLead:                "该Agent已是团队负责人",
+		MsgCannotRemoveTeamLead:           "无法移除团队负责人",
+		MsgWorkflowExpectedGuardsRequired: "expectedStatus 和 expectedPlanRevision 为必填项",
+		MsgWorkflowInvalidTaskID:          "taskId 无效",
+		MsgWorkflowActionInvalid:          "无效的工作流操作请求",
+		MsgWorkflowAuthorizationDenied:    "您无权执行此工作流操作",
+		MsgWorkflowNotFound:               "未找到工作流",
+		MsgWorkflowActionFailed:           "工作流操作失败",
 
 		// Channels
 		MsgCannotDeleteDefaultInst: "无法删除默认Channel实例",

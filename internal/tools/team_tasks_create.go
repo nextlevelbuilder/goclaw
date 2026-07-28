@@ -45,6 +45,10 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 	} else if err := t.manager.RequireLead(ctx, team, agentID); err != nil {
 		return ErrorResult(err.Error())
 	}
+	planConstraint := TeamWorkPlanConstraintFromCtx(ctx)
+	if planConstraint != nil && isLead {
+		return ErrorResult("A validated multi-role plan is active. Use team_tasks(action=\"create_workflow\"); regular create is not allowed.")
+	}
 
 	// Gate: must list tasks before creating to prevent duplicates in concurrent group chat.
 	if ptd := PendingTeamDispatchFromCtx(ctx); ptd != nil && !ptd.HasListed() {
@@ -96,12 +100,49 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 
 	// Resolve assignee (agent key → UUID). Required — every task must be assigned.
 	assigneeKey, _ := args["assignee"].(string)
+	assigneeKey = strings.TrimSpace(assigneeKey)
 	if assigneeKey == "" {
 		return ErrorResult("assignee is required — specify which team member should handle this task")
 	}
 	assigneeID, err := t.manager.ResolveAgentByKey(ctx, assigneeKey)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("assignee %q not found: %v", assigneeKey, err))
+	}
+	createCtx := ctx
+	if constraint := TeamWorkOwnerConstraintFromCtx(ctx); constraint != nil {
+		expectedOwnerID := constraint.OwnerID
+		expectedOwnerKey := strings.TrimSpace(constraint.OwnerKey)
+		if expectedOwnerID == uuid.Nil && expectedOwnerKey != "" {
+			resolved, resolveErr := t.manager.ResolveAgentByKey(ctx, expectedOwnerKey)
+			if resolveErr != nil {
+				return ErrorResult(fmt.Sprintf("team workflow owner %q is no longer available", expectedOwnerKey))
+			}
+			expectedOwnerID = resolved
+		}
+		if expectedOwnerID == uuid.Nil {
+			return ErrorResult("team workflow owner constraint is invalid")
+		}
+		slog.Info("team_work_owner_enforcement",
+			"expected_owner_id", expectedOwnerID,
+			"expected_owner_key", expectedOwnerKey,
+			"attempted_owner_id", assigneeID,
+			"attempted_owner_key", assigneeKey,
+			"owner_match", assigneeID == expectedOwnerID)
+		if assigneeID != expectedOwnerID {
+			if expectedOwnerKey == "" {
+				expectedOwnerKey = expectedOwnerID.String()
+			}
+			return ErrorResult(fmt.Sprintf("team workflow requires assignee %q; got %q", expectedOwnerKey, assigneeKey))
+		}
+		createCtx = store.WithExpectedTaskOwnerID(ctx, expectedOwnerID)
+	}
+	if planConstraint != nil {
+		if isLead || taskType != "request" {
+			return ErrorResult("A member multi-role workflow must create task_type=\"request\" for the canonical coordinator")
+		}
+		if assigneeID != planConstraint.CoordinatorAgentID {
+			return ErrorResult(fmt.Sprintf("workflow request requires coordinator %q", planConstraint.CoordinatorAgentKey))
+		}
 	}
 	// Verify assignee is a member of this team.
 	members, err := t.manager.CachedListMembers(ctx, team.ID, agentID)
@@ -121,7 +162,8 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 	// Prevent lead from self-assigning — causes dual-session execution + loop.
 	// buildCreateHint already hides the lead from the member list hint,
 	// but weaker models may still attempt self-assignment.
-	if assigneeID == team.LeadAgentID {
+	allowWorkflowAuditRequest := planConstraint != nil && !isLead && taskType == "request" && assigneeID == planConstraint.CoordinatorAgentID
+	if assigneeID == team.LeadAgentID && !allowWorkflowAuditRequest {
 		return ErrorResult("team lead cannot assign tasks to itself — delegate to a team member instead. You are the team lead; handle this work directly or assign to one of your members.")
 	}
 
@@ -215,12 +257,12 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 	}
 
 	task := &store.TeamTaskData{
-		TeamID:           team.ID,
-		Subject:          subject,
-		Description:      description,
-		Status:           status,
-		BlockedBy:        blockedBy,
-		Priority:         priority,
+		TeamID:      team.ID,
+		Subject:     subject,
+		Description: description,
+		Status:      status,
+		BlockedBy:   blockedBy,
+		Priority:    priority,
 		// SCOPE-intentional (#915 audit 2026-04-16): team task visibility is
 		// per-chat, not per-user. team_tasks_read.go filters end-user lists by
 		// this same UserID. Migrating to ActorIDFromContext would hide group
@@ -243,7 +285,13 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 		}
 	}
 
-	if err := t.manager.Store().CreateTask(ctx, task); err != nil {
+	workflowCreated := false
+	if planConstraint != nil {
+		if err := t.createPendingWorkflowRequest(ctx, team, agentID, task, planConstraint, memberCfgForDispatch.AutoDispatch); err != nil {
+			return ErrorResult("failed to create workflow request: " + err.Error())
+		}
+		workflowCreated = true
+	} else if err := t.manager.Store().CreateTask(createCtx, task); err != nil {
 		return ErrorResult("failed to create task: " + err.Error())
 	}
 
@@ -297,7 +345,7 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 	))
 	// Track for post-turn dispatch. If no post-turn hook (e.g. HTTP API), dispatch immediately.
 	// Member requests with auto_dispatch=false stay pending for leader review — skip dispatch.
-	if status == store.TeamTaskStatusPending && !skipAutoDispatch {
+	if !workflowCreated && status == store.TeamTaskStatusPending && !skipAutoDispatch {
 		if ptd := PendingTeamDispatchFromCtx(ctx); ptd != nil {
 			ptd.Add(team.ID, task.ID)
 		} else {

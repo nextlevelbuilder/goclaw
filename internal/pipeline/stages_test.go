@@ -256,6 +256,87 @@ func TestThinkStage_GeneratedToolCallContent_DoesNotDuplicateNamedTool(t *testin
 	}
 }
 
+// blockReplyForContent runs a single tool-iteration ThinkStage turn whose LLM
+// response carries the given content alongside a tool call, and returns whatever
+// block.reply content/source the stage emitted (empty when suppressed).
+func blockReplyForContent(t *testing.T, content string) (gotContent, gotSource string) {
+	t.Helper()
+	deps := &PipelineDeps{
+		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return &providers.ChatResponse{
+				Content:      content,
+				FinishReason: "tool_calls",
+				ToolCalls:    []providers.ToolCall{{ID: "tc1", Name: "team_tasks"}},
+			}, nil
+		},
+		EmitBlockReplyWithSource: func(c, s string) {
+			gotContent = c
+			gotSource = s
+		},
+	}
+	stage := NewThinkStage(deps)
+	state := defaultState()
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	return gotContent, gotSource
+}
+
+// TestThinkStage_AutoStatusContent_DoesNotEmitBlockReply proves the leader
+// auto-status control envelope ("[Auto-status …]" injected as an inbound to the
+// team lead) is never relayed to the user as a block.reply when the model
+// parrots it back in a tool-iteration turn. This is an internal relay-control
+// directive, not user-facing progress.
+func TestThinkStage_AutoStatusContent_DoesNotEmitBlockReply(t *testing.T) {
+	t.Parallel()
+	gotContent, gotSource := blockReplyForContent(t,
+		"[Auto-status — relay to user, NO task actions]\nMember finished task #4.\n\nBriefly inform the user.")
+	if gotContent != "" || gotSource != "" {
+		t.Fatalf("auto-status control content leaked as block reply: content=%q source=%q", gotContent, gotSource)
+	}
+}
+
+// TestThinkStage_EscalationContent_DoesNotEmitBlockReply proves the blocker
+// escalation control envelope ("[Escalation] …" injected as an inbound to the
+// team lead) is never relayed to the user as a block.reply. It is an internal
+// instruction to the coordinator to reopen a task, not user-facing content.
+func TestThinkStage_EscalationContent_DoesNotEmitBlockReply(t *testing.T) {
+	t.Parallel()
+	gotContent, gotSource := blockReplyForContent(t,
+		"[Escalation] Member \"worker\" is blocked on task #7 \"Ship it\"\n\nBlocker: needs API key\n\nUse team_tasks(action=\"retry\", task_id=\"abc\") to reopen with updated instructions.")
+	if gotContent != "" || gotSource != "" {
+		t.Fatalf("escalation control content leaked as block reply: content=%q source=%q", gotContent, gotSource)
+	}
+}
+
+// TestThinkStage_NaturalContentAlongsideToolCall_StillEmitsBlockReply guards the
+// other side of the content-origin filter: genuine natural-language progress
+// that merely accompanies a tool call must still reach the user. The filter must
+// key on the control-marker origin, not suppress all tool-iteration content.
+func TestThinkStage_NaturalContentAlongsideToolCall_StillEmitsBlockReply(t *testing.T) {
+	t.Parallel()
+	want := "Đang cập nhật trạng thái công việc cho bạn."
+	gotContent, gotSource := blockReplyForContent(t, want)
+	if gotContent != want {
+		t.Fatalf("natural progress content = %q, want %q", gotContent, want)
+	}
+	if gotSource != protocol.BlockReplySourceToolAnnouncement {
+		t.Fatalf("natural progress source = %q, want %q", gotSource, protocol.BlockReplySourceToolAnnouncement)
+	}
+}
+
+// TestThinkStage_EmptyToolCallContent_StillNoTemplate reaffirms that an empty
+// tool-iteration content emits no synthesized template block reply, alongside
+// the control-marker suppression cases above.
+func TestThinkStage_EmptyToolCallContent_StillNoTemplate(t *testing.T) {
+	t.Parallel()
+	gotContent, gotSource := blockReplyForContent(t, "   \n\t ")
+	if gotContent != "" || gotSource != "" {
+		t.Fatalf("empty tool-call content emitted template block reply: content=%q source=%q", gotContent, gotSource)
+	}
+}
+
 func TestThinkStage_Truncation_FirstRetry_AppendsContinueMessage(t *testing.T) {
 	t.Parallel()
 	deps := &PipelineDeps{
@@ -2512,6 +2593,53 @@ func TestFinalizeStage_SuppressesSilentReplyAfterFlush(t *testing.T) {
 	}
 	if len(flushed) == 0 || flushed[len(flushed)-1].Content != finalContent {
 		t.Fatalf("flushed final content = %#v, want original silent reply persisted before suppression", flushed)
+	}
+}
+
+func TestFinalizeStage_SuppressedHandoffNeverUsesModelBlockReply(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{}
+	stage := NewFinalizeStage(deps)
+	state := defaultState()
+	state.Tool.StopAfterTool = true
+	state.Tool.SuppressUserOutput = true
+	state.Observe.LastBlockReply = "Em chuyển phần này cho Huy Minh xử lý tiếp vì đây là việc research/strategy."
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if state.Observe.FinalContent != "" {
+		t.Fatalf("FinalContent = %q, want suppressed handoff", state.Observe.FinalContent)
+	}
+}
+
+func TestFinalizeStage_StopAfterToolEmptyModelReplyDoesNotEmitPlaceholder(t *testing.T) {
+	t.Parallel()
+	var flushed []providers.Message
+	deps := &PipelineDeps{
+		FlushMessages: func(_ context.Context, _ string, messages []providers.Message) error {
+			flushed = append(flushed, messages...)
+			return nil
+		},
+	}
+	stage := NewFinalizeStage(deps)
+	state := defaultState()
+	state.Tool.StopAfterTool = true
+	state.Tool.SuppressUserOutput = true
+
+	err := stage.Execute(context.Background(), state)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if state.Observe.FinalContent != "" {
+		t.Fatalf("FinalContent = %q, want empty suppressed handoff", state.Observe.FinalContent)
+	}
+	if len(flushed) == 0 {
+		t.Fatal("expected final assistant message to be persisted")
+	}
+	if flushed[len(flushed)-1].Content != "" {
+		t.Fatalf("persisted content = %q, want empty", flushed[len(flushed)-1].Content)
 	}
 }
 

@@ -19,6 +19,13 @@ import (
 
 type baseNoopTeamStore struct{}
 
+// TeamWorkClassificationAuditStore: default no-op so mocks embedding this base
+// satisfy the composed TeamStore interface. The audit write happens on the gate
+// path, not in tool execution, so tool tests never invoke it.
+func (b *baseNoopTeamStore) RecordTeamWorkClassificationAudit(_ context.Context, _ *store.TeamWorkClassificationAudit) error {
+	return nil
+}
+
 // TeamCRUDStore
 func (b *baseNoopTeamStore) CreateTeam(_ context.Context, _ *store.TeamData) error {
 	return fmt.Errorf("not implemented: CreateTeam")
@@ -138,6 +145,9 @@ func (b *baseNoopTeamStore) ListRecentTaskComments(_ context.Context, _ uuid.UUI
 func (b *baseNoopTeamStore) RecordTaskEvent(_ context.Context, _ *store.TeamTaskEventData) error {
 	return fmt.Errorf("not implemented: RecordTaskEvent")
 }
+func (b *baseNoopTeamStore) ClaimTaskEvent(_ context.Context, _ *store.TeamTaskEventData) (store.TaskEventClaimResult, error) {
+	return store.TaskEventClaimed, nil
+}
 func (b *baseNoopTeamStore) ListTaskEvents(_ context.Context, _ uuid.UUID) ([]store.TeamTaskEventData, error) {
 	return nil, fmt.Errorf("not implemented: ListTaskEvents")
 }
@@ -233,6 +243,7 @@ type mockTaskStore struct {
 	team        *store.TeamData
 	members     []store.TeamMemberData
 	taskSeq     int
+	searchErr   error
 	mu          sync.Mutex
 }
 
@@ -599,6 +610,9 @@ func (s *mockTaskStore) ListTasks(_ context.Context, teamID uuid.UUID, _, _, _, 
 func (s *mockTaskStore) SearchTasks(_ context.Context, teamID uuid.UUID, query string, limit int, _ string) ([]store.TeamTaskData, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.searchErr != nil {
+		return nil, s.searchErr
+	}
 	q := strings.ToLower(query)
 	var out []store.TeamTaskData
 	for _, t := range s.tasks {
@@ -774,6 +788,10 @@ func (mb *mockBackend) RequireLead(ctx context.Context, team *store.TeamData, ag
 
 func (mb *mockBackend) Store() store.TeamStore { return mb.taskStore }
 
+func (mb *mockBackend) ApplyWorkflowReplan(_ context.Context, _ WorkflowReplanRequest) (store.WorkflowActionResult, error) {
+	return store.WorkflowActionResult{}, fmt.Errorf("workflow replanner is unavailable")
+}
+
 func (mb *mockBackend) ResolveAgentByKey(_ context.Context, key string) (uuid.UUID, error) {
 	if ag, ok := mb.agentKeys[key]; ok {
 		return ag.ID, nil
@@ -806,8 +824,8 @@ func (mb *mockBackend) CachedGetAgentByID(_ context.Context, id uuid.UUID) (*sto
 	return nil, fmt.Errorf("agent not found: %s", id)
 }
 
-func (mb *mockBackend) PreWarmAgentKeyCache(_ context.Context, _ []string)    {}
-func (mb *mockBackend) PreWarmAgentIDCache(_ context.Context, _ []uuid.UUID)  {}
+func (mb *mockBackend) PreWarmAgentKeyCache(_ context.Context, _ []string)   {}
+func (mb *mockBackend) PreWarmAgentIDCache(_ context.Context, _ []uuid.UUID) {}
 
 func (mb *mockBackend) BroadcastTeamEvent(_ context.Context, name string, payload any) {
 	mb.mu.Lock()
@@ -828,25 +846,27 @@ func (mb *mockBackend) TryPublishInbound(msg bus.InboundMessage) bool {
 	return true
 }
 
-func (mb *mockBackend) BuildBlockerResultsSummary(_ context.Context, _ *store.TeamTaskData) string { return "" }
-func (mb *mockBackend) BuildRecentCommentsSummary(_ context.Context, _ uuid.UUID) string           { return "" }
+func (mb *mockBackend) BuildBlockerResultsSummary(_ context.Context, _ *store.TeamTaskData) string {
+	return ""
+}
+func (mb *mockBackend) BuildRecentCommentsSummary(_ context.Context, _ uuid.UUID) string { return "" }
 func (mb *mockBackend) RestoreTraceContext(ctx context.Context, _ *store.TeamTaskData) context.Context {
 	return ctx
 }
-func (mb *mockBackend) FollowupDelayMinutes(_ *store.TeamData) int  { return 30 }
-func (mb *mockBackend) FollowupMaxReminders(_ *store.TeamData) int  { return 0 }
-func (mb *mockBackend) DataDir() string                             { return "/tmp/test" }
+func (mb *mockBackend) FollowupDelayMinutes(_ *store.TeamData) int { return 30 }
+func (mb *mockBackend) FollowupMaxReminders(_ *store.TeamData) int { return 0 }
+func (mb *mockBackend) DataDir() string                            { return "/tmp/test" }
 
 // ============================================================
 // newTestTeamSetup — standard test fixture
 // ============================================================
 
 var (
-	testTeamID   = uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	testLeadID   = uuid.MustParse("00000000-0000-0000-0000-000000000002")
-	testMemberID = uuid.MustParse("00000000-0000-0000-0000-000000000003")
+	testTeamID    = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	testLeadID    = uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	testMemberID  = uuid.MustParse("00000000-0000-0000-0000-000000000003")
 	testMember2ID = uuid.MustParse("00000000-0000-0000-0000-000000000004")
-	testTenantID = uuid.MustParse("00000000-0000-0000-0000-000000000099")
+	testTenantID  = uuid.MustParse("00000000-0000-0000-0000-000000000099")
 )
 
 func newTestTeamSetup() (*mockBackend, *TeamTasksTool, uuid.UUID, uuid.UUID, context.Context) {

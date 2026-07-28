@@ -67,6 +67,14 @@ func IsRetryableError(err error) bool {
 		return false
 	}
 
+	// A response with no content, no tool calls and no usage means the upstream
+	// gave us nothing to work with; another attempt is the only way to learn
+	// whether that was transient.
+	var emptyErr *EmptyResponseError
+	if errors.As(err, &emptyErr) {
+		return true
+	}
+
 	// Check for HTTPError
 	var httpErr *HTTPError
 	if errors.As(err, &httpErr) {

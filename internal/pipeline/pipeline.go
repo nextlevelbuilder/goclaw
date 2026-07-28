@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 )
 
@@ -70,6 +71,12 @@ func (p *Pipeline) Run(ctx context.Context, state *RunState) (*RunResult, error)
 	// AbortRun: exit inner loop immediately (unrecoverable, e.g. over budget after compaction).
 	for state.Iteration = 0; state.Iteration < p.Deps.Config.MaxIterations; state.Iteration++ {
 		for _, stage := range p.iteration {
+			// ThinkStage may replace state.Ctx (for example when Team Work
+			// enforcement degrades to self-execution). Every later stage must
+			// observe the current run context, not the setup-time snapshot.
+			if state.Ctx != nil {
+				ctx = state.Ctx
+			}
 			if err := stage.Execute(ctx, state); err != nil {
 				return nil, fmt.Errorf("iter %d %s: %w", state.Iteration, stage.Name(), err)
 			}
@@ -118,5 +125,28 @@ func (p *Pipeline) Run(ctx context.Context, state *RunState) (*RunResult, error)
 	if result.Duration <= 0 {
 		result.Duration = time.Nanosecond
 	}
+	// An abort with a diagnosable cause is a failed run, not an empty answer.
+	// Returning (result, nil) here made a run that never reached the provider
+	// look identical to one whose provider returned nothing: callers settled
+	// tasks on a blank deliverable and the real cause (compaction timing out,
+	// so history never fit the window) never surfaced. Only report the error
+	// when the run genuinely produced nothing — an abort after partial work
+	// still has content worth delivering.
+	if state.ExitCode == AbortRun && state.AbortReason != nil && runProducedNothing(result) {
+		return result, state.AbortReason
+	}
 	return result, nil
+}
+
+// runProducedNothing reports whether a run yielded no deliverable output at all:
+// no content, no thinking, no images, no deliverables and no tool calls.
+func runProducedNothing(result *RunResult) bool {
+	if result == nil {
+		return true
+	}
+	return strings.TrimSpace(result.Content) == "" &&
+		strings.TrimSpace(result.Thinking) == "" &&
+		len(result.Deliverables) == 0 &&
+		len(result.MediaResults) == 0 &&
+		result.ToolCalls == 0
 }

@@ -41,6 +41,19 @@ type RunState struct {
 	RunID     string
 	ExitCode  StageResult
 
+	// AbortReason explains why a stage set ExitCode = AbortRun. An abort is NOT
+	// a normal end-of-run: the run produced no answer because it could not
+	// proceed. Without a reason on the state, Pipeline.Run returns a zero-content
+	// RunResult with a nil error, which every caller reads as "the model replied
+	// with nothing" — indistinguishable from a dead provider stream. Callers then
+	// settle work on an empty deliverable. Stages that abort for a diagnosable
+	// cause set this so Run can surface a real error instead.
+	AbortReason error
+
+	// TeamWorkDisabled remains true after guarded delegation degrades to
+	// self-execution, including every later tool/LLM iteration in this run.
+	TeamWorkDisabled bool
+
 	// CurrentLLMSpanID is the most recent LLM-call span in this run; tool spans parent to it.
 	CurrentLLMSpanID *uuid.UUID
 	// CurrentToolSpanID is the most recent tool-call span; post-tool-use hook spans parent to it.
@@ -128,6 +141,7 @@ type RunInput struct {
 	WorkspaceChannel           string
 	WorkspaceChatID            string
 	TeamWorkspace              string
+	RoutingMetadata            map[string]string
 }
 
 // MediaResult represents a media file produced during tool execution.

@@ -25,6 +25,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/gateway/methods"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/systemmessages"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -149,7 +150,7 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 // Returns the channel-instances methods handler so the caller can register
 // per-channel-type orphan cleaners (e.g. Bitrix24 imbot.unregister) after
 // per-channel dependencies (portal store, encryption key) are in scope.
-func wireChannelRPCMethods(server *gateway.Server, pgStores *store.Stores, channelMgr *channels.Manager, instanceLoader *channels.InstanceLoader, agentRouter *agent.Router, msgBus *bus.MessageBus, cfg *config.Config, dataDir string) *methods.ChannelInstancesMethods {
+func wireChannelRPCMethods(server *gateway.Server, pgStores *store.Stores, channelMgr *channels.Manager, instanceLoader *channels.InstanceLoader, agentRouter *agent.Router, msgBus *bus.MessageBus, cfg *config.Config, dataDir string, postTurn tools.PostTurnProcessor) *methods.ChannelInstancesMethods {
 	// Register channels RPC methods (after channelMgr is initialized with all channels)
 	methods.NewChannelsMethods(channelMgr).Register(server.Router())
 	methods.NewChatBehaviorMethods(cfg, channelMgr).Register(server.Router())
@@ -171,7 +172,12 @@ func wireChannelRPCMethods(server *gateway.Server, pgStores *store.Stores, chann
 
 	// Register agent teams WS RPC methods
 	if pgStores.Teams != nil {
-		methods.NewTeamsMethods(pgStores.Teams, pgStores.Agents, pgStores.AgentLinks, agentRouter, msgBus, msgBus, dataDir).Register(server.Router())
+		teamsMethods := methods.NewTeamsMethods(pgStores.Teams, pgStores.Agents, pgStores.AgentLinks, agentRouter, msgBus, msgBus, dataDir)
+		teamsMethods.SetPostTurnProcessor(postTurn)
+		if provider, ok := postTurn.(tools.WorkflowActionServiceProvider); ok {
+			teamsMethods.SetWorkflowActionService(provider.WorkflowActionService())
+		}
+		teamsMethods.Register(server.Router())
 	}
 
 	return chInstancesM

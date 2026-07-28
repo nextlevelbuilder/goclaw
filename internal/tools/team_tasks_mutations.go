@@ -139,6 +139,43 @@ func (t *TeamTasksTool) executeProgress(ctx context.Context, args map[string]any
 		percent = task.ProgressPercent
 	}
 
+	// Workflow-work tasks fence progress on the accepted attempt injected at run
+	// start. A superseded attempt (recovery/replan minted a newer token) gets a
+	// typed Stale outcome and mutates nothing — a stale worker can never move the
+	// progress bar on a step the current attempt owns. There is deliberately no
+	// generic pending→AssignTask→retry fallback here: for workflow-work tasks a
+	// pending status means recovery reset the task, and the stale worker must not
+	// re-claim it.
+	if task.WorkflowID != nil && task.WorkflowKind == store.TeamWorkflowTaskKindWork {
+		workflowStore, ok := t.manager.Store().(store.TeamWorkflowStore)
+		if !ok {
+			return ErrorResult("team workflow store is unavailable")
+		}
+		attempt, ok := store.WorkflowTaskAttemptFromContext(ctx)
+		if !ok {
+			return ErrorResult("workflow attempt identity missing from run context")
+		}
+		transition, err := workflowStore.UpdateWorkflowTaskProgress(ctx, attempt, percent, step)
+		if err != nil {
+			return ErrorResult("failed to update workflow progress: " + err.Error())
+		}
+		if transition.Stale() {
+			return SilentResult("Workflow step superseded by recovery/replan — progress update skipped.")
+		}
+		recordTaskAction(ctx, func(f *TaskActionFlags) { f.Progressed = true })
+		ownerKey := t.manager.AgentKeyFromID(ctx, agentID)
+		t.manager.BroadcastTeamEvent(ctx, protocol.EventTeamTaskProgress, BuildTaskEventPayload(
+			team.ID.String(), taskID.String(),
+			store.TeamTaskStatusInProgress,
+			"", "",
+			WithTaskInfo(task.TaskNumber, task.Subject),
+			WithOwnerAgentKey(ownerKey),
+			WithProgress(percent, step),
+			WithContextInfo(ctx),
+		))
+		return SilentResult(fmt.Sprintf("Progress updated: %d%% %s", percent, step))
+	}
+
 	if err := t.manager.Store().UpdateTaskProgress(ctx, taskID, team.ID, percent, step); err != nil {
 		// Status may have changed between GetTask and UpdateTaskProgress (race with completeTask).
 		// Fast path: check in-memory turn flags before hitting DB again.
@@ -249,6 +286,9 @@ func (t *TeamTasksTool) executeUpdate(ctx context.Context, args map[string]any) 
 	}
 	if task.TeamID != team.ID {
 		return ErrorResult("task does not belong to your team")
+	}
+	if task.WorkflowID != nil {
+		return ErrorResult("workflow tasks are immutable; use workflow lifecycle actions")
 	}
 
 	updates := map[string]any{}

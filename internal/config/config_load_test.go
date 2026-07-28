@@ -147,6 +147,65 @@ func TestLoad_EnvVarOverrides(t *testing.T) {
 	}
 }
 
+func TestLoad_MCPServerTokenFromFileAndEnv(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json5")
+	if err := os.WriteFile(cfgPath, []byte(`{"gateway":{"mcp_server_token":"file-token"}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load file token: %v", err)
+	}
+	if cfg.Gateway.MCPServerToken != "file-token" {
+		t.Fatalf("file MCP server token = %q", cfg.Gateway.MCPServerToken)
+	}
+
+	t.Setenv("GOCLAW_MCP_SERVER_TOKEN", "env-token")
+	cfg, err = Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load env token: %v", err)
+	}
+	if cfg.Gateway.MCPServerToken != "env-token" {
+		t.Fatalf("env MCP server token = %q, want env-token", cfg.Gateway.MCPServerToken)
+	}
+}
+
+func TestMCPServerTokenSecretLifecycle(t *testing.T) {
+	cfg := Default()
+	cfg.Gateway.MCPServerToken = "mcp-secret"
+
+	masked := cfg.MaskedCopy()
+	if masked.Gateway.MCPServerToken != secretMask {
+		t.Fatalf("masked MCP server token = %q", masked.Gateway.MCPServerToken)
+	}
+	if cfg.Gateway.MCPServerToken != "mcp-secret" {
+		t.Fatal("MaskedCopy mutated the source MCP server token")
+	}
+
+	secrets := cfg.ExtractDBSecrets()
+	if secrets["gateway.mcp_server_token"] != "mcp-secret" {
+		t.Fatalf("extracted MCP server token = %q", secrets["gateway.mcp_server_token"])
+	}
+
+	fromDB := Default()
+	fromDB.ApplyDBSecrets(secrets)
+	if fromDB.Gateway.MCPServerToken != "mcp-secret" {
+		t.Fatalf("DB-applied MCP server token = %q", fromDB.Gateway.MCPServerToken)
+	}
+
+	masked.StripMaskedSecrets()
+	if masked.Gateway.MCPServerToken != "" {
+		t.Fatalf("StripMaskedSecrets retained MCP server token mask %q", masked.Gateway.MCPServerToken)
+	}
+
+	cfg.StripSecrets()
+	if cfg.Gateway.MCPServerToken != "" {
+		t.Fatalf("StripSecrets retained MCP server token %q", cfg.Gateway.MCPServerToken)
+	}
+}
+
 func TestLoad_WebhookTimeoutsFromFileAndEnv(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.json5")

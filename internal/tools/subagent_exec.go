@@ -47,6 +47,7 @@ func (sm *SubagentManager) runTask(ctx context.Context, task *SubagentTask, call
 			OriginRole:       task.OriginRole,
 			OriginSessionKey: task.OriginSessionKey,
 			OriginTenantID:   task.OriginTenantID,
+			TeamID:           task.TeamID,
 			ParentAgent:      task.ParentID,
 			OriginTraceID:    task.OriginTraceID.String(),
 			OriginRootSpanID: task.OriginRootSpanID.String(),

@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import { IconBlocked, IconChat, IconPaperclip } from '../common/Icons'
 import { isTaskLocked, TERMINAL_STATUSES } from '../../types/team'
 import type { TeamTaskData } from '../../types/team'
@@ -20,6 +21,7 @@ interface KanbanCardProps {
 }
 
 export function KanbanCard({ task, ownerName, ownerEmoji, onClick }: KanbanCardProps) {
+  const { t } = useTranslation('teams')
   const locked = isTaskLocked(task)
   const blocked = task.status === 'blocked'
   const prio = PRIORITY_STYLE[task.priority] ?? PRIORITY_STYLE[0]
@@ -51,7 +53,7 @@ export function KanbanCard({ task, ownerName, ownerEmoji, onClick }: KanbanCardP
         {locked && (
           <span className="flex items-center gap-1 text-[10px] text-green-600 dark:text-green-400">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
-            Running
+            {t('workflow.status.running')}
           </span>
         )}
       </div>
@@ -75,7 +77,7 @@ export function KanbanCard({ task, ownerName, ownerEmoji, onClick }: KanbanCardP
       <div className="mt-2 flex items-center gap-1.5">
         {ownerEmoji && <span className="text-sm leading-none">{ownerEmoji}</span>}
         <span className="truncate text-xs text-text-muted flex-1">
-          {ownerName || task.owner_agent_key || 'Unassigned'}
+          {ownerName || task.owner_agent_key || t('unassigned')}
         </span>
         {(task.comment_count ?? 0) > 0 && (
           <span className="flex items-center gap-0.5 text-[10px] text-text-muted shrink-0">
@@ -90,6 +92,23 @@ export function KanbanCard({ task, ownerName, ownerEmoji, onClick }: KanbanCardP
           </span>
         )}
       </div>
+
+      {/* Workflow badges */}
+      {task.workflow_id && (
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          {task.workflow_step_id && (
+            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded border border-border text-text-muted">
+              {task.workflow_step_id}
+            </span>
+          )}
+          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded border border-border text-text-muted">
+            r{task.plan_revision ?? 1}
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded border border-border text-text-secondary">
+            {t(`taskStatus.${task.status}`)}
+          </span>
+        </div>
+      )}
 
       {/* Progress bar */}
       {task.progress_percent != null && task.progress_percent > 0 && !isTerminal && (

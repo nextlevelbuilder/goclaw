@@ -59,6 +59,8 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.2.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/mdast": "^4.0.4",
     "@types/prismjs": "^1.26.6",
     "@types/react": "^19.2.14",

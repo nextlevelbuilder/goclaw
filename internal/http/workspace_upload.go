@@ -122,16 +122,10 @@ func (h *WorkspaceUploadHandler) handleUpload(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// File quota check.
-	entries, _ := os.ReadDir(scopeDir)
-	fileCount := 0
-	for _, e := range entries {
-		if !e.IsDir() {
-			fileCount++
-		}
-	}
-	if fileCount >= tools.MaxFilesPerScope {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("workspace file limit reached (%d files)", tools.MaxFilesPerScope)})
+	// File quota check — counts only RECENT files so the limit stays an anti-flood
+	// guard instead of a permanent ceiling a long-lived team hits during real work.
+	if fileCount := tools.CountRecentScopeFiles(scopeDir); fileCount >= tools.MaxFilesPerScope {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("workspace file limit reached (%d new files in the last 7 days)", fileCount)})
 		return
 	}
 

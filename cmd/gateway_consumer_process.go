@@ -40,11 +40,16 @@ func makeSchedulerRunFunc(agents *agent.Router, cfg *config.Config) scheduler.Ru
 		// The ctx from the scheduler is already cancellable; we create a child so the router's
 		// cancel func is independent from the scheduler's cancel func. Calling cancel twice is safe.
 		runCtx, cancel := context.WithCancel(ctx)
-		injectCh := agents.RegisterRun(runCtx, req.RunID, req.SessionKey, agentID, cancel)
+		injectCh, generation := agents.RegisterRunWithKind(runCtx, req.RunID, req.SessionKey, agentID, req.RunKind, cancel)
 		defer agents.UnregisterRun(req.RunID)
 		defer cancel()
 
 		req.InjectCh = injectCh
+		// Ownership fence (Phase 7 Decision 3): the loop consults this before every
+		// user-visible commit so a run whose ownership was lost (force-abort,
+		// supersession) cannot append/save/emit into a session another run now owns.
+		sessionKey, runID := req.SessionKey, req.RunID
+		req.IsCurrentOwner = func() bool { return agents.IsCurrentOwner(sessionKey, runID, generation) }
 		return loop.Run(runCtx, req)
 	}
 }

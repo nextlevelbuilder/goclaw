@@ -133,9 +133,15 @@ func init() {
 		MsgInvalidLinkStatus:  "status must be active or disabled",
 
 		// Teams
-		MsgTeamsNotConfigured:   "teams not configured",
-		MsgAgentIsTeamLead:      "agent is already the team lead",
-		MsgCannotRemoveTeamLead: "cannot remove the team lead",
+		MsgTeamsNotConfigured:             "teams not configured",
+		MsgAgentIsTeamLead:                "agent is already the team lead",
+		MsgCannotRemoveTeamLead:           "cannot remove the team lead",
+		MsgWorkflowExpectedGuardsRequired: "expectedStatus and expectedPlanRevision are required",
+		MsgWorkflowInvalidTaskID:          "invalid taskId",
+		MsgWorkflowActionInvalid:          "invalid workflow action request",
+		MsgWorkflowAuthorizationDenied:    "you are not authorized to perform this workflow action",
+		MsgWorkflowNotFound:               "workflow not found",
+		MsgWorkflowActionFailed:           "workflow action failed",
 
 		// Channels
 		MsgCannotDeleteDefaultInst: "cannot delete default channel instance",

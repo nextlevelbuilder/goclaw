@@ -973,7 +973,7 @@ CREATE TABLE IF NOT EXISTS team_tasks (
     team_id              TEXT NOT NULL REFERENCES agent_teams(id) ON DELETE CASCADE,
     subject              VARCHAR(500) NOT NULL,
     description          TEXT,
-    status               VARCHAR(20) NOT NULL DEFAULT 'pending',
+    status               VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','dispatching','in_progress','completed','blocked','failed','in_review','cancelled','stale')),
     owner_agent_id       TEXT REFERENCES agents(id) ON DELETE SET NULL,
     blocked_by           TEXT NOT NULL DEFAULT '[]',
     priority             INT NOT NULL DEFAULT 0,
@@ -992,6 +992,21 @@ CREATE TABLE IF NOT EXISTS team_tasks (
     lock_expires_at      TEXT,
     progress_percent     INT DEFAULT 0 CHECK (progress_percent BETWEEN 0 AND 100),
     progress_step        TEXT,
+    workflow_id          TEXT REFERENCES team_workflows(id) ON DELETE CASCADE,
+    workflow_step_id     VARCHAR(100),
+    workflow_kind        VARCHAR(10) CHECK (workflow_kind IS NULL OR workflow_kind IN ('audit','work')),
+    workflow_terminal    INTEGER NOT NULL DEFAULT 0,
+    dispatch_token       TEXT,
+    dispatch_lease_until TEXT,
+    plan_revision        INTEGER NOT NULL DEFAULT 1,
+    dispatch_count       INTEGER NOT NULL DEFAULT 0,
+    blocker_reason       TEXT NOT NULL DEFAULT '',
+    recovery_count       INTEGER NOT NULL DEFAULT 0,
+    escalation_status        VARCHAR(16) NOT NULL DEFAULT 'pending' CHECK (escalation_status IN ('pending','enqueuing','delivered','dead')),
+    escalation_attempt_count INTEGER NOT NULL DEFAULT 0,
+    escalation_next_at       TEXT,
+    escalation_last_error    TEXT NOT NULL DEFAULT '',
+	 notification_policy  VARCHAR(24) NOT NULL DEFAULT 'default' CHECK (notification_policy IN ('default','suppress_handoff','workflow_internal')),
     followup_at          TEXT,
     followup_count       INT NOT NULL DEFAULT 0,
     followup_max         INT NOT NULL DEFAULT 0,
@@ -1004,7 +1019,12 @@ CREATE TABLE IF NOT EXISTS team_tasks (
     custom_scope         TEXT,
     tenant_id            TEXT NOT NULL REFERENCES tenants(id),
     created_at           TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at           TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at           TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    CHECK (
+      (workflow_id IS NULL AND workflow_step_id IS NULL AND workflow_kind IS NULL AND workflow_terminal = 0 AND dispatch_token IS NULL AND dispatch_lease_until IS NULL)
+      OR (workflow_id IS NOT NULL AND workflow_kind = 'audit' AND workflow_step_id IS NULL AND workflow_terminal = 0 AND dispatch_token IS NULL AND dispatch_lease_until IS NULL)
+      OR (workflow_id IS NOT NULL AND workflow_kind = 'work' AND workflow_step_id IS NOT NULL)
+    )
 );
 
 CREATE INDEX IF NOT EXISTS idx_team_tasks_team ON team_tasks(team_id);
@@ -1019,6 +1039,118 @@ CREATE INDEX IF NOT EXISTS idx_tt_followup ON team_tasks(followup_at) WHERE foll
 -- idx_tt_blocked_by (GIN on array) omitted: Go code handles JSON array filtering
 CREATE INDEX IF NOT EXISTS idx_tt_owner_status ON team_tasks(team_id, owner_agent_id, status);
 CREATE INDEX IF NOT EXISTS idx_team_tasks_tenant ON team_tasks(tenant_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_team_tasks_workflow_step
+  ON team_tasks(tenant_id, workflow_id, plan_revision, workflow_step_id)
+  WHERE workflow_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_team_tasks_workflow_status
+  ON team_tasks(tenant_id, workflow_id, status) WHERE workflow_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_team_tasks_dispatch_recovery
+  ON team_tasks(tenant_id, status, dispatch_lease_until)
+  WHERE workflow_id IS NOT NULL AND workflow_kind = 'work';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_team_tasks_active_owner
+  ON team_tasks(tenant_id, owner_agent_id)
+  WHERE workflow_kind = 'work' AND owner_agent_id IS NOT NULL
+    AND status IN ('dispatching', 'in_progress');
+
+CREATE TABLE IF NOT EXISTS team_workflows (
+    id                      TEXT NOT NULL PRIMARY KEY,
+    team_id                 TEXT NOT NULL REFERENCES agent_teams(id) ON DELETE CASCADE,
+    tenant_id               TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    status                  VARCHAR(24) NOT NULL CHECK (status IN ('pending_expansion','running','needs_revision','failing','cancelling','completed','failed','cancelled')),
+    canonical_plan          TEXT NOT NULL,
+    schema_version          INTEGER NOT NULL,
+    plan_hash               VARCHAR(64) NOT NULL CHECK (
+        length(plan_hash) = 64
+        AND plan_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    coordinator_agent_id    TEXT NOT NULL REFERENCES agents(id),
+    coordinator_agent_key   VARCHAR(255) NOT NULL,
+    origin_agent_id         TEXT NOT NULL REFERENCES agents(id),
+    origin_agent_key        VARCHAR(255) NOT NULL,
+    origin_run_id           VARCHAR(255) NOT NULL,
+    origin_session_key      VARCHAR(500) NOT NULL,
+    origin_channel          VARCHAR(60) NOT NULL,
+    origin_chat_id          VARCHAR(255) NOT NULL,
+    origin_peer_kind        VARCHAR(20) NOT NULL DEFAULT 'direct',
+    origin_local_key        VARCHAR(500) NOT NULL DEFAULT '',
+    origin_user_id          VARCHAR(255) NOT NULL DEFAULT '',
+    origin_sender_id        VARCHAR(255) NOT NULL DEFAULT '',
+    origin_role             VARCHAR(60) NOT NULL DEFAULT '',
+	 origin_routing          TEXT NOT NULL DEFAULT '{}',
+    auto_expand             INTEGER NOT NULL DEFAULT 0,
+    audit_task_id           TEXT REFERENCES team_tasks(id) ON DELETE SET NULL,
+    terminal_task_id        TEXT REFERENCES team_tasks(id) ON DELETE SET NULL,
+    expansion_token         TEXT,
+    expansion_lease_until   TEXT,
+    finalize_token          TEXT,
+    finalize_lease_until    TEXT,
+    finalize_claimed_at     TEXT,
+    finalized_at            TEXT,
+    failure_settle_deadline TEXT,
+    failure_summary         TEXT NOT NULL DEFAULT '',
+    result_summary          TEXT NOT NULL DEFAULT '',
+	 delivery_status         VARCHAR(16) NOT NULL DEFAULT 'pending' CHECK (delivery_status IN ('pending','enqueuing','delivered','dead')),
+	 delivery_token          TEXT,
+	 delivery_lease_until    TEXT,
+	 delivered_at            TEXT,
+    plan_revision           INTEGER NOT NULL DEFAULT 1,
+    expansion_attempt_count INTEGER NOT NULL DEFAULT 0,
+    next_expansion_at       TEXT,
+    last_expansion_error    TEXT NOT NULL DEFAULT '',
+    delivery_attempt_count  INTEGER NOT NULL DEFAULT 0,
+    next_delivery_at        TEXT,
+    last_delivery_error     TEXT NOT NULL DEFAULT '',
+    cancel_reason           TEXT NOT NULL DEFAULT '',
+    cancelled_at            TEXT,
+    classification_audit_id TEXT REFERENCES team_work_classification_audits(id) ON DELETE SET NULL,
+    created_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_team_workflows_creation
+  ON team_workflows(tenant_id, team_id, origin_run_id, plan_hash);
+CREATE INDEX IF NOT EXISTS idx_team_workflows_plan_lookup
+  ON team_workflows(tenant_id, team_id, plan_hash, status);
+CREATE INDEX IF NOT EXISTS idx_team_workflows_recovery
+  ON team_workflows(tenant_id, status, expansion_lease_until, finalize_lease_until);
+CREATE INDEX IF NOT EXISTS idx_team_workflows_delivery_recovery
+  ON team_workflows(tenant_id, delivery_status, delivery_lease_until)
+  WHERE finalized_at IS NOT NULL AND delivered_at IS NULL;
+
+-- Append-only classifier audit trail (Team Work over-selection / degradation).
+CREATE TABLE IF NOT EXISTS team_work_classification_audits (
+    id                      TEXT NOT NULL PRIMARY KEY,
+    tenant_id               TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    ingress                 VARCHAR(16) NOT NULL CHECK (ingress IN ('inbound','ws','system')),
+    run_id                  VARCHAR(255) NOT NULL DEFAULT '',
+    session_key             VARCHAR(500) NOT NULL DEFAULT '',
+    agent_id                TEXT REFERENCES agents(id) ON DELETE SET NULL,
+    original_hash           VARCHAR(64) NOT NULL DEFAULT '',
+    resolved_hash           VARCHAR(64) NOT NULL DEFAULT '',
+    verified_shape          VARCHAR(40) NOT NULL DEFAULT '',
+    traits                  TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(traits)),
+    requested_mode          VARCHAR(24) NOT NULL DEFAULT '' CHECK (requested_mode IN ('','self','single_owner','multi_role')),
+    effective_mode          VARCHAR(24) NOT NULL DEFAULT '' CHECK (effective_mode IN ('','self','single_owner','multi_role')),
+    independent_review      INTEGER NOT NULL DEFAULT 0 CHECK (independent_review IN (0,1)),
+    selected_owner_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+    coordinator_agent_id    TEXT REFERENCES agents(id) ON DELETE SET NULL,
+    plan_hash               VARCHAR(64) NOT NULL DEFAULT '',
+    stage_statuses          TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(stage_statuses)),
+    degraded_stage          VARCHAR(40) NOT NULL DEFAULT '',
+    degraded_reason         TEXT NOT NULL DEFAULT '',
+    classifier_provider     VARCHAR(60) NOT NULL DEFAULT '',
+    classifier_model        VARCHAR(120) NOT NULL DEFAULT '',
+    schema_version          INTEGER NOT NULL DEFAULT 1,
+    created_at              TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_twc_audits_tenant_time
+  ON team_work_classification_audits(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_twc_audits_tenant_session_time
+  ON team_work_classification_audits(tenant_id, session_key, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_twc_audits_tenant_run
+  ON team_work_classification_audits(tenant_id, run_id);
 
 -- ============================================================
 -- Table: team_task_comments

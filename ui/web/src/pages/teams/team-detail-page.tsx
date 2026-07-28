@@ -22,7 +22,8 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
   const { t } = useTranslation("teams");
   const {
     getTeam, getTeamTasks, getTeamScopes, addMember, removeMember, deleteTeam,
-    getTaskDetail, getTaskLight, deleteTask, deleteTasksBulk, addTaskComment, updateTeam,
+    getTaskDetail, getTaskLight, getWorkflow, applyWorkflowAction,
+    deleteTask, deleteTasksBulk, addTaskComment, updateTeam,
   } = useTeams();
 
   // Wrap addTaskComment to match (teamId, taskId, content) signature expected by UI components.
@@ -119,6 +120,8 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
         getTeamTasks={getTeamTasks}
         getTaskDetail={getTaskDetail}
         getTaskLight={getTaskLight}
+        getWorkflow={getWorkflow}
+        applyWorkflowAction={applyWorkflowAction}
         deleteTask={deleteTask}
         deleteTasksBulk={deleteTasksBulk}
         addTaskComment={handleAddComment}

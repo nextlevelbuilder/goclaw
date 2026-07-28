@@ -7,12 +7,12 @@ import (
 // TestT_ValidLocaleAndKey tests basic message retrieval with valid locale and key.
 func TestT_ValidLocaleAndKey(t *testing.T) {
 	tests := []struct {
-		name     string
-		locale   string
-		key      string
-		args     []any
-		wantMsg  string
-		wantKey  bool // if true, expects key to be returned (not found)
+		name    string
+		locale  string
+		key     string
+		args    []any
+		wantMsg string
+		wantKey bool // if true, expects key to be returned (not found)
 	}{
 		{
 			name:    "English - simple message without args",
@@ -376,6 +376,62 @@ func TestMultipleLocalesIndependent(t *testing.T) {
 	// English should be a template
 	if msg_en != "%s is required" {
 		t.Errorf("English message unexpected: %q", msg_en)
+	}
+}
+
+func TestWorkflowActionMessagesHaveFiveLocaleStructuralParity(t *testing.T) {
+	messages := map[string]map[string]string{
+		LocaleEN: {
+			MsgWorkflowExpectedGuardsRequired: "expectedStatus and expectedPlanRevision are required",
+			MsgWorkflowInvalidTaskID:          "invalid taskId",
+			MsgWorkflowActionInvalid:          "invalid workflow action request",
+			MsgWorkflowAuthorizationDenied:    "you are not authorized to perform this workflow action",
+			MsgWorkflowNotFound:               "workflow not found",
+			MsgWorkflowActionFailed:           "workflow action failed",
+		},
+		LocaleVI: {
+			MsgWorkflowExpectedGuardsRequired: "expectedStatus và expectedPlanRevision là bắt buộc",
+			MsgWorkflowInvalidTaskID:          "taskId không hợp lệ",
+			MsgWorkflowActionInvalid:          "yêu cầu thao tác workflow không hợp lệ",
+			MsgWorkflowAuthorizationDenied:    "bạn không có quyền thực hiện thao tác workflow này",
+			MsgWorkflowNotFound:               "không tìm thấy workflow",
+			MsgWorkflowActionFailed:           "thao tác workflow thất bại",
+		},
+		LocaleZH: {
+			MsgWorkflowExpectedGuardsRequired: "expectedStatus 和 expectedPlanRevision 为必填项",
+			MsgWorkflowInvalidTaskID:          "taskId 无效",
+			MsgWorkflowActionInvalid:          "无效的工作流操作请求",
+			MsgWorkflowAuthorizationDenied:    "您无权执行此工作流操作",
+			MsgWorkflowNotFound:               "未找到工作流",
+			MsgWorkflowActionFailed:           "工作流操作失败",
+		},
+		LocaleKO: {
+			MsgWorkflowExpectedGuardsRequired: "expectedStatus and expectedPlanRevision are required",
+			MsgWorkflowInvalidTaskID:          "invalid taskId",
+			MsgWorkflowActionInvalid:          "invalid workflow action request",
+			MsgWorkflowAuthorizationDenied:    "you are not authorized to perform this workflow action",
+			MsgWorkflowNotFound:               "workflow not found",
+			MsgWorkflowActionFailed:           "workflow action failed",
+		},
+		LocaleRU: {
+			MsgWorkflowExpectedGuardsRequired: "expectedStatus and expectedPlanRevision are required",
+			MsgWorkflowInvalidTaskID:          "invalid taskId",
+			MsgWorkflowActionInvalid:          "invalid workflow action request",
+			MsgWorkflowAuthorizationDenied:    "you are not authorized to perform this workflow action",
+			MsgWorkflowNotFound:               "workflow not found",
+			MsgWorkflowActionFailed:           "workflow action failed",
+		},
+	}
+	for locale, expected := range messages {
+		for key, want := range expected {
+			if _, exists := catalogs[locale][key]; !exists {
+				t.Errorf("locale %q has no explicit entry for %q", locale, key)
+				continue
+			}
+			if got := T(locale, key); got != want {
+				t.Errorf("T(%q, %q) = %q, want %q", locale, key, got, want)
+			}
+		}
 	}
 }
 

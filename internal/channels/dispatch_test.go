@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 )
@@ -36,6 +37,106 @@ func TestHandleSendFailure_ForwardNotifiesOrigin(t *testing.T) {
 	}
 	if origin.lastMsg.Content == "" {
 		t.Fatal("expected a non-empty failure notice content")
+	}
+}
+
+func TestDispatchOutboundAcknowledgesRealSendAndDeduplicatesWorkflow(t *testing.T) {
+	mb := bus.New()
+	mgr := NewManager(mb)
+	channel := newMockChannel("telegram-main", TypeTelegram)
+	mgr.channels["telegram-main"] = channel
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go mgr.dispatchOutbound(ctx)
+
+	ack := make(chan error, 2)
+	message := bus.OutboundMessage{
+		Channel: "telegram-main", ChatID: "chat-1", Content: "result",
+		Metadata:    map[string]string{"workflow_delivery_id": "workflow-1"},
+		DeliveryAck: func(err error) { ack <- err },
+	}
+	mb.PublishOutbound(message)
+	select {
+	case err := <-ack:
+		if err != nil {
+			t.Fatalf("delivery ack error=%v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for delivery ack")
+	}
+	mb.PublishOutbound(message)
+	select {
+	case err := <-ack:
+		if err != nil {
+			t.Fatalf("duplicate ack error=%v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for duplicate ack")
+	}
+	if channel.sendCount != 1 {
+		t.Fatalf("channel send count=%d, want one", channel.sendCount)
+	}
+}
+
+func TestDispatchOutboundReportsSendFailureToWorkflowAck(t *testing.T) {
+	mb := bus.New()
+	mgr := NewManager(mb)
+	channel := newMockChannel("telegram-main", TypeTelegram)
+	channel.sendErr = errors.New("send failed")
+	mgr.channels["telegram-main"] = channel
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go mgr.dispatchOutbound(ctx)
+
+	ack := make(chan error, 1)
+	mb.PublishOutbound(bus.OutboundMessage{
+		Channel: "telegram-main", ChatID: "chat-1", Content: "result",
+		Metadata:    map[string]string{"workflow_delivery_id": "workflow-failed"},
+		DeliveryAck: func(err error) { ack <- err },
+	})
+	select {
+	case err := <-ack:
+		if err == nil {
+			t.Fatal("failed channel send must return an ack error")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for failed delivery ack")
+	}
+}
+
+func TestWorkflowDeliveryDedupePrunesExpiredMarkers(t *testing.T) {
+	mgr := NewManager(bus.New())
+	now := time.Now()
+	if duplicate := mgr.markWorkflowDelivery("workflow-old", now); duplicate {
+		t.Fatal("first delivery must not be treated as duplicate")
+	}
+	if duplicate := mgr.markWorkflowDelivery("workflow-old", now.Add(time.Minute)); !duplicate {
+		t.Fatal("marker must remain active inside the dedupe TTL")
+	}
+	if duplicate := mgr.markWorkflowDelivery("workflow-new", now.Add(workflowDeliveryDedupeTTL+time.Second)); duplicate {
+		t.Fatal("new delivery must not be treated as duplicate")
+	}
+	if _, exists := mgr.workflowDelivery.Load("workflow-old"); exists {
+		t.Fatal("expired workflow marker was not pruned")
+	}
+}
+
+func TestWorkflowDeliveryDedupeIsBounded(t *testing.T) {
+	mgr := NewManager(bus.New())
+	now := time.Now()
+	for i := 0; i < workflowDeliveryDedupeMaxEntries; i++ {
+		mgr.workflowDelivery.Store(i, now.Add(time.Duration(i+1)*time.Second))
+	}
+	if duplicate := mgr.markWorkflowDelivery("workflow-new", now); duplicate {
+		t.Fatal("new delivery must not be treated as duplicate")
+	}
+	count := 0
+	mgr.workflowDelivery.Range(func(_, _ any) bool {
+		count++
+		return true
+	})
+	if count > workflowDeliveryDedupeMaxEntries {
+		t.Fatalf("dedupe entries=%d, max=%d", count, workflowDeliveryDedupeMaxEntries)
 	}
 }
 

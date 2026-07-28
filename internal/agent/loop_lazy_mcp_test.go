@@ -26,6 +26,86 @@ func (m *mockExecTool) Execute(_ context.Context, _ map[string]any) *tools.Resul
 	return tools.NewResult("ok from " + m.name)
 }
 
+func TestSelfFallbackCanonicalOrchestrationDenyCoversAliasesAndPrefix(t *testing.T) {
+	registry := tools.NewRegistry()
+	for _, name := range []string{"team_tasks", "delegate", "spawn", "read_file"} {
+		registry.Register(&mockExecTool{name: name})
+	}
+	registry.RegisterAlias("handoff", "team_tasks")
+	registry.RegisterAlias("fork_agent", "spawn")
+	loop := &Loop{
+		tools: registry, registry: registry,
+		agentToolPolicy: &config.ToolPolicySpec{ToolCallPrefix: "proxy_"},
+	}
+	for _, name := range []string{
+		"team_tasks", "delegate", "spawn",
+		"handoff", "fork_agent",
+		"proxy_team_tasks", "proxy_handoff", "proxy_fork_agent",
+	} {
+		if !loop.isSelfFallbackDeniedTool(name) {
+			t.Fatalf("orchestration alias %q bypassed canonical deny", name)
+		}
+	}
+	if loop.isSelfFallbackDeniedTool("proxy_read_file") {
+		t.Fatal("professional tool was incorrectly denied")
+	}
+
+	gate := loop.makeAuthorizeToolCall()
+	state := &pipeline.RunState{
+		TeamWorkDisabled: true,
+		Tool: pipeline.ToolState{AllowedTools: map[string]bool{
+			"team_tasks": true, "spawn": true, "read_file": true,
+		}},
+	}
+	if ok, _ := gate(context.Background(), state, providers.ToolCall{Name: "proxy_handoff"}); ok {
+		t.Fatal("authorization callback allowed prefixed team_tasks alias during self fallback")
+	}
+	if ok, reason := gate(context.Background(), state, providers.ToolCall{Name: "proxy_read_file"}); !ok {
+		t.Fatalf("professional tool denied during self fallback: %s", reason)
+	}
+}
+
+func TestRunLevelSelfFallbackBlocksOrchestrationBeforeExecution(t *testing.T) {
+	registry := tools.NewRegistry()
+	teamTask := &mockExecTool{name: "team_tasks"}
+	delegate := &mockExecTool{name: "delegate"}
+	spawn := &mockExecTool{name: "spawn"}
+	readFile := &mockExecTool{name: "read_file"}
+	for _, tool := range []*mockExecTool{teamTask, delegate, spawn, readFile} {
+		registry.Register(tool)
+	}
+	registry.RegisterAlias("handoff", "team_tasks")
+	registry.RegisterAlias("fork_agent", "spawn")
+	loop := &Loop{
+		tools: registry, registry: registry,
+		agentToolPolicy: &config.ToolPolicySpec{ToolCallPrefix: "proxy_"},
+	}
+	execute := loop.makeExecuteToolRaw(&RunRequest{DisableTeamWork: true})
+	ctx := tools.WithTeamWorkDisabled(context.Background())
+
+	for _, name := range []string{
+		"team_tasks", "delegate", "spawn",
+		"handoff", "fork_agent",
+		"proxy_team_tasks", "proxy_handoff", "proxy_fork_agent",
+	} {
+		msg, _, err := execute(ctx, providers.ToolCall{ID: "blocked-" + name, Name: name})
+		if err != nil {
+			t.Fatalf("execute %q returned error: %v", name, err)
+		}
+		if !msg.IsError || msg.Content != selfFallbackToolBlockedMessage {
+			t.Fatalf("execute %q result = %+v, want neutral blocked result", name, msg)
+		}
+	}
+	if teamTask.executed || delegate.executed || spawn.executed {
+		t.Fatalf("orchestration tool executed during self fallback: team=%t delegate=%t spawn=%t", teamTask.executed, delegate.executed, spawn.executed)
+	}
+
+	msg, _, err := execute(ctx, providers.ToolCall{ID: "professional", Name: "proxy_read_file"})
+	if err != nil || msg.IsError || !readFile.executed {
+		t.Fatalf("professional tool did not execute: message=%+v error=%v executed=%t", msg, err, readFile.executed)
+	}
+}
+
 // simulateLazyActivationCheck mimics the runtime authorize gate from
 // makeAuthorizeToolCall (loop_pipeline_callbacks.go) for one tool call.
 // The real gate is a PipelineDeps.AuthorizeToolCall callback invoked by ToolStage;

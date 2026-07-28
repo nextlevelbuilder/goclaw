@@ -217,6 +217,12 @@ func (s *PruneStage) Execute(ctx context.Context, state *RunState) error {
 	if historyTokens > budget {
 		slog.Warn("still over budget after compaction", "tokens", historyTokens, "budget", budget)
 		s.result = AbortRun
+		// Name the cause. This abort happens before the provider is ever called,
+		// so the run ends with zero content; if the state carries no reason the
+		// caller cannot tell it apart from a provider that answered nothing and
+		// will settle work on the empty result. A session whose compaction keeps
+		// timing out would otherwise abort every single run in silence.
+		state.AbortReason = fmt.Errorf("context still over budget after compaction: history_tokens=%d budget=%d", historyTokens, budget)
 	}
 
 	return nil

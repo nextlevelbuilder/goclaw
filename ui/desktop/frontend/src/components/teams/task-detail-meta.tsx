@@ -90,11 +90,16 @@ export function TaskDetailBody({ task, members, attachments }: TaskDetailBodyPro
           </span>
         )}
         <span className={`text-xs font-medium px-2 py-0.5 rounded capitalize ${statusCls}`}>
-          {task.status.replace(/_/g, ' ')}
+          {t(`taskStatus.${task.status}`)}
         </span>
         {locked && (
           <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-500/15 text-green-600 dark:text-green-400 animate-pulse">
-            Running
+            {t('workflow.status.running')}
+          </span>
+        )}
+        {task.workflow_step_id && (
+          <span className="text-xs font-medium px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">
+            {t('workflow.step')} {task.workflow_step_id} · {t('workflow.revision', { revision: task.plan_revision ?? 1 })}
           </span>
         )}
       </div>

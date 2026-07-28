@@ -43,6 +43,8 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
   // UX Behavior
   const [intentClassify, setIntentClassify] = useState(true);
   const [teamWorkClassify, setTeamWorkClassify] = useState(false);
+  const [teamWorkClassifyProvider, setTeamWorkClassifyProvider] = useState("");
+  const [teamWorkClassifyModel, setTeamWorkClassifyModel] = useState("");
 
   // Compaction
   const [compProvider, setCompProvider] = useState("");
@@ -75,6 +77,8 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
       embMaxChunkLen: configs["embedding.max_chunk_len"] ?? "", embChunkOverlap: configs["embedding.chunk_overlap"] ?? "",
       intentClassify: parseBool(configs["gateway.intent_classify"], true),
       teamWorkClassify: parseBool(configs["gateway.team_work_classify"], false),
+      teamWorkClassifyProvider: configs["gateway.team_work_classify_provider"] ?? "",
+      teamWorkClassifyModel: configs["gateway.team_work_classify_model"] ?? "",
       compProvider: configs["compaction.provider"] ?? "", compModel: configs["compaction.model"] ?? "",
       compThreshold: configs["compaction.threshold"] ?? "", compKeepRecent: configs["compaction.keep_recent"] ?? "",
       compMaxTokens: configs["compaction.max_tokens"] ?? "",
@@ -92,6 +96,7 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
     setEmbProvider(s.embProvider); setEmbModel(s.embModel); setEmbMaxChunkLen(s.embMaxChunkLen); setEmbChunkOverlap(s.embChunkOverlap);
     setIntentClassify(s.intentClassify);
     setTeamWorkClassify(s.teamWorkClassify);
+    setTeamWorkClassifyProvider(s.teamWorkClassifyProvider); setTeamWorkClassifyModel(s.teamWorkClassifyModel);
     setCompProvider(s.compProvider); setCompModel(s.compModel); setCompThreshold(s.compThreshold); setCompKeepRecent(s.compKeepRecent); setCompMaxTokens(s.compMaxTokens);
     setKgProvider(s.kgProvider); setKgModel(s.kgModel); setKgMinConfidence(s.kgMinConfidence);
     setBgProvider(s.bgProvider); setBgModel(s.bgModel);
@@ -136,6 +141,8 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
       if (embChunkOverlap !== init.embChunkOverlap) updates["embedding.chunk_overlap"] = embChunkOverlap;
       if (intentClassify !== init.intentClassify) updates["gateway.intent_classify"] = String(intentClassify);
       if (teamWorkClassify !== init.teamWorkClassify) updates["gateway.team_work_classify"] = String(teamWorkClassify);
+      if (teamWorkClassifyProvider !== init.teamWorkClassifyProvider) updates["gateway.team_work_classify_provider"] = teamWorkClassifyProvider;
+      if (teamWorkClassifyModel !== init.teamWorkClassifyModel) updates["gateway.team_work_classify_model"] = teamWorkClassifyModel;
       if (compProvider !== init.compProvider) updates["compaction.provider"] = compProvider;
       if (compModel !== init.compModel) updates["compaction.model"] = compModel;
       if (compThreshold !== init.compThreshold) updates["compaction.threshold"] = compThreshold;
@@ -163,7 +170,32 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
 
   const uxItems: FeatureSwitchItem[] = [
     { icon: Brain, iconClass: "text-orange-500", label: t("ux.intentClassify"), hint: t("ux.intentClassifyHint"), checked: intentClassify, onCheckedChange: setIntentClassify, infoWhenOn: t("ux.intentClassifyInfo"), infoClass: "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/30 dark:text-orange-300" },
-    { icon: UsersRound, iconClass: "text-blue-500", label: t("ux.teamWorkClassify"), hint: t("ux.teamWorkClassifyHint"), checked: teamWorkClassify && !!embProvider, onCheckedChange: setTeamWorkClassify, disabled: !embProvider, disabledHint: t("ux.teamWorkClassifyEmbeddingRequired"), infoWhenOn: t("ux.teamWorkClassifyInfo"), infoClass: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300" },
+    {
+      icon: UsersRound,
+      iconClass: "text-blue-500",
+      label: t("ux.teamWorkClassify"),
+      hint: t("ux.teamWorkClassifyHint"),
+      checked: teamWorkClassify && !!embProvider,
+      onCheckedChange: setTeamWorkClassify,
+      disabled: !embProvider,
+      disabledHint: t("ux.teamWorkClassifyEmbeddingRequired"),
+      infoWhenOn: t("ux.teamWorkClassifyInfo"),
+      infoClass: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300",
+      extraWhenOn: (
+        <ProviderModelSelect
+          provider={teamWorkClassifyProvider}
+          onProviderChange={(v) => { setTeamWorkClassifyProvider(v); setTeamWorkClassifyModel(""); }}
+          model={teamWorkClassifyModel}
+          onModelChange={setTeamWorkClassifyModel}
+          allowEmpty
+          noTips
+          providerLabel={t("ux.teamWorkClassifyProvider")}
+          modelLabel={t("ux.teamWorkClassifyModel")}
+          providerPlaceholder={t("ux.teamWorkClassifyProviderPlaceholder")}
+          modelPlaceholder={t("ux.teamWorkClassifyModelPlaceholder")}
+        />
+      ),
+    },
   ];
 
   return (

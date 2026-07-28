@@ -27,7 +27,7 @@ func NewSpawnTool(manager *SubagentManager, parentID string, depth int) *SpawnTo
 	}
 }
 
-func (t *SpawnTool) Name() string { return "spawn" }
+func (t *SpawnTool) Name() string { return ToolNameSpawn }
 
 func (t *SpawnTool) Description() string {
 	return "Spawn a subagent to handle a task in the background. The subagent runs independently and reports back when done."

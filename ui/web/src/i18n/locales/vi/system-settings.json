@@ -35,8 +35,12 @@
     "intentClassifyInfo": "Tính năng này chỉ áp dụng khi session đang bận; nó không quyết định yêu cầu có cần làm việc theo team hay không.",
     "teamWorkClassify": "Phân Loại Team Work",
     "teamWorkClassifyHint": "Phân loại yêu cầu mới thành tự xử lý hoặc làm theo team/delegate workflow.",
-    "teamWorkClassifyInfo": "Khi yêu cầu vượt chuyên môn hoặc nên chia việc, hệ thống dùng embedding làm bằng chứng rồi để model quyết định tự xử lý hay dùng team/delegate workflow. Hệ thống xét cả quyền lead/member; member chỉ được tạo request nhờ hỗ trợ khi team đã bật Yêu cầu thành viên và Tự động phân phối.",
-    "teamWorkClassifyEmbeddingRequired": "Cần cấu hình embedding trước khi bật Phân Loại Team Work."
+    "teamWorkClassifyInfo": "Khi yêu cầu vượt chuyên môn hoặc nên chia việc, hệ thống dùng embedding làm bằng chứng rồi để model phân loại quyết định tự xử lý hay dùng team/delegate workflow. Để Provider/Model là Agent default để dùng agent hiện tại; nếu chỉ chọn provider thì dùng model mặc định của provider đó.",
+    "teamWorkClassifyEmbeddingRequired": "Cần cấu hình embedding trước khi bật Phân Loại Team Work.",
+    "teamWorkClassifyProvider": "Provider",
+    "teamWorkClassifyModel": "Model",
+    "teamWorkClassifyProviderPlaceholder": "Agent default",
+    "teamWorkClassifyModelPlaceholder": "Agent default"
   },
   "kg": {
     "title": "Đồ thị tri thức",

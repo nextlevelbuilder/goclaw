@@ -152,7 +152,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
 
       // Capture run.started
       if (event.type === "run.started" && event.agentId === agentIdRef.current) {
-        if (expectingRunRef.current || event.runKind === "announce") {
+        if (expectingRunRef.current || event.runKind === "announce" || event.runKind === "workflow_finalize") {
           runIdRef.current = event.runId;
           expectingRunRef.current = false;
           setSessionRunning(sessionKeyRef.current, true);

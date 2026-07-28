@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -34,6 +33,49 @@ func startTaskLockRenewal(ctx context.Context, teamStore store.TeamStore, taskID
 					return
 				}
 				slog.Debug("teammate lock renewed", "task_id", taskID)
+			case <-ch:
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	return func() { close(ch) }
+}
+
+// startWorkflowLockRenewal renews a workflow-work task lease every 5 min while
+// the agent works, fenced on the accepted attempt. Unlike startTaskLockRenewal,
+// the heartbeat CAS carries the full attempt tuple, so a superseded attempt's
+// stale ticker cannot extend the lease on the replacement run: HeartbeatWorkflow-
+// TaskAttempt returns a non-Applied outcome and this stops renewing. Returns a
+// stop func — call it when the run finishes. Returns nil if the store lacks the
+// workflow contract or the attempt is zero.
+func startWorkflowLockRenewal(ctx context.Context, teamStore store.TeamStore, attempt store.WorkflowTaskAttempt) (stop func()) {
+	workflowStore, ok := teamStore.(store.TeamWorkflowStore)
+	if !ok || attempt.DispatchToken == uuid.Nil || attempt.TaskID == uuid.Nil {
+		return nil
+	}
+	ch := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				transition, err := workflowStore.HeartbeatWorkflowTaskAttempt(ctx, attempt, time.Now().Add(60*time.Minute))
+				if err != nil {
+					slog.Warn("workflow lock renewal failed", "task_id", attempt.TaskID, "error", err)
+					return
+				}
+				if transition.Outcome != store.WorkflowMutationApplied {
+					// Attempt superseded (stale) or already terminal — stop renewing so
+					// this ticker never keeps a lease alive for a task the replacement
+					// attempt now owns.
+					slog.Info("workflow lock renewal stopping: attempt no longer current",
+						"task_id", attempt.TaskID, "outcome", transition.Outcome)
+					return
+				}
+				slog.Debug("workflow lock renewed", "task_id", attempt.TaskID)
 			case <-ch:
 				return
 			case <-ctx.Done():
@@ -135,7 +177,7 @@ func resolveTeamTaskOutcome(
 		if err := deps.TeamStore.FailTask(ctx, meta.TaskID, meta.TeamID, outcome.Err.Error()); err != nil {
 			slog.Warn("auto-complete: FailTask error", "task_id", meta.TaskID, "error", err)
 		} else {
-			bus.BroadcastForTenant(deps.MsgBus, protocol.EventTeamTaskFailed, store.TenantIDFromContext(ctx), tools.BuildTaskEventPayload(
+			tools.PublishTaskEventWithResolver(deps.TeamStore, deps.MsgBus, deps.AgentStore, protocol.EventTeamTaskFailed, tools.BuildTaskEventPayload(
 				meta.TeamID.String(), meta.TaskID.String(),
 				store.TeamTaskStatusFailed,
 				"agent", toAgent,
@@ -146,7 +188,7 @@ func resolveTeamTaskOutcome(
 				tools.WithPeerKind(taskPeerKind),
 				tools.WithLocalKey(taskLocalKey),
 				tools.WithTimestamp(now),
-			))
+			), uuid.Nil)
 		}
 
 	case flags.Completed || flags.Escalated:
@@ -170,7 +212,7 @@ func resolveTeamTaskOutcome(
 		if err := deps.TeamStore.FailTask(ctx, meta.TaskID, meta.TeamID, failMsg); err != nil {
 			slog.Warn("auto-fail: FailTask error (loop kill)", "task_id", meta.TaskID, "error", err)
 		} else {
-			bus.BroadcastForTenant(deps.MsgBus, protocol.EventTeamTaskFailed, store.TenantIDFromContext(ctx), tools.BuildTaskEventPayload(
+			tools.PublishTaskEventWithResolver(deps.TeamStore, deps.MsgBus, deps.AgentStore, protocol.EventTeamTaskFailed, tools.BuildTaskEventPayload(
 				meta.TeamID.String(), meta.TaskID.String(),
 				store.TeamTaskStatusFailed,
 				"system", "loop_detector",
@@ -181,7 +223,7 @@ func resolveTeamTaskOutcome(
 				tools.WithPeerKind(taskPeerKind),
 				tools.WithLocalKey(taskLocalKey),
 				tools.WithTimestamp(now),
-			))
+			), uuid.Nil)
 		}
 		slog.Warn("post-turn: loop detector killed member run",
 			"task_id", meta.TaskID, "agent", toAgent)
@@ -196,8 +238,17 @@ func resolveTeamTaskOutcome(
 				result = strings.Join(outcome.Result.Deliverables, "\n\n---\n\n")
 			}
 		}
-		if result == "" {
-			result = "Agent run ended without explicit result"
+		// A turn that produced nothing usable is not a completed task. The
+		// workflow-step path already refuses to settle on "..." / NO_REPLY
+		// (workflowStepResultIsUsable); member request tasks settle here
+		// instead and were being marked completed with a 3-character
+		// placeholder as their deliverable, so the requester got a "done"
+		// task with no work in it. Requeue for another dispatch instead —
+		// an empty turn is usually a transient provider failure.
+		if !workflowStepResultIsUsable(result) {
+			requeueMemberTaskWithoutResult(ctx, deps, meta, taskNumber, taskSubject, toAgent,
+				taskChannel, taskChatID, taskPeerKind, taskLocalKey, now)
+			break
 		}
 		if len(result) > 100_000 {
 			result = result[:100_000] + "\n[truncated]"
@@ -205,7 +256,7 @@ func resolveTeamTaskOutcome(
 		if err := deps.TeamStore.CompleteTask(ctx, meta.TaskID, meta.TeamID, result); err != nil {
 			slog.Warn("auto-complete: CompleteTask error", "task_id", meta.TaskID, "error", err)
 		} else {
-			bus.BroadcastForTenant(deps.MsgBus, protocol.EventTeamTaskCompleted, store.TenantIDFromContext(ctx), tools.BuildTaskEventPayload(
+			tools.PublishTaskEventWithResolver(deps.TeamStore, deps.MsgBus, deps.AgentStore, protocol.EventTeamTaskCompleted, tools.BuildTaskEventPayload(
 				meta.TeamID.String(), meta.TaskID.String(),
 				store.TeamTaskStatusCompleted,
 				"agent", toAgent,
@@ -216,7 +267,7 @@ func resolveTeamTaskOutcome(
 				tools.WithPeerKind(taskPeerKind),
 				tools.WithLocalKey(taskLocalKey),
 				tools.WithTimestamp(now),
-			))
+			), uuid.Nil)
 		}
 	}
 
@@ -228,4 +279,70 @@ func resolveTeamTaskOutcome(
 	}
 
 	return cachedTeam
+}
+
+// requeueMemberTaskWithoutResult returns a member request task to pending after a
+// turn that produced no usable deliverable, so the next dispatch can try again.
+//
+// The empty turn is almost always a transient provider failure — a stream that
+// died before its first chunk reads as a successful empty answer — so failing the
+// task outright would discard work the requester still wants. But an unbounded
+// requeue would loop forever against a provider that keeps returning nothing, so
+// the retry shares the SAME dispatch budget as every other dispatch. Once the
+// budget is spent the task stays failed with a diagnosable reason.
+//
+// There is no single-step "back to pending" transition from in_progress, so this
+// goes through the two supported store calls (FailTask → ResetTaskStatus) rather
+// than writing status SQL of its own. If the reset fails the task is left failed,
+// which is the safe end state: visible to the requester, not silently "done".
+func requeueMemberTaskWithoutResult(
+	ctx context.Context,
+	deps *ConsumerDeps,
+	meta teammateTaskMeta,
+	taskNumber int,
+	taskSubject string,
+	toAgent string,
+	taskChannel string,
+	taskChatID string,
+	taskPeerKind string,
+	taskLocalKey string,
+	now string,
+) {
+	const reason = "Agent run ended without a usable result"
+
+	dispatches := 0
+	if task, err := deps.TeamStore.GetTask(ctx, meta.TaskID); err == nil && task != nil {
+		dispatches = tools.TaskDispatchCount(task)
+	}
+
+	if err := deps.TeamStore.FailTask(ctx, meta.TaskID, meta.TeamID, reason); err != nil {
+		slog.Warn("post-turn: FailTask error before requeue", "task_id", meta.TaskID, "error", err)
+		return
+	}
+
+	if dispatches >= tools.MaxTaskDispatches {
+		slog.Warn("post-turn: no usable result and dispatch budget exhausted",
+			"task_id", meta.TaskID, "agent", toAgent, "dispatch_count", dispatches)
+		tools.PublishTaskEventWithResolver(deps.TeamStore, deps.MsgBus, deps.AgentStore, protocol.EventTeamTaskFailed, tools.BuildTaskEventPayload(
+			meta.TeamID.String(), meta.TaskID.String(),
+			store.TeamTaskStatusFailed,
+			"system", "no_usable_result",
+			tools.WithTaskInfo(taskNumber, taskSubject),
+			tools.WithReason("no_usable_result"),
+			tools.WithChannel(taskChannel),
+			tools.WithChatID(taskChatID),
+			tools.WithPeerKind(taskPeerKind),
+			tools.WithLocalKey(taskLocalKey),
+			tools.WithTimestamp(now),
+		), uuid.Nil)
+		return
+	}
+
+	if err := deps.TeamStore.ResetTaskStatus(ctx, meta.TaskID, meta.TeamID); err != nil {
+		slog.Warn("post-turn: requeue after empty run failed; task left failed",
+			"task_id", meta.TaskID, "error", err)
+		return
+	}
+	slog.Warn("post-turn: no usable result, requeueing member task",
+		"task_id", meta.TaskID, "agent", toAgent, "dispatch_count", dispatches)
 }

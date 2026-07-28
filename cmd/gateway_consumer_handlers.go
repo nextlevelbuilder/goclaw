@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -231,6 +232,22 @@ func handleTeammateMessage(
 
 	// Track task → session so the subscriber can cancel on task cancellation.
 	taskIDStr := msg.Metadata[tools.MetaTeamTaskID]
+	runID := fmt.Sprintf("teammate-%s-%s", msg.Metadata[tools.MetaFromAgent], msg.Metadata[tools.MetaToAgent])
+	// workflowAttempt carries the accepted, backend-derived attempt identity into
+	// the RunRequest so every downstream mutation (heartbeat, progress, blocker,
+	// complete, post-turn settlement) fences on this exact tuple. Nil for
+	// non-workflow teammate dispatches.
+	var workflowAttempt *store.WorkflowTaskAttempt
+	if msg.Metadata[tools.MetaWorkflowID] != "" {
+		var accepted bool
+		workflowAttempt, accepted = acceptWorkflowDispatchAttempt(ctx, msg, deps.TeamStore)
+		if !accepted {
+			return true
+		}
+		// Run ID is fenced to the dispatch token so a superseded attempt's run key
+		// never collides with the replacement run for the same workflow step.
+		runID = fmt.Sprintf("workflow-step:%s:%s:%s", workflowAttempt.WorkflowID, workflowAttempt.WorkflowStep, workflowAttempt.DispatchToken)
+	}
 	if taskIDStr != "" {
 		deps.TaskRunSessions.Store(taskIDStr, sessionKey)
 	}
@@ -239,6 +256,10 @@ func handleTeammateMessage(
 	// The post-turn goroutine reads these flags to decide auto-complete vs skip.
 	taskActionFlags := &tools.TaskActionFlags{}
 	schedCtx := tools.WithTaskActionFlags(ctx, taskActionFlags)
+	var originRouting map[string]string
+	if raw := msg.Metadata[tools.MetaOriginRouting]; raw != "" {
+		_ = json.Unmarshal([]byte(raw), &originRouting)
+	}
 
 	outCh := deps.Sched.Schedule(schedCtx, scheduler.LaneTeam, agent.RunRequest{
 		SessionKey:      sessionKey,
@@ -252,7 +273,7 @@ func handleTeammateMessage(
 		UserID:          announceUserID,
 		SenderID:        teammateSenderID, // real user who triggered the teammate dispatch (#915)
 		Role:            teammateRole,     // RBAC role for admin bypass during teammate turn (#915)
-		RunID:           fmt.Sprintf("teammate-%s-%s", msg.Metadata[tools.MetaFromAgent], msg.Metadata[tools.MetaToAgent]),
+		RunID:           runID,
 		Stream:          false,
 		TeamTaskID:      msg.Metadata[tools.MetaTeamTaskID],
 		TeamWorkspace:   msg.Metadata[tools.MetaTeamWorkspace],
@@ -260,6 +281,8 @@ func handleTeammateMessage(
 		WorkspaceChatID: origChatID,
 		TeamID:          msg.Metadata[tools.MetaTeamID],
 		LinkedTraceID:   linkedTraceID,
+		RoutingMetadata: originRouting,
+		WorkflowAttempt: workflowAttempt,
 	})
 
 	deps.BgWg.Add(1)
@@ -268,9 +291,14 @@ func handleTeammateMessage(
 		defer safego.Recover(nil, "component", "teammate_message", "task_id", taskID)
 
 		// Lock renewal heartbeat: extend task lock every 5 min to prevent
-		// the ticker from recovering long-running tasks as stale.
+		// the ticker from recovering long-running tasks as stale. Workflow-work
+		// tasks renew via the attempt-fenced heartbeat so a superseded attempt's
+		// renewal is a typed Stale no-op instead of extending a lease it no longer
+		// owns; ordinary teammate tasks use the generic lock renewal.
 		var lockStop func()
-		if taskIDStr := inMeta[tools.MetaTeamTaskID]; taskIDStr != "" && deps.TeamStore != nil {
+		if workflowAttempt != nil {
+			lockStop = startWorkflowLockRenewal(ctx, deps.TeamStore, *workflowAttempt)
+		} else if taskIDStr := inMeta[tools.MetaTeamTaskID]; taskIDStr != "" && deps.TeamStore != nil {
 			teamTaskID, _ := uuid.Parse(taskIDStr)
 			teamID, _ := uuid.Parse(inMeta[tools.MetaTeamID])
 			lockStop = startTaskLockRenewal(ctx, deps.TeamStore, teamTaskID, teamID)
@@ -286,6 +314,13 @@ func handleTeammateMessage(
 		// Stop lock renewal now that the agent has finished.
 		if lockStop != nil {
 			lockStop()
+		}
+
+		// Workflow tasks settle inside the workflow service and never enter the
+		// ordinary teammate announce/lead resolver path.
+		if inMeta[tools.MetaWorkflowID] != "" {
+			resolveWorkflowTaskOutcome(ctx, deps, outcome, taskActionFlags, inMeta, workflowAttempt)
+			return
 		}
 
 		// Auto-complete/fail the associated team task (v2 only).
@@ -388,6 +423,40 @@ func handleTeammateMessage(
 	}(origChannel, origChatID, msg.SenderID, taskIDStr, outMeta, msg.Metadata)
 
 	return true
+}
+
+func acceptWorkflowDispatchAttempt(ctx context.Context, msg bus.InboundMessage, teamStore store.TeamStore) (*store.WorkflowTaskAttempt, bool) {
+	workflowID, workflowErr := uuid.Parse(msg.Metadata[tools.MetaWorkflowID])
+	taskID, taskErr := uuid.Parse(msg.Metadata[tools.MetaTeamTaskID])
+	teamID, teamErr := uuid.Parse(msg.Metadata[tools.MetaTeamID])
+	dispatchToken, tokenErr := uuid.Parse(msg.Metadata[tools.MetaDispatchToken])
+	workflowStore, storeOK := teamStore.(store.TeamWorkflowStore)
+	if workflowErr != nil || taskErr != nil || teamErr != nil || tokenErr != nil || !storeOK {
+		slog.Warn("workflow dispatch: invalid durable dispatch envelope", "workflow_id", msg.Metadata[tools.MetaWorkflowID], "task_id", msg.Metadata[tools.MetaTeamTaskID])
+		return nil, false
+	}
+
+	planRevision, revisionErr := strconv.Atoi(msg.Metadata[tools.MetaWorkflowPlanRevision])
+	if revisionErr != nil || planRevision <= 0 {
+		slog.Warn("workflow dispatch: invalid plan revision", "workflow_id", workflowID, "task_id", taskID, "plan_revision", msg.Metadata[tools.MetaWorkflowPlanRevision])
+		return nil, false
+	}
+
+	attempt := &store.WorkflowTaskAttempt{
+		TenantID:      msg.TenantID,
+		TeamID:        teamID,
+		WorkflowID:    workflowID,
+		TaskID:        taskID,
+		DispatchToken: dispatchToken,
+		PlanRevision:  planRevision,
+		WorkflowStep:  msg.Metadata[tools.MetaWorkflowStepID],
+	}
+	transition, err := workflowStore.AcceptWorkflowTaskAttempt(ctx, *attempt, time.Now().Add(60*time.Minute))
+	if err != nil || !transition.Applied() {
+		slog.Info("workflow dispatch: stale or duplicate message rejected", "workflow_id", workflowID, "task_id", taskID, "outcome", transition.Outcome.String(), "error", err)
+		return nil, false
+	}
+	return attempt, true
 }
 
 // handleResetCommand processes /reset command: clears session history.
@@ -610,6 +679,13 @@ func resolveTeammateLeadAgent(ctx context.Context, cachedTeam *store.TeamData, i
 				if leadAg, err := deps.AgentStore.GetByID(ctx, team.LeadAgentID); err == nil {
 					return leadAg.AgentKey
 				}
+			}
+		}
+	}
+	if leadIDStr := inMeta[tools.MetaLeaderAgentID]; leadIDStr != "" && deps.AgentStore != nil {
+		if leadID, err := uuid.Parse(leadIDStr); err == nil {
+			if leadAg, err := deps.AgentStore.GetByID(ctx, leadID); err == nil && leadAg != nil && leadAg.AgentKey != "" {
+				return leadAg.AgentKey
 			}
 		}
 	}

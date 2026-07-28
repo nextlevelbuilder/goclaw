@@ -10,7 +10,9 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/teamworkconfig"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
@@ -35,6 +37,17 @@ type ConsumerDeps struct {
 	UsageCaps        *usagecaps.Service
 	ProviderReg      *providers.Registry
 	TeamWorkEmbedder memory.EmbeddingProvider
+	SkillsLoader     *skills.Loader
+	MCPStore         store.MCPAgentGrantBatchStore
+	BuiltinToolStore store.BuiltinToolStore
+	TenantToolStore  store.BuiltinToolTenantConfigStore
+	ToolPolicy       *tools.PolicyEngine
+	ToolRegistry     *tools.Registry
 	BgWg             sync.WaitGroup
 	GetAnnounceMu    func(string) *sync.Mutex
+	// TeamWorkCfg resolves per-tenant Team Work classifier settings for the
+	// inbound ingress. Shared with the WS surface (same *teamworkconfig.Resolver
+	// instance) so cache invalidation is coherent. When nil, the inbound gate
+	// falls back to Cfg's file-config values (pre-isolation behavior).
+	TeamWorkCfg *teamworkconfig.Resolver
 }

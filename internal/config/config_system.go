@@ -51,8 +51,21 @@ func (c *Config) ApplySystemConfigs(configs map[string]string) {
 	integer("gateway.inbound_debounce_ms", &c.Gateway.InboundDebounceMs)
 	boolean("gateway.block_reply", &c.Gateway.BlockReply)
 	boolean("gateway.tool_status", &c.Gateway.ToolStatus)
-	boolean("gateway.team_work_classify", &c.Gateway.TeamWorkClassify)
-	integer("gateway.task_recovery_interval_sec", &c.Gateway.TaskRecoveryIntervalSec)
+	// NOTE: gateway.team_work_classify / _provider / _model are intentionally
+	// NOT overlaid onto the shared cfg here. They are resolved per-tenant at
+	// request time by internal/teamworkconfig.Resolver — overlaying them onto the
+	// process-wide *config.Config leaked one tenant's Team Work settings to all
+	// others. See cmd/gateway.go (deps.teamWorkCfg) and the system-config-changed
+	// subscriber's per-tenant Invalidate.
+	//
+	// gateway.task_recovery_interval_sec is ALSO not overlaid here (Phase 7
+	// Decision 8): it configures a single process-wide recovery ticker built once
+	// at startup (cmd/gateway_lifecycle.go), which never re-reads the field. This
+	// dynamic path runs on EVERY system-config-changed event carrying the CHANGING
+	// tenant's context (cmd/gateway_http_wiring.go), so overlaying it here let any
+	// tenant's edit mutate the shared runtime value — an ineffective (ticker never
+	// re-reads) cross-tenant write. It is a startup-only, master-managed key,
+	// applied exactly once from the master-tenant seed via ApplyStartupSystemConfigs.
 	integer("gateway.webhook_async_timeout_sec", &c.Gateway.WebhookAsyncTimeoutSec)
 	integer("gateway.webhook_sync_timeout_sec", &c.Gateway.WebhookSyncTimeoutSec)
 	boolean("gateway.webhook_stream", &c.Gateway.WebhookStream)
@@ -119,6 +132,30 @@ func (c *Config) ApplySystemConfigs(configs map[string]string) {
 		var paths []string
 		if err := json.Unmarshal([]byte(v), &paths); err == nil {
 			c.Agents.Defaults.AllowedPaths = paths
+		}
+	}
+}
+
+// ApplyStartupSystemConfigs overlays the process-wide, startup-only system_configs
+// keys — the ones read exactly once when a singleton is constructed and never
+// re-read afterwards. It MUST be called only at startup, from the master-tenant
+// seed, and MUST NOT be wired into the per-tenant system-config-changed subscriber
+// (Phase 7 Decision 8).
+//
+// These keys are deliberately kept out of ApplySystemConfigs: that method runs on
+// every system-config-changed event under the CHANGING tenant's context, so
+// overlaying a startup-only key there let any tenant's edit mutate the shared
+// runtime value — a write that is both ineffective (the consuming singleton never
+// re-reads the field) and cross-tenant. Splitting them out makes "read once at
+// startup, master-managed" explicit in the type, not just a comment.
+//
+// gateway.task_recovery_interval_sec — feeds the single team-task recovery ticker
+// built once in cmd/gateway_lifecycle.go. Changing it takes effect on the next
+// process restart; there is no live ticker reconfiguration in Phase 7.
+func (c *Config) ApplyStartupSystemConfigs(configs map[string]string) {
+	if v, ok := configs["gateway.task_recovery_interval_sec"]; ok && v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.Gateway.TaskRecoveryIntervalSec = n
 		}
 	}
 }

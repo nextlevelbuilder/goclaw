@@ -72,13 +72,13 @@ func TestSessionQueue_DropNewPolicy(t *testing.T) {
 
 	// Enqueue 3 requests: 1 active + 2 in queue = at capacity
 	ctx := context.Background()
-	sq.Enqueue(ctx, agent.RunRequest{RunID: "r1", SessionKey: "s"})
+	sq.Enqueue(ctx, agent.RunRequest{RunID: "r1", SessionKey: "s"}, nil)
 	time.Sleep(10 * time.Millisecond) // let r1 start
-	sq.Enqueue(ctx, agent.RunRequest{RunID: "r2", SessionKey: "s"})
-	sq.Enqueue(ctx, agent.RunRequest{RunID: "r3", SessionKey: "s"})
+	sq.Enqueue(ctx, agent.RunRequest{RunID: "r2", SessionKey: "s"}, nil)
+	sq.Enqueue(ctx, agent.RunRequest{RunID: "r3", SessionKey: "s"}, nil)
 
 	// Queue is full (cap=2). Next one should be rejected.
-	ch := sq.Enqueue(ctx, agent.RunRequest{RunID: "r4", SessionKey: "s"})
+	ch := sq.Enqueue(ctx, agent.RunRequest{RunID: "r4", SessionKey: "s"}, nil)
 
 	outcome := <-ch
 	if !errors.Is(outcome.Err, ErrQueueFull) {
@@ -109,14 +109,14 @@ func TestSessionQueue_DropOldPolicy(t *testing.T) {
 	sq := NewSessionQueue("test-session", LaneMain, cfg, laneMgr, runFn)
 
 	ctx := context.Background()
-	sq.Enqueue(ctx, agent.RunRequest{RunID: "r1", SessionKey: "s"})
+	sq.Enqueue(ctx, agent.RunRequest{RunID: "r1", SessionKey: "s"}, nil)
 	time.Sleep(10 * time.Millisecond)
 
-	ch2 := sq.Enqueue(ctx, agent.RunRequest{RunID: "r2", SessionKey: "s"})
-	sq.Enqueue(ctx, agent.RunRequest{RunID: "r3", SessionKey: "s"})
+	ch2 := sq.Enqueue(ctx, agent.RunRequest{RunID: "r2", SessionKey: "s"}, nil)
+	sq.Enqueue(ctx, agent.RunRequest{RunID: "r3", SessionKey: "s"}, nil)
 
 	// Queue is full. Adding r4 should drop r2 (oldest queued).
-	sq.Enqueue(ctx, agent.RunRequest{RunID: "r4", SessionKey: "s"})
+	sq.Enqueue(ctx, agent.RunRequest{RunID: "r4", SessionKey: "s"}, nil)
 
 	// r2 should have been dropped
 	outcome := <-ch2
@@ -204,7 +204,7 @@ func TestSessionQueue_StaleCompletion_AfterReset(t *testing.T) {
 	sq := NewSessionQueue("test", LaneMain, cfg, laneMgr, runFn)
 
 	// Start run r1
-	ch1 := sq.Enqueue(context.Background(), agent.RunRequest{RunID: "r1", SessionKey: "test"})
+	ch1 := sq.Enqueue(context.Background(), agent.RunRequest{RunID: "r1", SessionKey: "test"}, nil)
 	time.Sleep(20 * time.Millisecond) // let r1 start
 
 	// Reset bumps generation, cancels r1
@@ -217,7 +217,7 @@ func TestSessionQueue_StaleCompletion_AfterReset(t *testing.T) {
 	_ = outcome
 
 	// After reset, new runs should work normally
-	sq2ch := sq.Enqueue(context.Background(), agent.RunRequest{RunID: "r2", SessionKey: "test"})
+	sq2ch := sq.Enqueue(context.Background(), agent.RunRequest{RunID: "r2", SessionKey: "test"}, nil)
 	outcome2 := <-sq2ch
 	if outcome2.Err != nil {
 		t.Fatalf("post-reset run should succeed: %v", outcome2.Err)
@@ -242,11 +242,11 @@ func TestSessionQueue_CancelAll_StaleMessages(t *testing.T) {
 	sq := NewSessionQueue("test", LaneMain, cfg, laneMgr, runFn)
 
 	ctx := context.Background()
-	sq.Enqueue(ctx, agent.RunRequest{RunID: "r1", SessionKey: "test"})
+	sq.Enqueue(ctx, agent.RunRequest{RunID: "r1", SessionKey: "test"}, nil)
 	time.Sleep(10 * time.Millisecond)
 
 	// Queue r2 before cancellation
-	ch2 := sq.Enqueue(ctx, agent.RunRequest{RunID: "r2", SessionKey: "test"})
+	ch2 := sq.Enqueue(ctx, agent.RunRequest{RunID: "r2", SessionKey: "test"}, nil)
 
 	// CancelAll → sets abort cutoff → r2 was queued before cutoff → stale
 	sq.CancelAll()
@@ -404,7 +404,7 @@ func TestSessionQueue_Debounce_CollapsesRapidMessages(t *testing.T) {
 		ch := sq.Enqueue(ctx, agent.RunRequest{
 			RunID:      "r" + string(rune('0'+i)),
 			SessionKey: "test",
-		})
+		}, nil)
 		channels = append(channels, ch)
 	}
 
@@ -453,11 +453,11 @@ func TestSessionQueue_InterruptMode(t *testing.T) {
 	sq := NewSessionQueue("test", LaneMain, cfg, laneMgr, runFn)
 
 	ctx := context.Background()
-	sq.Enqueue(ctx, agent.RunRequest{RunID: "r1", SessionKey: "test"})
+	sq.Enqueue(ctx, agent.RunRequest{RunID: "r1", SessionKey: "test"}, nil)
 	time.Sleep(20 * time.Millisecond)
 
 	// Interrupt: should cancel r1 and start r2
-	ch2 := sq.Enqueue(ctx, agent.RunRequest{RunID: "r2", SessionKey: "test"})
+	ch2 := sq.Enqueue(ctx, agent.RunRequest{RunID: "r2", SessionKey: "test"}, nil)
 
 	outcome := <-ch2
 	if outcome.Err != nil {

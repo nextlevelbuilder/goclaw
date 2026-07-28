@@ -13,15 +13,15 @@ import (
 
 // AnnounceQueueItem represents a single subagent result waiting to be announced.
 type AnnounceQueueItem struct {
-	SubagentID    string
-	Label         string
-	Status        string // "completed", "failed", "cancelled"
-	Result        string
-	Media         []bus.MediaFile // media files from tool results
-	Runtime       time.Duration
-	Iterations    int
-	InputTokens   int64
-	OutputTokens  int64
+	SubagentID   string
+	Label        string
+	Status       string // "completed", "failed", "cancelled"
+	Result       string
+	Media        []bus.MediaFile // media files from tool results
+	Runtime      time.Duration
+	Iterations   int
+	InputTokens  int64
+	OutputTokens int64
 }
 
 // AnnounceMetadata carries origin info for routing the batched announce.
@@ -31,10 +31,11 @@ type AnnounceMetadata struct {
 	OriginPeerKind   string
 	OriginLocalKey   string // composite key with topic/thread suffix for routing
 	OriginUserID     string
-	OriginSenderID   string // real acting sender; preserves permission attribution through re-ingress (#915)
-	OriginRole       string // caller's RBAC role; bypasses per-user grants for admin/operator/owner (#915)
-	OriginSessionKey string // exact parent session key (WS uses non-standard format)
+	OriginSenderID   string    // real acting sender; preserves permission attribution through re-ingress (#915)
+	OriginRole       string    // caller's RBAC role; bypasses per-user grants for admin/operator/owner (#915)
+	OriginSessionKey string    // exact parent session key (WS uses non-standard format)
 	OriginTenantID   uuid.UUID // parent tenant for announce routing
+	TeamID           string    // optional team scope for Team Work UI events
 	ParentAgent      string
 	OriginTraceID    string // parent trace UUID for announce linking
 	OriginRootSpanID string // parent agent's root span UUID
@@ -47,7 +48,7 @@ type AnnounceQueue struct {
 	queues   map[string]*sessionQueue // session key → queue
 	debounce time.Duration            // default 1000ms
 	cap      int                      // max items per session before immediate drain (default 20)
-	onDrain func(sessionKey string, items []AnnounceQueueItem, meta AnnounceMetadata)
+	onDrain  func(sessionKey string, items []AnnounceQueueItem, meta AnnounceMetadata)
 }
 
 type sessionQueue struct {

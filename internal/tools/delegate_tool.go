@@ -28,7 +28,7 @@ type DelegateRunFunc func(ctx context.Context, req DelegateRequest) (DelegateRes
 
 // DelegateRequest describes a delegation dispatch.
 type DelegateRequest struct {
-	FromAgentID uuid.UUID
+	FromAgentID  uuid.UUID
 	FromAgentKey string
 	ToAgentKey   string
 	Task         string
@@ -65,7 +65,7 @@ func NewDelegateTool(links store.AgentLinkStore, agents store.AgentCRUDStore, eb
 	return &DelegateTool{links: links, agents: agents, eventBus: eb, runFn: runFn}
 }
 
-func (t *DelegateTool) Name() string { return "delegate" }
+func (t *DelegateTool) Name() string { return ToolNameDelegate }
 
 func (t *DelegateTool) Description() string {
 	return "Delegate a task to a linked agent. The target agent must be connected via an agent link."
@@ -342,4 +342,3 @@ func (t *DelegateTool) emitEvent(ctx context.Context, eventType eventbus.EventTy
 		Payload:   payload,
 	})
 }
-

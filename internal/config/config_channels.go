@@ -423,29 +423,32 @@ type QuotaConfig struct {
 
 // GatewayConfig controls the gateway server.
 type GatewayConfig struct {
-	Host                    string              `json:"host"`
-	Port                    int                 `json:"port"`
-	Token                   string              `json:"token,omitempty"`                      // bearer token for WS/HTTP auth
-	MCPServerToken          string              `json:"mcp_server_token,omitempty"`           // bearer token gating the CRUD MCP server mounted at /api/mcp/; callers may pass an optional "X-GoClaw-Tenant-Id" header (UUID or slug) to scope a request to a tenant, defaulting to the master tenant when absent (see internal/mcp/crud_server.go)
-	OwnerIDs                []string            `json:"owner_ids,omitempty"`                  // sender IDs considered "owner"
-	AllowedOrigins          []string            `json:"allowed_origins,omitempty"`            // WebSocket CORS whitelist (empty = allow all)
-	MCPAllowedHosts         []string            `json:"mcp_allowed_hosts,omitempty"`          // trusted MCP server hostnames exempt from the private-IP SSRF block during config validation (empty = none)
-	MaxMessageChars         int                 `json:"max_message_chars,omitempty"`          // max user message characters (default 32000)
-	RateLimitRPM            int                 `json:"rate_limit_rpm,omitempty"`             // rate limit: requests per minute per user (default 20, 0 = disabled)
-	InjectionAction         string              `json:"injection_action,omitempty"`           // prompt injection action: "log", "warn" (default), "block", "off"
-	InboundDebounceMs       int                 `json:"inbound_debounce_ms,omitempty"`        // silence-window in ms that merges rapid channel/Web Chat messages from the same sender/session; 0 disables for text but media-bearing messages still honor a built-in media floor so multi-attachment bursts (#63) coalesce into a single agent run. Agents may override via per-agent agent_config.inbound_debounce_ms.
-	Quota                   *QuotaConfig        `json:"quota,omitempty"`                      // per-user/group request quotas
-	BlockReply              *bool               `json:"block_reply,omitempty"`                // deliver intermediate text during tool iterations (default false)
-	ChatBehavior            *ChatBehaviorConfig `json:"chat_behavior,omitempty"`              // human-like channel delivery behavior (default disabled)
-	ToolStatus              *bool               `json:"tool_status,omitempty"`                // show tool name in streaming preview during tool execution (default true)
-	TeamWorkClassify        *bool               `json:"team_work_classify,omitempty"`         // classify new requests as direct handling or team workflow (default false)
-	TaskRecoveryIntervalSec int                 `json:"task_recovery_interval_sec,omitempty"` // team task recovery ticker interval in seconds (default 300 = 5min)
-	WebhookAsyncTimeoutSec  int                 `json:"webhook_async_timeout_sec,omitempty"`  // async webhook worker agent-run deadline in seconds (default 600, cap 3600)
-	WebhookSyncTimeoutSec   int                 `json:"webhook_sync_timeout_sec,omitempty"`   // sync + test webhook handler agent-run deadline in seconds (default 600, cap 3600). NOTE: sync holds the HTTP connection open for this duration — a value above an upstream proxy/LB read timeout may be cut.
-	WebhookStream           *bool               `json:"webhook_stream,omitempty"`             // stream provider responses for server-side webhook agent runs (sync/async/test) so the upstream can populate/serve its prompt cache (default true). Response to the caller is unchanged (still assembled JSON).
-	BackgroundProvider      string              `json:"background_provider,omitempty"`        // LLM provider for background workers (vault enrichment, consolidation)
-	BackgroundModel         string              `json:"background_model,omitempty"`           // LLM model for background workers
-	PublicURL               string              `json:"public_url,omitempty"`                 // public base URL for OAuth callbacks (e.g. "https://goclaw.example.com")
+	Host                     string              `json:"host"`
+	Port                     int                 `json:"port"`
+	Token                    string              `json:"token,omitempty"`                       // bearer token for WS/HTTP auth
+	MCPServerToken           string              `json:"mcp_server_token,omitempty"`            // bearer token gating the CRUD MCP server mounted at /api/mcp/; callers may pass an optional "X-GoClaw-Tenant-Id" header (UUID or slug) to scope a request to a tenant, defaulting to the master tenant when absent (see internal/mcp/crud_server.go)
+	OwnerIDs                 []string            `json:"owner_ids,omitempty"`                   // sender IDs considered "owner"
+	AllowedOrigins           []string            `json:"allowed_origins,omitempty"`             // WebSocket CORS whitelist (empty = allow all)
+	MCPAllowedHosts          []string            `json:"mcp_allowed_hosts,omitempty"`           // trusted MCP server hostnames exempt from the private-IP SSRF block during config validation (empty = none)
+	MaxMessageChars          int                 `json:"max_message_chars,omitempty"`           // max user message characters (default 32000)
+	RateLimitRPM             int                 `json:"rate_limit_rpm,omitempty"`              // rate limit: requests per minute per user (default 20, 0 = disabled)
+	InjectionAction          string              `json:"injection_action,omitempty"`            // prompt injection action: "log", "warn" (default), "block", "off"
+	InboundDebounceMs        int                 `json:"inbound_debounce_ms,omitempty"`         // silence-window in ms that merges rapid channel/Web Chat messages from the same sender/session; 0 disables for text but media-bearing messages still honor a built-in media floor so multi-attachment bursts (#63) coalesce into a single agent run. Agents may override via per-agent agent_config.inbound_debounce_ms.
+	Quota                    *QuotaConfig        `json:"quota,omitempty"`                       // per-user/group request quotas
+	BlockReply               *bool               `json:"block_reply,omitempty"`                 // deliver intermediate text during tool iterations (default false)
+	ChatBehavior             *ChatBehaviorConfig `json:"chat_behavior,omitempty"`               // human-like channel delivery behavior (default disabled)
+	ToolStatus               *bool               `json:"tool_status,omitempty"`                 // show tool name in streaming preview during tool execution (default true)
+	TeamWorkClassify         *bool               `json:"team_work_classify,omitempty"`          // classify new requests as direct handling or team workflow (default false)
+	WebhookAsyncTimeoutSec   int                 `json:"webhook_async_timeout_sec,omitempty"`   // async webhook worker agent-run deadline in seconds (default 600, cap 3600)
+	WebhookSyncTimeoutSec    int                 `json:"webhook_sync_timeout_sec,omitempty"`    // sync + test webhook handler agent-run deadline in seconds (default 600, cap 3600). NOTE: sync holds the HTTP connection open for this duration — a value above an upstream proxy/LB read timeout may be cut.
+	WebhookStream            *bool               `json:"webhook_stream,omitempty"`              // stream provider responses for server-side webhook agent runs (sync/async/test) so the upstream can populate/serve its prompt cache (default true). Response to the caller is unchanged (still assembled JSON).
+	TaskRecoveryIntervalSec  int                 `json:"task_recovery_interval_sec,omitempty"`  // team task recovery ticker interval in seconds (default 300 = 5min). PROCESS-WIDE, STARTUP-ONLY, RESTART-REQUIRED: the single recovery ticker captures this once at startup (ApplyStartupSystemConfigs reads the master value); it is deliberately NOT tenant-seeded/synced and the dynamic per-tenant config path ignores it, so changing it requires a restart (Phase 7 closure item 6 / Decision 8).
+	TeamWorkClassifyProvider string              `json:"team_work_classify_provider,omitempty"` // optional provider override for Team Work Classification; empty uses agent provider
+	TeamWorkClassifyModel    string              `json:"team_work_classify_model,omitempty"`    // optional model override for Team Work Classification; empty uses agent model/provider default
+	TeamWorkClassifyTimeoutSec int               `json:"team_work_classify_timeout_sec,omitempty"` // per-call Team Work LLM deadline in seconds, covering the classifier stages and the agent loop's directive enforcement (0/unset = built-in 30s arbiter, 60s planner, 30s enforcement). The classifier runs up to 5 sequential LLM stages, so a slow agent model needs a larger value or every stage fails safe to a degraded self and enforcement discards the validated plan. Capped at 300.
+	BackgroundProvider       string              `json:"background_provider,omitempty"`         // LLM provider for background workers (vault enrichment, consolidation)
+	BackgroundModel          string              `json:"background_model,omitempty"`            // LLM model for background workers
+	PublicURL                string              `json:"public_url,omitempty"`                  // public base URL for OAuth callbacks (e.g. "https://goclaw.example.com")
 }
 
 // ToolsConfig controls tool availability, policy, and web search.

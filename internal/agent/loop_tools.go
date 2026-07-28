@@ -151,6 +151,12 @@ func (l *Loop) processToolResult(
 
 	action = toolResultContinue
 
+	if teamWorkDirectiveTerminalCreateSucceeded(ctx, req.TeamWorkDirective, registryName, tc, result.ForLLM, result.IsError) {
+		rs.stopAfterTool = true
+		rs.suppressUserOutput = true
+		return toolMsg, nil, toolResultBreak
+	}
+
 	// Check for tool call loop after recording result.
 	if level, msg := rs.loopDetector.detect(registryName, argsHash); level != "" {
 		if level == "critical" {

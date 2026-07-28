@@ -518,3 +518,28 @@ func TestLoad_ChannelAutoEnable_Slack(t *testing.T) {
 		t.Error("Slack should be auto-enabled when both tokens are set")
 	}
 }
+
+// ApplySystemConfigs must NOT touch the Team Work classifier keys: they are
+// resolved per-tenant at request time by internal/teamworkconfig.Resolver.
+// Overlaying them onto the process-wide cfg leaked one tenant's settings to all
+// others; the clear-override semantics now live in the resolver
+// (teamworkconfig.TestResolveClearOverrideSemantics). This test pins that the
+// shared cfg is left untouched even when the DB carries these keys.
+func TestApplySystemConfigsLeavesTeamWorkClassifierKeysUntouched(t *testing.T) {
+	cfg := Default()
+	enabled := true
+	cfg.Gateway.TeamWorkClassify = &enabled
+	cfg.Gateway.TeamWorkClassifyProvider = "classifier"
+	cfg.Gateway.TeamWorkClassifyModel = "classifier-model"
+	cfg.ApplySystemConfigs(map[string]string{
+		"gateway.team_work_classify":          "false",
+		"gateway.team_work_classify_provider": "openai",
+		"gateway.team_work_classify_model":    "gpt-z",
+	})
+	if cfg.Gateway.TeamWorkClassify == nil || !*cfg.Gateway.TeamWorkClassify {
+		t.Fatalf("team_work_classify must be untouched (still true), got %+v", cfg.Gateway.TeamWorkClassify)
+	}
+	if cfg.Gateway.TeamWorkClassifyProvider != "classifier" || cfg.Gateway.TeamWorkClassifyModel != "classifier-model" {
+		t.Fatalf("classifier provider/model must be untouched, got %q/%q", cfg.Gateway.TeamWorkClassifyProvider, cfg.Gateway.TeamWorkClassifyModel)
+	}
+}

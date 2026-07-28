@@ -9,6 +9,7 @@
   "completed": "已完成",
   "createTask": "创建任务",
   "noTasks": "暂无任务",
+  "unassigned": "未分配",
   "id": "ID",
   "subject": "标题",
   "status": "状态",
@@ -107,5 +108,102 @@
     "poolProvider": "Pool Provider",
     "secureCli": "安全 CLI",
     "tenantUsers": "租户与用户管理"
+  },
+  "taskStatus": {
+    "pending": "待处理",
+    "dispatching": "正在分派",
+    "blocked": "受阻",
+    "in_progress": "进行中",
+    "in_review": "审核中",
+    "completed": "已完成",
+    "failed": "失败",
+    "cancelled": "已取消",
+    "stale": "已过期"
+  },
+  "workflow": {
+    "title": "工作流",
+    "step": "步骤",
+    "revision": "修订版 {{revision}}",
+    "blockerReason": "阻塞原因：{{reason}}",
+    "actionUnavailable": "工作流操作不可用",
+    "actionFailed": "应用工作流操作失败",
+    "status": {
+      "pending_expansion": "等待扩展",
+      "running": "运行中",
+      "needs_revision": "需要修订",
+      "failing": "正在转为失败",
+      "cancelling": "正在取消",
+      "completed": "已完成",
+      "failed": "失败",
+      "cancelled": "已取消"
+    },
+    "delivery": {
+      "label": "交付：{{status}}",
+      "pending": "等待中",
+      "enqueuing": "正在入队",
+      "delivered": "已交付",
+      "dead": "重试已耗尽"
+    },
+    "attempts": {
+      "expansion": "扩展尝试次数：{{count}}",
+      "delivery": "交付尝试次数：{{count}}"
+    },
+    "reason": {
+      "label": "原因",
+      "placeholder": "说明为什么需要此操作",
+      "required": "必须填写原因"
+    },
+    "actions": {
+      "cancel": "取消",
+      "confirm": "确认",
+      "applying": "应用中...",
+      "retry_blocked": {
+        "label": "重试受阻步骤",
+        "description": "使用修订后的指令重试受阻步骤。",
+        "confirm": "立即重试此受阻步骤？"
+      },
+      "request_revision": {
+        "label": "请求修订",
+        "description": "暂停当前计划并请求替代计划。",
+        "confirm": "暂停当前计划并请求修订？"
+      },
+      "apply_replan": {
+        "label": "应用替代计划",
+        "description": "根据权威工作流证据构建并应用新计划。",
+        "confirm": "立即构建并应用替代计划？"
+      },
+      "cancel_workflow": {
+        "label": "取消工作流",
+        "description": "取消此工作流中所有剩余工作。",
+        "confirm": "取消此工作流？剩余工作将停止。"
+      },
+      "fail_workflow": {
+        "label": "将工作流标记为失败",
+        "description": "将工作流标记为失败并停止剩余工作。",
+        "confirm": "将此工作流标记为失败？剩余工作将停止。"
+      },
+      "retry_expansion": {
+        "label": "重试扩展",
+        "description": "在剩余的有限重试预算内重试扩展。",
+        "confirm": "立即重试工作流扩展？"
+      },
+      "retry_delivery": {
+        "label": "重试交付",
+        "description": "为最终结果启动新的有限交付周期。",
+        "confirm": "立即重试最终结果交付？"
+      }
+    },
+    "toast": {
+      "applied": "工作流操作已应用",
+      "already_applied": "工作流操作此前已应用",
+      "conflict": "工作流已更改",
+      "refreshed": "已加载最新的权威工作流状态。",
+      "error": "应用工作流操作失败"
+    },
+    "outcomes": {
+      "applied": "工作流操作已应用",
+      "already_applied": "工作流操作此前已应用",
+      "conflict": "工作流已更改；已加载最新状态"
+    }
   }
 }

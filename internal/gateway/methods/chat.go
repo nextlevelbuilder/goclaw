@@ -3,6 +3,10 @@ package methods
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 
@@ -17,10 +21,13 @@ import (
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/memory"
+	"github.com/nextlevelbuilder/goclaw/internal/providerresolve"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/teamworkclassify"
+	"github.com/nextlevelbuilder/goclaw/internal/teamworkconfig"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -41,10 +48,25 @@ type ChatMethods struct {
 	teamStore        store.TeamStore
 	linkStore        store.AgentLinkStore
 	teamWorkEmbedder memory.EmbeddingProvider
+	providerReg      *providers.Registry
+	skillsLoader     *skills.Loader
+	mcpStore         store.MCPAgentGrantBatchStore
+	builtinToolStore store.BuiltinToolStore
+	tenantToolStore  store.BuiltinToolTenantConfigStore
+	toolPolicy       *tools.PolicyEngine
+	toolRegistry     *tools.Registry
+	runQueue         *chatRunQueue
+	teamWorkCfg      *teamworkconfig.Resolver
+	// shuttingDown latches at graceful shutdown (Phase 7 Decision 6). Once set, no
+	// new chat.send is admitted: handleSend rejects with a terminal error before it
+	// can buffer in the debouncer or reserve in the FIFO queue. Checked with an
+	// atomic load so the signal-handler goroutine and WS request goroutines don't
+	// race. It is a one-way latch — there is no "un-shutdown" in a process lifetime.
+	shuttingDown atomic.Bool
 }
 
 func NewChatMethods(agents *agent.Router, sess store.SessionStore, cfg *config.Config, rl *gateway.RateLimiter, eventBus bus.EventPublisher) *ChatMethods {
-	m := &ChatMethods{agents: agents, sessions: sess, cfg: cfg, rateLimiter: rl, eventBus: eventBus}
+	m := &ChatMethods{agents: agents, sessions: sess, cfg: cfg, rateLimiter: rl, eventBus: eventBus, runQueue: newChatRunQueue()}
 	m.debouncer = newChatDebouncer(m.dispatchChatSends)
 	return m
 }
@@ -58,11 +80,28 @@ func (m *ChatMethods) SetUsageCapService(s *usagecaps.Service) {
 	m.usageCaps = s
 }
 
-func (m *ChatMethods) SetTeamWorkClassification(agentStore store.AgentStore, teamStore store.TeamStore, linkStore store.AgentLinkStore, embedder memory.EmbeddingProvider) {
+func (m *ChatMethods) SetTeamWorkClassification(agentStore store.AgentStore, teamStore store.TeamStore, linkStore store.AgentLinkStore, embedder memory.EmbeddingProvider, skillsLoader *skills.Loader, mcpStore store.MCPAgentGrantBatchStore, builtinToolStore store.BuiltinToolStore, tenantToolStore store.BuiltinToolTenantConfigStore, toolPolicy *tools.PolicyEngine, toolRegistry *tools.Registry) {
 	m.agentStore = agentStore
 	m.teamStore = teamStore
 	m.linkStore = linkStore
 	m.teamWorkEmbedder = embedder
+	m.skillsLoader = skillsLoader
+	m.mcpStore = mcpStore
+	m.builtinToolStore = builtinToolStore
+	m.tenantToolStore = tenantToolStore
+	m.toolPolicy = toolPolicy
+	m.toolRegistry = toolRegistry
+}
+
+func (m *ChatMethods) SetProviderRegistry(registry *providers.Registry) {
+	m.providerReg = registry
+}
+
+// SetTeamWorkConfigResolver wires the per-tenant Team Work classifier config
+// resolver. When nil, applyTeamWorkGate falls back to the file-config values on
+// m.cfg (preserving pre-isolation behavior for unit wiring that never sets it).
+func (m *ChatMethods) SetTeamWorkConfigResolver(r *teamworkconfig.Resolver) {
+	m.teamWorkCfg = r
 }
 
 // SetPostTurnProcessor sets the post-turn processor for team task dispatch.
@@ -96,7 +135,17 @@ func (m *ChatMethods) handleSessionStatus(ctx context.Context, client *gateway.C
 		return
 	}
 
+	// A session is "running" from the client's perspective whenever the router
+	// holds an active run OR the run queue holds a reservation — a batch that is
+	// queued behind an active run, or one the FIFO worker has dequeued and is
+	// classifying/setting up before its run registers with the router. Reporting
+	// only the router state would flash the session idle during those transition
+	// windows and let the UI submit a "fresh" send that actually queues (Phase 7
+	// review 7A-H4).
 	isRunning := m.agents.IsSessionBusy(params.SessionKey)
+	if !isRunning && m.runQueue != nil {
+		isRunning = m.runQueue.HasReservation(params.SessionKey)
+	}
 	var runId string
 	if rid, ok := m.agents.SessionRunID(params.SessionKey); ok {
 		runId = rid
@@ -154,6 +203,16 @@ func (p *chatSendParams) parseMedia() []chatMediaItem {
 
 func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
 	locale := store.LocaleFromContext(ctx)
+	// Graceful shutdown gate (Phase 7 Decision 6 point 1): once the process is
+	// shutting down, reject new sends with a terminal error BEFORE they can buffer
+	// in the debouncer or reserve in the FIFO queue. This is the single admission
+	// point for chat.send, so latching here is sufficient to stop new work; batches
+	// already buffered/queued/running are drained by Shutdown() itself. The RPC ID
+	// is resolved immediately, so a client submitting during shutdown never hangs.
+	if m.shuttingDown.Load() {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "gateway shutting down")))
+		return
+	}
 	// Rate limit check per user/client
 	if m.rateLimiter != nil && m.rateLimiter.Enabled() {
 		key := client.UserID()
@@ -221,13 +280,45 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 		loop:       loop,
 		userID:     userID,
 		sessionKey: sessionKey,
+		// One latch per inbound chat.send, shared by pointer across every copy the
+		// request makes through the debouncer, FIFO queue, and serialized run, so
+		// the request ID receives exactly one terminal RPC response no matter which
+		// path resolves it first (Phase 7 review deviation #1 / trace item C).
+		respondedOnce: &sync.Once{},
+		// Stable logical-turn identity assigned BEFORE enqueue/reserve (Phase 7
+		// Decision 4). Each inbound send starts with its own turnLifecycle; when the
+		// debouncer merges several sends into one batch, the canonical turn is the
+		// primary (last) request — mergeChatSendRequests' rule — so the emitter and
+		// queued ack read requests[len-1].turnLifecycle and every copy in the batch
+		// shares one turnID and one terminal latch. The terminal sync.Once is DISTINCT
+		// from respondedOnce: respondedOnce bounds RPC-response cardinality, terminal
+		// bounds lifecycle-event cardinality, and neither may suppress the other
+		// (Decision 4 point 8).
+		turnLifecycle: &turnLifecycle{turnID: uuid.NewString()},
 	}
 	debounceKey := chatDebounceKey(userID, sessionKey)
 	if m.debouncer == nil {
 		m.debouncer = newChatDebouncer(m.dispatchChatSends)
 	}
-	if m.agents.IsSessionBusy(sessionKey) && agent.IsExactCancelKeyword(params.Message) {
-		m.debouncer.Discard(debounceKey)
+	// Cancel is a control op. Treat it as one whenever the session is occupied —
+	// either the router holds an active run OR the FIFO queue holds a reservation
+	// (a batch queued behind an active run, or one dequeued and being classified
+	// before its run registers). Checking only the router would miss that
+	// transition window and let a cancel keyword be dispatched as an ordinary send
+	// (Phase 7 review 7A-H4).
+	sessionOccupied := m.agents.IsSessionBusy(sessionKey) ||
+		(m.runQueue != nil && m.runQueue.HasReservation(sessionKey))
+	if sessionOccupied && agent.IsExactCancelKeyword(params.Message) {
+		// Resolve any buffered follow-ups (still in the debounce window) and any
+		// batches queued in the reservation as cancelled, so their chat.send
+		// promises do not hang until the client timeout (Phase 7 review 7A-H5).
+		// Take (not Discard) hands the buffered items back so we can respond.
+		if buffered := m.debouncer.Take(debounceKey); len(buffered) > 0 {
+			sendChatCancelled(buffered)
+		}
+		if m.runQueue != nil {
+			m.runQueue.Cancel(sessionKey)
+		}
 		m.abortChatSession(req.ID, client, sessionKey)
 		return
 	}
@@ -237,12 +328,24 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 	// into a single dispatch (issue #63).
 	hasMedia := len(params.parseMedia()) > 0
 	delay := chatDebounceDelay(m.cfg, loop.OtherConfig(), hasMedia)
+	// Push return value is the authoritative admission decision (Phase 7 closure
+	// item 4): the early m.shuttingDown latch fails fast, but a request can still
+	// pass that check, have CloseAndDrain run to completion, and only then reach
+	// Push. A false return means the debouncer is closed and the item was neither
+	// buffered nor flushed, so settle it here with a terminal shutdown error +
+	// failed lifecycle instead of calling any flush path.
 	if delay > 0 {
-		m.debouncer.Push(debounceKey, delay, item)
+		if !m.debouncer.Push(debounceKey, delay, item) {
+			sendChatError([]chatSendRequest{item}, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "gateway shutting down"))
+			emitTurnLifecycle([]chatSendRequest{item}, protocol.ChatTurnFailed, "")
+		}
 		return
 	}
 	// delay == 0: Push merges into existing buffer (if any) or dispatches.
-	m.debouncer.Push(debounceKey, 0, item)
+	if !m.debouncer.Push(debounceKey, 0, item) {
+		sendChatError([]chatSendRequest{item}, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "gateway shutting down"))
+		emitTurnLifecycle([]chatSendRequest{item}, protocol.ChatTurnFailed, "")
+	}
 }
 
 func (m *ChatMethods) abortChatSession(reqID string, client *gateway.Client, sessionKey string) {
@@ -260,18 +363,103 @@ func (m *ChatMethods) abortChatSession(reqID string, client *gateway.Client, ses
 	}))
 }
 
-type chatTeamWorkGateOutcome struct {
-	message   string
-	directive *agent.TeamWorkDirective
+// Shutdown gracefully quiesces WS chat dispatch at process teardown (Phase 7
+// Decision 6). It is called from the gateway signal handler BEFORE the scheduler
+// and providers are torn down, so every in-flight chat.send is resolved with a
+// terminal outcome instead of hanging until the client-side timeout. The steps,
+// in order:
+//
+//  1. Latch shuttingDown so handleSend rejects any NEW send from here on. This is
+//     the single admission point, so latching first guarantees the drains below
+//     race against a bounded, non-growing set of work.
+//  2. DrainAll the debouncer: requests still inside a debounce window never left
+//     to the queue, so they have neither a queued ack nor a started run. Resolve
+//     each with a terminal shutdown error (its RPC ID is still unanswered). We do
+//     NOT flush them — flushing would push new batches into a queue that is
+//     already shutting down.
+//  3. runQueue.Shutdown(): blocks further Submits, drains every not-yet-started
+//     batch with a terminal error + failed lifecycle, and cancels the batch a
+//     worker has popped and is classifying (its cancelCurrent handle) so it stops
+//     before RegisterRun. A queued turn that was already {queued:true}-acked gets
+//     its terminal lifecycle here, never a second RPC.
+//  4. Bounded cancel of active registered runs via the router's AbortAllRuns
+//     (every session with an active run). AbortRun already applies the 3s grace +
+//     force-release, so a stuck run cannot wedge shutdown; the run goroutine's own
+//     runCtx.Err() branch resolves its chat.send cancelled and emits the terminal
+//     lifecycle. We reuse the existing abort path rather than add a new one.
+//
+// Idempotent: a second call latches again (no-op), CloseAndDrain/Shutdown return
+// nothing, and there are no active runs left to abort.
+func (m *ChatMethods) Shutdown() {
+	m.shuttingDown.Store(true)
+
+	// (2) Atomically close the debouncer and resolve buffered-but-never-dispatched
+	// requests. CloseAndDrain sets closed + drains in one critical section, so a
+	// Push that raced past handleSend's early latch is rejected (returns false)
+	// rather than buffering into the just-drained debouncer (Phase 7 closure item 4).
+	if m.debouncer != nil {
+		for _, batch := range m.debouncer.CloseAndDrain() {
+			locale := ""
+			if len(batch) > 0 {
+				locale = store.LocaleFromContext(batch[0].ctx)
+			}
+			sendChatError(batch, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "gateway shutting down"))
+			// A buffered request never reached the queue, so it never got a queued
+			// ack and never emitted a queued lifecycle. Emit a failed terminal so any
+			// turnId the client already holds resolves; the terminal latch makes this
+			// safe even in the impossible case a lifecycle was already emitted.
+			emitTurnLifecycle(batch, protocol.ChatTurnFailed, "")
+		}
+	}
+
+	// (3) Drain queued batches + cancel the classifying batch.
+	if m.runQueue != nil {
+		m.runQueue.Shutdown()
+	}
+
+	// (4) Bounded cancel of active registered runs. AbortAllRuns aborts every
+	// in-flight run; AbortRun's built-in 3s grace + force-release is the bound, so a
+	// stuck run cannot wedge shutdown. The run goroutine resolves its own chat.send +
+	// terminal lifecycle from runCtx.Err().
+	if m.agents != nil {
+		m.agents.AbortAllRuns()
+	}
 }
 
-func (m *ChatMethods) applyTeamWorkGate(ctx context.Context, params chatSendParams, loop agent.Agent, sessionKey string) chatTeamWorkGateOutcome {
-	out := chatTeamWorkGateOutcome{message: params.Message}
-	if m.cfg == nil || m.cfg.Gateway.TeamWorkClassify == nil || !*m.cfg.Gateway.TeamWorkClassify {
-		return out
+type chatTeamWorkGateOutcome struct {
+	message         string
+	directive       *agent.TeamWorkDirective
+	disableTeamWork bool
+	blockedTools    []string
+	auditID         uuid.UUID
+}
+
+// resolveTeamWorkSettings returns the per-tenant Team Work classifier settings
+// for the request tenant. When no resolver is wired (unit wiring), it falls back
+// to the file-config values on m.cfg so behavior is identical to the
+// pre-isolation shared-cfg read.
+func (m *ChatMethods) resolveTeamWorkSettings(ctx context.Context) teamworkconfig.Settings {
+	if m.teamWorkCfg != nil {
+		return m.teamWorkCfg.Resolve(ctx)
 	}
-	if m.teamWorkEmbedder == nil || m.agentStore == nil {
-		slog.Info("team_work_classify: ws skipped; embedding or agent store unavailable", "session", sessionKey, "agent", params.AgentID)
+	if m.cfg == nil {
+		return teamworkconfig.Settings{}
+	}
+	s := teamworkconfig.Settings{
+		ClassifierProvider: m.cfg.Gateway.TeamWorkClassifyProvider,
+		ClassifierModel:    m.cfg.Gateway.TeamWorkClassifyModel,
+	}
+	if m.cfg.Gateway.TeamWorkClassify != nil {
+		s.Enabled = *m.cfg.Gateway.TeamWorkClassify
+		s.EnabledSet = true
+	}
+	return s
+}
+
+func (m *ChatMethods) applyTeamWorkGate(ctx context.Context, params chatSendParams, loop agent.Agent, sessionKey, runID string) chatTeamWorkGateOutcome {
+	out := chatTeamWorkGateOutcome{message: params.Message}
+	twSettings := m.resolveTeamWorkSettings(ctx)
+	if !twSettings.ClassifyEnabled() {
 		return out
 	}
 	agentUUID := loop.UUID()
@@ -284,53 +472,212 @@ func (m *ChatMethods) applyTeamWorkGate(ctx context.Context, params chatSendPara
 		return out
 	}
 	input := teamworkclassify.BuildInputFromStores(ctx, teamworkclassify.ProfileStores{
-		Agents:     m.agentStore,
-		Teams:      m.teamStore,
-		AgentLinks: m.linkStore,
+		Agents:            m.agentStore,
+		Teams:             m.teamStore,
+		AgentLinks:        m.linkStore,
+		PinnedSkills:      m.skillsLoader,
+		MCP:               m.mcpStore,
+		BuiltinTools:      m.builtinToolStore,
+		TenantToolConfigs: m.tenantToolStore,
+		ToolPolicy:        m.toolPolicy,
+		ToolRegistry:      m.toolRegistry,
 	}, teamworkclassify.BuildInputOptions{
-		Mode:     teamworkclassify.Mode(mode),
-		Message:  params.Message,
-		AgentID:  agentUUID,
-		Embedder: m.teamWorkEmbedder,
+		Mode:           teamworkclassify.Mode(mode),
+		Message:        params.Message,
+		RecentMessages: m.recentMessagesForTeamWorkGate(ctx, sessionKey),
+		AgentID:        agentUUID,
+		Embedder:       m.teamWorkEmbedder,
+		Timeout:        twSettings.ClassifyTimeout,
 	})
-	result := teamworkclassify.ClassifyWithLLM(ctx, input, loop.Provider(), loop.Model(), m.usageCaps)
-	slog.Info("team_work_classify: ws decision", "session", sessionKey, "agent", params.AgentID, "mode", mode, "decision", result.Decision, "self_score", result.SelfScore, "collaboration_score", result.CollaborationScore, "reason", result.Reason)
-	if result.Decision == teamworkclassify.DecisionTeam {
-		out.directive = &agent.TeamWorkDirective{
-			Mode:            string(result.Mode),
-			Source:          "llm",
-			Reason:          result.Reason,
-			OriginalMessage: params.Message,
-			RequiredTool:    result.RequiredTool,
-			WorkflowHint:    result.WorkflowHint,
-		}
+	selection := providerresolve.ResolveTeamWorkClassifier(ctx, m.providerReg, twSettings.ClassifierProvider, twSettings.ClassifierModel, loop.Provider(), loop.Model())
+	if selection.Warning != "" {
+		slog.Warn("team_work_classify: ws classifier provider override fallback", "session", sessionKey, "agent", params.AgentID, "warning", selection.Warning, "source", selection.Source)
+	} else if selection.Source != "agent_default" {
+		slog.Info("team_work_classify: ws classifier provider selected", "session", sessionKey, "agent", params.AgentID, "classifier_provider", selection.ProviderName, "classifier_model", selection.Model, "source", selection.Source)
 	}
+	result := teamworkclassify.ClassifyWithLLM(ctx, input, selection.Provider, selection.Model, m.usageCaps)
+	agentUUIDForAudit := agentUUID
+	decision, auditID := agent.BuildAuditedTeamWorkGateDecision(ctx, m.teamStore, result, input, teamworkclassify.ClassificationAuditInput{
+		Ingress:            store.TeamWorkIngressWS,
+		RunID:              runID,
+		SessionKey:         sessionKey,
+		AgentID:            &agentUUIDForAudit,
+		OriginalMessage:    params.Message,
+		ClassifierProvider: selection.ProviderName,
+		ClassifierModel:    selection.Model,
+	})
+	if decision.PlanFreezeError != nil {
+		slog.Warn("team_work_classify: ws failed to freeze validated plan; failing closed to self", "session", sessionKey, "agent", params.AgentID, "error", decision.PlanFreezeError)
+	}
+	out.directive = decision.Directive
+	out.disableTeamWork = decision.DisableTeamWork
+	out.blockedTools = decision.BlockedTools
+	out.auditID = auditID
+	slog.Info("team_work_classify: ws decision",
+		"session", sessionKey,
+		"agent", params.AgentID,
+		"mode", mode,
+		"decision", result.Decision,
+		"intent_relation", result.IntentRelation,
+		"workflow_mode", result.WorkflowMode,
+		"review_required", result.EffectiveReviewRequired,
+		"owner", result.BestTeamOwner,
+		"workflow_step_count", func() int {
+			if result.Plan == nil {
+				return 0
+			}
+			return len(result.Plan.Steps)
+		}(),
+		"revised", result.PlannerRepaired,
+		"disable_team_work", decision.DisableTeamWork,
+		"degraded_reason", result.DegradedReasonCode,
+		"staffing_gaps", result.StaffingGaps,
+		"validation_reason", result.PlannerValidationReason)
 	return out
 }
 
+func (m *ChatMethods) recentMessagesForTeamWorkGate(ctx context.Context, sessionKey string) []providers.Message {
+	if m == nil || m.sessions == nil || sessionKey == "" {
+		return nil
+	}
+	return m.sessions.GetHistory(ctx, sessionKey)
+}
+
 func (m *ChatMethods) dispatchChatSends(requests []chatSendRequest) {
+	// Top-level entry (debouncer flush): the batch is not yet owned by a worker, so
+	// there is no batch-cancellation context yet. The FIFO worker supplies one when
+	// it re-enters serialized (Phase 7 review mandatory fix #5).
+	m.dispatchChatSendsInternal(nil, requests, false)
+}
+
+// dispatchChatSendsInternal enqueues (serialized=false) or classifies+runs
+// (serialized=true) a batch. cancelCtx is the worker's per-batch cancellation
+// context, non-nil only on the serialized path: its cancellation (from a cancel
+// keyword arriving while the batch is popped but before its run registers with
+// the router — the window Cancel's queue drain and AbortRunsForSession both miss)
+// stops the batch before RegisterRun and, via a watcher, cancels the run if the
+// cancel lands right around registration (Phase 7 review mandatory fix #5).
+func (m *ChatMethods) dispatchChatSendsInternal(cancelCtx context.Context, requests []chatSendRequest, serialized bool) <-chan struct{} {
 	if len(requests) == 0 {
-		return
+		return nil
+	}
+	// A debounce window is one logical turn (Decision 4 point 1), even when it
+	// contains several chat.send requests. Canonicalize the entire batch to the
+	// primary (last) request's pre-enqueue turnLifecycle — matching
+	// mergeChatSendRequests' primary rule — so every copy through the FIFO worker
+	// shares one stable turnID and one terminal sync.Once by pointer. Earlier
+	// per-send turnLifecycle objects become unreachable and intentionally emit no
+	// lifecycle of their own: the merged batch classifies/runs exactly once.
+	canonicalTurn := requests[len(requests)-1].turnLifecycle
+	for i := range requests {
+		requests[i].turnLifecycle = canonicalTurn
 	}
 	primary := requests[len(requests)-1]
-	params := mergeChatSendRequests(requests)
 	sessionKey := primary.sessionKey
+
+	if !serialized {
+		if m.runQueue == nil {
+			m.runQueue = newChatRunQueue()
+		}
+		// Atomic reserve-or-join under the queue lock. This single locked decision
+		// closes the reserve-before-classify race (Phase 7 review 7A-H2): two
+		// concurrent initial batches for an idle session can no longer both observe
+		// "idle" and both classify+run. The first creates the reservation and starts
+		// exactly one FIFO worker; every later batch joins it as a subsequent queue
+		// entry. The classification unit is the DEQUEUED BATCH, not the individual
+		// send (Phase 7 review 7A-M1): `requests` here is one debounce window, which
+		// may already have merged several sends into a single turn, and the worker
+		// classifies+runs each such batch exactly once at dequeue against the latest
+		// history. This also removes the old InjectMessage steering: a busy follow-up
+		// no longer mutates the in-flight turn. Each queued chat.send stays open and
+		// resolves with its batch's run result (deferred result contract).
+		res := m.runQueue.Submit(sessionKey, requests,
+			func() <-chan struct{} {
+				// Evaluated under the queue lock only when a new reservation is
+				// created. If a run started OUTSIDE this queue (inbound consumer,
+				// workflow finalize/recovery) already owns the session, the worker
+				// waits on its Done before the first batch; nil starts it immediately.
+				if active, ok := m.agents.SessionActiveRun(sessionKey); ok {
+					return active.Done
+				}
+				return nil
+			},
+			func(batchCtx context.Context, batch []chatSendRequest) <-chan struct{} {
+				return m.dispatchChatSendsInternal(batchCtx, batch, true)
+			},
+		)
+		switch res {
+		case submitJoined, submitStartedWaiting:
+			// Busy follow-up (submitJoined): a reservation already existed, so this
+			// turn is queued behind the active run.
+			//
+			// External-busy first turn (submitStartedWaiting, Phase 7 closure item 3):
+			// this send created the FIFO reservation, but a run registered OUTSIDE this
+			// queue (ordinary inbound, workflow finalize, or workflow recovery) already
+			// owns the session, so the worker must wait on that external run's Done
+			// before this batch can start. From the client's perspective the turn is
+			// queued exactly like a busy follow-up, so it takes the same contract.
+			//
+			// Per Phase 7 review deviation #1, an accepted queued turn is acknowledged
+			// immediately with a structural {queued:true} — NOT a deferred result. The
+			// batch's assistant output is delivered later, exactly once, via the normal
+			// run/event/history path when the FIFO worker dequeues and runs it. This ack
+			// claims the per-request exactly-one-response latch, so that serialized run's
+			// terminal sendChatOK is suppressed and the client never receives a second
+			// RPC response for the same ID.
+			sendChatQueuedAck(requests)
+			// Non-terminal lifecycle hint: the turn is queued behind the active run.
+			// Distinct from the RPC ack above — the ack consumes the request's
+			// respondedOnce latch, this only publishes a status event keyed by the
+			// stable turnId so the client can follow queued → running → terminal even
+			// though no further RPC response is coming (Decision 4 points 4 & 8).
+			emitTurnLifecycle(requests, protocol.ChatTurnQueued, "")
+		case submitRejected:
+			// Backpressure: the session already holds the max queued batches.
+			sendChatError(requests, protocol.ErrInternal,
+				i18n.T(store.LocaleFromContext(primary.ctx), i18n.MsgInternalError, "session busy: too many queued messages"))
+		case submitShutdown:
+			sendChatError(requests, protocol.ErrInternal,
+				i18n.T(store.LocaleFromContext(primary.ctx), i18n.MsgInternalError, "gateway shutting down"))
+		}
+		// submitStarted: this send created the reservation AND the session was idle,
+		// so its worker runs the batch immediately (the primary turn) and its chat.send
+		// resolves with the run result through the serialized path below — the
+		// pre-existing, non-queued behavior the review deliberately leaves unchanged.
+		// submitStartedWaiting (handled in the switch above) also created the
+		// reservation, but an external run (inbound/finalize/recovery) still owns the
+		// session, so the worker waits on that run's Done before the first batch; the
+		// spec (closure item 3) requires that first WS turn take the same queued-ack
+		// contract as submitJoined rather than a deferred RPC. submitProbeMiss cannot
+		// occur here because run is non-nil.
+		return nil
+	}
+
+	// serialized == true: a batch dequeued by the FIFO worker. Classify + run it
+	// exactly once against the latest history.
+	//
+	// Pre-classify cancellation check (Phase 7 review mandatory fix #5): if a cancel
+	// keyword already cancelled this popped batch's context, resolve it cancelled and
+	// do NOT run the Team Work classifier (an LLM call + durable audit write) or
+	// register a run. This is the window between the worker popping the batch and
+	// RegisterRun, which the reservation drain (Cancel) and AbortRunsForSession
+	// (router only) both miss. Returning a nil done channel lets the worker advance
+	// to the next batch immediately.
+	if cancelCtx != nil {
+		if err := cancelCtx.Err(); err != nil {
+			sendChatCancelled(requests)
+			// Terminal lifecycle for a turn cancelled while queued/classifying, before
+			// any run registered (Decision 4 point 6). The terminal latch makes this a
+			// no-op if a queued-ack path already emitted a terminal, and it is emitted
+			// regardless of whether the RPC latch was already consumed by the ack.
+			emitTurnLifecycle(requests, protocol.ChatTurnCancelled, "")
+			return nil
+		}
+	}
+
+	params := mergeChatSendRequests(requests)
 	userID := primary.userID
 	loop := primary.loop
-	hasMedia := len(params.parseMedia()) > 0
-
-	// Mid-run injection: debounce rapid follow-ups into a single injected message.
-	if !hasMedia && m.agents.IsSessionBusy(sessionKey) {
-		injected := m.agents.InjectMessage(sessionKey, agent.InjectedMessage{
-			Content: params.Message,
-			UserID:  userID,
-		})
-		if injected {
-			sendChatOK(requests, map[string]any{"injected": true})
-			return
-		}
-		// Fallback: injection failed (channel full), proceed with new run.
-	}
 
 	// Detach from HTTP request context so agent runs survive page navigation/reconnect.
 	// WithoutCancel preserves all context values (locale, user ID, etc.)
@@ -341,24 +688,147 @@ func (m *ChatMethods) dispatchChatSends(requests []chatSendRequest) {
 		runCtxBase = store.WithUserID(runCtxBase, userID)
 	}
 	// Team Work gate runs before Loop.injectContext; inject the resolved agent
-	// budget now so the classifier cannot fall back to model/provider guesses.
+	// budget now so every classifier sees the same authority.
 	runCtxBase = agent.WithAgentBudget(runCtxBase, loop)
 	if uid := loop.UUID(); uid != uuid.Nil {
 		runCtxBase = store.WithAgentID(runCtxBase, uid)
 	}
-	gate := m.applyTeamWorkGate(runCtxBase, params, loop, sessionKey)
+	// Generate the run ID before the gate so the classification audit records the
+	// run it authorized and a workflow created during the run can link back to it.
+	//
+	// ORDERING INVARIANT (Phase 6 audit-before-schedule): applyTeamWorkGate writes
+	// the durable classification audit synchronously. It MUST stay ahead of both
+	// RegisterRun (below) and loop.Run — the run must not start before its audit is
+	// persisted. Do not move the gate call after RegisterRun.
+	runID := uuid.NewString()
+	gate := func() chatTeamWorkGateOutcome {
+		if cancelCtx == nil {
+			return m.applyTeamWorkGate(runCtxBase, params, loop, sessionKey, runID)
+		}
+		// Preserve every request-scoped value from the detached base (tenant, user,
+		// locale, agent budget/ID), but bridge the FIFO batch cancellation into the
+		// classifier. A queue Cancel or Shutdown must interrupt a provider blocked in
+		// the gate rather than waiting for that provider to return on its own.
+		gateCtx, cancelGate := context.WithCancel(runCtxBase)
+		stopGateBridge := context.AfterFunc(cancelCtx, cancelGate)
+		defer func() {
+			stopGateBridge()
+			cancelGate()
+		}()
+		return m.applyTeamWorkGate(gateCtx, params, loop, sessionKey, runID)
+	}()
 	params.Message = gate.message
+
+	// Post-classify cancellation recheck (Phase 7 review mandatory fix #5). The
+	// pre-classify check above covers a cancel that arrived before the classifier;
+	// this covers a cancel that lands WHILE applyTeamWorkGate blocks — it is an LLM
+	// call plus a durable audit write and can run arbitrarily long. Without this
+	// recheck the batch would register and run even though the user cancelled during
+	// classification: the post-register watcher only races the cancel, whereas this
+	// deterministically stops the batch before RegisterRun (no router run created, no
+	// team-dispatch lock acquired). The audit already written by the gate is
+	// intentionally kept: it records the classification decision, not that the run
+	// executed. Resolve the batch cancelled and let the worker advance.
+	if cancelCtx != nil {
+		if err := cancelCtx.Err(); err != nil {
+			sendChatCancelled(requests)
+			// Terminal lifecycle for a turn cancelled during classification, still
+			// before RegisterRun (Decision 4 point 6). Independent of the RPC latch.
+			emitTurnLifecycle(requests, protocol.ChatTurnCancelled, "")
+			return nil
+		}
+	}
+
 	// Inject team dispatch tracker: gates team_tasks create (must search/list first)
 	// and defers task dispatch to post-turn.
 	runCtxBase, drainTeamDispatch := tools.InjectTeamDispatch(runCtxBase, m.postTurn)
+	if gate.directive != nil && gate.directive.PlanConstraint != nil {
+		runCtxBase = tools.WithTeamWorkPlanConstraint(runCtxBase, *gate.directive.PlanConstraint)
+	} else if gate.directive != nil && strings.TrimSpace(gate.directive.BestTeamOwner) != "" {
+		runCtxBase = tools.WithTeamWorkOwnerConstraint(runCtxBase, tools.TeamWorkOwnerConstraint{
+			OwnerID:  gate.directive.BestTeamOwnerID,
+			OwnerKey: strings.TrimSpace(gate.directive.BestTeamOwner),
+		})
+	}
+	if gate.auditID != uuid.Nil {
+		runCtxBase = tools.WithTeamWorkClassificationAuditID(runCtxBase, gate.auditID)
+	}
 
 	// Create cancellable context for abort support (matching TS AbortController pattern).
 	runCtx, cancel := context.WithCancel(runCtxBase)
-	runID := uuid.NewString()
-	injectCh := m.agents.RegisterRun(runCtxBase, runID, sessionKey, params.AgentID, cancel)
+	// Register with a forced-abort callback (Phase 7 closure item 2). If this run
+	// goroutine gets genuinely stuck and never returns, AbortRun's 3s-timeout branch
+	// invokes this callback at the force boundary to settle the original chat.send
+	// RPC + emit one cancelled terminal — work only this goroutine would otherwise
+	// do. If the goroutine later returns, its ErrRunOwnershipLost path re-enters
+	// sendChatCancelled/emitTurnLifecycle, but the respondedOnce + terminal latches
+	// suppress the duplicate, so the callback and the late return never double-settle.
+	injectCh, generation := m.agents.RegisterRunWithOptions(runCtxBase, runID, sessionKey, params.AgentID, "", cancel, func() {
+		sendChatCancelled(requests)
+		emitTurnLifecycle(requests, protocol.ChatTurnCancelled, runID)
+	})
+
+	// Non-terminal lifecycle: the turn has passed classification and registered a
+	// run, so link its stable turnId to the freshly assigned runId (Decision 4
+	// point 5). Emitted after RegisterRun so the runId is real; not latched (only
+	// terminal states use the terminal sync.Once).
+	emitTurnLifecycle(requests, protocol.ChatTurnRunning, runID)
+
+	// Bridge a batch cancellation that lands right around registration into the
+	// run's own cancel (Phase 7 review mandatory fix #5). runCtx derives from
+	// runCtxBase (WithoutCancel of the HTTP ctx), so the worker's per-batch
+	// cancelCtx does NOT propagate into it automatically. The pre-gate check above
+	// covers a cancel that arrives before classify; this watcher covers the narrow
+	// window where the cancel lands after the check but before/just-after
+	// RegisterRun — it cancels the run so runCtx.Err() becomes non-nil and the run
+	// goroutine returns the cancelled response instead of running to completion. The
+	// watcher exits when the run's context ends (normal completion cancels runCtx
+	// via the goroutine's defer), so it cannot leak.
+	if cancelCtx != nil {
+		go func() {
+			select {
+			case <-cancelCtx.Done():
+				cancel()
+			case <-runCtx.Done():
+			}
+		}()
+	}
+	// The FIFO worker must wait on the ROUTER's Done, not a local completion
+	// channel (Phase 7 review mandatory fix #3). A forced abort (AbortRun's 3s
+	// grace timeout) closes the router Done via UnregisterRun even when the run
+	// goroutine is genuinely stuck and never reaches its own defers. If the worker
+	// waited on a local channel closed only by those defers, a stuck run would hold
+	// the session's FIFO reservation forever — follow-ups would never run and the
+	// router would report idle while the queue stayed wedged. Capturing routerDone
+	// here (right after RegisterRun, while the run is guaranteed present) means both
+	// the normal exit (goroutine defer → UnregisterRun) and the forced-abort exit
+	// release the worker. The local runDone is retained only as a defensive fallback
+	// for the impossible case where the router entry vanished before we read it.
+	routerDone, haveRouterDone := m.agents.RunDone(runID)
+	runDone := make(chan struct{})
 
 	// Run agent asynchronously - events are broadcast via the event system
 	go func() {
+		// Outermost safety net (registered first => runs last): recover from any
+		// panic in the run body OR the cleanup defers below so the batch's chat.send
+		// promises resolve with a terminal error instead of hanging until the client
+		// timeout, and a nil-provider / malformed-result panic never crashes the
+		// gateway. runBatch's recover only covers the synchronous classify/setup that
+		// happens before this goroutine is spawned; once the run is async, only this
+		// recover can catch it (Phase 7 review 7A-C1, async-run arm). By the time it
+		// runs, cancel + UnregisterRun have already released the router run and the
+		// FIFO worker, so responding here cannot deadlock the queue.
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("chat run goroutine panicked", "panic", r, "session", sessionKey, "run", runID)
+				sendChatError(requests, protocol.ErrInternal, i18n.T(store.LocaleFromContext(primary.ctx), i18n.MsgInternalError, "chat run failed"))
+				// Terminal lifecycle for the async-run panic arm (Decision 4 point 4/8).
+				// Independent of the RPC latch: a turn whose RPC was already consumed by a
+				// {queued:true} ack still emits exactly one failed lifecycle here.
+				emitTurnLifecycle(requests, protocol.ChatTurnFailed, runID)
+			}
+		}()
+		defer close(runDone)
 		defer m.agents.UnregisterRun(runID)
 		defer cancel()
 		defer drainTeamDispatch() // dispatch pending team tasks + release lock (even on panic)
@@ -403,22 +873,47 @@ func (m *ChatMethods) dispatchChatSends(requests []chatSendRequest) {
 			UserID:            userID,
 			Stream:            params.Stream,
 			TeamWorkDirective: gate.directive,
+			DisableTeamWork:   gate.disableTeamWork,
+			BlockedTools:      gate.blockedTools,
 			InjectCh:          injectCh,
 			// Wire trace ID back to the active run so force-abort can mark the
 			// correct trace as cancelled if the goroutine does not exit within 3s.
 			OnTraceCreated: func(traceID uuid.UUID) {
 				m.agents.SetRunTraceID(runID, traceID)
 			},
+			// Ownership fence (Phase 7 Decision 3): the loop consults this before
+			// every user-visible commit so a run whose ownership was lost — force
+			// aborted or superseded by a replacement run on this session — cannot
+			// append history, save the session, or emit a final success event into
+			// a session another run now owns.
+			IsCurrentOwner: func() bool { return m.agents.IsCurrentOwner(sessionKey, runID, generation) },
 		})
 
 		if err != nil {
+			// Outer-delivery fence (Phase 7 closure item 1): a run that lost session
+			// ownership (force-aborted or superseded) returns ErrRunOwnershipLost. Its
+			// inner guards already suppressed history/session commit and run.completed;
+			// here we settle the original chat.send as cancelled and emit exactly one
+			// cancelled terminal, then return BEFORE title/TTS/content/completed. The
+			// replacement/current owner delivers the real answer. This must precede the
+			// runCtx.Err() and generic error branches so a stale success cannot leak.
+			if errors.Is(err, agent.ErrRunOwnershipLost) {
+				sendChatCancelled(requests)
+				emitTurnLifecycle(requests, protocol.ChatTurnCancelled, runID)
+				return
+			}
 			// Send cancelled response so the frontend's chat.send promise resolves
 			// instead of hanging until the 600s timeout.
 			if runCtx.Err() != nil {
 				sendChatOK(requests, map[string]any{"cancelled": true})
+				// A run cancelled after it registered (abort / superseded) emits a
+				// terminal cancelled lifecycle (Decision 4 point 6). runCtx.Err() is the
+				// authoritative cancel signal; the RPC latch is independent.
+				emitTurnLifecycle(requests, protocol.ChatTurnCancelled, runID)
 				return
 			}
 			sendChatError(requests, protocol.ErrInternal, err.Error())
+			emitTurnLifecycle(requests, protocol.ChatTurnFailed, runID)
 			return
 		}
 
@@ -484,18 +979,133 @@ func (m *ChatMethods) dispatchChatSends(requests []chatSendRequest) {
 			resp["media"] = mediaResults
 		}
 		sendChatOK(requests, resp)
+		// Terminal lifecycle: the run committed its assistant result through the
+		// normal history/run-event path. This chat.turn frame is a status hint only
+		// and carries NO assistant content (Decision 4 point 7); the terminal latch
+		// guarantees it is the single terminal for this turn. Independent of the RPC
+		// latch, so a turn whose RPC was consumed by a {queued:true} ack still emits
+		// its completed lifecycle here (Decision 4 point 8).
+		emitTurnLifecycle(requests, protocol.ChatTurnCompleted, runID)
 	}()
+	// The worker waits on routerDone: closed by UnregisterRun on BOTH the normal
+	// goroutine exit and the forced-abort path (mandatory fix #3), so a genuinely
+	// stuck run no longer wedges the FIFO. runDone is the fallback only if the
+	// router entry was somehow absent at RunDone time (should not happen: we just
+	// registered it).
+	if haveRouterDone {
+		return routerDone
+	}
+	return runDone
+}
+
+// respondChatOnce sends resp for one request iff its exactly-one-RPC latch has
+// not already fired (Phase 7 review deviation #1 / trace item C). The latch is
+// shared by pointer across every copy of the request, so whichever terminal
+// path runs first — the queued ack, the run result, a cancel, or a panic-path
+// error — wins and every later send for the same request ID is dropped. A nil
+// latch means "no latch wired" (direct send), preserving the pre-deviation
+// single-response behavior for callers that build requests inline.
+func respondChatOnce(request chatSendRequest, resp *protocol.ResponseFrame) {
+	if request.respondedOnce == nil {
+		request.client.SendResponse(resp)
+		return
+	}
+	request.respondedOnce.Do(func() {
+		request.client.SendResponse(resp)
+	})
 }
 
 func sendChatOK(requests []chatSendRequest, payload map[string]any) {
 	for _, request := range requests {
-		request.client.SendResponse(protocol.NewOKResponse(request.requestID, payload))
+		respondChatOnce(request, protocol.NewOKResponse(request.requestID, payload))
 	}
 }
 
 func sendChatError(requests []chatSendRequest, code, message string) {
 	for _, request := range requests {
-		request.client.SendResponse(protocol.NewErrorResponse(request.requestID, code, message))
+		respondChatOnce(request, protocol.NewErrorResponse(request.requestID, code, message))
+	}
+}
+
+// sendChatCancelled resolves every request in a batch with the same cancelled
+// payload the abort path returns, so a follow-up drained from the reservation
+// queue (Phase 7 review 7A-H5) or superseded by cancellation never leaves its
+// chat.send promise hanging until the client-side timeout.
+func sendChatCancelled(requests []chatSendRequest) {
+	for _, request := range requests {
+		respondChatOnce(request, protocol.NewOKResponse(request.requestID, map[string]any{"cancelled": true}))
+	}
+}
+
+// sendChatQueuedAck emits the structural {queued:true, turnId} acknowledgement
+// for a busy follow-up the moment it joins the per-session FIFO (Phase 7 review
+// deviation #1 + Decision 4). It is NOT the turn's result: the assistant output
+// is delivered later, exactly once, through the normal run/event/history path
+// when the FIFO worker dequeues and runs the batch. Claiming the latch here is
+// what guarantees the batch's serialized run does not emit a second RPC response
+// for the same ID. The turnId lets the client correlate this ack with the
+// subsequent chat.turn lifecycle events (queued → running → terminal) even after
+// the RPC latch is consumed — Decision 4's reason for a stable logical turn
+// identity distinct from the request ID. Requests without a latch (should not
+// happen on the queued path) fall back to a direct send.
+func sendChatQueuedAck(requests []chatSendRequest) {
+	payload := map[string]any{"queued": true}
+	if len(requests) > 0 {
+		if tl := requests[len(requests)-1].turnLifecycle; tl != nil {
+			payload["turnId"] = tl.turnID
+		}
+	}
+	for _, request := range requests {
+		respondChatOnce(request, protocol.NewOKResponse(request.requestID, payload))
+	}
+}
+
+// emitTurnLifecycle pushes one chat.turn lifecycle frame (Phase 7 Decision 4) to
+// the client that owns the batch's canonical turn. A debounce batch is one
+// logical turn; its canonical turn is the primary (last) request — matching
+// mergeChatSendRequests — so every copy shares one turnID and one terminal latch
+// by pointer. The frame is a status/refetch hint keyed by the stable turnID: the
+// assistant result still flows through the normal run/history path and is NEVER
+// duplicated here (Decision 4 point 7).
+//
+// Terminal states (completed | cancelled | failed) are guarded by the turn's
+// terminal sync.Once so EXACTLY ONE terminal frame is emitted per turn no matter
+// which path resolves it — the serialized run's success/error/cancel exits, the
+// pre/post-classify cancel checks, or the queue-owned drain/shutdown/panic
+// callback. That latch is DISTINCT from respondedOnce: respondedOnce bounds RPC
+// cardinality, terminal bounds lifecycle cardinality, and neither suppresses the
+// other (Decision 4 point 8) — so a turn whose RPC was already consumed by a
+// {queued:true} ack still emits its terminal lifecycle when it is later run or
+// cancelled. Non-terminal states (queued, running) are emitted directly; running
+// carries the runID so the client can link turnId → runId (Decision 4 point 5).
+//
+// A nil turnLifecycle disables the emit (direct/unit sends that build requests
+// inline), preserving pre-Decision-4 behavior.
+func emitTurnLifecycle(requests []chatSendRequest, state, runID string) {
+	if len(requests) == 0 {
+		return
+	}
+	canonical := requests[len(requests)-1]
+	tl := canonical.turnLifecycle
+	if tl == nil || canonical.client == nil {
+		return
+	}
+	emit := func() {
+		payload := map[string]any{
+			"turnId":     tl.turnID,
+			"state":      state,
+			"sessionKey": canonical.sessionKey,
+		}
+		if runID != "" {
+			payload["runId"] = runID
+		}
+		canonical.client.SendEvent(*protocol.NewEvent(protocol.EventChatTurn, payload))
+	}
+	switch state {
+	case protocol.ChatTurnCompleted, protocol.ChatTurnCancelled, protocol.ChatTurnFailed:
+		tl.terminal.Do(emit)
+	default:
+		emit()
 	}
 }
 

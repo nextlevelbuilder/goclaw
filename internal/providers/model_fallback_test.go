@@ -12,12 +12,19 @@ type testFallbackProvider struct {
 	err       error
 	streamErr error
 	calls     int
+	// signalless makes the provider report success while returning nothing at
+	// all — the shape every ChatStream implementation produces when a stream
+	// ends before delivering a chunk (FinishReason defaults to "stop").
+	signalless bool
 }
 
 func (p *testFallbackProvider) Chat(_ context.Context, req ChatRequest) (*ChatResponse, error) {
 	p.calls++
 	if p.err != nil {
 		return nil, p.err
+	}
+	if p.signalless {
+		return &ChatResponse{FinishReason: "stop"}, nil
 	}
 	return &ChatResponse{Content: req.Model, FinishReason: "stop"}, nil
 }
@@ -29,6 +36,9 @@ func (p *testFallbackProvider) ChatStream(_ context.Context, req ChatRequest, on
 			onChunk(StreamChunk{Content: "partial"})
 		}
 		return nil, p.streamErr
+	}
+	if p.signalless {
+		return &ChatResponse{FinishReason: "stop"}, nil
 	}
 	return &ChatResponse{Content: req.Model, FinishReason: "stop"}, nil
 }
@@ -60,6 +70,104 @@ func TestModelFallbackProviderFallsBackOnClassifiedError(t *testing.T) {
 	}
 	if primary.calls != 1 || backup.calls != 1 {
 		t.Fatalf("calls primary=%d backup=%d, want 1/1", primary.calls, backup.calls)
+	}
+}
+
+// A candidate that reports success while returning nothing has not answered.
+// Before the signalless check, runOrdered returned that empty response as a
+// success — marking the dead candidate healthy and never trying the backup,
+// which defeats the entire purpose of configuring fallback.
+func TestModelFallbackProviderFallsBackOnSignallessResponse(t *testing.T) {
+	primary := &testFallbackProvider{name: "primary", model: "primary-model", signalless: true}
+	backup := &testFallbackProvider{name: "backup", model: "backup-model"}
+	provider := NewModelFallbackProvider(FallbackCandidate{
+		ProviderName: "primary",
+		Provider:     primary,
+		Model:        "primary-model",
+	}, []FallbackCandidate{
+		{ProviderName: "backup", Provider: backup, Model: "backup-model"},
+	}, 2, false)
+
+	resp, err := provider.Chat(context.Background(), ChatRequest{})
+	if err != nil {
+		t.Fatalf("Chat() error = %v", err)
+	}
+	if resp.Content != "backup-model" {
+		t.Fatalf("Chat() content = %q, want the backup to have answered", resp.Content)
+	}
+	if primary.calls != 1 || backup.calls != 1 {
+		t.Fatalf("calls primary=%d backup=%d, want 1/1", primary.calls, backup.calls)
+	}
+}
+
+// Streaming path: same invariant, and it must hold even though no chunk was
+// emitted (so the no-fallback-after-stream rule does not apply).
+func TestModelFallbackProviderFallsBackOnSignallessStream(t *testing.T) {
+	primary := &testFallbackProvider{name: "primary", model: "primary-model", signalless: true}
+	backup := &testFallbackProvider{name: "backup", model: "backup-model"}
+	provider := NewModelFallbackProvider(FallbackCandidate{
+		ProviderName: "primary",
+		Provider:     primary,
+		Model:        "primary-model",
+	}, []FallbackCandidate{
+		{ProviderName: "backup", Provider: backup, Model: "backup-model"},
+	}, 2, false)
+
+	resp, err := provider.ChatStream(context.Background(), ChatRequest{}, func(StreamChunk) {})
+	if err != nil {
+		t.Fatalf("ChatStream() error = %v", err)
+	}
+	if resp.Content != "backup-model" {
+		t.Fatalf("ChatStream() content = %q, want the backup to have answered", resp.Content)
+	}
+}
+
+// When every candidate comes back empty there is nothing to return, but the
+// caller must get an error rather than a success carrying nothing.
+func TestModelFallbackProviderErrorsWhenAllCandidatesSignalless(t *testing.T) {
+	primary := &testFallbackProvider{name: "primary", model: "primary-model", signalless: true}
+	backup := &testFallbackProvider{name: "backup", model: "backup-model", signalless: true}
+	provider := NewModelFallbackProvider(FallbackCandidate{
+		ProviderName: "primary",
+		Provider:     primary,
+		Model:        "primary-model",
+	}, []FallbackCandidate{
+		{ProviderName: "backup", Provider: backup, Model: "backup-model"},
+	}, 2, false)
+
+	resp, err := provider.Chat(context.Background(), ChatRequest{})
+	if err == nil {
+		t.Fatalf("Chat() error = nil, want an error; resp = %+v", resp)
+	}
+	if resp != nil {
+		t.Errorf("Chat() resp = %+v, want nil alongside the error", resp)
+	}
+	if primary.calls != 1 || backup.calls != 1 {
+		t.Errorf("calls primary=%d backup=%d, want both tried", primary.calls, backup.calls)
+	}
+}
+
+// A candidate that answers normally must not be disturbed by the new check.
+func TestModelFallbackProviderKeepsNormalResponse(t *testing.T) {
+	primary := &testFallbackProvider{name: "primary", model: "primary-model"}
+	backup := &testFallbackProvider{name: "backup", model: "backup-model"}
+	provider := NewModelFallbackProvider(FallbackCandidate{
+		ProviderName: "primary",
+		Provider:     primary,
+		Model:        "primary-model",
+	}, []FallbackCandidate{
+		{ProviderName: "backup", Provider: backup, Model: "backup-model"},
+	}, 2, false)
+
+	resp, err := provider.Chat(context.Background(), ChatRequest{})
+	if err != nil {
+		t.Fatalf("Chat() error = %v", err)
+	}
+	if resp.Content != "primary-model" {
+		t.Fatalf("Chat() content = %q, want the primary's answer", resp.Content)
+	}
+	if backup.calls != 0 {
+		t.Errorf("backup.calls = %d, want 0 — a healthy primary must not fail over", backup.calls)
 	}
 }
 

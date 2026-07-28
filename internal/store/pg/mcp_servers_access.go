@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 
 	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -62,6 +63,26 @@ func (s *PGMCPServerStore) ListAgentGrants(ctx context.Context, agentID uuid.UUI
 		 granted_by, created_at
 		 FROM mcp_agent_grants WHERE agent_id = $1`+tClause,
 		append([]any{agentID}, tArgs...)...)
+	return result, err
+}
+
+func (s *PGMCPServerStore) ListAgentGrantsByAgentIDs(ctx context.Context, agentIDs []uuid.UUID) ([]store.MCPAgentGrant, error) {
+	if len(agentIDs) == 0 {
+		return nil, nil
+	}
+	tClause, tArgs, _, err := scopeClause(ctx, 2)
+	if err != nil {
+		return nil, err
+	}
+	var result []store.MCPAgentGrant
+	err = pkgSqlxDB.SelectContext(ctx, &result,
+		`SELECT id, server_id, agent_id, enabled,
+		 COALESCE(tool_allow, 'null'::jsonb) AS tool_allow,
+		 COALESCE(tool_deny, 'null'::jsonb) AS tool_deny,
+		 COALESCE(config_overrides, 'null'::jsonb) AS config_overrides,
+		 granted_by, created_at
+		 FROM mcp_agent_grants WHERE agent_id = ANY($1)`+tClause,
+		append([]any{pq.Array(agentIDs)}, tArgs...)...)
 	return result, err
 }
 

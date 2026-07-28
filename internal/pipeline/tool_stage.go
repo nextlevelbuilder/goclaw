@@ -110,7 +110,7 @@ func (s *ToolStage) Execute(ctx context.Context, state *RunState) error {
 			})
 		}
 
-		if state.Tool.LoopKilled {
+		if state.Tool.LoopKilled || state.Tool.StopAfterTool {
 			appendDeferredMessages(state, deferredNonTool)
 			s.result = BreakLoop
 			return nil
@@ -346,7 +346,7 @@ func (s *ToolStage) executeParallel(ctx context.Context, state *RunState, prefli
 			})
 		}
 
-		if state.Tool.LoopKilled {
+		if state.Tool.LoopKilled || state.Tool.StopAfterTool {
 			appendDeferredMessages(state, deferredNonTool)
 			s.result = BreakLoop
 			return nil
@@ -381,7 +381,7 @@ func appendDeferredMessages(state *RunState, deferred []providers.Message) {
 
 // checkExitConditions checks read-only streak and tool budget.
 func (s *ToolStage) checkExitConditions(state *RunState) {
-	if state.Tool.LoopKilled {
+	if state.Tool.LoopKilled || state.Tool.StopAfterTool {
 		s.result = BreakLoop
 		return
 	}

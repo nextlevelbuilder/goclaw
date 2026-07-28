@@ -12,6 +12,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
@@ -25,6 +26,13 @@ func hooksTestDB(t *testing.T) *sql.DB {
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skipf("TEST_DATABASE_URL not set; skipping PG hook store tests")
+	}
+	config, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		t.Fatalf("parse TEST_DATABASE_URL: %v", err)
+	}
+	if config.Database == "goclaw" {
+		t.Fatal("refusing to run PostgreSQL integration tests against production database goclaw")
 	}
 
 	db, err := sql.Open("pgx", dsn)
@@ -79,7 +87,10 @@ func seedTenantAndAgent(t *testing.T, db *sql.DB) (tenantID, agentID uuid.UUID) 
 	t.Cleanup(func() {
 		db.Exec("DELETE FROM hook_executions WHERE hook_id IN (SELECT id FROM hooks WHERE tenant_id=$1)", tenantID)
 		db.Exec("DELETE FROM hooks WHERE tenant_id=$1", tenantID)
-		db.Exec("DELETE FROM agents WHERE id=$1", agentID)
+		db.Exec("DELETE FROM agent_context_files WHERE tenant_id=$1", tenantID)
+		db.Exec("DELETE FROM system_configs WHERE tenant_id=$1", tenantID)
+		db.Exec("DELETE FROM llm_providers WHERE tenant_id=$1", tenantID)
+		db.Exec("DELETE FROM agents WHERE tenant_id=$1", tenantID)
 		db.Exec("DELETE FROM tenants WHERE id=$1", tenantID)
 	})
 	return tenantID, agentID

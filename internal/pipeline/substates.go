@@ -60,13 +60,16 @@ type PruneState struct {
 type ToolState struct {
 	// AllowedTools is the per-iteration execution allowlist built from tool
 	// definitions sent to the provider. Nil means "no runtime restriction".
-	AllowedTools   map[string]bool
-	LoopDetector   any // concrete type toolLoopState lives in agent; Phase 5 defines LoopDetector interface
-	TotalToolCalls int
-	AsyncToolCalls []string      // tool names that executed async (spawn)
-	MediaResults   []MediaResult // media files produced by tools
-	Deliverables   []string      // tool output content for team task results
-	LoopKilled     bool          // set when loop detector triggers critical
+	AllowedTools       map[string]bool
+	HardToolAllowlist  bool // true when routing enforcement forbids lazy/deferred activation
+	LoopDetector       any  // concrete type toolLoopState lives in agent; Phase 5 defines LoopDetector interface
+	TotalToolCalls     int
+	AsyncToolCalls     []string      // tool names that executed async (spawn)
+	MediaResults       []MediaResult // media files produced by tools
+	Deliverables       []string      // tool output content for team task results
+	LoopKilled         bool          // set when loop detector triggers critical
+	StopAfterTool      bool          // clean stop after successful required workflow handoff
+	SuppressUserOutput bool          // suppress only after a directive-terminal mutation commits
 }
 
 // ObserveState: owned by ObserveStage.

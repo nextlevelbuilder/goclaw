@@ -19,6 +19,7 @@ type TeamToolBackend interface {
 
 	// Store access
 	Store() store.TeamStore
+	ApplyWorkflowReplan(ctx context.Context, request WorkflowReplanRequest) (store.WorkflowActionResult, error)
 
 	// Agent resolution
 	ResolveAgentByKey(ctx context.Context, key string) (uuid.UUID, error)

@@ -81,23 +81,15 @@ func (w *WorkspaceInterceptor) HandleWrite(ctx context.Context, path string, con
 		return false, fmt.Errorf("file exceeds max size (10MB)")
 	}
 
-	// Quota: count files in team workspace scope.
+	// Quota: count RECENT files in team workspace scope. Counting the scope's whole
+	// history made the limit a permanent ceiling that a long-lived team hits during
+	// ordinary work; the window keeps the anti-flood purpose without that.
 	wsDir := teamWs
 	if wsDir != "" {
-		entries, err := os.ReadDir(wsDir)
-		if err != nil {
-			slog.Warn("workspace: quota check ReadDir failed", "dir", wsDir, "error", err)
-		}
-		fileCount := 0
-		for _, e := range entries {
-			if !e.IsDir() {
-				fileCount++
-			}
-		}
 		// Only check when creating new file (not updating existing).
 		if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
-			if fileCount >= maxFilesPerScope {
-				return false, fmt.Errorf("workspace file limit reached (%d/%d)", fileCount, maxFilesPerScope)
+			if fileCount := CountRecentScopeFiles(wsDir); fileCount >= maxFilesPerScope {
+				return false, fmt.Errorf("workspace file limit reached (%d new files in the last 7 days/%d) — reuse or update an existing file", fileCount, maxFilesPerScope)
 			}
 		}
 	}

@@ -81,17 +81,23 @@ func init() {
 		MsgNotImplemented: "%s은(는) 아직 구현되지 않았습니다",
 
 		// Agent links
-		MsgLinksNotConfigured:   "에이전트 링크가 설정되지 않았습니다",
-		MsgInvalidDirection:     "방향은 outbound, inbound, 또는 bidirectional이어야 합니다",
-		MsgSourceTargetSame:     "소스와 대상은 서로 다른 에이전트여야 합니다",
-		MsgCannotDelegateOpen:   "오픈 에이전트에게는 위임할 수 없습니다 — 사전 정의된 에이전트만 위임 대상이 될 수 있습니다",
-		MsgNoUpdatesProvided:    "업데이트가 제공되지 않았습니다",
-		MsgInvalidLinkStatus:    "상태는 active 또는 disabled여야 합니다",
+		MsgLinksNotConfigured: "에이전트 링크가 설정되지 않았습니다",
+		MsgInvalidDirection:   "방향은 outbound, inbound, 또는 bidirectional이어야 합니다",
+		MsgSourceTargetSame:   "소스와 대상은 서로 다른 에이전트여야 합니다",
+		MsgCannotDelegateOpen: "오픈 에이전트에게는 위임할 수 없습니다 — 사전 정의된 에이전트만 위임 대상이 될 수 있습니다",
+		MsgNoUpdatesProvided:  "업데이트가 제공되지 않았습니다",
+		MsgInvalidLinkStatus:  "상태는 active 또는 disabled여야 합니다",
 
 		// Teams
-		MsgTeamsNotConfigured:   "팀이 설정되지 않았습니다",
-		MsgAgentIsTeamLead:      "에이전트가 이미 팀 리더입니다",
-		MsgCannotRemoveTeamLead: "팀 리더는 제거할 수 없습니다",
+		MsgTeamsNotConfigured:             "팀이 설정되지 않았습니다",
+		MsgAgentIsTeamLead:                "에이전트가 이미 팀 리더입니다",
+		MsgCannotRemoveTeamLead:           "팀 리더는 제거할 수 없습니다",
+		MsgWorkflowExpectedGuardsRequired: "expectedStatus와 expectedPlanRevision은 필수입니다",
+		MsgWorkflowInvalidTaskID:          "유효하지 않은 taskId입니다",
+		MsgWorkflowActionInvalid:          "유효하지 않은 워크플로 작업 요청입니다",
+		MsgWorkflowAuthorizationDenied:    "이 워크플로 작업을 수행할 권한이 없습니다",
+		MsgWorkflowNotFound:               "워크플로를 찾을 수 없습니다",
+		MsgWorkflowActionFailed:           "워크플로 작업이 실패했습니다",
 
 		// Channels
 		MsgCannotDeleteDefaultInst: "기본 채널 인스턴스는 삭제할 수 없습니다",

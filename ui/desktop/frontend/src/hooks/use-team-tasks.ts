@@ -11,6 +11,8 @@ export function useTeamTasks() {
   const [members, setMembers] = useState<TeamMemberData[]>([])
   const [loading, setLoading] = useState(true)
   const activeTeamRef = useRef<string | null>(null)
+  const activeStatusFilterRef = useRef<string | undefined>(undefined)
+  const boardRefreshTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const fetchOneTask = useCallback(async (taskId: string) => {
     const teamId = activeTeamRef.current
@@ -32,7 +34,10 @@ export function useTeamTasks() {
     setTasks,
   })
 
-  useEffect(() => () => clearAll(), [clearAll])
+  useEffect(() => () => {
+    clearAll()
+    clearTimeout(boardRefreshTimerRef.current)
+  }, [clearAll])
 
   const fetchTeams = useCallback(async () => {
     try {
@@ -51,6 +56,7 @@ export function useTeamTasks() {
       setTasks(res.tasks ?? [])
       if (res.members) setMembers(res.members)
       activeTeamRef.current = teamId
+      activeStatusFilterRef.current = statusFilter
     } catch (err) {
       console.error('Failed to fetch tasks:', err)
     } finally {
@@ -111,7 +117,17 @@ export function useTeamTasks() {
     }
   }, [])
 
-  // Real-time WS event subscriptions — use getWsClient() directly (.on not .call)
+  const debouncedRefetchBoard = useCallback((payload: unknown) => {
+    const event = payload as { team_id?: string }
+    if (event.team_id !== activeTeamRef.current || !activeTeamRef.current) return
+    clearTimeout(boardRefreshTimerRef.current)
+    boardRefreshTimerRef.current = setTimeout(() => {
+      const teamId = activeTeamRef.current
+      if (teamId) fetchTasks(teamId, activeStatusFilterRef.current)
+    }, 300)
+  }, [fetchTasks])
+
+  // Real-time WS event subscriptions — event payloads are refetch hints only.
   useEffect(() => {
     const ws = getWsClient()
     const unsubs: Array<() => void> = []
@@ -122,13 +138,16 @@ export function useTeamTasks() {
     for (const evt of [
       'team.task.created', 'team.task.completed', 'team.task.claimed',
       'team.task.cancelled', 'team.task.failed', 'team.task.assigned',
-      'team.task.dispatched', 'team.task.updated',
+      'team.task.dispatched', 'team.task.updated', 'team.task.blocked',
+      'team.task.reviewed', 'team.task.approved', 'team.task.rejected',
+      'team.task.commented', 'team.task.attachment_added',
     ]) {
       unsubs.push(ws.on(evt, handleFetchOne))
     }
+    unsubs.push(ws.on('team.workflow.updated', debouncedRefetchBoard))
 
     return () => { for (const fn of unsubs) fn() }
-  }, [handleProgress, handleDeleted, handleFetchOne])
+  }, [handleProgress, handleDeleted, handleFetchOne, debouncedRefetchBoard])
 
   const fetchTaskDetail = useCallback(async (teamId: string, taskId: string) => {
     try {

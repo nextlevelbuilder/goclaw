@@ -12,19 +12,21 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/gateway/methods"
 	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
-func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore store.SessionStore, tracingStore store.TracingStore, runTimeline store.RunTimelineStore, cronStore store.CronStore, pairingStore store.PairingStore, cfg *config.Config, cfgPath, workspace, dataDir string, msgBus *bus.MessageBus, execApprovalMgr *tools.ExecApprovalManager, agentStore store.AgentStore, skillStore store.SkillStore, configSecretsStore store.ConfigSecretsStore, teamStore store.TeamStore, agentLinkStore store.AgentLinkStore, contextFileInterceptor *tools.ContextFileInterceptor, logTee *gateway.LogTee, heartbeatStore store.HeartbeatStore, configPermStore store.ConfigPermissionStore, sysConfigStore store.SystemConfigStore, tenantStore store.TenantStore, skillTenantCfgStore store.SkillTenantConfigStore, audioMgr *audio.Manager, usageCapSvc *usagecaps.Service, providerReg *providers.Registry, teamWorkEmbedder memory.EmbeddingProvider) (*methods.PairingMethods, *methods.HeartbeatMethods, *methods.ChatMethods, *methods.ConfigPermissionsMethods) {
+func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore store.SessionStore, tracingStore store.TracingStore, runTimeline store.RunTimelineStore, cronStore store.CronStore, pairingStore store.PairingStore, cfg *config.Config, cfgPath, workspace, dataDir string, msgBus *bus.MessageBus, execApprovalMgr *tools.ExecApprovalManager, agentStore store.AgentStore, skillStore store.SkillStore, skillsLoader *skills.Loader, configSecretsStore store.ConfigSecretsStore, teamStore store.TeamStore, agentLinkStore store.AgentLinkStore, contextFileInterceptor *tools.ContextFileInterceptor, logTee *gateway.LogTee, heartbeatStore store.HeartbeatStore, configPermStore store.ConfigPermissionStore, sysConfigStore store.SystemConfigStore, tenantStore store.TenantStore, skillTenantCfgStore store.SkillTenantConfigStore, audioMgr *audio.Manager, usageCapSvc *usagecaps.Service, providerReg *providers.Registry, teamWorkEmbedder memory.EmbeddingProvider, mcpStore store.MCPAgentGrantBatchStore, builtinToolStore store.BuiltinToolStore, tenantToolStore store.BuiltinToolTenantConfigStore, toolPolicy *tools.PolicyEngine, toolRegistry *tools.Registry) (*methods.PairingMethods, *methods.HeartbeatMethods, *methods.ChatMethods, *methods.ConfigPermissionsMethods) {
 	router := server.Router()
 
 	// Phase 1: Core methods
 	chatMethods := methods.NewChatMethods(agents, sessStore, cfg, server.RateLimiter(), msgBus)
 	chatMethods.SetAudioManager(audioMgr) // Wire TTS auto-apply for WS responses
 	chatMethods.SetUsageCapService(usageCapSvc)
-	chatMethods.SetTeamWorkClassification(agentStore, teamStore, agentLinkStore, teamWorkEmbedder)
+	chatMethods.SetTeamWorkClassification(agentStore, teamStore, agentLinkStore, teamWorkEmbedder, skillsLoader, mcpStore, builtinToolStore, tenantToolStore, toolPolicy, toolRegistry)
+	chatMethods.SetProviderRegistry(providerReg)
 	chatMethods.Register(router)
 	methods.NewAgentsMethods(agents, cfg, cfgPath, workspace, agentStore, contextFileInterceptor, msgBus).Register(router)
 	methods.NewSessionsMethods(sessStore, msgBus, cfg).Register(router)
@@ -88,4 +90,9 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 	)
 
 	return pairingMethods, heartbeatMethods, chatMethods, cfgPerms
+}
+
+func teamWorkMCPBatchStore(mcpStore store.MCPServerStore) store.MCPAgentGrantBatchStore {
+	batchStore, _ := mcpStore.(store.MCPAgentGrantBatchStore)
+	return batchStore
 }

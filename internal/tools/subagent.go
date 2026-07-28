@@ -64,6 +64,7 @@ type SubagentTask struct {
 	Media             []bus.MediaFile `json:"-"` // media files from tool results
 	OriginAgentID     uuid.UUID       `json:"-"` // parent agent UUID for usage caps and scoped tools
 	OriginTenantID    uuid.UUID       `json:"-"` // parent's tenant for announce routing
+	TeamID            string          `json:"-"` // dispatching team for scoped UI events
 	OriginTraceID     uuid.UUID       `json:"-"` // parent trace for announce linking
 	OriginRootSpanID  uuid.UUID       `json:"-"` // parent agent's root span ID
 	// OriginContextWindow and OriginMaxTokens are captured from the caller at

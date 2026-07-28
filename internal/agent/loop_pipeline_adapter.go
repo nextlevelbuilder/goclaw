@@ -40,6 +40,7 @@ func (l *Loop) runViaPipeline(ctx context.Context, req RunRequest) (*RunResult, 
 
 	p := pipeline.NewDefaultPipeline(deps)
 	state := pipeline.NewRunState(input, nil, model, provider)
+	state.TeamWorkDisabled = req.DisableTeamWork
 
 	pResult, err := p.Run(ctx, state)
 	if err != nil {
@@ -274,6 +275,7 @@ func convertRunInput(req *RunRequest) *pipeline.RunInput {
 		WorkspaceChannel:           req.WorkspaceChannel,
 		WorkspaceChatID:            req.WorkspaceChatID,
 		TeamWorkspace:              req.TeamWorkspace,
+		RoutingMetadata:            req.RoutingMetadata,
 	}
 }
 

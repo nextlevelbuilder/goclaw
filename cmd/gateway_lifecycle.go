@@ -7,12 +7,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/cache"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/bitrix24"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
+	"github.com/nextlevelbuilder/goclaw/internal/gateway/methods"
 	"github.com/nextlevelbuilder/goclaw/internal/heartbeat"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
@@ -36,6 +39,9 @@ type lifecycleDeps struct {
 	consumerTeamStore store.TeamStore
 	auditCh           chan bus.AuditEventPayload
 	sigCh             chan os.Signal
+	// chatMethods drives the graceful WS chat-dispatch quiesce at shutdown (Phase 7
+	// Decision 6). nil in wirings that do not register WS chat methods.
+	chatMethods *methods.ChatMethods
 }
 
 // runLifecycle wires config-reload subscribers, starts consumers, task recovery,
@@ -148,7 +154,7 @@ func (d *gatewayDeps) runLifecycle(
 		d.channelMgr.SetContactCollector(contactCollector)
 	}
 
-	go consumeInboundMessages(ctx, d.msgBus, d.agentRouter, d.cfg, deps.sched, d.channelMgr, deps.consumerTeamStore, d.pgStores.AgentLinks, deps.quotaChecker, d.pgStores.Sessions, d.pgStores.Agents, contactCollector, deps.postTurn, deps.subagentMgr, d.usageCapSvc, d.providerRegistry, d.teamWorkEmbedder)
+	go consumeInboundMessages(ctx, d.msgBus, d.agentRouter, d.cfg, deps.sched, d.channelMgr, deps.consumerTeamStore, d.pgStores.AgentLinks, deps.quotaChecker, d.pgStores.Sessions, d.pgStores.Agents, contactCollector, deps.postTurn, deps.subagentMgr, d.usageCapSvc, d.providerRegistry, d.teamWorkEmbedder, d.skillsLoader, teamWorkMCPBatchStore(d.pgStores.MCP), d.pgStores.BuiltinTools, d.pgStores.BuiltinToolTenantCfgs, d.toolPE, d.toolsReg, d.teamWorkCfg)
 
 	// Webhook callback worker — delivers async webhook_calls rows to receiver callback_url.
 	// Runs in both editions: Standard (PG, concurrency=4) and Lite (SQLite, concurrency=1).
@@ -188,6 +194,19 @@ func (d *gatewayDeps) runLifecycle(
 	var taskTicker *tasks.TaskTicker
 	if d.pgStores.Teams != nil {
 		taskTicker = tasks.NewTaskTicker(d.pgStores.Teams, d.pgStores.Agents, d.msgBus, d.cfg.Gateway.TaskRecoveryIntervalSec)
+		taskTicker.SetWorkflowRuntime(deps.postTurn, func(finalizeCtx context.Context, workflowID uuid.UUID) {
+			workflowStore, ok := d.pgStores.Teams.(store.TeamWorkflowStore)
+			if !ok {
+				return
+			}
+			go finalizeWorkflow(workflowBackgroundContext(finalizeCtx), &ConsumerDeps{Sched: deps.sched, MsgBus: d.msgBus, TeamStore: d.pgStores.Teams, SessStore: d.pgStores.Sessions}, workflowStore, workflowID)
+		}, func(recoveryCtx context.Context, claim store.EscalationClaim) {
+			workflowStore, ok := d.pgStores.Teams.(store.TeamWorkflowStore)
+			if !ok {
+				return
+			}
+			go recoverWorkflowBlocker(workflowBackgroundContext(recoveryCtx), &ConsumerDeps{Sched: deps.sched, MsgBus: d.msgBus, TeamStore: d.pgStores.Teams, SessStore: d.pgStores.Sessions}, workflowStore, claim.WorkflowID, claim.TaskID)
+		})
 		taskTicker.Start()
 	}
 
@@ -197,6 +216,16 @@ func (d *gatewayDeps) runLifecycle(
 
 		// Broadcast shutdown event
 		d.server.BroadcastEvent(*protocol.NewEvent(protocol.EventShutdown, nil))
+
+		// Phase 7 Decision 6: quiesce the WS chat dispatch path BEFORE tearing down
+		// the scheduler/providers. This latches new submissions closed, resolves
+		// buffered debounce requests + acked queued turns with a terminal lifecycle,
+		// stops the FIFO queue, and bounded-aborts the active run — so no chat run
+		// is left mid-flight when the scheduler drains below. nil in wirings that do
+		// not register WS chat methods.
+		if deps.chatMethods != nil {
+			deps.chatMethods.Shutdown()
+		}
 
 		// Stop channels, cron, heartbeat, and task ticker
 		d.channelMgr.StopAll(context.Background())

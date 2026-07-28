@@ -41,9 +41,8 @@ describe('VoicePicker (desktop)', () => {
     // Wait for voices to load
     await waitFor(() => expect(screen.queryByText('Loading voices…')).toBeNull())
 
-    // Open combobox by clicking the input
-    const input = screen.getByRole('textbox')
-    fireEvent.focus(input)
+    // Open the listbox from the button trigger.
+    fireEvent.click(screen.getByRole('button', { name: /chọn giọng đọc/i }))
 
     // Click Rachel option
     await waitFor(() => {
@@ -69,8 +68,8 @@ describe('VoicePicker (desktop)', () => {
   it('(d) loads voices via API mock — Rachel appears in list', async () => {
     renderWithI18n(<VoicePicker value={null} onChange={() => {}} />)
 
-    const input = screen.getByRole('textbox')
-    fireEvent.focus(input)
+    await waitFor(() => expect(screen.queryByText('Loading voices…')).toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: /chọn giọng đọc/i }))
 
     await waitFor(() => {
       expect(screen.getByText('Rachel')).toBeInTheDocument()

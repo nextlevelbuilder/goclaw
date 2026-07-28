@@ -4,14 +4,14 @@ package tools
 // These keys appear in bus.InboundMessage.Metadata for teammate and
 // subagent messages routed through the gateway consumer.
 const (
-	MetaOriginChannel    = "origin_channel"
-	MetaOriginPeerKind   = "origin_peer_kind"
-	MetaOriginChatID     = "origin_chat_id"
-	MetaOriginUserID     = "origin_user_id"
+	MetaOriginChannel  = "origin_channel"
+	MetaOriginPeerKind = "origin_peer_kind"
+	MetaOriginChatID   = "origin_chat_id"
+	MetaOriginUserID   = "origin_user_id"
 	// MetaOriginSenderID carries the real acting sender through announce re-ingress
 	// so permission checks (e.g. CheckFileWriterPermission) attribute to the
 	// original user rather than a synthetic "subagent:<id>" / "notification:system" string.
-	MetaOriginSenderID   = "origin_sender_id"
+	MetaOriginSenderID = "origin_sender_id"
 	// MetaOriginRole carries the caller's RBAC role through dispatch + re-ingress
 	// so permission checks can bypass per-user grants for authenticated admins
 	// (e.g. dashboard user dispatches a task that writes files in a group chat).
@@ -27,23 +27,33 @@ const (
 	MetaTeamID           = "team_id"
 	MetaTeamWorkspace    = "team_workspace"
 	MetaLeaderAgentID    = "leader_agent_id"
-	MetaParentAgent      = "parent_agent"
-	MetaSubagentLabel      = "subagent_label"
-	MetaSubagentStatus     = "subagent_status"
-	MetaSubagentResult     = "subagent_result"
-	MetaSubagentRuntime    = "subagent_runtime_ms"
-	MetaSubagentIterations = "subagent_iterations"
-	MetaSubagentInputToks  = "subagent_input_tokens"
-	MetaSubagentOutputToks = "subagent_output_tokens"
-	MetaCommand          = "command"
-	MetaIsForum          = "is_forum"
-	MetaMessageThreadID  = "message_thread_id"
-	MetaDMThreadID       = "dm_thread_id"
-	MetaChatTitle        = "chat_title"
-	MetaUsername         = "username"
-	MetaUserName         = "user_name"
-	MetaTopicSystemPrompt = "topic_system_prompt"
-	MetaTopicSkills      = "topic_skills"
+	MetaWorkflowID       = "workflow_id"
+	MetaWorkflowStepID   = "workflow_step_id"
+	MetaWorkflowTerminal = "workflow_terminal"
+	MetaDispatchToken    = "dispatch_token"
+	// MetaWorkflowPlanRevision carries the plan revision the dispatch was minted
+	// against, so the accepted attempt is fenced to a single revision. A blocker
+	// or replan bumps the revision and clears the token, so a stale worker that
+	// re-ingresses with an old revision can never mutate the current-revision task.
+	MetaWorkflowPlanRevision = "workflow_plan_revision"
+	MetaOriginRouting        = "origin_routing"
+	MetaParentAgent          = "parent_agent"
+	MetaSubagentLabel        = "subagent_label"
+	MetaSubagentStatus       = "subagent_status"
+	MetaSubagentResult       = "subagent_result"
+	MetaSubagentRuntime      = "subagent_runtime_ms"
+	MetaSubagentIterations   = "subagent_iterations"
+	MetaSubagentInputToks    = "subagent_input_tokens"
+	MetaSubagentOutputToks   = "subagent_output_tokens"
+	MetaCommand              = "command"
+	MetaIsForum              = "is_forum"
+	MetaMessageThreadID      = "message_thread_id"
+	MetaDMThreadID           = "dm_thread_id"
+	MetaChatTitle            = "chat_title"
+	MetaUsername             = "username"
+	MetaUserName             = "user_name"
+	MetaTopicSystemPrompt    = "topic_system_prompt"
+	MetaTopicSkills          = "topic_skills"
 	// MetaChannelSelfIdentity carries a channel-provided self-identity hint
 	// (e.g. "You are @viet_super_bot (ViệtBot) on this Telegram channel.")
 	// appended to the agent's system prompt so the LLM does not confuse its own
@@ -61,4 +71,5 @@ const (
 	TaskMetaOriginTrace    = "origin_trace_id"
 	TaskMetaOriginRootSpan = "origin_root_span_id"
 	TaskMetaTeamWorkspace  = "team_workspace"
+	TaskMetaOriginRouting  = "origin_routing"
 )

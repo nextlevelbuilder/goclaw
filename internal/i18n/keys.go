@@ -134,9 +134,15 @@ const (
 	MsgInvalidLinkStatus  = "error.invalid_link_status"  // "status must be active or disabled"
 
 	// --- Teams ---
-	MsgTeamsNotConfigured   = "error.teams_not_configured"    // "teams not configured"
-	MsgAgentIsTeamLead      = "error.agent_is_team_lead"      // "agent is already the team lead"
-	MsgCannotRemoveTeamLead = "error.cannot_remove_team_lead" // "cannot remove the team lead"
+	MsgTeamsNotConfigured             = "error.teams_not_configured"              // "teams not configured"
+	MsgAgentIsTeamLead                = "error.agent_is_team_lead"                // "agent is already the team lead"
+	MsgCannotRemoveTeamLead           = "error.cannot_remove_team_lead"           // "cannot remove the team lead"
+	MsgWorkflowExpectedGuardsRequired = "error.workflow_expected_guards_required" // "expectedStatus and expectedPlanRevision are required"
+	MsgWorkflowInvalidTaskID          = "error.workflow_invalid_task_id"          // "invalid taskId"
+	MsgWorkflowActionInvalid          = "error.workflow_action_invalid"           // "invalid workflow action request"
+	MsgWorkflowAuthorizationDenied    = "error.workflow_authorization_denied"     // "you are not authorized to perform this workflow action"
+	MsgWorkflowNotFound               = "error.workflow_not_found"                // "workflow not found"
+	MsgWorkflowActionFailed           = "error.workflow_action_failed"            // "workflow action could not be completed"
 
 	// --- Channels ---
 	MsgCannotDeleteDefaultInst = "error.cannot_delete_default_inst" // "cannot delete default channel instance"
@@ -209,10 +215,10 @@ const (
 	MsgFailedToDeleteFile    = "error.failed_to_delete_file"    // "failed to delete"
 
 	// --- OAuth ---
-	MsgNoPendingOAuth        = "error.no_pending_oauth"        // "no pending OAuth flow"
-	MsgFailedToSaveToken     = "error.failed_to_save_token"    // "failed to save token"
-	MsgOAuthCallbackSuccess  = "oauth.callback_success"        // "Authorization successful. You may close this window."
-	MsgOAuthCallbackFailed   = "oauth.callback_failed"         // "Authorization failed. You may close this window."
+	MsgNoPendingOAuth       = "error.no_pending_oauth"     // "no pending OAuth flow"
+	MsgFailedToSaveToken    = "error.failed_to_save_token" // "failed to save token"
+	MsgOAuthCallbackSuccess = "oauth.callback_success"     // "Authorization successful. You may close this window."
+	MsgOAuthCallbackFailed  = "oauth.callback_failed"      // "Authorization failed. You may close this window."
 
 	// --- Intent Classify (channel-facing status replies) ---
 	MsgStatusWorking       = "status.working"         // "🔄 I'm working on your request... Please wait."

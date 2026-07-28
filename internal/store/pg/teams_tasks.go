@@ -25,11 +25,15 @@ const taskLockDuration = 60 * time.Minute
 const taskSelectCols = `t.id, t.team_id, t.tenant_id, t.subject, t.description, t.status, t.owner_agent_id, t.blocked_by, t.priority, t.result, t.user_id, t.channel,
 		 t.task_type, t.task_number, COALESCE(t.identifier,''), t.created_by_agent_id, COALESCE(t.assignee_user_id,''), t.parent_id,
 		 COALESCE(t.chat_id,''), t.metadata, t.locked_at, t.lock_expires_at, COALESCE(t.progress_percent,0), COALESCE(t.progress_step,''),
+		 t.workflow_id, COALESCE(t.workflow_step_id,''), COALESCE(t.workflow_kind,''), t.workflow_terminal, t.dispatch_token, t.dispatch_lease_until,
 		 t.followup_at, COALESCE(t.followup_count,0), COALESCE(t.followup_max,0), COALESCE(t.followup_message,''), COALESCE(t.followup_channel,''), COALESCE(t.followup_chat_id,''),
 		 COALESCE(t.comment_count,0), COALESCE(t.attachment_count,0),
 		 t.created_at, t.updated_at,
 		 COALESCE(a.agent_key, '') AS owner_agent_key,
-		 COALESCE(ca.agent_key, '') AS created_by_agent_key`
+		 COALESCE(ca.agent_key, '') AS created_by_agent_key,
+		 COALESCE(t.plan_revision,1), COALESCE(t.dispatch_count,0), COALESCE(t.blocker_reason,''),
+		 COALESCE(t.recovery_count,0), COALESCE(t.escalation_status,'pending'),
+		 COALESCE(t.escalation_attempt_count,0), t.escalation_next_at, COALESCE(t.escalation_last_error,'')`
 
 // taskJoinClause is the shared JOIN clause for task queries.
 const taskJoinClause = `FROM team_tasks t
@@ -79,6 +83,10 @@ func (s *PGTeamStore) ListTaskScopes(ctx context.Context, teamID uuid.UUID) ([]s
 // ============================================================
 
 func (s *PGTeamStore) CreateTask(ctx context.Context, task *store.TeamTaskData) error {
+	if expectedOwnerID := store.ExpectedTaskOwnerIDFromContext(ctx); expectedOwnerID != uuid.Nil &&
+		(task.OwnerAgentID == nil || *task.OwnerAgentID != expectedOwnerID) {
+		return fmt.Errorf("task owner does not match canonical owner constraint")
+	}
 	if task.ID == uuid.Nil {
 		task.ID = store.GenNewID()
 	}
@@ -129,8 +137,10 @@ func (s *PGTeamStore) CreateTask(ctx context.Context, task *store.TeamTaskData) 
 	// INSERT with all fields in one statement.
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO team_tasks (id, team_id, subject, description, status, owner_agent_id, blocked_by, priority, result, user_id, channel,
-		 task_type, task_number, identifier, created_by_agent_id, parent_id, chat_id, metadata, locked_at, lock_expires_at, created_at, updated_at, tenant_id)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`,
+		 task_type, task_number, identifier, created_by_agent_id, parent_id, chat_id, metadata, locked_at, lock_expires_at,
+		 workflow_id, workflow_step_id, workflow_kind, workflow_terminal, dispatch_token, dispatch_lease_until,
+		 created_at, updated_at, tenant_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)`,
 		task.ID, task.TeamID, task.Subject, task.Description,
 		task.Status, task.OwnerAgentID, pq.Array(task.BlockedBy),
 		task.Priority, task.Result,
@@ -141,6 +151,9 @@ func (s *PGTeamStore) CreateTask(ctx context.Context, task *store.TeamTaskData) 
 		sql.NullString{String: task.ChatID, Valid: task.ChatID != ""},
 		metaJSON,
 		task.LockedAt, task.LockExpiresAt,
+		task.WorkflowID, sql.NullString{String: task.WorkflowStepID, Valid: task.WorkflowStepID != ""},
+		sql.NullString{String: task.WorkflowKind, Valid: task.WorkflowKind != ""}, task.WorkflowTerminal,
+		task.DispatchToken, task.DispatchLeaseUntil,
 		now, now, tenantIDForInsert(ctx),
 	)
 	if err != nil {
@@ -171,6 +184,11 @@ var allowedTaskUpdateCols = map[string]bool{
 func (s *PGTeamStore) UpdateTask(ctx context.Context, taskID uuid.UUID, updates map[string]any) error {
 	if len(updates) == 0 {
 		return nil
+	}
+	if task, err := s.GetTask(ctx, taskID); err != nil {
+		return err
+	} else if task.WorkflowID != nil {
+		return fmt.Errorf("workflow tasks are immutable")
 	}
 	// Validate columns against whitelist.
 	for col := range updates {
@@ -219,7 +237,7 @@ func (s *PGTeamStore) ListTasks(ctx context.Context, teamID uuid.UUID, orderBy s
 		statusWhere = "AND t.status = 'in_review'"
 	case store.TeamTaskFilterCompleted:
 		statusWhere = "AND t.status IN ('completed','cancelled')"
-	// "", store.TeamTaskFilterAll ("all") → no filter (all statuses)
+		// "", store.TeamTaskFilterAll ("all") → no filter (all statuses)
 	}
 
 	if limit <= 0 {
@@ -420,7 +438,7 @@ func (s *PGTeamStore) DeleteTask(ctx context.Context, taskID, teamID uuid.UUID) 
 	defer tx.Rollback() //nolint:errcheck — no-op after commit
 
 	res, err := tx.ExecContext(ctx,
-		`DELETE FROM team_tasks WHERE id = $1 AND team_id = $2 AND status IN ('completed','failed','cancelled')`+tenantWhere,
+		`DELETE FROM team_tasks WHERE id = $1 AND team_id = $2 AND workflow_id IS NULL AND status IN ('completed','failed','cancelled')`+tenantWhere,
 		args...)
 	if err != nil {
 		return err
@@ -473,7 +491,7 @@ func (s *PGTeamStore) DeleteTasks(ctx context.Context, taskIDs []uuid.UUID, team
 
 	rows, err := tx.QueryContext(ctx,
 		`DELETE FROM team_tasks
-		 WHERE id = ANY($1) AND team_id = $2 AND status IN ('completed','failed','cancelled')`+tenantWhere+`
+		 WHERE id = ANY($1) AND team_id = $2 AND workflow_id IS NULL AND status IN ('completed','failed','cancelled')`+tenantWhere+`
 		 RETURNING id`, args...)
 	if err != nil {
 		return nil, err
@@ -537,7 +555,7 @@ func (s *PGTeamStore) ListActiveTasksByChatID(ctx context.Context, chatID string
 		`SELECT `+taskSelectCols+`
 		 `+taskJoinClause+`
 		 WHERE COALESCE(t.chat_id,'') = $1
-		   AND t.status IN ('pending','in_progress','blocked','in_review')`+tenantWhere+`
+		   AND t.status IN ('pending','dispatching','in_progress','blocked','in_review')`+tenantWhere+`
 		 ORDER BY t.task_number ASC
 		 LIMIT 50`, args...)
 	if err != nil {
@@ -556,23 +574,31 @@ func scanTaskRowsJoined(rows *sql.Rows) ([]store.TeamTaskData, error) {
 		var blockedBy []uuid.UUID
 		var assigneeUserID, chatID, progressStep, identifier string
 		var metadataJSON []byte
-		var lockedAt, lockExpiresAt, followupAt *time.Time
+		var lockedAt, lockExpiresAt, followupAt, dispatchLeaseUntil *time.Time
+		var workflowID, dispatchToken *uuid.UUID
+		var workflowStepID, workflowKind string
 		var followupCount, followupMax int
 		var followupMessage, followupChannel, followupChatID string
+		var escalationNextAt *time.Time
 		if err := rows.Scan(
 			&d.ID, &d.TeamID, &d.TenantID, &d.Subject, &desc, &d.Status,
 			&ownerID, pq.Array(&blockedBy), &d.Priority, &result,
 			&userID, &channel,
 			&d.TaskType, &d.TaskNumber, &identifier, &createdByAgentID, &assigneeUserID, &parentID,
 			&chatID, &metadataJSON, &lockedAt, &lockExpiresAt, &d.ProgressPercent, &progressStep,
+			&workflowID, &workflowStepID, &workflowKind, &d.WorkflowTerminal, &dispatchToken, &dispatchLeaseUntil,
 			&followupAt, &followupCount, &followupMax, &followupMessage, &followupChannel, &followupChatID,
 			&d.CommentCount, &d.AttachmentCount,
 			&d.CreatedAt, &d.UpdatedAt,
 			&d.OwnerAgentKey,
 			&d.CreatedByAgentKey,
+			&d.PlanRevision, &d.DispatchCount, &d.BlockerReason,
+			&d.RecoveryCount, &d.EscalationStatus,
+			&d.EscalationAttemptCount, &escalationNextAt, &d.EscalationLastError,
 		); err != nil {
 			return nil, err
 		}
+		d.EscalationNextAt = escalationNextAt
 		if desc.Valid {
 			d.Description = desc.String
 		}
@@ -598,12 +624,20 @@ func scanTaskRowsJoined(rows *sql.Rows) ([]store.TeamTaskData, error) {
 		d.LockedAt = lockedAt
 		d.LockExpiresAt = lockExpiresAt
 		d.ProgressStep = progressStep
+		d.WorkflowID = workflowID
+		d.WorkflowStepID = workflowStepID
+		d.WorkflowKind = workflowKind
+		d.DispatchToken = dispatchToken
+		d.DispatchLeaseUntil = dispatchLeaseUntil
 		d.FollowupAt = followupAt
 		d.FollowupCount = followupCount
 		d.FollowupMax = followupMax
 		d.FollowupMessage = followupMessage
 		d.FollowupChannel = followupChannel
 		d.FollowupChatID = followupChatID
+		// Reflect the durable dispatch_count column back into the metadata blob
+		// so backward-compatible consumers observe the authoritative value.
+		d.MirrorDispatchCountToMetadata()
 		tasks = append(tasks, d)
 	}
 	return tasks, rows.Err()
