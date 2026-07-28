@@ -86,6 +86,14 @@ type Server struct {
 	systemCfgStore   store.SystemConfigStore
 	secureCLIStore   store.SecureCLIStore
 
+	// MCP-server self-management for the CRUD MCP server's goclaw_mcp_servers_*
+	// tools. mcpServerStore alone enables them; the manager/pool/OAuth provider
+	// refine live tool listing, pool eviction and OAuth-backed discovery.
+	mcpServerStore store.MCPServerStore
+	mcpManager     *mcpbridge.Manager
+	mcpPool        *mcpbridge.Pool
+	mcpOAuth       mcpbridge.OAuthTokenProvider
+
 	// Phase 3 CRUD MCP server (/api/mcp/) dependencies: chat/LLM/logs/send/voices.
 	llmProviders      *providers.Registry
 	llmDefaults       mcpbridge.LLMDefaults
@@ -333,6 +341,10 @@ func (s *Server) BuildMux() *http.ServeMux {
 			Activity:          s.activityStore,
 			SystemConfigs:     s.systemCfgStore,
 			SecureCLI:         s.secureCLIStore,
+			MCPServers:        s.mcpServerStore,
+			MCPManager:        s.mcpManager,
+			MCPPool:           s.mcpPool,
+			MCPOAuth:          s.mcpOAuth,
 		}, s.version)
 		mux.Handle("/api/mcp/", mcpServerTokenAuthMiddleware(s.cfg.Gateway.MCPServerToken, crudHandler))
 	} else {
@@ -920,6 +932,23 @@ func (s *Server) SetSystemConfigStore(sc store.SystemConfigStore) { s.systemCfgS
 // CRUD MCP server (see internal/mcp/crud_server.go) to expose
 // goclaw_secure_cli_binaries_* tools.
 func (s *Server) SetSecureCLIStore(sc store.SecureCLIStore) { s.secureCLIStore = sc }
+
+// SetMCPServerDeps sets the MCP-server management dependencies, used by the
+// CRUD MCP server (see internal/mcp/crud_mcp_servers.go) to expose
+// goclaw_mcp_servers_* tools. Only servers is required; manager, pool and
+// oauth may each be nil, and the tools degrade accordingly rather than being
+// withheld — see mcpServerCRUDDeps.
+func (s *Server) SetMCPServerDeps(
+	servers store.MCPServerStore,
+	manager *mcpbridge.Manager,
+	pool *mcpbridge.Pool,
+	oauth mcpbridge.OAuthTokenProvider,
+) {
+	s.mcpServerStore = servers
+	s.mcpManager = manager
+	s.mcpPool = pool
+	s.mcpOAuth = oauth
+}
 
 // SetExecApprovalManager sets the exec approval manager, used by the CRUD MCP
 // server (see internal/mcp/crud_server.go) to expose exec approval tools.
