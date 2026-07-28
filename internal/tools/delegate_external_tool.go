@@ -28,6 +28,20 @@ func delegateExecTimeoutSec() int {
 	return 1800
 }
 
+// delegateMemoryMB is the memory ceiling for a delegated connected-agent run.
+// The sandbox default (512 MB) OOM-kills a real coding task (Node runtime +
+// git clone + go build). Default to 1 GB; override with GOCLAW_DELEGATE_MEMORY_MB.
+// NOTE: this must fit the host — a limit larger than available RAM just moves
+// the OOM to the whole instance. Size the staging/prod host accordingly.
+func delegateMemoryMB() int {
+	if v := os.Getenv("GOCLAW_DELEGATE_MEMORY_MB"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 1024
+}
+
 // DelegateExternalTool hands a task to one of the calling agent's CONNECTED
 // external agents (Claude Code, Aider, …) — the specialists a user wires into
 // an agent at creation time (agents.connected_agents). v1 supports the
@@ -251,9 +265,10 @@ func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.Connecte
 	}
 	netCfg.NetworkEnabled = true
 	// A real coding delegation (clone + port + build loop) runs far longer than
-	// the sandbox's default 5-minute exec timeout, which would otherwise kill the
-	// connected agent mid-task and yield no output. Give it a generous window.
+	// the sandbox's default 5-minute exec timeout, and needs more than the default
+	// 512 MB (Node runtime + go build OOM under it). Give it generous limits.
 	netCfg.TimeoutSec = delegateExecTimeoutSec()
+	netCfg.MemoryMB = delegateMemoryMB()
 	sandboxKey := "external:" + conn.ID
 
 	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, &netCfg)
@@ -271,34 +286,22 @@ func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.Connecte
 	}
 	slog.Info("external delegation completed", "provider", conn.Provider, "connection", conn.ID, "exit", result.ExitCode, "events", streamer.eventCount, "stdout_len", len(result.Stdout))
 
-	// exit=-1 means the exec was killed — almost always the time limit. Tell the
-	// caller clearly (an ERROR, not a benign empty result) so it can scope the
-	// task down or retry rather than hunting for output that was never produced.
-	if result.ExitCode == -1 {
-		mins := delegateExecTimeoutSec() / 60
-		return ErrorResult(fmt.Sprintf("the connected agent %q ran past the %d-minute time limit and was stopped before it finished — it produced no result. Give it a smaller, self-contained slice of the work (e.g. one module/package at a time) and delegate again, or raise GOCLAW_DELEGATE_TIMEOUT_SEC.", conn.Name, mins))
-	}
-
-	// Prefer the parsed final answer (from the stream's "result" event); fall back
-	// to raw stdout if the stream didn't yield one (e.g. non-JSON output).
+	// The final answer is the stream's "result" event. If it's missing, the run
+	// didn't finish — classify why so the agent gets an actionable error instead
+	// of a benign empty result (or, worse, a dump of raw stream-json).
 	out := strings.TrimSpace(streamer.finalResult)
 	if out == "" {
-		out = strings.TrimSpace(result.Stdout)
-	}
-	if result.Stderr != "" && result.ExitCode != 0 {
-		out += "\n[stderr]\n" + strings.TrimSpace(result.Stderr)
-	}
-	slog.Info("external delegation completed", "provider", conn.Provider, "connection", conn.ID, "exit", result.ExitCode, "stdout_len", len(result.Stdout))
-
-	// exit=-1 means the exec was killed — almost always the time limit. Tell the
-	// caller clearly (an ERROR, not a benign empty result) so it can scope the
-	// task down or retry rather than hunting for output that was never produced.
-	if result.ExitCode == -1 {
-		mins := delegateExecTimeoutSec() / 60
-		return ErrorResult(fmt.Sprintf("the connected agent %q ran past the %d-minute time limit and was stopped before it finished — it produced no result. Give it a smaller, self-contained slice of the work (e.g. one module/package at a time) and delegate again, or raise GOCLAW_DELEGATE_TIMEOUT_SEC.", conn.Name, mins))
-	}
-	if out == "" {
-		out = "(the connected agent produced no output)"
+		switch result.ExitCode {
+		case -1:
+			mins := delegateExecTimeoutSec() / 60
+			return ErrorResult(fmt.Sprintf("the connected agent %q ran past the %d-minute time limit and was stopped before finishing. Give it a smaller, self-contained slice of the work (one module/package at a time) and delegate again, or raise GOCLAW_DELEGATE_TIMEOUT_SEC.", conn.Name, mins))
+		case 137:
+			return ErrorResult(fmt.Sprintf("the connected agent %q was killed for running out of memory (the sandbox cap is %d MB) before it finished. Give it a smaller slice of the work, or raise GOCLAW_DELEGATE_MEMORY_MB (and ensure the host has the RAM).", conn.Name, delegateMemoryMB()))
+		case 0:
+			return NewResult(fmt.Sprintf("Delegated to %s (%s):\n\n(the connected agent finished but returned no result — after %d steps of activity)", conn.Name, conn.Provider, streamer.eventCount))
+		default:
+			return ErrorResult(fmt.Sprintf("the connected agent %q did not finish (exit %d) after %d steps. stderr: %s", conn.Name, result.ExitCode, streamer.eventCount, truncate(result.Stderr, 400)))
+		}
 	}
 	return NewResult(fmt.Sprintf("Delegated to %s (%s):\n\n%s", conn.Name, conn.Provider, out))
 }
