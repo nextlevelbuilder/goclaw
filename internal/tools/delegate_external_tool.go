@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -61,6 +62,45 @@ func delegateMemoryMB() int {
 		}
 	}
 	return 1024
+}
+
+// delegateMaxConcurrent bounds how many delegated coding runs execute AT ONCE
+// across the whole process. The agent loop happily launches every tool call in
+// one message in parallel, so a fan-out that splits a repo into N chunks would
+// try to run N memory-heavy `go build` sandboxes simultaneously and OOM the
+// host. This cap lets the model split into as many independent chunks as it
+// likes (better load-balancing) while the platform runs only as many at a time
+// as the host RAM allows; the rest queue for a free slot. Size it to
+// host_RAM / GOCLAW_DELEGATE_MEMORY_MB (8 GB host ÷ 3 GB ≈ 3). Override with
+// GOCLAW_DELEGATE_MAX_CONCURRENT.
+func delegateMaxConcurrent() int {
+	if v := os.Getenv("GOCLAW_DELEGATE_MAX_CONCURRENT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 3
+}
+
+// delegateSem is a process-wide semaphore capping concurrent delegated runs.
+// Lazily sized on first use so a test/env override of GOCLAW_DELEGATE_MAX_CONCURRENT
+// is honoured. The host — not any single agent — is the shared resource, so the
+// cap is global rather than per-tool-instance.
+var (
+	delegateSemOnce sync.Once
+	delegateSem     chan struct{}
+)
+
+// acquireDelegateSlot blocks until a concurrency slot is free (or ctx is
+// cancelled), returning a release func to free the slot when the run finishes.
+func acquireDelegateSlot(ctx context.Context) (func(), error) {
+	delegateSemOnce.Do(func() { delegateSem = make(chan struct{}, delegateMaxConcurrent()) })
+	select {
+	case delegateSem <- struct{}{}:
+		return func() { <-delegateSem }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 // DelegateExternalTool hands a task to one of the calling agent's CONNECTED
@@ -306,6 +346,16 @@ func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.Connecte
 	if w := strings.TrimSpace(worker); w != "" {
 		sandboxKey += ":" + sanitizeWorker(w)
 	}
+
+	// Bound how many delegated runs execute at once so a wide fan-out queues
+	// within host capacity instead of OOM-ing the box. Acquired BEFORE creating
+	// the container so queued workers don't even spin one up until they have a
+	// slot. Blocks here if all slots are busy; released when this run finishes.
+	release, err := acquireDelegateSlot(ctx)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("delegation cancelled while waiting for a run slot: %v", err))
+	}
+	defer release()
 
 	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, &netCfg)
 	if err != nil {
