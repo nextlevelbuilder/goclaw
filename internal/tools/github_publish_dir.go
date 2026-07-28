@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -104,51 +105,31 @@ func (t *GithubPublishDirTool) Execute(ctx context.Context, args map[string]any)
 		baseBranch = "main"
 	}
 
-	// The whole flow uses only the curated/granted GitHub tools (get-branch,
-	// create-reference, create-or-update-file, create-pull-request) — the same
-	// ones the agent can call directly — via reg.Execute, which resolves and
-	// activates them (inline or deferred) with the caller's Composio identity.
-
-	// 1) Resolve the base branch's tip commit SHA.
-	brRes := reg.Execute(ctx, composioToolPrefix+"GITHUB_GET_A_BRANCH", map[string]any{
-		"owner": owner, "repo": repo, "branch": baseBranch,
+	// All GitHub work goes through the curated/granted tools via reg.Execute,
+	// which resolves+activates them (inline or deferred) with the caller's
+	// Composio identity.
+	//
+	// Fast path: commit ALL files in ONE commit (which also creates the branch
+	// from base_branch). Writing 100+ files one-by-one takes minutes and overruns
+	// the chat request timeout; a single multi-file commit takes seconds and gives
+	// a clean one-commit PR. Fall back to per-file if the multi-file tool is
+	// unavailable or errors.
+	fast := reg.Execute(ctx, composioToolPrefix+"GITHUB_COMMIT_MULTIPLE_FILES", map[string]any{
+		"owner":       owner,
+		"repo":        repo,
+		"branch":      branch,
+		"base_branch": baseBranch,
+		"message":     commitMsg,
+		"upserts":     upserts,
 	})
-	if brRes == nil || brRes.IsError {
-		return ErrorResult(fmt.Sprintf("couldn't read the base branch %q from GitHub (is GitHub connected for this agent?): %s", baseBranch, resultText(brRes)))
-	}
-	baseSHA := shaRe.FindString(resultText(brRes))
-	if baseSHA == "" {
-		return ErrorResult(fmt.Sprintf("couldn't resolve the tip commit SHA of base branch %q", baseBranch))
-	}
-
-	// 2) Create the new branch off that SHA.
-	refRes := reg.Execute(ctx, composioToolPrefix+"GITHUB_CREATE_A_REFERENCE", map[string]any{
-		"owner": owner, "repo": repo, "ref": "refs/heads/" + branch, "sha": baseSHA,
-	})
-	if refRes == nil || refRes.IsError {
-		return ErrorResult(fmt.Sprintf("couldn't create branch %q (it may already exist — pick a new name): %s", branch, resultText(refRes)))
-	}
-
-	// 3) Write each file onto the new branch (content is raw text; Composio
-	//    encodes it). One commit per file — the curated set has no multi-file
-	//    commit, and this is exactly what works by hand.
-	for i, u := range upserts {
-		path, _ := u["path"].(string)
-		content, _ := u["content"].(string)
-		fileMsg := commitMsg
-		if len(upserts) > 1 {
-			fileMsg = fmt.Sprintf("%s (%d/%d: %s)", commitMsg, i+1, len(upserts), path)
-		}
-		wRes := reg.Execute(ctx, composioToolPrefix+"GITHUB_CREATE_OR_UPDATE_FILE_CONTENTS", map[string]any{
-			"owner": owner, "repo": repo, "branch": branch,
-			"path": path, "message": fileMsg, "content": content,
-		})
-		if wRes == nil || wRes.IsError {
-			return ErrorResult(fmt.Sprintf("created branch %q and wrote %d/%d files, then failed on %q: %s", branch, i, len(upserts), path, resultText(wRes)))
+	if fast == nil || fast.IsError {
+		slog.Info("github_publish_dir: multi-file commit unavailable — falling back to per-file", "detail", truncateStr(resultText(fast), 160))
+		if errMsg := t.publishPerFile(ctx, reg, owner, repo, branch, baseBranch, commitMsg, upserts); errMsg != "" {
+			return ErrorResult(errMsg)
 		}
 	}
 
-	// 4) Open the PR.
+	// Open the PR.
 	prRes := reg.Execute(ctx, composioToolPrefix+"GITHUB_CREATE_A_PULL_REQUEST", map[string]any{
 		"owner": owner,
 		"repo":  repo,
@@ -171,6 +152,45 @@ func (t *GithubPublishDirTool) Execute(ctx context.Context, args map[string]any)
 		msg += "\n" + truncateStr(resultText(prRes), 400)
 	}
 	return NewResult(msg)
+}
+
+// publishPerFile is the fallback publish path: resolve the base branch's tip
+// SHA, create the new branch, then write each file individually. Returns "" on
+// success or an error message. Used when GITHUB_COMMIT_MULTIPLE_FILES isn't
+// available for the caller.
+func (t *GithubPublishDirTool) publishPerFile(ctx context.Context, reg *Registry, owner, repo, branch, baseBranch, commitMsg string, upserts []map[string]any) string {
+	brRes := reg.Execute(ctx, composioToolPrefix+"GITHUB_GET_A_BRANCH", map[string]any{
+		"owner": owner, "repo": repo, "branch": baseBranch,
+	})
+	if brRes == nil || brRes.IsError {
+		return fmt.Sprintf("couldn't read the base branch %q from GitHub (is GitHub connected for this agent?): %s", baseBranch, resultText(brRes))
+	}
+	baseSHA := shaRe.FindString(resultText(brRes))
+	if baseSHA == "" {
+		return fmt.Sprintf("couldn't resolve the tip commit SHA of base branch %q", baseBranch)
+	}
+	refRes := reg.Execute(ctx, composioToolPrefix+"GITHUB_CREATE_A_REFERENCE", map[string]any{
+		"owner": owner, "repo": repo, "ref": "refs/heads/" + branch, "sha": baseSHA,
+	})
+	if refRes == nil || refRes.IsError {
+		return fmt.Sprintf("couldn't create branch %q (it may already exist — pick a new name): %s", branch, resultText(refRes))
+	}
+	for i, u := range upserts {
+		path, _ := u["path"].(string)
+		content, _ := u["content"].(string)
+		fileMsg := commitMsg
+		if len(upserts) > 1 {
+			fileMsg = fmt.Sprintf("%s (%d/%d: %s)", commitMsg, i+1, len(upserts), path)
+		}
+		wRes := reg.Execute(ctx, composioToolPrefix+"GITHUB_CREATE_OR_UPDATE_FILE_CONTENTS", map[string]any{
+			"owner": owner, "repo": repo, "branch": branch,
+			"path": path, "message": fileMsg, "content": content,
+		})
+		if wRes == nil || wRes.IsError {
+			return fmt.Sprintf("created branch %q and wrote %d/%d files, then failed on %q: %s", branch, i, len(upserts), path, resultText(wRes))
+		}
+	}
+	return ""
 }
 
 // resolveDir joins source_dir onto the workspace and guarantees the result stays
