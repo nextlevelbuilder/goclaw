@@ -231,17 +231,22 @@ func (l *Loop) makeBuildFilteredTools(req *RunRequest) func(state *pipeline.RunS
 		// Servers with require_user_credentials are deferred at startup and
 		// connected per-request here with the actual user's credentials.
 		//
-		// Use resolveActorUserID — the gateway consumer rewrites UserID in
-		// two scenarios (group chats AND DM with merged contact), both of
-		// which break per-user MCP credential lookup. ChannelType discriminates
-		// Bitrix24 (always prefer SenderID) from other channels (group-only
-		// rewrite recovery). See resolveActorUserID docstring for full rationale.
-		actorUserID := resolveActorUserID(
-			state.Input.UserID,
-			state.Input.SenderID,
-			state.Input.PeerKind,
-			state.Input.ChannelType,
-		)
+		// Prefer CredentialUserID from context — resolveCredentialUserID already
+		// resolved the merged tenant_user identity (e.g. Telegram group merged
+		// to a tenant_user via UI). Using the raw SenderID or group composite
+		// as the cache key would miss the credential row keyed by the merged
+		// tenant_user UUID. Fall back to resolveActorUserID for channels without
+		// merge resolution (backward compat). See resolveActorUserID docstring
+		// for the group-rewrite recovery rationale.
+		actorUserID := store.CredentialUserIDFromContext(state.Ctx)
+		if actorUserID == "" {
+			actorUserID = resolveActorUserID(
+				state.Input.UserID,
+				state.Input.SenderID,
+				state.Input.PeerKind,
+				state.Input.ChannelType,
+			)
+		}
 		userTools := l.getUserMCPTools(state.Ctx, actorUserID)
 		slog.Debug("mcp.user_tools_context",
 			"peer_kind", state.Input.PeerKind,

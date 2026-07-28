@@ -162,8 +162,13 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 	// tools. Otherwise lookupMCPDescFromUserTools surfaces descriptions from
 	// any user's cache → LLM sees tools it can't actually call (executeToolForActor
 	// scoped to actorUserID returns "tool not found"). Compute actor via
-	// resolveActorUserID — same key the agent loop uses to fetch per-user MCP creds.
-	actorUserID := resolveActorUserID(userID, store.SenderIDFromContext(ctx), peerKind, channelType)
+	// CredentialUserID (merged tenant_user identity) to match the cache key
+	// used by getUserMCPTools. Fall back to resolveActorUserID for channels
+	// without merge resolution.
+	actorUserID := store.CredentialUserIDFromContext(ctx)
+	if actorUserID == "" {
+		actorUserID = resolveActorUserID(userID, store.SenderIDFromContext(ctx), peerKind, channelType)
+	}
 	mcpToolDescs := l.buildMCPToolDescs(toolNames, actorUserID)
 
 	// Bootstrap DM mode: only restrict tools for open agents (identity being created).

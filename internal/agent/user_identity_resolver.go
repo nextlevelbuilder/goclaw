@@ -60,7 +60,17 @@ func (l *Loop) resolveCredentialUserID(ctx context.Context, req RunRequest) stri
 		return req.UserID
 	}
 
-	// Group: try individual sender first (most specific)
+	// Group: try group contact first (group has its own credentials),
+	// fall back to individual sender if no group credential exists.
+	if chatID := extractGroupChatID(req.UserID); chatID != "" && channelType != "" {
+		resolved, err := l.userResolver.ResolveTenantUserID(ctx, channelType, chatID)
+		if err != nil {
+			slog.Debug("credential_resolve.group_contact_failed", "chatID", chatID, "channel", channelType, "error", err)
+		} else if resolved != "" {
+			return resolved
+		}
+	}
+
 	if req.SenderID != "" && channelType != "" {
 		senderNumeric := req.SenderID
 		if idx := strings.IndexByte(senderNumeric, '|'); idx > 0 {
@@ -69,16 +79,6 @@ func (l *Loop) resolveCredentialUserID(ctx context.Context, req RunRequest) stri
 		resolved, err := l.userResolver.ResolveTenantUserID(ctx, channelType, senderNumeric)
 		if err != nil {
 			slog.Debug("credential_resolve.group_sender_failed", "sender", senderNumeric, "channel", channelType, "error", err)
-		} else if resolved != "" {
-			return resolved
-		}
-	}
-
-	// Group: try group contact resolution (group chatID merged to tenant user)
-	if chatID := extractGroupChatID(req.UserID); chatID != "" && channelType != "" {
-		resolved, err := l.userResolver.ResolveTenantUserID(ctx, channelType, chatID)
-		if err != nil {
-			slog.Debug("credential_resolve.group_contact_failed", "chatID", chatID, "channel", channelType, "error", err)
 		} else if resolved != "" {
 			return resolved
 		}

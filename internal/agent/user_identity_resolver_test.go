@@ -62,13 +62,13 @@ func TestResolveCredentialUserID(t *testing.T) {
 			wantUserID: "team-acme@co.com",
 		},
 		{
-			name: "Group: both sender and group merged — sender takes priority",
+			name: "Group: both sender and group merged — group takes priority",
 			req:  RunRequest{UserID: "group:tg:-100456", SenderID: "12345", ChannelType: "telegram", PeerKind: "group"},
 			mergedMap: map[string]string{
 				"telegram:12345":   "john@co.com",
 				"telegram:-100456": "team-acme@co.com",
 			},
-			wantUserID: "john@co.com", // individual > group
+			wantUserID: "team-acme@co.com", // group > individual
 		},
 		{
 			name:       "Group: nobody merged — returns group composite",

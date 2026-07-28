@@ -475,3 +475,127 @@ func TestGetUserMCPToolsNilPoolEarlyReturn(t *testing.T) {
 type errTokenExpiredForTest string
 
 func (e errTokenExpiredForTest) Error() string { return string(e) }
+
+// TestGetUserMCPToolsGroupCredentialResolution verifies that when a Telegram user
+// posts in a group, the group's credentials (CredentialUserID) are used for MCP
+// tool lookup instead of the individual sender's credentials.
+//
+// This is the fix for the calendar event creation bug: the user's calendar email
+// was known but the MCP tools were being looked up with the wrong user ID,
+// causing the tools to appear blocked by system policy.
+func TestGetUserMCPToolsGroupCredentialResolution(t *testing.T) {
+	// Simulate a group chat where the group has its own MCP credentials
+	// (e.g., a Google Calendar MCP server configured for the group).
+	groupID := "group:telegram:-100456"
+	serverID := uuid.New()
+
+	// Track which user ID is used for credential lookup
+	var lookupUserID string
+	st := &trackingMCPServerStore{
+		userCreds: &store.MCPUserCredentials{
+			APIKey:  "group-calendar-api-key",
+			Headers: map[string]string{"Authorization": "Bearer group-calendar-api-key"},
+		},
+		onGetUserCredentials: func(_ context.Context, _ uuid.UUID, userID string) {
+			lookupUserID = userID
+		},
+	}
+
+	pool := newTestPool(t)
+	l := &Loop{
+		tenantID: uuid.New(),
+		mcpPool:  pool,
+		mcpStore: st,
+		mcpUserCredSrvs: []store.MCPAccessInfo{
+			{Server: store.MCPServerData{
+				BaseModel: store.BaseModel{ID: serverID},
+				Name:      "google-calendar",
+				Transport: "http",
+				URL:       "http://127.0.0.1:1",
+			}},
+		},
+	}
+
+	// When CredentialUserID is set in context (resolved group identity),
+	// it should be used for MCP credential lookup.
+	ctx := store.WithCredentialUserID(context.Background(), groupID)
+	_ = l.getUserMCPTools(ctx, groupID)
+
+	if lookupUserID != groupID {
+		t.Errorf("expected MCP credentials looked up with group ID %q, got %q", groupID, lookupUserID)
+	}
+}
+
+// trackingMCPServerStore is a test store that tracks GetUserCredentials calls.
+type trackingMCPServerStore struct {
+	userCreds            *store.MCPUserCredentials
+	onGetUserCredentials func(_ context.Context, _ uuid.UUID, userID string)
+}
+
+func (m *trackingMCPServerStore) GetUserCredentials(_ context.Context, _ uuid.UUID, userID string) (*store.MCPUserCredentials, error) {
+	if m.onGetUserCredentials != nil {
+		m.onGetUserCredentials(context.Background(), uuid.Nil, userID)
+	}
+	return m.userCreds, nil
+}
+
+func (m *trackingMCPServerStore) CreateServer(_ context.Context, _ *store.MCPServerData) error {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) GetServer(_ context.Context, _ uuid.UUID) (*store.MCPServerData, error) {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) GetServerByName(_ context.Context, _ string) (*store.MCPServerData, error) {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) ListServers(_ context.Context) ([]store.MCPServerData, error) {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) UpdateServer(_ context.Context, _ uuid.UUID, _ map[string]any) error {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) DeleteServer(_ context.Context, _ uuid.UUID) error {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) GrantToAgent(_ context.Context, _ *store.MCPAgentGrant) error {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) RevokeFromAgent(_ context.Context, _, _ uuid.UUID) error {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) ListAgentGrants(_ context.Context, _ uuid.UUID) ([]store.MCPAgentGrant, error) {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) ListServerGrants(_ context.Context, _ uuid.UUID) ([]store.MCPAgentGrant, error) {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) GrantToUser(_ context.Context, _ *store.MCPUserGrant) error {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) RevokeFromUser(_ context.Context, _ uuid.UUID, _ string) error {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) CountAgentGrantsByServer(_ context.Context) (map[uuid.UUID]int, error) {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) ListAccessible(_ context.Context, _ uuid.UUID, _ string) ([]store.MCPAccessInfo, error) {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) CreateRequest(_ context.Context, _ *store.MCPAccessRequest) error {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) ListPendingRequests(_ context.Context) ([]store.MCPAccessRequest, error) {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) ReviewRequest(_ context.Context, _ uuid.UUID, _ bool, _, _ string) error {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) SetUserCredentials(_ context.Context, _ uuid.UUID, _ string, _ store.MCPUserCredentials) error {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) DeleteUserCredentials(_ context.Context, _ uuid.UUID, _ string) error {
+	panic("not implemented")
+}
+func (m *trackingMCPServerStore) CacheToolDescriptions(_ context.Context, _ uuid.UUID, _ map[string]store.CachedToolInfo) error {
+	return nil
+}
