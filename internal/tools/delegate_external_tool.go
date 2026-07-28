@@ -33,6 +33,27 @@ func delegateExecTimeoutSec() int {
 // git clone + go build). Default to 1 GB; override with GOCLAW_DELEGATE_MEMORY_MB.
 // NOTE: this must fit the host — a limit larger than available RAM just moves
 // the OOM to the whole instance. Size the staging/prod host accordingly.
+// sanitizeWorker keeps a worker label safe for a docker container name suffix
+// (letters, digits, dash, underscore, dot), capped in length.
+func sanitizeWorker(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
+		}
+		if b.Len() >= 32 {
+			break
+		}
+	}
+	if b.Len() == 0 {
+		return "w"
+	}
+	return b.String()
+}
+
 func delegateMemoryMB() int {
 	if v := os.Getenv("GOCLAW_DELEGATE_MEMORY_MB"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
@@ -100,6 +121,10 @@ func (t *DelegateExternalTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "The task for the connected agent, stated as a complete, self-contained instruction (it does not see this conversation).",
 			},
+			"worker": map[string]any{
+				"type":        "string",
+				"description": "Optional label to run this delegation in its OWN isolated sandbox so it can run in PARALLEL with other delegations to the same connection. Give each concurrent delegation a distinct worker (e.g. \"1\", \"2\", \"engine\", \"detector\"). They still share the workspace, so have each write to a different sub-directory. Omit for a single (non-parallel) delegation.",
+			},
 		},
 		"required": []string{"task"},
 	}
@@ -108,6 +133,7 @@ func (t *DelegateExternalTool) Parameters() map[string]any {
 func (t *DelegateExternalTool) Execute(ctx context.Context, args map[string]any) *Result {
 	task, _ := args["task"].(string)
 	connArg, _ := args["connection"].(string)
+	worker, _ := args["worker"].(string)
 	if strings.TrimSpace(task) == "" {
 		return ErrorResult("task is required")
 	}
@@ -138,7 +164,7 @@ func (t *DelegateExternalTool) Execute(ctx context.Context, args map[string]any)
 
 	switch conn.Kind {
 	case "external_cli", "":
-		return t.runCLI(ctx, conn, task)
+		return t.runCLI(ctx, conn, task, worker)
 	default:
 		return ErrorResult(fmt.Sprintf("connected-agent transport %q is recognised but not dispatched yet (v1 supports external_cli)", conn.Kind))
 	}
@@ -198,7 +224,7 @@ func (t *DelegateExternalTool) injectConnectionCredential(ctx context.Context, c
 // runCLI runs a connected CLI agent inside the sandbox. Network is enabled ONLY
 // for this exec (regular code exec stays --network none); the sandbox container
 // is keyed separately so it never shares the network-isolated exec container.
-func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.ConnectedAgentSpec, task string) *Result {
+func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.ConnectedAgentSpec, task, worker string) *Result {
 	var command []string
 	env := map[string]string{}
 
@@ -269,7 +295,14 @@ func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.Connecte
 	// 512 MB (Node runtime + go build OOM under it). Give it generous limits.
 	netCfg.TimeoutSec = delegateExecTimeoutSec()
 	netCfg.MemoryMB = delegateMemoryMB()
+	// A distinct worker → a distinct sandbox container, so several delegations to
+	// the same connection can run concurrently (the loop already executes 2+ tool
+	// calls in parallel goroutines). Without a worker they share one warm
+	// container. The workspace volume is shared across all of them.
 	sandboxKey := "external:" + conn.ID
+	if w := strings.TrimSpace(worker); w != "" {
+		sandboxKey += ":" + sanitizeWorker(w)
+	}
 
 	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, t.workspace, &netCfg)
 	if err != nil {

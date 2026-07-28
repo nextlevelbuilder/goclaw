@@ -576,7 +576,15 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 					"1. DELEGATE the coding to your connected coding agent with `delegate_external`. Instruct it to: for a PUBLIC repo, clone it (its sandbox has network + git + the Go toolchain); refactor/port the code into a NEW directory under the workspace (e.g. `port/`); run `go build`/tests in a loop until it compiles; and NOT push or open a PR. Ask it to report the workspace-relative directory it wrote the result to.\n"+
 					"   - For a PRIVATE repo the coding agent cannot clone it (no GitHub credentials in its sandbox): first read the source with your own GitHub tools (`GITHUB_GET_A_TREE` + `GITHUB_GET_REPOSITORY_CONTENT`), write it into the workspace, then tell the coding agent that local path to work from.\n"+
 					"2. PUBLISH with `github_publish_dir` (owner, repo, source_dir = the directory the coding agent wrote to, branch, commit_message, pr_title). It commits every file and opens the PR through the user's connected GitHub — no PAT — and returns the PR URL. Report that URL.\n"+
-					"This is the correct way to ship a large refactor: the coding agent compiles the result, and `github_publish_dir` gets it onto GitHub through the user's account.")
+					"This is the correct way to ship a large refactor: the coding agent compiles the result, and `github_publish_dir` gets it onto GitHub through the user's account.\n"+
+						"\n"+
+						"### Faster on a big repo: fan out in parallel\n"+
+						"When the repo is large, split the port across several coding-agent runs that work AT THE SAME TIME (pass a distinct `worker` to each `delegate_external` so each gets its own sandbox; they share the workspace). Shape:\n"+
+						"a. SETUP (one delegation, worker \"setup\"): clone the repo into the workspace, create the target module skeleton (e.g. `port/go.mod` + shared types packages), and produce a plan splitting the source into 2–3 INDEPENDENT chunks (each = packages that don't depend on the others). Report the plan + paths.\n"+
+						"b. PORT IN PARALLEL: in ONE message, issue 2–3 `delegate_external` calls together, each with a distinct `worker` (\"1\",\"2\",\"3\") — each ports its chunk from the shared clone into its OWN sub-directories, building just its packages. Cap at 2–3 concurrent workers (host memory). They run simultaneously.\n"+
+						"c. INTEGRATE (one delegation, worker \"integrate\"): `go build ./...` / tests across the whole target, fixing cross-package seams until it compiles.\n"+
+						"d. PUBLISH once with `github_publish_dir`.\n"+
+						"Only fan out when the chunks are genuinely independent; if unsure, the single sequential delegation above is safer.")
 		}
 
 		if hint := buildChannelFormattingHint(cfg.ChannelType); hint != nil {
