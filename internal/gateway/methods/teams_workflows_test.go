@@ -245,8 +245,8 @@ func TestWorkflowHandlersLocalizePhase8ValidationAcrossFiveLocales(t *testing.T)
 		{i18n.LocaleEN, "invalid teamId ID", "expectedStatus and expectedPlanRevision are required", "invalid workflow action request"},
 		{i18n.LocaleVI, "ID teamId không hợp lệ", "expectedStatus và expectedPlanRevision là bắt buộc", "yêu cầu thao tác workflow không hợp lệ"},
 		{i18n.LocaleZH, "无效的 teamId ID", "expectedStatus 和 expectedPlanRevision 为必填项", "无效的工作流操作请求"},
-		{i18n.LocaleKO, "잘못된 teamId ID", "expectedStatus and expectedPlanRevision are required", "invalid workflow action request"},
-		{i18n.LocaleRU, "неверный ID teamId", "expectedStatus and expectedPlanRevision are required", "invalid workflow action request"},
+		{i18n.LocaleKO, "잘못된 teamId ID", "expectedStatus와 expectedPlanRevision은 필수입니다", "유효하지 않은 워크플로 작업 요청입니다"},
+		{i18n.LocaleRU, "неверный ID teamId", "expectedStatus и expectedPlanRevision обязательны", "недопустимый запрос действия рабочего процесса"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.locale, func(t *testing.T) {
