@@ -22,7 +22,21 @@ type delegateStreamer struct {
 	finalResult  string
 	finalIsError bool
 	eventCount   int
+
+	// partialActive flips true once token-level stream_event deltas start
+	// arriving (--include-partial-messages). While set, the whole-block text
+	// on the assistant event is suppressed — it would duplicate what the
+	// deltas already streamed word-by-word.
+	partialActive bool
+	// textBuf coalesces successive token deltas so we emit a handful of
+	// subagent.chunk events per second instead of one per token — real-time
+	// feel without flooding the socket / re-rendering the UI every character.
+	textBuf strings.Builder
 }
+
+// deltaFlushBytes is the coalescing threshold: buffered narration is flushed
+// once it crosses this many bytes (or at a content-block/newline boundary).
+const deltaFlushBytes = 48
 
 func newDelegateStreamer(ctx context.Context, label string) *delegateStreamer {
 	return &delegateStreamer{
@@ -42,6 +56,20 @@ type streamEvent struct {
 	Message struct {
 		Content []streamContent `json:"content"`
 	} `json:"message"`
+	// Event carries the wrapped Anthropic streaming event when Type is
+	// "stream_event" (--include-partial-messages). Pointer so it's nil for the
+	// message-level event types (assistant/user/result).
+	Event *innerStreamEvent `json:"event"`
+}
+
+// innerStreamEvent is the Anthropic SSE event nested inside a stream_event —
+// content_block_delta (text_delta) is the one we stream token-by-token.
+type innerStreamEvent struct {
+	Type  string `json:"type"` // content_block_delta | content_block_stop | message_stop | …
+	Delta struct {
+		Type string `json:"type"` // text_delta | input_json_delta | thinking_delta
+		Text string `json:"text"`
+	} `json:"delta"`
 }
 
 type streamContent struct {
@@ -67,27 +95,42 @@ func (s *delegateStreamer) onLine(line string) {
 	}
 	s.eventCount++
 	switch ev.Type {
+	case "stream_event":
+		// Token-level delta (--include-partial-messages). Stream narration text
+		// word-by-word for a real-time feel; ignore tool-input json deltas (the
+		// complete tool_use arrives on the assistant event with full args).
+		if e := ev.Event; e != nil && e.Type == "content_block_delta" && e.Delta.Type == "text_delta" {
+			s.partialActive = true
+			s.appendDelta(e.Delta.Text)
+		} else if e != nil && (e.Type == "content_block_stop" || e.Type == "message_stop") {
+			s.flushDelta()
+		}
+		return
 	case "assistant":
+		s.flushDelta() // land any buffered narration before this turn's tool chips
 		for _, c := range ev.Message.Content {
 			switch c.Type {
 			case "tool_use":
 				s.pending[c.ID] = c.Name
 				s.emitCall(c.ID, c.Name, c.Input)
 			case "text":
-				// Stream the connected agent's own narration so the user sees
-				// real progress ("I'll clone the repo…", "build failed, fixing
-				// the import…"), not just a list of tool names. Each stream-json
-				// assistant event carries a full turn's text, so append it.
-				s.emitText(c.Text)
+				// When token deltas are streaming (partialActive), the whole-block
+				// text here is a duplicate of what already streamed — skip it.
+				// Otherwise (older CLI without partial messages) emit the block.
+				if !s.partialActive {
+					s.emitText(c.Text)
+				}
 			}
 		}
 	case "user":
+		s.flushDelta()
 		for _, c := range ev.Message.Content {
 			if c.Type == "tool_result" {
 				s.emitResult(c.ToolUseID, c.IsError, decodeToolResult(c.Content))
 			}
 		}
 	case "result":
+		s.flushDelta()
 		// NOTE: the stream-json "result" event also carries Claude Code's own
 		// token usage/cost. We deliberately do NOT read or report it: Claude Code
 		// runs on the USER'S own Anthropic credential (BYOK), so those tokens are
@@ -112,6 +155,42 @@ func (s *delegateStreamer) emitText(text string) {
 	}
 	s.emit("subagent.chunk", map[string]any{
 		"content":             text + "\n",
+		"parent_tool_call_id": s.parentID,
+		"subagent_id":         s.subagentID,
+		"subagent_label":      s.label,
+	})
+}
+
+// appendDelta buffers a token-level text delta and flushes once the buffer
+// crosses deltaFlushBytes or hits a line break — coalescing per-token events
+// into a smooth handful-per-second stream without re-rendering every character.
+func (s *delegateStreamer) appendDelta(t string) {
+	if t == "" {
+		return
+	}
+	s.textBuf.WriteString(t)
+	if s.textBuf.Len() >= deltaFlushBytes || strings.ContainsRune(t, '\n') {
+		s.flushDelta()
+	}
+}
+
+// flushDelta emits whatever narration has accumulated as one subagent.chunk.
+func (s *delegateStreamer) flushDelta() {
+	if s.textBuf.Len() == 0 {
+		return
+	}
+	s.emitTextRaw(s.textBuf.String())
+	s.textBuf.Reset()
+}
+
+// emitTextRaw streams narration verbatim (no trim / no added newline) — used
+// for the token-delta path where trimming would eat the spaces between words.
+func (s *delegateStreamer) emitTextRaw(text string) {
+	if s.emit == nil || s.parentID == "" || text == "" {
+		return
+	}
+	s.emit("subagent.chunk", map[string]any{
+		"content":             text,
 		"parent_tool_call_id": s.parentID,
 		"subagent_id":         s.subagentID,
 		"subagent_label":      s.label,

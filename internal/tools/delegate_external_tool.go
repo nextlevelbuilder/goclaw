@@ -236,7 +236,10 @@ func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.Connecte
 		// stream-json emits one JSON event per line AS the run progresses (tool
 		// uses, results, final answer), which we tail to stream live progress back
 		// to the user. --verbose is required for stream-json under -p.
-		command = []string{"claude", "-p", task, "--permission-mode", "bypassPermissions", "--output-format", "stream-json", "--verbose"}
+		// --include-partial-messages adds token-level `stream_event` deltas so the
+		// agent's narration streams word-by-word (real-time feel) instead of
+		// arriving as a whole block only after each assistant message completes.
+		command = []string{"claude", "-p", task, "--permission-mode", "bypassPermissions", "--output-format", "stream-json", "--verbose", "--include-partial-messages"}
 		// The sandbox root is read-only; point everything that wants to write to a
 		// config/cache dir at the writable tmpfs. HOME=/tmp lets Claude Code persist
 		// its own state, and the Go env vars let a delegated `go build`/test loop
