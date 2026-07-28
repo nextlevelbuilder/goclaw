@@ -61,6 +61,14 @@ func (l *Loop) resolveRunProviderModel(req *RunRequest) (providers.Provider, str
 // instead of stopping at the default 30-turn cap.
 const browserMaxIterations = 100
 
+// delegateMaxIterations is the think→act ceiling for runs that can delegate to a
+// connected coding agent + publish (the whole-repo port workflow). Such a run
+// legitimately needs many turns — browse the repo, a SETUP delegation, several
+// PARALLEL port workers, an INTEGRATE pass, then PUBLISH — and the default 30
+// was being exhausted before the publish step ran, so the PR never opened. The
+// loop detector + sandbox isolation keep the extra turns runaway-safe.
+const delegateMaxIterations = 100
+
 // unresolvedMaxOutputTokens is the per-call output budget used when the model's
 // real ceiling can't be resolved. Generous on purpose so thinking models have
 // room to reason AND emit text; auto-clamped to the model's real limit at the
@@ -94,6 +102,13 @@ func (l *Loop) effectiveMaxIterations(req *RunRequest) int {
 	maxIter := l.maxIterations
 	if req != nil && req.ClientKind == "extension" && maxIter < browserMaxIterations {
 		maxIter = browserMaxIterations
+	}
+	// Whole-repo port fan-out (delegate_external + github_publish_dir): raise the
+	// ceiling so the run reaches PUBLISH instead of dying at the default 30.
+	if maxIter < delegateMaxIterations && l.tools != nil {
+		if _, ok := l.tools.Get("delegate_external"); ok {
+			maxIter = delegateMaxIterations
+		}
 	}
 	if req != nil && req.MaxIterations > 0 && req.MaxIterations < maxIter {
 		maxIter = req.MaxIterations
