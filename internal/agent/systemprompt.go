@@ -578,13 +578,13 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 					"2. PUBLISH with `github_publish_dir` (owner, repo, source_dir = the directory the coding agent wrote to, branch, commit_message, pr_title). It commits every file and opens the PR through the user's connected GitHub — no PAT — and returns the PR URL. Report that URL.\n"+
 					"This is the correct way to ship a large refactor: the coding agent compiles the result, and `github_publish_dir` gets it onto GitHub through the user's account.\n"+
 						"\n"+
-						"### Faster on a big repo: fan out in parallel\n"+
-						"When the repo is large, split the port across several coding-agent runs that work AT THE SAME TIME (pass a distinct `worker` to each `delegate_external` so each gets its own sandbox; they share the workspace). Shape:\n"+
-						"a. SETUP (one delegation, worker \"setup\"): clone the repo into the workspace, create the target module skeleton (e.g. `port/go.mod` + shared types packages), and produce a plan splitting the source into 2–3 INDEPENDENT chunks (each = packages that don't depend on the others). Report the plan + paths.\n"+
-						"b. PORT IN PARALLEL: in ONE message, issue 2–3 `delegate_external` calls together, each with a distinct `worker` (\"1\",\"2\",\"3\") — each ports its chunk from the shared clone into its OWN sub-directories, building just its packages. Cap at 2–3 concurrent workers (host memory). They run simultaneously.\n"+
+						"### Fan out in parallel — the DEFAULT for a whole-repo port\n"+
+						"For any \"port/refactor the whole repo\" job, DEFAULT to splitting the work across several coding-agent runs that work AT THE SAME TIME — it is much faster and is what the user wants. Do NOT use a single sequential delegation for a whole repo unless it is tiny (a single package / a handful of files). Pass a distinct `worker` to each `delegate_external` so each gets its OWN sandbox; they share the workspace. Shape:\n"+
+						"a. SETUP (one delegation, worker \"setup\"): clone the repo into the workspace, create the target module skeleton (e.g. `port/go.mod` + shared types packages), and produce a plan splitting the source into 2–3 chunks that are as INDEPENDENT as possible (each = packages that mostly don't depend on the others). Report the plan + paths.\n"+
+						"b. PORT IN PARALLEL: in ONE message, issue 2–3 `delegate_external` calls together, each with a distinct `worker` (\"1\",\"2\",\"3\") — each ports its chunk from the shared clone into its OWN sub-directories, building just its packages. Use 2–3 concurrent workers (host memory caps it at ~3). They run simultaneously — this is the whole point, so ALWAYS send them in the same message, never one at a time.\n"+
 						"c. INTEGRATE (one delegation, worker \"integrate\"): `go build ./...` / tests across the whole target, fixing cross-package seams until it compiles.\n"+
 						"d. PUBLISH once with `github_publish_dir`.\n"+
-						"Only fan out when the chunks are genuinely independent; if unsure, the single sequential delegation above is safer.")
+						"Cross-package seams are expected and get fixed in the INTEGRATE step — that is not a reason to avoid splitting. Fall back to a single sequential delegation ONLY for a tiny repo.")
 		}
 
 		if hint := buildChannelFormattingHint(cfg.ChannelType); hint != nil {
