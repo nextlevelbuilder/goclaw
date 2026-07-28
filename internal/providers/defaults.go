@@ -23,12 +23,37 @@ const (
 
 // NewDefaultTransport returns an http.Transport with per-stage timeouts but no
 // overall deadline. The absence of Client.Timeout allows LLM streaming responses
-// (extended thinking, long completions) to run indefinitely while ctx cancellation
-// still terminates the request promptly via CtxBody.
+// (extended thinking, long completions) to run indefinitely once the response has
+// STARTED, while ctx cancellation still terminates the request promptly via
+// CtxBody.
+//
+// Note that ctx cancellation is a user/caller signal here, not a time bound:
+// agent runs get their context from scheduler queue.go via context.WithCancel,
+// so no deadline is attached. The stage timeouts below are therefore the only
+// thing bounding a request that never answers.
 func NewDefaultTransport() *http.Transport {
 	return &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		ResponseHeaderTimeout: 180 * time.Second, // wait for first byte of response (3min for slow providers)
+		Proxy: http.ProxyFromEnvironment,
+		// Wait for the first byte of the response. This bounds a SINGLE attempt;
+		// RetryDo wraps the call with Attempts: 3, so the worst case a caller
+		// observes is ~3x this value, and a workflow step that requeues 3 times
+		// multiplies it again. Keep it modest.
+		//
+		// Raised from 180s after live evidence 2026-07-28: a reasoning model
+		// (claude-opus-5-thinking) emits nothing at all while thinking, so with a
+		// ~110k-token prompt it routinely passed 3 minutes before its first byte.
+		// GoClaw killed the connection and reported "http2: timeout awaiting
+		// response headers" while 9router's own usage log showed the upstream
+		// answering fine moments later (promptTokens=77194 → completionTokens=2789).
+		// The request was healthy; only this deadline was too short.
+		//
+		// Deliberately NOT removed: nothing else bounds an LLM call. The scheduler
+		// builds run contexts with context.WithCancel, not WithTimeout, so there is
+		// no run-level deadline to fall back on — despite what this file's older
+		// comment claimed. Without this timeout a silently dead connection would
+		// hold its scheduler lane until the OS TCP keepalive gave up (~2h), and
+		// requeue could not rescue it because requeue only fires when a run ends.
+		ResponseHeaderTimeout: 300 * time.Second,
 		IdleConnTimeout:       90 * time.Second, // close idle keep-alive connections
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
