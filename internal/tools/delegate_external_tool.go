@@ -2,6 +2,9 @@ package tools
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,7 +15,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/cliagent"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -127,19 +130,21 @@ func acquireDelegateSlot(ctx context.Context) (func(), error) {
 	}
 }
 
-// DelegateExternalTool hands a task to one of the calling agent's CONNECTED
-// external agents (Claude Code, Aider, …) — the specialists a user wires into
-// an agent at creation time (agents.connected_agents). v1 supports the
-// external_cli transport: run the connected agent's CLI inside the sandbox.
-// MCP / A2A / HTTP transports are recognised but not yet dispatched.
+// DelegateExternalTool hands a task to one of the CONNECTED external agents
+// (Claude Code, Aider, …) available to the tenant — the specialists a user
+// connects once under Connections and every agent in the tenant can use. v1
+// supports the external_cli transport: run the connected agent's CLI inside the
+// sandbox. MCP / A2A / HTTP transports are recognised but not yet dispatched.
 type DelegateExternalTool struct {
-	agents     store.AgentCRUDStore
 	sandboxMgr sandbox.Manager
 	workspace  string
-	// creds holds per-connection BYOK credentials (a user's own API key or
-	// subscription OAuth token). Resolved first; the platform creds below are the
-	// fallback. May be nil (e.g. desktop/SQLite) → always fall back to platform.
-	creds store.ConnectedAgentCredentialStore
+	// cliConns is the TENANT-level connection catalogue (migration 000082) and is
+	// the only source of truth: any agent in the tenant may delegate to any
+	// enabled connection, with no per-agent wiring. It also holds the per-user
+	// BYOK credentials (a user's own API key or subscription OAuth token), which
+	// are resolved first; the platform creds below are the fallback. May be nil on
+	// a deployment without the catalogue → delegation is unavailable.
+	cliConns store.CLIConnectionStore
 	// Platform Anthropic credentials, used when a connection has no credential
 	// of its own. Either may be empty; at least one is required to run Claude
 	// Code. When both are set the OAuth token (subscription billing) is
@@ -153,14 +158,13 @@ type DelegateExternalTool struct {
 }
 
 // NewDelegateExternalTool wires the tool. sandboxMgr may be nil (no sandbox →
-// external delegation returns a clear error rather than crashing). creds may be
-// nil (per-connection BYOK unavailable → platform fallback only).
-func NewDelegateExternalTool(agents store.AgentCRUDStore, sandboxMgr sandbox.Manager, workspace string, creds store.ConnectedAgentCredentialStore, anthropicKey, anthropicOAuthToken, githubToken string) *DelegateExternalTool {
+// external delegation returns a clear error rather than crashing). cliConns may
+// be nil (no connection catalogue → delegation returns a clear error).
+func NewDelegateExternalTool(sandboxMgr sandbox.Manager, workspace string, cliConns store.CLIConnectionStore, anthropicKey, anthropicOAuthToken, githubToken string) *DelegateExternalTool {
 	return &DelegateExternalTool{
-		agents:              agents,
 		sandboxMgr:          sandboxMgr,
 		workspace:           workspace,
-		creds:               creds,
+		cliConns:            cliConns,
 		anthropicKey:        anthropicKey,
 		anthropicOAuthToken: anthropicOAuthToken,
 		githubToken:         githubToken,
@@ -170,7 +174,7 @@ func NewDelegateExternalTool(agents store.AgentCRUDStore, sandboxMgr sandbox.Man
 func (t *DelegateExternalTool) Name() string { return "delegate_external" }
 
 func (t *DelegateExternalTool) Description() string {
-	return "Hand a self-contained task to one of THIS agent's connected external agents — specialists wired into the agent at creation time (e.g. Claude Code for software engineering). Runs the connected agent and returns its result. Use it when the work squarely fits a connected specialist; otherwise do the work yourself."
+	return "Hand a self-contained task to one of the connected external agents available to this workspace — specialists connected once and shared by every agent (e.g. Claude Code for software engineering). Runs the connected agent and returns its result. Use it when the work squarely fits a connected specialist; otherwise do the work yourself."
 }
 
 func (t *DelegateExternalTool) Parameters() map[string]any {
@@ -205,25 +209,9 @@ func (t *DelegateExternalTool) Execute(ctx context.Context, args map[string]any)
 		return ErrorResult("external delegation requires a sandbox, which is not configured on this deployment")
 	}
 
-	agentID := store.AgentIDFromContext(ctx)
-	if agentID == uuid.Nil {
-		return ErrorResult("no calling agent in context — cannot resolve connected agents")
-	}
-	agent, err := t.agents.GetByID(ctx, agentID)
-	if err != nil || agent == nil {
-		return ErrorResult("could not load the calling agent's configuration")
-	}
-	conns := agent.ParseConnectedAgents()
-	if len(conns) == 0 {
-		return ErrorResult("this agent has no connected agents — add one on the agent's \"Connected agents\" section first")
-	}
-	conn := findConnection(conns, connArg)
-	if conn == nil {
-		names := make([]string, 0, len(conns))
-		for i := range conns {
-			names = append(names, conns[i].Name)
-		}
-		return ErrorResult(fmt.Sprintf("no connected agent matches %q — available: %s", connArg, strings.Join(names, ", ")))
+	conn, errMsg := t.resolveConnection(ctx, connArg)
+	if errMsg != "" {
+		return ErrorResult(errMsg)
 	}
 
 	switch conn.Kind {
@@ -234,21 +222,118 @@ func (t *DelegateExternalTool) Execute(ctx context.Context, args map[string]any)
 	}
 }
 
-// findConnection matches by id, name, or provider (case-insensitive). If the
-// agent has exactly one connection and no arg is given, that one is used.
-func findConnection(conns []config.ConnectedAgentSpec, arg string) *config.ConnectedAgentSpec {
-	arg = strings.TrimSpace(arg)
-	if arg == "" && len(conns) == 1 {
-		return &conns[0]
+// resolvedConn is a connection resolved from the tenant catalogue, normalised so
+// the run path doesn't need the store row.
+type resolvedConn struct {
+	ID       string    // stable identity used for sandbox keying
+	UUID     uuid.UUID // the catalogue row id
+	Name     string
+	Provider string
+	Kind     string
+	// Config is the connection's provider-specific overlay. It lets a wrong
+	// built-in default (an argv flag, a credential env var) be corrected per
+	// connection without a redeploy — see cliagent.Resolve.
+	Config json.RawMessage
+}
+
+// resolveConnection finds the connection to delegate to. The TENANT catalogue is
+// the only source: any agent may use any enabled connection, so a CLI connected
+// once is usable everywhere. Returns a user-facing message as the second value
+// on failure.
+func (t *DelegateExternalTool) resolveConnection(ctx context.Context, connArg string) (*resolvedConn, string) {
+	if t.cliConns == nil {
+		return nil, "connected agents are not available on this deployment"
 	}
-	for i := range conns {
-		c := &conns[i]
-		if strings.EqualFold(c.ID, arg) || strings.EqualFold(c.Name, arg) || strings.EqualFold(c.Provider, arg) {
+
+	tenantID := store.TenantIDFromContext(ctx)
+	var tenantPtr *uuid.UUID
+	if tenantID != uuid.Nil {
+		tenantPtr = &tenantID
+	}
+	// enabledOnly: a disabled connection must not be reachable by delegation.
+	list, err := t.cliConns.ListForTenant(ctx, tenantPtr, true)
+	if err != nil {
+		slog.Warn("delegate_external: tenant connection lookup failed", "error", err)
+		return nil, "could not look up the available connected agents — try again"
+	}
+	if c := matchCLIConnection(list, connArg); c != nil {
+		return &resolvedConn{
+			ID: c.ID.String(), UUID: c.ID, Name: c.Name,
+			Provider: c.Provider, Kind: c.Kind, Config: c.Config,
+		}, ""
+	}
+
+	available := make([]string, 0, len(list))
+	for i := range list {
+		available = append(available, list[i].Name)
+	}
+	if len(available) == 0 {
+		return nil, "no connected agents are available — connect one (e.g. Claude Code) under Connections first"
+	}
+	return nil, fmt.Sprintf("no connected agent matches %q — available: %s", connArg, strings.Join(available, ", "))
+}
+
+// maxSandboxKeyLen mirrors the hard truncation in sandbox.sanitizeKey (docker.go):
+// container keys longer than this are CUT, keeping the prefix. Exceeding it is
+// silently destructive rather than an error — a key whose distinguishing suffix
+// (the worker label) falls past the cut collapses every parallel worker into ONE
+// shared container, disabling the fan-out without any visible failure. Any change
+// to buildSandboxKey must keep the result within this budget; TestSandboxKey
+// enforces it.
+const maxSandboxKeyLen = 50
+
+// buildSandboxKey composes the container identity for a delegated run. It must
+// distinguish, in this order of importance:
+//   - tenant + user — connections are tenant-global and their credentials are
+//     per-user, so sharing a warm container across either would leak one user's
+//     authenticated CLI session (the container persists HOME=/tmp between runs).
+//   - connection — different CLIs must not share a container.
+//   - worker — the parallel fan-out relies on one container per worker.
+//
+// Kept deliberately compact to fit maxSandboxKeyLen: the tenant+user pair is
+// folded into an 8-hex digest (isolation without length), while the connection
+// keeps a readable prefix so a container name is still recognisable when
+// debugging on the host.
+func buildSandboxKey(ctx context.Context, connID, worker string) string {
+	scope := "t0-u0"
+	tenant := store.TenantIDFromContext(ctx)
+	user := strings.TrimSpace(store.UserIDFromContext(ctx))
+	if tenant != uuid.Nil || user != "" {
+		sum := sha256.Sum256([]byte(tenant.String() + "|" + user))
+		scope = hex.EncodeToString(sum[:4]) // 8 hex chars
+	}
+
+	conn := sanitizeWorker(connID)
+	if len(conn) > 8 {
+		conn = conn[:8]
+	}
+
+	key := "ext:" + scope + ":" + conn
+	if w := strings.TrimSpace(worker); w != "" {
+		ws := sanitizeWorker(w)
+		if len(ws) > 16 {
+			ws = ws[:16]
+		}
+		key += ":" + ws
+	}
+	return key
+}
+
+// matchCLIConnection matches by id, name, or provider (case-insensitive). With
+// exactly one connection and no argument, that one is used.
+func matchCLIConnection(list []store.CLIConnection, arg string) *store.CLIConnection {
+	arg = strings.TrimSpace(arg)
+	if arg == "" {
+		if len(list) == 1 {
+			return &list[0]
+		}
+		return nil
+	}
+	for i := range list {
+		c := &list[i]
+		if strings.EqualFold(c.ID.String(), arg) || strings.EqualFold(c.Name, arg) || strings.EqualFold(c.Provider, arg) {
 			return c
 		}
-	}
-	if arg == "" && len(conns) == 1 {
-		return &conns[0]
 	}
 	return nil
 }
@@ -257,93 +342,88 @@ func findConnection(conns []config.ConnectedAgentSpec, arg string) *config.Conne
 // any) and injects it into env per its descriptor. Returns true when a usable
 // credential was applied; false → the caller falls back to the platform
 // credential. Never returns the secret to the caller.
-func (t *DelegateExternalTool) injectConnectionCredential(ctx context.Context, conn *config.ConnectedAgentSpec, env map[string]string) bool {
-	if t.creds == nil {
+func (t *DelegateExternalTool) injectConnectionCredential(ctx context.Context, conn *resolvedConn, spec cliagent.Spec, env map[string]string) bool {
+	if t.cliConns == nil {
 		return false
 	}
-	agentID := store.AgentIDFromContext(ctx)
-	if agentID == uuid.Nil {
-		return false
-	}
-	cred, err := t.creds.Get(ctx, agentID, conn.ID)
+	// The credential is per-USER, so the acting user's own key/token is preferred
+	// and the tenant-shared row is the fallback (that resolution happens inside
+	// the store).
+	cred, err := t.cliConns.GetCredential(ctx, conn.UUID, store.UserIDFromContext(ctx))
 	if err != nil {
-		slog.Warn("security.connected_agent_credential_load_failed", "connection", conn.ID, "error", err)
+		slog.Warn("security.cli_connection_credential_load_failed", "connection", conn.ID, "error", err)
 		return false
 	}
 	if cred == nil || cred.Secret == "" {
 		return false
 	}
-	kind, target, ok := strings.Cut(cred.Inject, ":")
-	if ok && kind == "env" && target != "" {
-		env[target] = cred.Secret
-		return true
+	// The spec decides WHERE the secret goes: the stored env:VAR descriptor wins,
+	// otherwise the provider's preferred credential env var. It never logs or
+	// returns the secret.
+	if err := spec.ApplyCredential(cred.Secret, cred.Inject, env); err != nil {
+		// e.g. the still-unwired file:PATH form — fall back to a platform
+		// credential rather than failing the run outright.
+		slog.Warn("connected-agent credential could not be injected",
+			"connection", conn.ID, "provider", conn.Provider, "error", err)
+		return false
 	}
-	// file:PATH injection (for file-based CLIs like Codex/Gemini) is not wired
-	// yet; fall back to a platform credential rather than failing the run.
-	slog.Warn("connected-agent credential injection descriptor not supported yet",
-		"connection", conn.ID, "inject", cred.Inject)
-	return false
+	return true
 }
 
 // runCLI runs a connected CLI agent inside the sandbox. Network is enabled ONLY
 // for this exec (regular code exec stays --network none); the sandbox container
 // is keyed separately so it never shares the network-isolated exec container.
-func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.ConnectedAgentSpec, task, worker string) *Result {
-	var command []string
-	env := map[string]string{}
+func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *resolvedConn, task, worker string) *Result {
+	// Resolve the provider's invocation from the adapter layer: a built-in default
+	// overlaid by this connection's config. Keeping it data rather than a switch
+	// means an unfamiliar CLI can be connected, and a wrong built-in flag can be
+	// corrected, without touching this code.
+	spec, err := cliagent.Resolve(conn.Provider, conn.Config)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("connected agent %q cannot be run: %v", conn.Name, err))
+	}
+	command, err := spec.Command(task, cliagent.PermissionAuto)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("connected agent %q cannot be run: %v", conn.Name, err))
+	}
 
-	switch strings.ToLower(conn.Provider) {
-	case "claude_code", "claude", "claudecode":
-		// Headless, auto-approve inside the isolated sandbox. Plain-text output.
-		// NOTE: not --bare, so CLAUDE_CODE_OAUTH_TOKEN is honoured (bare mode
-		// ignores it and requires ANTHROPIC_API_KEY).
-		// stream-json emits one JSON event per line AS the run progresses (tool
-		// uses, results, final answer), which we tail to stream live progress back
-		// to the user. --verbose is required for stream-json under -p.
-		// --include-partial-messages adds token-level `stream_event` deltas so the
-		// agent's narration streams word-by-word (real-time feel) instead of
-		// arriving as a whole block only after each assistant message completes.
-		command = []string{"claude", "-p", task, "--permission-mode", "bypassPermissions", "--output-format", "stream-json", "--verbose", "--include-partial-messages"}
-		// The sandbox root is read-only; point everything that wants to write to a
-		// config/cache dir at the writable tmpfs. HOME=/tmp lets Claude Code persist
-		// its own state, and the Go env vars let a delegated `go build`/test loop
-		// work (the Go toolchain otherwise writes its cache under ~/.cache and its
-		// module cache under ~/go, both read-only here). Verified: with these,
-		// Claude Code compiles Go in the locked-down sandbox.
-		env["HOME"] = "/tmp"
-		env["GOCACHE"] = "/tmp/go-build"
-		env["GOPATH"] = "/tmp/go"
-		env["GOMODCACHE"] = "/tmp/go/pkg/mod"
-		// Credential resolution, in order:
-		//   1. per-connection BYOK credential (the user's own key/token)
-		//   2. platform subscription OAuth token (GOCLAW_ANTHROPIC_OAUTH_TOKEN)
-		//   3. platform API key (GOCLAW_ANTHROPIC_API_KEY)
-		// We inject exactly ONE credential per exec: the CLI's own precedence has
-		// ANTHROPIC_API_KEY beating CLAUDE_CODE_OAUTH_TOKEN, so setting more than
-		// one would make the choice implicit. NOTE: not --bare, so the OAuth token
-		// env var is honoured (bare mode ignores it).
-		switch {
-		case t.injectConnectionCredential(ctx, conn, env):
-			// used the connection's own credential
-		case t.anthropicOAuthToken != "":
-			env["CLAUDE_CODE_OAUTH_TOKEN"] = t.anthropicOAuthToken
-		case t.anthropicKey != "":
-			env["ANTHROPIC_API_KEY"] = t.anthropicKey
-		default:
-			return ErrorResult("Claude Code needs an Anthropic credential — connect the agent with your Anthropic API key or a \"Log in with Claude\" subscription, or set a platform credential (GOCLAW_ANTHROPIC_OAUTH_TOKEN / GOCLAW_ANTHROPIC_API_KEY)")
-		}
-		// Give the delegated agent GitHub write access (clone/push/open PR) when a
-		// token is configured. GH_TOKEN powers `gh`; the env-only git credential
-		// helper powers `git` (the sandbox root is read-only, so no ~/.gitconfig).
-		if t.githubToken != "" {
-			env["GH_TOKEN"] = t.githubToken
-			env["GITHUB_TOKEN"] = t.githubToken
-			env["GIT_CONFIG_COUNT"] = "1"
-			env["GIT_CONFIG_KEY_0"] = "credential.https://github.com.helper"
-			env["GIT_CONFIG_VALUE_0"] = `!f() { echo username=x-access-token; echo password=$GH_TOKEN; }; f`
-		}
+	// Static env from the spec — for Claude Code this is HOME=/tmp plus the Go
+	// cache/module paths, without which a delegated `go build` fails against the
+	// read-only sandbox root.
+	env := map[string]string{}
+	for k, v := range spec.Env {
+		env[k] = v
+	}
+
+	// Credential resolution, in order:
+	//   1. the connection's own per-user BYOK credential
+	//   2. platform subscription OAuth token (Anthropic-only)
+	//   3. platform API key (Anthropic-only)
+	// Exactly ONE credential is injected: some CLIs have their own precedence
+	// between accepted env vars, so setting several would make the choice implicit.
+	switch {
+	case t.injectConnectionCredential(ctx, conn, spec, env):
+		// used the connection's own credential
+	case cliagent.CanonicalProvider(conn.Provider) == "claude_code" && t.anthropicOAuthToken != "":
+		env["CLAUDE_CODE_OAUTH_TOKEN"] = t.anthropicOAuthToken
+	case cliagent.CanonicalProvider(conn.Provider) == "claude_code" && t.anthropicKey != "":
+		env["ANTHROPIC_API_KEY"] = t.anthropicKey
 	default:
-		return ErrorResult(fmt.Sprintf("connected CLI provider %q is not available in the sandbox yet", conn.Provider))
+		// No platform fallback exists for non-Anthropic CLIs, so say what to do
+		// rather than letting the CLI fail with its own opaque auth error.
+		return ErrorResult(fmt.Sprintf("%s has no credential — open Connections and add an API key for it (or use \"Log in with Claude\" where supported)", conn.Name))
+	}
+
+	// Give the delegated agent GitHub write access (clone/push/open PR) when a
+	// token is configured. GH_TOKEN powers `gh`; the env-only git credential
+	// helper powers `git` (the sandbox root is read-only, so no ~/.gitconfig).
+	// Provider-agnostic: every coding CLI benefits.
+	if t.githubToken != "" {
+		env["GH_TOKEN"] = t.githubToken
+		env["GITHUB_TOKEN"] = t.githubToken
+		env["GIT_CONFIG_COUNT"] = "1"
+		env["GIT_CONFIG_KEY_0"] = "credential.https://github.com.helper"
+		env["GIT_CONFIG_VALUE_0"] = `!f() { echo username=x-access-token; echo password=$GH_TOKEN; }; f`
 	}
 
 	// Network-enabled sandbox config for this exec only, dedicated container key.
@@ -366,10 +446,10 @@ func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.Connecte
 	// the same connection can run concurrently (the loop already executes 2+ tool
 	// calls in parallel goroutines). Without a worker they share one warm
 	// container. The workspace volume is shared across all of them.
-	sandboxKey := "external:" + conn.ID
-	if w := strings.TrimSpace(worker); w != "" {
-		sandboxKey += ":" + sanitizeWorker(w)
-	}
+	// Sandbox identity spans tenant + user + connection + worker — see
+	// buildSandboxKey for why each component is required and why the key must stay
+	// short.
+	sandboxKey := buildSandboxKey(ctx, conn.ID, worker)
 
 	// Bound how many delegated runs execute at once so a wide fan-out queues
 	// within host capacity instead of OOM-ing the box. Acquired BEFORE creating
@@ -390,7 +470,11 @@ func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.Connecte
 	// line as it arrives, emits tool.call/tool.result chips under this delegation's
 	// card, and captures the final "result" event as the delegation's output.
 	streamer := newDelegateStreamer(ctx, conn.Name)
-	result, err := sb.Exec(ctx, command, "", sandbox.WithEnv(env), sandbox.WithStdoutLine(streamer.onLine))
+	onLine, finishStream := streamer.lineHandler(spec.Output)
+	result, err := sb.Exec(ctx, command, "", sandbox.WithEnv(env), sandbox.WithStdoutLine(onLine))
+	// Flush whatever the parser is still holding — matters most when the run was
+	// killed at the timeout/OOM, where the last narration would otherwise be lost.
+	finishStream()
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("connected agent %q failed to run: %v", conn.Name, err))
 	}

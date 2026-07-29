@@ -46,7 +46,8 @@ type AgentsHandler struct {
 	msgBus           *bus.MessageBus                     // for cache invalidation events (nil = no events)
 	summoner         *AgentSummoner                      // LLM-based agent setup (nil = disabled)
 	isOwner          func(string) bool                   // checks if user ID is a system owner (nil = no owners configured)
-	credStore        store.ConnectedAgentCredentialStore // per-connection BYOK creds (nil = feature off)
+	credStore        store.ConnectedAgentCredentialStore // superseded per-agent BYOK creds; kept wired for rollback only
+	cliConns         store.CLIConnectionStore            // tenant-level CLI connections + per-user creds (nil = feature off)
 	sandboxMgr       sandbox.Manager                     // for "Log in with Claude" (nil = login disabled)
 	sandboxWorkspace string                              // workspace path for login containers
 }
@@ -84,11 +85,20 @@ func (h *AgentsHandler) SetEpisodicStore(ep store.EpisodicStore) {
 	h.episodicStore = ep
 }
 
-// SetConnectedAgentCredentialStore attaches the encrypted per-connection
-// credential store (BYOK). nil is safe — the credential endpoints then return
-// 501 and delegate_external falls back to the platform credential.
+// SetConnectedAgentCredentialStore attaches the encrypted per-agent connection
+// credential store (BYOK). The per-agent connection endpoints it served were
+// superseded by the tenant-level ones in connections.go, so nothing reads it
+// today — it stays wired so a rollback of that switch has its read path intact,
+// and is dropped together with the connected_agent_credentials table.
 func (h *AgentsHandler) SetConnectedAgentCredentialStore(cs store.ConnectedAgentCredentialStore) {
 	h.credStore = cs
+}
+
+// SetCLIConnectionStore attaches the tenant-level CLI connection store
+// (migration 000082) that backs /v1/connections. nil is safe — those endpoints
+// then return 501.
+func (h *AgentsHandler) SetCLIConnectionStore(cs store.CLIConnectionStore) {
+	h.cliConns = cs
 }
 
 // SetSandbox attaches the sandbox manager + workspace used by the "Log in with
@@ -161,13 +171,24 @@ func (h *AgentsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/agents/{id}/shares", h.authMiddleware(h.handleListShares))
 	mux.HandleFunc("POST /v1/agents/{id}/shares", h.adminMiddleware(h.handleShare))
 	mux.HandleFunc("DELETE /v1/agents/{id}/shares/{userID}", h.adminMiddleware(h.handleRevokeShare))
-	// Connected-agent credentials (BYOK) — admin+; secret write, never returned
-	mux.HandleFunc("GET /v1/agents/{id}/connections/credentials", h.authMiddleware(h.handleListConnectionCredentials))
-	mux.HandleFunc("PUT /v1/agents/{id}/connections/{connID}/credential", h.adminMiddleware(h.handleSetConnectionCredential))
-	mux.HandleFunc("DELETE /v1/agents/{id}/connections/{connID}/credential", h.adminMiddleware(h.handleDeleteConnectionCredential))
-	// "Log in with Claude" (subscription OAuth) — admin+; two-phase login
-	mux.HandleFunc("POST /v1/agents/{id}/connections/{connID}/login", h.adminMiddleware(h.handleStartConnectionLogin))
-	mux.HandleFunc("POST /v1/agents/{id}/connections/{connID}/login/code", h.adminMiddleware(h.handleSubmitConnectionLoginCode))
+	// ── Tenant-level CLI connections (migration 000082) ────────────────────────
+	// A connection belongs to the TENANT and every agent in it can delegate to
+	// the connection. Reads are viewer+ and return the tenant's rows plus global
+	// ones; writes are admin+. BYOK credentials are scoped to the ACTING USER and
+	// never returned. Implemented in connections.go / connections_login.go.
+	// (The superseded per-agent /v1/agents/{id}/connections/... routes were
+	// removed once the frontend moved to these.)
+	mux.HandleFunc("GET /v1/connections", h.authMiddleware(h.handleListConnections))
+	mux.HandleFunc("POST /v1/connections", h.adminMiddleware(h.handleCreateConnection))
+	mux.HandleFunc("GET /v1/connections/credentials", h.authMiddleware(h.handleListCLIConnectionCredentials))
+	mux.HandleFunc("PUT /v1/connections/{id}", h.adminMiddleware(h.handleUpdateConnection))
+	mux.HandleFunc("DELETE /v1/connections/{id}", h.adminMiddleware(h.handleDeleteConnection))
+	mux.HandleFunc("PUT /v1/connections/{id}/credential", h.adminMiddleware(h.handleSetCLIConnectionCredential))
+	mux.HandleFunc("DELETE /v1/connections/{id}/credential", h.adminMiddleware(h.handleDeleteCLIConnectionCredential))
+	// "Log in with Claude" for a tenant connection — two-phase, per-user token.
+	mux.HandleFunc("POST /v1/connections/{id}/login", h.adminMiddleware(h.handleStartConnectionLoginForConnection))
+	mux.HandleFunc("POST /v1/connections/{id}/login/code", h.adminMiddleware(h.handleSubmitConnectionLoginCodeForConnection))
+
 	// Agent operations (admin+)
 	mux.HandleFunc("POST /v1/agents/{id}/regenerate", h.adminMiddleware(h.handleRegenerate))
 	mux.HandleFunc("POST /v1/agents/{id}/resummon", h.adminMiddleware(h.handleResummon))
@@ -633,22 +654,6 @@ func (h *AgentsHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	// Sync display_name change into IDENTITY.md so the agent self-reports the new name.
 	if newName, ok := allowed["display_name"].(string); ok && newName != "" {
 		h.syncIdentityName(r.Context(), ag, newName)
-	}
-
-	// Cascade: if the connections changed, delete stored credentials for any
-	// connection that was removed. The secret lives outside connected_agents
-	// (in the credential store), so without this it would orphan on disconnect.
-	if h.credStore != nil {
-		if rawNew, ok := allowed["connected_agents"]; ok {
-			newIDs := connectedAgentIDsFromAny(rawNew)
-			for _, c := range ag.ParseConnectedAgents() { // ag = pre-update state
-				if _, kept := newIDs[c.ID]; !kept {
-					if err := h.credStore.Delete(r.Context(), id, c.ID); err != nil {
-						slog.Warn("connected_agent_credential_cascade_delete_failed", "agent", id, "connection", c.ID, "error", err)
-					}
-				}
-			}
-		}
 	}
 
 	// Invalidate caches: agent Loop + bootstrap files

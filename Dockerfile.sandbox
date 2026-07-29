@@ -37,7 +37,7 @@ RUN pip3 install --break-system-packages --no-cache-dir \
 
 # Node.js + connected external-agent CLIs. Installed globally as root so the
 # sandbox user can invoke them. Claude Code is the first connected agent; add
-# other CLIs (aider, codex, gemini-cli, …) here as they're supported. These
+# other CLIs (aider, codex, gemini-cli — installed best-effort just below) These
 # only reach their APIs when the sandbox exec has network enabled (the
 # delegate_external path) — regular code exec stays --network none.
 RUN set -eux; \
@@ -49,6 +49,23 @@ RUN set -eux; \
   node --version; npm --version; \
   npm install -g @anthropic-ai/claude-code; \
   npm cache clean --force
+
+# Additional coding CLIs a connection may select (internal/cliagent knows how to
+# invoke each). They are installed BEST-EFFORT and individually: a package that
+# has been renamed or yanked upstream must not fail the whole image build and take
+# Claude Code — the provider that actually works — down with it. A missing binary
+# surfaces later as a clear "not available in the sandbox" error for that one
+# connection, which is the honest failure mode.
+RUN set -eux; \
+  for pkg in @openai/codex @google/gemini-cli; do \
+    npm install -g "$pkg" || echo "WARN: optional CLI $pkg not installed"; \
+  done; \
+  npm cache clean --force; \
+  pip3 install --break-system-packages --no-cache-dir aider-chat \
+    || echo "WARN: optional CLI aider-chat not installed"; \
+  for bin in claude codex gemini aider; do \
+    printf '%s: ' "$bin"; command -v "$bin" || echo "(absent)"; \
+  done
 
 # Go toolchain — so a delegated agent (Claude Code) can `go build`/test its
 # refactor in a loop inside the sandbox before the result is pushed. Fetched

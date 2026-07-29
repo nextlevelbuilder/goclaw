@@ -213,6 +213,14 @@ func isWriteMethod(method string) bool {
 		protocol.MethodTeamsTaskComment,
 		protocol.MethodTeamsTaskCreate,
 		protocol.MethodTeamsTaskAssign,
+		// Tenant-level CLI connections: mutations need operator+, while
+		// connections.list stays viewer-readable — so the write methods are
+		// listed individually rather than adding a bare "connections." prefix,
+		// which would also gate the read.
+		protocol.MethodConnectionsCreate,
+		protocol.MethodConnectionsUpdate,
+		protocol.MethodConnectionsDelete,
+		"connections.credential.",
 	}
 	for _, prefix := range writePrefixes {
 		if strings.HasPrefix(method, prefix) {

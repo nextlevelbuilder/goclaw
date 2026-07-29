@@ -2,20 +2,15 @@ package http
 
 import (
 	"context"
-	"encoding/json"
-	"log/slog"
-	"net/http"
 	"regexp"
 	"strings"
 
-	"github.com/google/uuid"
-
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
-	"github.com/nextlevelbuilder/goclaw/internal/store"
-	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
-// "Log in with Claude" (subscription OAuth) for a connected Claude Code agent.
+// Shared "Log in with Claude" (subscription OAuth) machinery. The HTTP handlers
+// that drive it live in connections_login.go (tenant-level connections); the
+// superseded per-agent handlers that used to live here were removed.
 //
 // The real `claude setup-token` OAuth flow is driven INSIDE a per-connection
 // sandbox (the user's own Claude Code on a remote machine they control — the
@@ -36,153 +31,6 @@ const loginSandboxKeyPrefix = "external-login:"
 
 type submitLoginCodeRequest struct {
 	Code string `json:"code"`
-}
-
-// handleStartConnectionLogin runs phase 1 and returns the authorization URL.
-func (h *AgentsHandler) handleStartConnectionLogin(w http.ResponseWriter, r *http.Request) {
-	conn, agentID, ok := h.loginPreflight(w, r)
-	if !ok {
-		return
-	}
-	sb, err := h.loginSandbox(r.Context(), conn.ID)
-	if err != nil {
-		slog.Warn("security.connected_login_sandbox_unavailable", "connection", conn.ID, "error", err)
-		writeError(w, http.StatusServiceUnavailable, protocol.ErrInternal, "login sandbox unavailable: "+err.Error())
-		return
-	}
-	res, err := sb.Exec(r.Context(), []string{"bash", "-lc", startLoginScript}, "")
-	if err != nil || res.ExitCode != 0 {
-		stderr := ""
-		if res != nil {
-			stderr = res.Stderr
-		}
-		slog.Warn("connected_login_start_exec_failed", "connection", conn.ID, "error", err, "exit", exitOf(res), "stderr", truncate(stderr, 300))
-		h.releaseLoginSandbox(conn.ID)
-		writeError(w, http.StatusBadGateway, protocol.ErrInternal, "could not start Claude login")
-		return
-	}
-	url := strings.TrimSpace(res.Stdout)
-	if !strings.HasPrefix(url, "https://") {
-		slog.Warn("connected_login_no_url", "connection", conn.ID, "stdout", truncate(res.Stdout, 200), "stderr", truncate(res.Stderr, 300))
-		h.releaseLoginSandbox(conn.ID)
-		writeError(w, http.StatusBadGateway, protocol.ErrInternal, "login did not produce an authorization URL")
-		return
-	}
-	_ = agentID // not needed for phase 1
-	writeJSON(w, http.StatusOK, map[string]any{
-		"connection_id":     conn.ID,
-		"authorization_url": url,
-		"credential_status": "pending",
-	})
-}
-
-// handleSubmitConnectionLoginCode runs phase 2: feed the pasted code, capture the
-// token, store it as an oauth credential, and tear the login container down.
-func (h *AgentsHandler) handleSubmitConnectionLoginCode(w http.ResponseWriter, r *http.Request) {
-	conn, agentID, ok := h.loginPreflight(w, r)
-	if !ok {
-		return
-	}
-	var req submitLoginCodeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, "invalid request body")
-		return
-	}
-	code := strings.TrimSpace(req.Code)
-	if code == "" {
-		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, "code is required")
-		return
-	}
-	// The container from phase 1 must still exist; Get reuses it by key.
-	sb, err := h.loginSandbox(r.Context(), conn.ID)
-	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, protocol.ErrInternal, "login sandbox unavailable: "+err.Error())
-		return
-	}
-	// Pass the code via env (never interpolated into the shell).
-	res, err := sb.Exec(r.Context(), []string{"bash", "-lc", submitCodeScript}, "", sandbox.WithEnv(map[string]string{"CODE": code}))
-	if err != nil || res.ExitCode != 0 {
-		msg := "login did not complete — start the login again"
-		if res != nil && res.ExitCode == 2 {
-			msg = "that code was invalid or expired — start the login again"
-		}
-		// stderr is safe to log (script diagnostics, never the token); stdout is
-		// not logged here — on a token-less run it could still contain one.
-		stderr := ""
-		if res != nil {
-			stderr = res.Stderr
-		}
-		slog.Warn("connected_login_submit_failed", "connection", conn.ID, "error", err, "exit", exitOf(res), "stderr", truncate(stderr, 600))
-		h.releaseLoginSandbox(conn.ID)
-		writeError(w, http.StatusBadGateway, protocol.ErrInternal, msg)
-		return
-	}
-	// DIAG (temporary): the submit script writes TOKENDBG rawhex lines to stderr;
-	// log them so we can see the raw prefix bytes and fix the "o"-drop precisely.
-	if strings.Contains(res.Stderr, "TOKENDBG") {
-		slog.Info("connected_login_token_dbg", "connection", conn.ID, "stderr", truncate(res.Stderr, 500))
-	}
-	token := extractOAuthToken(res.Stdout)
-	if token == "" {
-		// Don't log stdout content (may contain the token); length only.
-		slog.Warn("connected_login_no_token", "connection", conn.ID, "stdout_len", len(res.Stdout))
-		h.releaseLoginSandbox(conn.ID)
-		writeError(w, http.StatusBadGateway, protocol.ErrInternal, "login finished but no token was returned; start again")
-		return
-	}
-	// Log the token's SHAPE (prefix through the tag + total length), never the
-	// secret — so a future capture/format regression is diagnosable straight from
-	// logs without ever exec'ing into the sandbox to reverse-engineer the format.
-	slog.Info("connected_login_token_captured", "connection", conn.ID, "shape", tokenShape(token), "len", len(token))
-	if err := h.credStore.Put(r.Context(), store.ConnectedAgentCredential{
-		AgentID:      agentID,
-		ConnectionID: conn.ID,
-		Type:         "oauth",
-		Inject:       injectForConnection(conn.Provider, "oauth"),
-		Secret:       token,
-	}); err != nil {
-		writeError(w, http.StatusInternalServerError, protocol.ErrInternal, "failed to store credential")
-		return
-	}
-	// The token is captured + stored; the login container is no longer needed.
-	h.releaseLoginSandbox(conn.ID)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"connection_id":     conn.ID,
-		"credential_type":   "oauth",
-		"credential_status": "connected",
-	})
-}
-
-// loginPreflight validates auth availability, resolves the agent + connection,
-// and enforces that the connection is a Claude Code CLI. On failure it writes the
-// response and returns ok=false.
-func (h *AgentsHandler) loginPreflight(w http.ResponseWriter, r *http.Request) (*connLogin, uuid.UUID, bool) {
-	if h.credStore == nil || h.sandboxMgr == nil {
-		writeError(w, http.StatusNotImplemented, protocol.ErrInternal, "\"Log in with Claude\" is not available on this deployment")
-		return nil, uuid.Nil, false
-	}
-	agent, status, err := h.lookupAccessibleAgent(r)
-	if err != nil {
-		writeError(w, status, protocol.ErrNotFound, err.Error())
-		return nil, uuid.Nil, false
-	}
-	connID := r.PathValue("connID")
-	conn := findConnectedAgent(agent, connID)
-	if conn == nil {
-		writeError(w, http.StatusNotFound, protocol.ErrNotFound, "no such connection on this agent")
-		return nil, uuid.Nil, false
-	}
-	if injectForConnection(conn.Provider, "oauth") == "" {
-		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, "this connection does not support subscription login")
-		return nil, uuid.Nil, false
-	}
-	return &connLogin{ID: conn.ID, Provider: conn.Provider}, agent.ID, true
-}
-
-// connLogin is the minimal connection info the login handlers need.
-type connLogin struct {
-	ID       string
-	Provider string
 }
 
 // loginSandbox returns (creating if needed) the network-enabled per-connection

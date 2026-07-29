@@ -17,6 +17,7 @@ type Stores struct {
 	ChannelInstances          ChannelInstanceStore
 	ConfigSecrets             ConfigSecretsStore
 	ConnectedAgentCredentials ConnectedAgentCredentialStore
+	CLIConnections            CLIConnectionStore
 	AgentLinks                AgentLinkStore
 	Teams                     TeamStore
 	BuiltinTools              BuiltinToolStore

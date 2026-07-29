@@ -30,7 +30,12 @@ import (
 
 // ResolverDeps holds shared dependencies for the agent resolver.
 type ResolverDeps struct {
-	AgentStore     store.AgentStore
+	AgentStore store.AgentStore
+	// CLIConnections is the tenant-level connected-CLI catalogue (migration
+	// 000082) and the ONLY source of connected-agent awareness: every agent in the
+	// tenant sees every enabled connection, rather than only the one a connection
+	// happened to be attached to. Nil → the system prompt simply omits the section.
+	CLIConnections store.CLIConnectionStore
 	ProviderStore  store.ProviderStore
 	ProviderReg    *providers.Registry
 	ModelRegistry  providers.ModelRegistry // per-model context window + capabilities lookup
@@ -475,15 +480,26 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			}
 		}
 
-		// Connected external agents (agents.connected_agents) for prompt
-		// awareness — so the agent knows it can delegate to Claude Code etc.
+		// Connected external agents, for prompt awareness — so the agent knows it
+		// can delegate to Claude Code etc. The TENANT catalogue is the only source:
+		// connections are shared by every agent in the tenant.
 		var connectedAgents []ConnectedAgentSummary
-		for _, ca := range ag.ParseConnectedAgents() {
-			connectedAgents = append(connectedAgents, ConnectedAgentSummary{
-				Name:     ca.Name,
-				Provider: ca.Provider,
-				Mode:     ca.Mode,
-			})
+		if deps.CLIConnections != nil {
+			var tenantPtr *uuid.UUID
+			if tid := store.TenantIDFromContext(ctx); tid != uuid.Nil {
+				tenantPtr = &tid
+			}
+			if list, err := deps.CLIConnections.ListForTenant(ctx, tenantPtr, true); err != nil {
+				slog.Warn("resolver: tenant CLI connection lookup failed", "error", err)
+			} else {
+				for i := range list {
+					connectedAgents = append(connectedAgents, ConnectedAgentSummary{
+						Name:     list[i].Name,
+						Provider: list[i].Provider,
+						Mode:     list[i].Mode,
+					})
+				}
+			}
 		}
 
 		// v3 evolution metrics: only wire store when feature flag enabled

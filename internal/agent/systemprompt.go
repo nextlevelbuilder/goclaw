@@ -177,9 +177,10 @@ type SystemPromptConfig struct {
 	// and doesn't ask the user to re-connect an already-active bot.
 	ConnectedChannels []ConnectedChannelSummary
 
-	// ConnectedAgents lists the external agents wired into this agent
-	// (agents.connected_agents) so the prompt can tell it what it may delegate
-	// to via delegate_external — and stop it claiming they aren't connected.
+	// ConnectedAgents lists the external agents available to this agent — the
+	// tenant's cli_connections catalogue — so the prompt can tell it what it may
+	// delegate to via delegate_external, and stop it claiming they aren't
+	// connected.
 	ConnectedAgents []ConnectedAgentSummary
 }
 
@@ -557,7 +558,7 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 					"To find out whether a third-party integration (GitHub, Gmail, Google Drive/Docs/Sheets/Calendar, Slack, Notion, …) is connected, call the `check_integration` tool — never assume it isn't.\n"+
 						"GitHub work is done ENTIRELY through the GitHub API tools that run on the user's connected account (private repos included) — NOT on local disk. The repository is NOT checked out in your workspace: your `exec` sandbox has no network and no clone, so `git`, `git clone`, `ls`, `find`, `wc`, and `read_file` will NEVER see the repo — do not use them for repository work, and never shell out to git. Map every step to a tool:\n"+
 						"- Identify WHICH repo the user means FIRST. If they named it loosely (\"my solana arbitrage backtest repo\"), call `GITHUB_LIST_REPOSITORIES_FOR_THE_AUTHENTICATED_USER` ONCE and match the closest name from that list — the real slug is often shorter/abbreviated (e.g. \"solana arbitrage backtest\" → `solana-arb-backtest`). NEVER guess repo names by calling `GITHUB_GET_A_REPOSITORY` on invented variations: it needs an EXACT name, so guesses just return a string of errors. Don't use `web_search` to find the user's own repos either.\n"+
-					"- Browse the repo's files: `GITHUB_GET_A_TREE` (recursive tree). Read a file's contents: `GITHUB_GET_REPOSITORY_CONTENT`. Resolve the default branch / base SHA: `GITHUB_GET_A_BRANCH` or `GITHUB_GET_A_REPOSITORY`.\n"+
+						"- Browse the repo's files: `GITHUB_GET_A_TREE` (recursive tree). Read a file's contents: `GITHUB_GET_REPOSITORY_CONTENT`. Resolve the default branch / base SHA: `GITHUB_GET_A_BRANCH` or `GITHUB_GET_A_REPOSITORY`.\n"+
 						"- Make changes on a NEW branch: create it with `GITHUB_CREATE_A_REFERENCE` (from the base SHA), then write each file with `GITHUB_CREATE_OR_UPDATE_FILE_CONTENTS` (targeting that branch).\n"+
 						"- Open the PR with `GITHUB_CREATE_A_PULL_REQUEST` (head = your new branch, base = default branch) and report the PR URL it returns.\n"+
 						"Never delegate GitHub work to a connected agent — its sandbox has no access to the user's GitHub connection.")
@@ -585,9 +586,9 @@ func BuildSystemPrompt(cfg SystemPromptConfig) string {
 					"2. PORT IN PARALLEL — in ONE message, issue ONE `delegate_external` call per chunk from the plan (about "+ns+"), ALL TOGETHER, each with a distinct `worker` (\"1\",\"2\",\"3\",…). Each WRITES the Go implementation for ITS chunk (creating its own files under `port/`) by translating the Rust sources listed for that chunk. Pass each worker this instruction VERBATIM (substituting the real module path/import prefix from PLAN.md): \"Use the module path and import prefix EXACTLY as written in port/PLAN.md for every import — do not invent or adjust it, and do not add extra path segments; every worker must match or nothing compiles. Write your chunk's files, then run ONLY `gofmt -l` on the files you wrote (to catch syntax errors) and `go build ./<your-own-package-dirs>` if it needs no other chunk. Do NOT run `go build ./...`, `go vet ./...` or `go test ./...`, and do NOT iterate on errors coming from packages other workers are still writing — your chunk cannot fully compile yet and a build loop here just burns time. Then report the files and packages you created. A single integration pass compiles everything afterwards.\" The platform runs ~"+ns+" at once (the rest queue), so keeping the plan to ~"+ns+" chunks means a single fast wave. Sending them in the SAME message is the whole point — NEVER issue them one at a time. None push or open a PR. You MUST reach this step — a whole-repo port is not done until the parallel workers have run.\n"+
 					"3. INTEGRATE — ONE `delegate_external`, `worker`=\"integrate\". This is the ONLY step that compiles: run `go build ./...` across the whole `port/` tree and fix the cross-package seams (mismatched signatures, missing helpers, unused imports) until it builds cleanly. Because the workers deliberately skipped building, expect a batch of errors on the first run — that is normal and this pass is exactly where they get resolved; work through them in bulk rather than file-by-file. Report the final directory (`port/`). Still no push/PR.\n"+
 					"4. PUBLISH — `github_publish_dir` (owner, repo, source_dir = `port/`, branch, commit_message, pr_title). It commits every file and opens the PR through the user's connected GitHub — no PAT — and returns the PR URL. Report that URL. Only reach this step AFTER steps 2 and 3.\n"+
-						"\n"+
-						"PRIVATE repo: the coding agent can't clone it (no GitHub creds in its sandbox). In the SETUP step, YOU first read the source with your own GitHub tools (`GITHUB_GET_A_TREE` + `GITHUB_GET_REPOSITORY_CONTENT`) and write it into the workspace, then tell the coding agent that local path to work from.\n"+
-						"TINY-REPO FALLBACK (single package / a handful of files ONLY): skip the split — one `delegate_external` (no `worker` needed) that clones, ports into `port/`, and `go build`s until it compiles; then PUBLISH as in step 4. Do NOT use this path for a normal multi-package repo.")
+					"\n"+
+					"PRIVATE repo: the coding agent can't clone it (no GitHub creds in its sandbox). In the SETUP step, YOU first read the source with your own GitHub tools (`GITHUB_GET_A_TREE` + `GITHUB_GET_REPOSITORY_CONTENT`) and write it into the workspace, then tell the coding agent that local path to work from.\n"+
+					"TINY-REPO FALLBACK (single package / a handful of files ONLY): skip the split — one `delegate_external` (no `worker` needed) that clones, ports into `port/`, and `go build`s until it compiles; then PUBLISH as in step 4. Do NOT use this path for a normal multi-package repo.")
 		}
 
 		if hint := buildChannelFormattingHint(cfg.ChannelType); hint != nil {

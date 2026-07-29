@@ -44,7 +44,6 @@ func (m *AgentsMethods) handleCreate(ctx context.Context, client *gateway.Client
 		CompactionConfig json.RawMessage `json:"compaction_config,omitempty"`
 		ContextPruning   json.RawMessage `json:"context_pruning,omitempty"`
 		OtherConfig      json.RawMessage `json:"other_config,omitempty"`
-		ConnectedAgents  json.RawMessage `json:"connected_agents,omitempty"`
 		// Promoted config fields (Emoji already above)
 		AgentDescription    string          `json:"agent_description"`
 		ThinkingLevel       string          `json:"thinking_level"`
@@ -129,26 +128,25 @@ func (m *AgentsMethods) handleCreate(ctx context.Context, client *gateway.Client
 		}
 
 		agentData := &store.AgentData{
-			AgentKey:         agentID,
-			DisplayName:      params.Name,
-			OwnerID:          ownerID,
-			TenantID:         tenantID,
-			AgentType:        agentType,
-			Provider:         provider,
-			Model:            model,
-			Workspace:        ws,
-			ContextWindow:     params.ContextWindow,
-			MaxToolIterations: params.MaxToolIterations,
-			BudgetMonthlyCents: params.BudgetCents,
-			Status:           store.AgentStatusActive,
-			ToolsConfig:      params.ToolsConfig,
-			SubagentsConfig:  params.SubagentsConfig,
-			SandboxConfig:    params.SandboxConfig,
-			MemoryConfig:     params.MemoryConfig,
-			CompactionConfig: params.CompactionConfig,
-			ContextPruning:   params.ContextPruning,
+			AgentKey:            agentID,
+			DisplayName:         params.Name,
+			OwnerID:             ownerID,
+			TenantID:            tenantID,
+			AgentType:           agentType,
+			Provider:            provider,
+			Model:               model,
+			Workspace:           ws,
+			ContextWindow:       params.ContextWindow,
+			MaxToolIterations:   params.MaxToolIterations,
+			BudgetMonthlyCents:  params.BudgetCents,
+			Status:              store.AgentStatusActive,
+			ToolsConfig:         params.ToolsConfig,
+			SubagentsConfig:     params.SubagentsConfig,
+			SandboxConfig:       params.SandboxConfig,
+			MemoryConfig:        params.MemoryConfig,
+			CompactionConfig:    params.CompactionConfig,
+			ContextPruning:      params.ContextPruning,
 			OtherConfig:         params.OtherConfig,
-			ConnectedAgents:     params.ConnectedAgents,
 			Emoji:               params.Emoji,
 			AgentDescription:    params.AgentDescription,
 			ThinkingLevel:       params.ThinkingLevel,

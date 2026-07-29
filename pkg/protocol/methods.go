@@ -11,13 +11,13 @@ const (
 	MethodAgentIdentityGet = "agent.identity.get"
 
 	// Chat
-	MethodChatSend          = "chat.send"
-	MethodChatHistory       = "chat.history"
-	MethodChatAbort         = "chat.abort"
-	MethodChatInject        = "chat.inject"
-	MethodChatSessionStatus = "chat.session.status"
+	MethodChatSend           = "chat.send"
+	MethodChatHistory        = "chat.history"
+	MethodChatAbort          = "chat.abort"
+	MethodChatInject         = "chat.inject"
+	MethodChatSessionStatus  = "chat.session.status"
 	MethodChatActiveSessions = "chat.activeSessions"
-	MethodChatToolResult    = "chat.toolResult"
+	MethodChatToolResult     = "chat.toolResult"
 
 	// MethodRunsSubscribe is the resumable-stream entry point. Client
 	// sends `{runId, sinceSeq}` and receives all buffered events with
@@ -109,8 +109,8 @@ const (
 
 // Phase 2 - NEEDED methods
 const (
-	MethodSkillsList  = "skills.list"
-	MethodSkillsGet   = "skills.get"
+	MethodSkillsList   = "skills.list"
+	MethodSkillsGet    = "skills.get"
 	MethodSkillsUpdate = "skills.update"
 
 	MethodCronList   = "cron.list"
@@ -142,6 +142,18 @@ const (
 	MethodApprovalsList    = "exec.approval.list"
 	MethodApprovalsApprove = "exec.approval.approve"
 	MethodApprovalsDeny    = "exec.approval.deny"
+
+	// Tenant-level CLI connections (migration 000082): the connected-CLI
+	// catalogue shared by every agent in a tenant. connections.list is a read
+	// (viewer+); the rest are writes and require operator+ — see
+	// permissions.isWriteMethod. credential.* writes a per-USER BYOK secret and
+	// never returns one.
+	MethodConnectionsList             = "connections.list"
+	MethodConnectionsCreate           = "connections.create"
+	MethodConnectionsUpdate           = "connections.update"
+	MethodConnectionsDelete           = "connections.delete"
+	MethodConnectionsCredentialSet    = "connections.credential.set"
+	MethodConnectionsCredentialDelete = "connections.credential.delete"
 
 	MethodUsageGet     = "usage.get"
 	MethodUsageSummary = "usage.summary"
@@ -189,28 +201,28 @@ const (
 
 // Agent teams
 const (
-	MethodTeamsList     = "teams.list"
-	MethodTeamsCreate   = "teams.create"
-	MethodTeamsGet      = "teams.get"
-	MethodTeamsDelete   = "teams.delete"
-	MethodTeamsTaskList      = "teams.tasks.list"
-	MethodTeamsTaskGet       = "teams.tasks.get"
-	MethodTeamsTaskGetLight  = "teams.tasks.get-light"
-	MethodTeamsTaskApprove   = "teams.tasks.approve"
-	MethodTeamsTaskReject    = "teams.tasks.reject"
-	MethodTeamsTaskComment   = "teams.tasks.comment"
-	MethodTeamsTaskComments  = "teams.tasks.comments"
-	MethodTeamsTaskEvents    = "teams.tasks.events"
-	MethodTeamsTaskCreate    = "teams.tasks.create"
-	MethodTeamsTaskDelete     = "teams.tasks.delete"
-	MethodTeamsTaskDeleteBulk = "teams.tasks.delete-bulk"
-	MethodTeamsTaskAssign            = "teams.tasks.assign"
-	MethodTeamsTaskActiveBySession   = "teams.tasks.active-by-session"
-	MethodTeamsMembersAdd    = "teams.members.add"
-	MethodTeamsMembersRemove = "teams.members.remove"
-	MethodTeamsUpdate        = "teams.update"
-	MethodTeamsKnownUsers    = "teams.known_users"
-	MethodTeamsScopes        = "teams.scopes"
+	MethodTeamsList                = "teams.list"
+	MethodTeamsCreate              = "teams.create"
+	MethodTeamsGet                 = "teams.get"
+	MethodTeamsDelete              = "teams.delete"
+	MethodTeamsTaskList            = "teams.tasks.list"
+	MethodTeamsTaskGet             = "teams.tasks.get"
+	MethodTeamsTaskGetLight        = "teams.tasks.get-light"
+	MethodTeamsTaskApprove         = "teams.tasks.approve"
+	MethodTeamsTaskReject          = "teams.tasks.reject"
+	MethodTeamsTaskComment         = "teams.tasks.comment"
+	MethodTeamsTaskComments        = "teams.tasks.comments"
+	MethodTeamsTaskEvents          = "teams.tasks.events"
+	MethodTeamsTaskCreate          = "teams.tasks.create"
+	MethodTeamsTaskDelete          = "teams.tasks.delete"
+	MethodTeamsTaskDeleteBulk      = "teams.tasks.delete-bulk"
+	MethodTeamsTaskAssign          = "teams.tasks.assign"
+	MethodTeamsTaskActiveBySession = "teams.tasks.active-by-session"
+	MethodTeamsMembersAdd          = "teams.members.add"
+	MethodTeamsMembersRemove       = "teams.members.remove"
+	MethodTeamsUpdate              = "teams.update"
+	MethodTeamsKnownUsers          = "teams.known_users"
+	MethodTeamsScopes              = "teams.scopes"
 )
 
 // Team workspace
@@ -254,8 +266,8 @@ const (
 	MethodBrowserScreenshot = "browser.screenshot"
 
 	// Zalo Personal
-	MethodZaloPersonalQRStart   = "zalo.personal.qr.start"
-	MethodZaloPersonalContacts  = "zalo.personal.contacts"
+	MethodZaloPersonalQRStart  = "zalo.personal.qr.start"
+	MethodZaloPersonalContacts = "zalo.personal.contacts"
 
 	// WhatsApp
 	MethodWhatsAppQRStart = "whatsapp.qr.start"

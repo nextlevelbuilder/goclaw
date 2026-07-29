@@ -215,6 +215,7 @@ func wireExtras(
 
 	resolver := agent.NewManagedResolver(agent.ResolverDeps{
 		AgentStore:             stores.Agents,
+		CLIConnections:         stores.CLIConnections,
 		ProviderStore:          stores.Providers,
 		ProviderReg:            providerReg,
 		ModelRegistry:          modelReg,
@@ -539,13 +540,13 @@ func wireExtras(
 		slog.Info("delegate tool wired")
 	}
 
-	// Wire the external-delegate tool: lets an agent hand tasks to its connected
-	// external agents (Claude Code, …). v1 runs the connected CLI in the sandbox
-	// with network enabled for that exec only. Reads the calling agent's
-	// connected_agents at runtime; platform Anthropic key used when a connection
-	// has no credential of its own.
-	if stores.Agents != nil {
-		extTool := tools.NewDelegateExternalTool(stores.Agents, sandboxMgr, workspace, stores.ConnectedAgentCredentials, appCfg.Providers.Anthropic.APIKey, appCfg.Providers.Anthropic.OAuthToken, os.Getenv("GOCLAW_GITHUB_TOKEN"))
+	// Wire the external-delegate tool: lets an agent hand tasks to the tenant's
+	// connected external agents (Claude Code, …). v1 runs the connected CLI in the
+	// sandbox with network enabled for that exec only. Reads the tenant CLI
+	// connection catalogue at runtime; platform Anthropic key used when a
+	// connection has no credential of its own.
+	if stores.CLIConnections != nil {
+		extTool := tools.NewDelegateExternalTool(sandboxMgr, workspace, stores.CLIConnections, appCfg.Providers.Anthropic.APIKey, appCfg.Providers.Anthropic.OAuthToken, os.Getenv("GOCLAW_GITHUB_TOKEN"))
 		toolsReg.Register(extTool)
 		slog.Info("delegate_external tool wired", "sandbox", sandboxMgr != nil)
 	}

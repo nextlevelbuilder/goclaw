@@ -43,7 +43,6 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 		CompactionConfig json.RawMessage `json:"compaction_config,omitempty"`
 		ContextPruning   json.RawMessage `json:"context_pruning,omitempty"`
 		OtherConfig      json.RawMessage `json:"other_config,omitempty"`
-		ConnectedAgents  json.RawMessage `json:"connected_agents,omitempty"`
 		// Promoted config fields
 		Emoji               *string         `json:"emoji,omitempty"`
 		AgentDescription    *string         `json:"agent_description,omitempty"`
@@ -147,9 +146,6 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 				}
 			}
 			updates["other_config"] = []byte(params.OtherConfig)
-		}
-		if len(params.ConnectedAgents) > 0 {
-			updates["connected_agents"] = []byte(params.ConnectedAgents)
 		}
 		// Promoted config fields
 		if params.Emoji != nil {

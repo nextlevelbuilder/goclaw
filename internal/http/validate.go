@@ -55,7 +55,7 @@ var agentAllowedFields = map[string]bool{
 	"agent_key": true, "agent_type": true, "display_name": true,
 	"provider": true, "model": true, "status": true,
 	"context_window": true, "max_tool_iterations": true,
-	"workspace": true,
+	"workspace":   true,
 	"frontmatter": true, "compaction_config": true,
 	"memory_config": true, "other_config": true, "tools_config": true,
 	"sandbox_config": true, "context_pruning": true,
@@ -69,8 +69,6 @@ var agentAllowedFields = map[string]bool{
 	// website's Manage modal can save edits to existing agents — clone
 	// pre-fills from this same field on the source.
 	"system_prompt": true,
-	// connected_agents: external/other agents this agent can delegate to.
-	"connected_agents": true,
 }
 
 var providerAllowedFields = map[string]bool{

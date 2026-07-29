@@ -1709,3 +1709,41 @@ CREATE TABLE IF NOT EXISTS tenant_hook_budget (
     metadata       TEXT NOT NULL DEFAULT '{}',
     updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
+
+-- Tenant-level CLI agent connections (mirrors PG migration 000082).
+-- Connections are shared: every agent may delegate to any enabled connection.
+-- Credentials are per-user (user_id = '' means tenant-shared).
+CREATE TABLE IF NOT EXISTS cli_connections (
+    id         TEXT PRIMARY KEY,
+    tenant_id  TEXT,
+    name       TEXT NOT NULL,
+    kind       TEXT NOT NULL DEFAULT 'external_cli',
+    provider   TEXT NOT NULL,
+    mode       TEXT NOT NULL DEFAULT 'delegate',
+    endpoint   TEXT,
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    config     TEXT,
+    created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cli_connections_tenant_name
+    ON cli_connections (tenant_id, lower(name)) WHERE tenant_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cli_connections_global_name
+    ON cli_connections (lower(name)) WHERE tenant_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_cli_connections_tenant_enabled
+    ON cli_connections (tenant_id, enabled);
+
+CREATE TABLE IF NOT EXISTS cli_connection_credentials (
+    connection_id TEXT NOT NULL REFERENCES cli_connections(id) ON DELETE CASCADE,
+    user_id       TEXT NOT NULL DEFAULT '',
+    tenant_id     TEXT,
+    cred_type     TEXT NOT NULL,
+    inject        TEXT NOT NULL,
+    secret_enc    TEXT NOT NULL,
+    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (connection_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cli_connection_credentials_tenant
+    ON cli_connection_credentials (tenant_id);

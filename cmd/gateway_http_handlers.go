@@ -33,6 +33,9 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 		agentsH = httpapi.NewAgentsHandler(stores.Agents, stores.Providers, providerReg, stores.DB, stores.Tracing, defaultWorkspace, msgBus, summoner, isOwner)
 		agentsH.SetImportStores(stores.Memory, stores.KnowledgeGraph)
 		agentsH.SetConnectedAgentCredentialStore(stores.ConnectedAgentCredentials)
+		// Tenant-level CLI connections (/v1/connections). nil-safe: the endpoints
+		// answer 501 when the store is absent.
+		agentsH.SetCLIConnectionStore(stores.CLIConnections)
 		agentsH.SetDataDir(dataDir)
 	}
 

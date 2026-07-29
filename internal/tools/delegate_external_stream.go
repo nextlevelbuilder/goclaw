@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+
+	"github.com/nextlevelbuilder/goclaw/internal/cliagent"
 )
 
 // delegateStreamer parses Claude Code's --output-format stream-json output line
@@ -81,6 +83,66 @@ type streamContent struct {
 	IsError   bool            `json:"is_error"`
 	Text      string          `json:"text"`    // assistant text block
 	Content   json.RawMessage `json:"content"` // tool_result content (string or [{text}])
+}
+
+// lineHandler returns the per-line consumer appropriate to the provider's output
+// format, plus a finaliser to call once the exec has ended.
+//
+// claude_stream_json deliberately keeps the ORIGINAL onLine implementation rather
+// than routing through cliagent's port of it. That path is production-tested and
+// carries hard-won behaviour (token-delta coalescing, suppressing the duplicate
+// whole-block text, never reading usage so BYOK tokens aren't metered); swapping
+// it for an untried reimplementation would risk the one provider that works today
+// for no benefit. Other formats — which previously streamed NOTHING here, because
+// onLine drops any line not starting with '{' — go through the normalised parser.
+func (s *delegateStreamer) lineHandler(format cliagent.OutputFormat) (onLine func(string), finish func()) {
+	if format == "" || format == cliagent.OutputClaudeStreamJSON {
+		return s.onLine, s.flushDelta
+	}
+
+	p := cliagent.NewParser(format)
+	return func(line string) {
+			for _, ev := range p.ParseLine(line) {
+				s.eventCount++
+				s.consume(ev)
+			}
+		}, func() {
+			if f, ok := p.(cliagent.Flusher); ok {
+				for _, ev := range f.Flush() {
+					s.consume(ev)
+				}
+			}
+			// Formats without an explicit terminal event (plain text) report their
+			// answer only via Final(); without this the run would look like it produced
+			// nothing and the caller would report "finished but returned no result".
+			if s.finalResult == "" {
+				if text, isErr := p.Final(); strings.TrimSpace(text) != "" {
+					s.finalResult, s.finalIsError = text, isErr
+				}
+			}
+		}
+}
+
+// consume maps one normalised adapter event onto the live-progress emitters, so
+// every provider renders through the same UI as Claude Code.
+func (s *delegateStreamer) consume(ev cliagent.Event) {
+	switch ev.Kind {
+	case cliagent.EventText:
+		s.emitTextRaw(ev.Text)
+	case cliagent.EventToolCall:
+		if ev.ToolName != "" {
+			s.pending[ev.ToolID] = ev.ToolName
+		}
+		s.emitCall(ev.ToolID, ev.ToolName, ev.ToolInput)
+	case cliagent.EventToolResult:
+		s.emitResult(ev.ToolID, ev.IsError, ev.ToolResult)
+	case cliagent.EventFinal:
+		// Final() is the authoritative source; EventFinal is the same content and
+		// rendering both would duplicate the answer.
+		if s.finalResult == "" {
+			s.finalResult, s.finalIsError = ev.Text, ev.IsError
+		}
+	}
 }
 
 // onLine is invoked once per stdout line by the sandbox as output is produced.

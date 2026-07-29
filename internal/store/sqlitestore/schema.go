@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 27
+const SchemaVersion = 28
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -523,6 +523,47 @@ CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(use
 
 	// Version 26 → 27: agents.connected_agents (mirrors PG migration 000079).
 	26: `ALTER TABLE agents ADD COLUMN connected_agents TEXT;`,
+
+	// Version 27 → 28: tenant-level CLI connections (mirrors PG migration 000082).
+	// No backfill here: the SQLite agent store never round-tripped
+	// agents.connected_agents (see sqlitestore/connected_agent_credentials.go), so
+	// desktop/Lite has no legacy per-agent connections to migrate — these tables
+	// simply start empty. Lite is single-tenant, so tenant_id stays nullable and
+	// unused rather than being dropped, to keep the schema shape identical to PG.
+	27: `
+CREATE TABLE IF NOT EXISTS cli_connections (
+    id         TEXT PRIMARY KEY,
+    tenant_id  TEXT,
+    name       TEXT NOT NULL,
+    kind       TEXT NOT NULL DEFAULT 'external_cli',
+    provider   TEXT NOT NULL,
+    mode       TEXT NOT NULL DEFAULT 'delegate',
+    endpoint   TEXT,
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    config     TEXT,
+    created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cli_connections_tenant_name
+    ON cli_connections (tenant_id, lower(name)) WHERE tenant_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cli_connections_global_name
+    ON cli_connections (lower(name)) WHERE tenant_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_cli_connections_tenant_enabled
+    ON cli_connections (tenant_id, enabled);
+CREATE TABLE IF NOT EXISTS cli_connection_credentials (
+    connection_id TEXT NOT NULL REFERENCES cli_connections(id) ON DELETE CASCADE,
+    user_id       TEXT NOT NULL DEFAULT '',
+    tenant_id     TEXT,
+    cred_type     TEXT NOT NULL,
+    inject        TEXT NOT NULL,
+    secret_enc    TEXT NOT NULL,
+    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (connection_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cli_connection_credentials_tenant
+    ON cli_connection_credentials (tenant_id);`,
 }
 
 // addHooksTables is the SQLite incremental migration for schema v19 → v20.
