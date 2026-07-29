@@ -2,33 +2,27 @@ package agent
 
 import "testing"
 
-// Regression: generate_image must NOT be exempt from the same-result loop
-// breaker. Gemini over-eagerly re-calls it with tweaked args; the server-side
-// cooldown returns an identical notice each time, and the breaker is the
-// deterministic stop that bounds the runaway. Exempting it (a prior attempt)
-// let the model call it 14 times.
-func TestGenerateImageBoundedBySameResultBreaker(t *testing.T) {
+// generate_image / generate_video are EXEMPT from the same-result breaker
+// (#434): document-mcp already rate-limits them with a per-user cooldown that
+// returns an identical "already generated" notice by design, so counting those
+// repeats as a runaway loop appended a scary CRITICAL notice to an otherwise
+// successful turn. The cooldown — not the breaker — is the bound here. (This
+// supersedes the earlier #220 attempt to bound it via the breaker.)
+func TestGenerateImageExemptFromSameResultBreaker(t *testing.T) {
 	const tool = "mcp_document_mcp__generate_image"
 	const result = "Image generation already completed for this request; the generated image is attached to the chat. No additional image was produced."
 
 	var s toolLoopState
 	rh := hashResult(result)
 
-	// Calls 1..2 with DIFFERENT args, identical result → warning, not yet critical.
-	for i := range 2 {
+	// Even at 3+ identical results (different args each time), the breaker must
+	// stay silent for generate_image — no warning, no critical.
+	for i := range 4 {
 		h := s.record(tool, map[string]any{"prompt": "green elephant", "variant": i})
 		s.recordResult(h, result)
-	}
-	if level, _ := s.detectSameResult(tool, rh); level == "critical" {
-		t.Fatalf("should not be critical at 2 identical results, got critical")
-	}
-
-	// Third identical result → critical halt.
-	h := s.record(tool, map[string]any{"prompt": "green elephant", "variant": 2})
-	s.recordResult(h, result)
-	level, msg := s.detectSameResult(tool, rh)
-	if level != "critical" {
-		t.Fatalf("expected critical at 3 identical results for generate_image, got level=%q msg=%q", level, msg)
+		if level, _ := s.detectSameResult(tool, rh); level != "" {
+			t.Fatalf("generate_image must stay exempt from the same-result breaker, got level=%q after %d calls", level, i+1)
+		}
 	}
 }
 
