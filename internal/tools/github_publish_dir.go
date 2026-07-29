@@ -2,6 +2,8 @@ package tools
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -105,6 +107,17 @@ func (t *GithubPublishDirTool) Execute(ctx context.Context, args map[string]any)
 		baseBranch = "main"
 	}
 
+	// Avoid colliding with an existing branch and its open PR. A collision makes
+	// CREATE_A_PULL_REQUEST fail with "a pull request already exists", which sent
+	// the agent into a GET_A_PULL_REQUEST retry loop. If the requested branch is
+	// already on the remote, publish to a fresh unique branch so a NEW PR always
+	// opens cleanly (each run gets its own branch + PR).
+	if t.branchExists(ctx, reg, owner, repo, branch) {
+		orig := branch
+		branch = branch + "-" + shortRandID()
+		slog.Info("github_publish_dir: requested branch exists, publishing to a unique branch instead", "requested", orig, "using", branch)
+	}
+
 	// All GitHub work goes through the curated/granted tools via reg.Execute,
 	// which resolves+activates them (inline or deferred) with the caller's
 	// Composio identity.
@@ -139,7 +152,10 @@ func (t *GithubPublishDirTool) Execute(ctx context.Context, args map[string]any)
 		"body":  prBody,
 	})
 	if prRes == nil || prRes.IsError {
-		return ErrorResult(fmt.Sprintf("published %d files to branch %q, but opening the PR failed: %s", len(upserts), branch, resultText(prRes)))
+		// Terminal error — the files are already pushed to `branch`. Tell the
+		// agent NOT to retry (retrying just re-hits the same failure); it should
+		// report this to the user instead of looping on PR-lookup tools.
+		return ErrorResult(fmt.Sprintf("published %d files to branch %q, but opening the PR failed: %s\nDo NOT retry github_publish_dir or loop on PR-lookup tools — the files are already on the branch. Report this to the user with the branch name.", len(upserts), branch, resultText(prRes)))
 	}
 
 	msg := fmt.Sprintf("Published %d files to %s/%s on branch %q (base %q) and opened a pull request.", len(upserts), owner, repo, branch, baseBranch)
@@ -152,6 +168,25 @@ func (t *GithubPublishDirTool) Execute(ctx context.Context, args map[string]any)
 		msg += "\n" + truncateStr(resultText(prRes), 400)
 	}
 	return NewResult(msg)
+}
+
+// branchExists reports whether `branch` already exists on the remote. Used to
+// avoid a branch/PR collision that would fail CREATE_A_PULL_REQUEST. A non-error
+// GET_A_BRANCH means it's there; any error (incl. 404) means treat it as absent.
+func (t *GithubPublishDirTool) branchExists(ctx context.Context, reg *Registry, owner, repo, branch string) bool {
+	res := reg.Execute(ctx, composioToolPrefix+"GITHUB_GET_A_BRANCH", map[string]any{
+		"owner": owner, "repo": repo, "branch": branch,
+	})
+	return res != nil && !res.IsError
+}
+
+// shortRandID returns 6 hex chars for uniquifying a colliding branch name.
+func shortRandID() string {
+	b := make([]byte, 3)
+	if _, err := rand.Read(b); err != nil {
+		return "new"
+	}
+	return hex.EncodeToString(b)
 }
 
 // publishPerFile is the fallback publish path: resolve the base branch's tip
