@@ -37,21 +37,13 @@ func (m *ExecApprovalMethods) handleList(_ context.Context, client *gateway.Clie
 	}
 	pending := m.manager.ListPending()
 
-	type pendingInfo struct {
-		ID        string `json:"id"`
-		Command   string `json:"command"`
-		AgentID   string `json:"agentId"`
-		CreatedAt int64  `json:"createdAt"`
-	}
-
-	items := make([]pendingInfo, 0, len(pending))
+	// One wire shape for both the list response and the exec.approval.requested
+	// event (tools.PendingApproval.Wire), so the UI renders a pending action the
+	// same way however it learned about it — including toolName/detail, which say
+	// WHAT is being approved for non-exec (e.g. delegated CLI) approvals.
+	items := make([]map[string]any, 0, len(pending))
 	for _, pa := range pending {
-		items = append(items, pendingInfo{
-			ID:        pa.ID,
-			Command:   pa.Command,
-			AgentID:   pa.AgentID,
-			CreatedAt: pa.CreatedAt.UnixMilli(),
-		})
+		items = append(items, pa.Wire())
 	}
 
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{

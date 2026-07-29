@@ -150,7 +150,12 @@ func MethodScopes(method string) []Scope {
 	if isAdminMethod(method) {
 		return []Scope{ScopeAdmin}
 	}
-	if strings.HasPrefix(method, "approvals.") {
+	// The wire methods are exec.approval.list/approve/deny (protocol.MethodApprovals*),
+	// so matching only "approvals." let them fall through to the generic write
+	// scope below — any operator token could approve commands. Both prefixes are
+	// matched: "approvals." for the legacy/short spelling, "exec.approval." for the
+	// methods actually registered.
+	if strings.HasPrefix(method, "approvals.") || strings.HasPrefix(method, "exec.approval.") {
 		return []Scope{ScopeApprovals, ScopeAdmin}
 	}
 	if strings.HasPrefix(method, "pairing.") || strings.HasPrefix(method, "device.pair") {

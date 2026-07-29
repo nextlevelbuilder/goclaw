@@ -1,12 +1,19 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // ExecSecurity determines the overall security mode for command execution.
@@ -85,22 +92,94 @@ const (
 	ApprovalDeny        ApprovalDecision = "deny"
 )
 
+// ToolNameExec is the ToolName used for approvals raised by the exec tool.
+// Kept explicit so a payload always says which tool is asking, even for the
+// original exec path whose requests predate the generalisation.
+const ToolNameExec = "exec"
+
+// ApprovalRequest describes one action awaiting a user's decision.
+//
+// It is deliberately tool-agnostic: `exec` fills Command with the shell command,
+// while any other caller (e.g. a delegated CLI run) fills ToolName + Detail with
+// a human-readable description of what would happen. UserID/TenantID are NOT
+// cosmetic — they scope the WS event to the asking user (see
+// internal/gateway/event_filter.go), so an approval never surfaces in someone
+// else's dashboard.
+type ApprovalRequest struct {
+	ToolName   string // "exec", "delegate_external", …
+	Command    string // exec path: the shell command (empty for non-exec tools)
+	Detail     string // human-readable "what would run" (defaults to Command)
+	AgentID    string
+	SessionKey string
+	UserID     string
+	TenantID   uuid.UUID
+}
+
+// NewApprovalRequest seeds a request with the identity/scope fields carried on
+// ctx, so every call site scopes its approval the same way.
+func NewApprovalRequest(ctx context.Context, toolName, agentID string) ApprovalRequest {
+	return ApprovalRequest{
+		ToolName:   toolName,
+		AgentID:    agentID,
+		SessionKey: ToolSessionKeyFromCtx(ctx),
+		UserID:     store.UserIDFromContext(ctx),
+		TenantID:   store.TenantIDFromContext(ctx),
+	}
+}
+
 // PendingApproval is an in-flight approval request.
+//
+// Command stays in place (and keeps its JSON name) for the exec path and its UI;
+// ToolName/Detail/SessionKey/UserID generalise the record so a non-exec action
+// can describe itself.
 type PendingApproval struct {
-	ID        string    `json:"id"`
-	Command   string    `json:"command"`
-	AgentID   string    `json:"agentId"`
-	CreatedAt time.Time `json:"createdAt"`
-	resultCh  chan ApprovalDecision
+	ID         string    `json:"id"`
+	ToolName   string    `json:"toolName"`
+	Command    string    `json:"command"`
+	Detail     string    `json:"detail,omitempty"`
+	AgentID    string    `json:"agentId"`
+	SessionKey string    `json:"sessionKey,omitempty"`
+	UserID     string    `json:"userId,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
+
+	tenantID uuid.UUID // event scope only — never serialised to clients
+	resultCh chan ApprovalDecision
+}
+
+// Wire renders the approval for the wire: the exec.approval.requested/resolved
+// event payloads and the exec.approval.list response all use this one shape, so
+// the UI describes a pending action the same way however it learned about it.
+//
+// `userId` MUST be present: the gateway event filter scopes exec.approval.*
+// events by it and falls back to a tenant-wide broadcast when it is missing.
+func (pa *PendingApproval) Wire() map[string]any {
+	if pa == nil {
+		return map[string]any{}
+	}
+	return map[string]any{
+		"id":         pa.ID,
+		"toolName":   pa.ToolName,
+		"command":    pa.Command,
+		"detail":     pa.Detail,
+		"agentId":    pa.AgentID,
+		"sessionKey": pa.SessionKey,
+		"userId":     pa.UserID,
+		"createdAt":  pa.CreatedAt.UnixMilli(),
+	}
 }
 
 // ExecApprovalManager manages pending approval requests and the dynamic allowlist.
 type ExecApprovalManager struct {
-	config       ExecApprovalConfig
-	pending      map[string]*PendingApproval
-	alwaysAllow  map[string]bool // patterns added via "allow-always" decisions
-	mu           sync.Mutex
-	nextID       int
+	config      ExecApprovalConfig
+	pending     map[string]*PendingApproval
+	alwaysAllow map[string]bool // patterns added via "allow-always" decisions
+	mu          sync.Mutex
+	nextID      int
+
+	// eventBus pushes exec.approval.requested/resolved to connected clients so a
+	// pending approval appears without a manual page reload. Nil-safe: a nil bus
+	// (tests, embedded callers) simply means no live notification.
+	eventBus bus.EventPublisher
 }
 
 // NewExecApprovalManager creates an approval manager with the given config.
@@ -110,6 +189,40 @@ func NewExecApprovalManager(cfg ExecApprovalConfig) *ExecApprovalManager {
 		pending:     make(map[string]*PendingApproval),
 		alwaysAllow: make(map[string]bool),
 	}
+}
+
+// SetEventBus wires the publisher used for approval events. Safe to call with
+// nil (no live notifications) and safe to leave unset.
+func (m *ExecApprovalManager) SetEventBus(pub bus.EventPublisher) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	m.eventBus = pub
+	m.mu.Unlock()
+}
+
+// publish broadcasts an approval event, tenant-scoped so the gateway's
+// fail-closed tenant filter delivers it. No-op when no bus is wired.
+func (m *ExecApprovalManager) publish(name string, pa *PendingApproval, extra map[string]any) {
+	if m == nil || pa == nil {
+		return
+	}
+	m.mu.Lock()
+	pub := m.eventBus
+	m.mu.Unlock()
+	if pub == nil {
+		return
+	}
+	payload := pa.Wire()
+	for k, v := range extra {
+		payload[k] = v
+	}
+	pub.Broadcast(bus.Event{
+		Name:     name,
+		Payload:  payload,
+		TenantID: pa.tenantID,
+	})
 }
 
 // CheckCommand evaluates whether a command should be executed, blocked, or needs approval.
@@ -149,21 +262,38 @@ func (m *ExecApprovalManager) CheckCommand(command string) string {
 }
 
 // RequestApproval creates a pending approval and blocks until resolved or timeout.
-func (m *ExecApprovalManager) RequestApproval(command, agentID string, timeout time.Duration) (ApprovalDecision, error) {
+//
+// It publishes exec.approval.requested on entry and exec.approval.resolved on
+// exit (including on timeout), so a connected dashboard shows the prompt live
+// instead of only after a manual reload.
+func (m *ExecApprovalManager) RequestApproval(req ApprovalRequest, timeout time.Duration) (ApprovalDecision, error) {
+	if req.ToolName == "" {
+		req.ToolName = ToolNameExec
+	}
+	if req.Detail == "" {
+		req.Detail = req.Command
+	}
+
 	m.mu.Lock()
 	m.nextID++
-	id := fmt.Sprintf("exec-%d", m.nextID)
+	id := fmt.Sprintf("%s-%d", ToolNameExec, m.nextID)
 	pa := &PendingApproval{
-		ID:        id,
-		Command:   command,
-		AgentID:   agentID,
-		CreatedAt: time.Now(),
-		resultCh:  make(chan ApprovalDecision, 1),
+		ID:         id,
+		ToolName:   req.ToolName,
+		Command:    req.Command,
+		Detail:     req.Detail,
+		AgentID:    req.AgentID,
+		SessionKey: req.SessionKey,
+		UserID:     req.UserID,
+		CreatedAt:  time.Now(),
+		tenantID:   req.TenantID,
+		resultCh:   make(chan ApprovalDecision, 1),
 	}
 	m.pending[id] = pa
 	m.mu.Unlock()
 
-	slog.Info("exec approval requested", "id", id, "command", truncateCmd(command, 100))
+	slog.Info("approval requested", "id", id, "tool", pa.ToolName, "detail", truncateCmd(pa.Detail, 100))
+	m.publish(protocol.EventExecApprovalReq, pa, nil)
 
 	// Wait for resolution or timeout
 	select {
@@ -172,9 +302,10 @@ func (m *ExecApprovalManager) RequestApproval(command, agentID string, timeout t
 		delete(m.pending, id)
 		m.mu.Unlock()
 
-		// If allow-always, add the command's base binary to the dynamic allowlist
-		if decision == ApprovalAllowAlways {
-			bin := extractBin(command)
+		// If allow-always, add the command's base binary to the dynamic allowlist.
+		// Only meaningful for the exec path, where Command is a shell command.
+		if decision == ApprovalAllowAlways && pa.Command != "" {
+			bin := extractBin(pa.Command)
 			if bin != "" {
 				m.mu.Lock()
 				m.alwaysAllow[bin] = true
@@ -189,21 +320,40 @@ func (m *ExecApprovalManager) RequestApproval(command, agentID string, timeout t
 		m.mu.Lock()
 		delete(m.pending, id)
 		m.mu.Unlock()
+		// Tell the UI the row is gone, otherwise a timed-out prompt lingers until
+		// the next reload.
+		m.publish(protocol.EventExecApprovalRes, pa, map[string]any{
+			"decision": string(ApprovalDeny),
+			"reason":   "timeout",
+		})
 		return ApprovalDeny, fmt.Errorf("approval timed out after %s", timeout)
 	}
+}
+
+// RequestExecApproval is the exec-shaped convenience wrapper: it keeps the
+// original (command, agentID) call shape while filling the generalised fields
+// from ctx.
+func (m *ExecApprovalManager) RequestExecApproval(ctx context.Context, command, agentID string, timeout time.Duration) (ApprovalDecision, error) {
+	req := NewApprovalRequest(ctx, ToolNameExec, agentID)
+	req.Command = command
+	req.Detail = command
+	return m.RequestApproval(req, timeout)
 }
 
 // Resolve resolves a pending approval request.
 func (m *ExecApprovalManager) Resolve(id string, decision ApprovalDecision) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	pa, ok := m.pending[id]
+	m.mu.Unlock()
+
 	if !ok {
 		return fmt.Errorf("approval %q not found or already resolved", id)
 	}
 
+	// resultCh is buffered (cap 1) so this never blocks the caller; the waiting
+	// RequestApproval goroutine removes the pending entry once it reads.
 	pa.resultCh <- decision
+	m.publish(protocol.EventExecApprovalRes, pa, map[string]any{"decision": string(decision)})
 	return nil
 }
 

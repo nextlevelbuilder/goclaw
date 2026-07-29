@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -382,10 +383,23 @@ func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *resolvedConn, t
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("connected agent %q cannot be run: %v", conn.Name, err))
 	}
-	command, err := spec.Command(task, cliagent.PermissionAuto)
+	// Approval mode is a per-connection choice, stored in the same config JSON as
+	// the invocation overrides ({"permission_mode":"manual"}). Absent → auto, which
+	// is how every existing connection already runs.
+	mode := cliagent.PermissionModeFromConfig(conn.Config)
+	command, err := spec.Command(task, mode)
 	if err != nil {
+		// A provider with no ask-before-acting flag must NOT be silently downgraded
+		// to auto — the whole point of choosing manual is to withhold that trust. Say
+		// which connection/provider is misconfigured and what to change.
+		if errors.Is(err, cliagent.ErrManualApprovalUnsupported) {
+			return ErrorResult(fmt.Sprintf(
+				"connected agent %q is set to manual approval, but its provider (%s) cannot ask before acting, so the task was NOT run — switch this connection's permission_mode to %q (it runs confined to the sandbox), or set %q on the connection if this CLI does have an ask-before-acting flag. Details: %v",
+				conn.Name, cliagent.CanonicalProvider(conn.Provider), cliagent.PermissionAuto, "manual_approve_args", err))
+		}
 		return ErrorResult(fmt.Sprintf("connected agent %q cannot be run: %v", conn.Name, err))
 	}
+	slog.Debug("connected-agent run", "connection", conn.ID, "provider", conn.Provider, "permission_mode", string(mode))
 
 	// Static env from the spec — for Claude Code this is HOME=/tmp plus the Go
 	// cache/module paths, without which a delegated `go build` fails against the

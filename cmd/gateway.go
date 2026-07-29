@@ -136,7 +136,7 @@ func runGateway() {
 		tools.DetectServerIPs(context.Background())
 	}
 
-	toolsReg, execApprovalMgr, mcpMgr, sandboxMgr, browserMgr, webFetchTool, ttsTool, audioMgr, permPE, toolPE, dataDir, agentCfg := setupToolRegistry(cfg, workspace, providerRegistry)
+	toolsReg, execApprovalMgr, mcpMgr, sandboxMgr, browserMgr, webFetchTool, ttsTool, audioMgr, permPE, toolPE, dataDir, agentCfg := setupToolRegistry(cfg, workspace, providerRegistry, msgBus)
 	if browserMgr != nil {
 		defer browserMgr.Close()
 	}

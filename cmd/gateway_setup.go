@@ -14,11 +14,11 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
-	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
@@ -33,10 +33,14 @@ import (
 // Returns the registry, exec approval manager, MCP manager, sandbox manager,
 // browser manager (caller must defer Close), web fetch tool, TTS tool,
 // permission policy engine, tool policy engine, data directory, and resolved agent defaults.
+// eventPub is the WS event publisher (the message bus). It may be nil — every
+// consumer here is nil-safe — and is used so approval prompts reach connected
+// clients live.
 func setupToolRegistry(
 	cfg *config.Config,
 	workspace string,
 	providerRegistry *providers.Registry,
+	eventPub bus.EventPublisher,
 ) (
 	toolsReg *tools.Registry,
 	execApprovalMgr *tools.ExecApprovalManager,
@@ -203,6 +207,9 @@ func setupToolRegistry(
 			approvalCfg.Allowlist = cfg.Tools.ExecApproval.Allowlist
 		}
 		execApprovalMgr = tools.NewExecApprovalManager(approvalCfg)
+		// Publish exec.approval.requested/resolved so a pending prompt shows up in
+		// the dashboard immediately instead of only after a manual reload. Nil-safe.
+		execApprovalMgr.SetEventBus(eventPub)
 
 		// Wire approval to exec tools in the registry
 		if execTool, ok := toolsReg.Get("exec"); ok {
@@ -624,4 +631,3 @@ func setupSkillsSystem(
 
 	return skillsLoader, skillSearchTool, globalSkillsDir, bundledSkillsDir, builtinSkillsDir
 }
-

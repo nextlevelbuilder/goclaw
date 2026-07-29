@@ -1,6 +1,7 @@
 package permissions
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -276,5 +277,32 @@ func TestMethodScopes_ApprovalMethod(t *testing.T) {
 	}
 	if !hasScopeApprovals || !hasAdmin {
 		t.Fatalf("approvals method should require [approvals, admin], got %v", scopes)
+	}
+}
+
+// The registered wire methods are exec.approval.* (protocol.MethodApprovals*),
+// NOT "approvals.*" — they must map to ScopeApprovals rather than falling
+// through to the generic write scope, which would let any operator token
+// approve a command.
+func TestMethodScopes_ExecApprovalMethods(t *testing.T) {
+	for _, method := range []string{
+		protocol.MethodApprovalsList,
+		protocol.MethodApprovalsApprove,
+		protocol.MethodApprovalsDeny,
+	} {
+		scopes := MethodScopes(method)
+		if slices.Contains(scopes, ScopeWrite) {
+			t.Fatalf("%s must not be satisfied by the generic write scope, got %v", method, scopes)
+		}
+		if !slices.Contains(scopes, ScopeApprovals) || !slices.Contains(scopes, ScopeAdmin) {
+			t.Fatalf("%s should require [approvals, admin], got %v", method, scopes)
+		}
+		pe := NewPolicyEngine(nil)
+		if pe.CanAccessWithScopes([]Scope{ScopeWrite}, method) {
+			t.Fatalf("%s: a write-only token must not be able to call it", method)
+		}
+		if !pe.CanAccessWithScopes([]Scope{ScopeApprovals}, method) {
+			t.Fatalf("%s: an approvals-scoped token must be able to call it", method)
+		}
 	}
 }

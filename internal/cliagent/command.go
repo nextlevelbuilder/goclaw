@@ -1,6 +1,7 @@
 package cliagent
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -17,6 +18,38 @@ const (
 	// fails rather than quietly downgrading to auto.
 	PermissionManual PermissionMode = "manual"
 )
+
+// permissionModeConfig is the slice of the connection config
+// (store.CLIConnection.Config) that selects the approval mode. It is a separate
+// shape from specOverride because the mode is not part of the invocation recipe:
+// it is a user preference about how much the CLI may do on its own.
+type permissionModeConfig struct {
+	PermissionMode *string `json:"permission_mode"`
+}
+
+// PermissionModeFromConfig reads {"permission_mode":"auto"|"manual"} from a
+// connection's config.
+//
+// Absent, empty, unparseable, or unrecognised → PermissionAuto, which is the
+// pre-existing behaviour of every connection (no config key = today's runs keep
+// working). Note this only picks the REQUESTED mode; whether the provider can
+// actually honour manual is decided by Spec.Command, which fails with
+// ErrManualApprovalUnsupported rather than downgrading.
+func PermissionModeFromConfig(cfg json.RawMessage) PermissionMode {
+	if !hasConfig(cfg) {
+		return PermissionAuto
+	}
+	var pm permissionModeConfig
+	if err := json.Unmarshal(cfg, &pm); err != nil || pm.PermissionMode == nil {
+		return PermissionAuto
+	}
+	switch strings.ToLower(strings.TrimSpace(*pm.PermissionMode)) {
+	case string(PermissionManual), "ask":
+		return PermissionManual
+	default:
+		return PermissionAuto
+	}
+}
 
 // ErrManualApprovalUnsupported is returned by Command when manual approval is
 // requested from a provider whose Spec has no ManualApproveArgs. Callers should
