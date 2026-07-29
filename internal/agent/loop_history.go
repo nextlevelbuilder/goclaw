@@ -280,6 +280,10 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 		messages = append(messages, providers.Message{
 			Role:    "assistant",
 			Content: "I understand the context from our previous conversation. How can I help you?",
+			// Synthetic reasoning for thinking-mode providers (DeepSeek v4-pro, Kimi)
+			// that reject assistant turns missing reasoning_content. Wired in
+			// internal/providers/openai_request.go via openAIWireAssistantReasoningContent.
+			Thinking: "Reviewed previous conversation summary. Ready to continue from this context.",
 		})
 	}
 

@@ -45,7 +45,11 @@ func (l *Loop) runViaPipeline(ctx context.Context, req RunRequest) (*RunResult, 
 	if err != nil {
 		return nil, err
 	}
-	return convertRunResult(pResult), nil
+	result := convertRunResult(pResult)
+	// Bridge Thinking into runState so finalizeRun emits a non-empty Thinking
+	// on the assistant message — required for DeepSeek/Kimi reasoning_content.
+	bridgeRS.finalThinking = result.Thinking
+	return result, nil
 }
 
 // buildPipelineDeps maps Loop fields + methods to PipelineDeps callbacks.
