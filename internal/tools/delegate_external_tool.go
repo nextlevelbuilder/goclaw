@@ -73,7 +73,11 @@ func delegateMemoryMB() int {
 // as the host RAM allows; the rest queue for a free slot. Size it to
 // host_RAM / GOCLAW_DELEGATE_MEMORY_MB (8 GB host ÷ 3 GB ≈ 3). Override with
 // GOCLAW_DELEGATE_MAX_CONCURRENT.
-func delegateMaxConcurrent() int {
+// DelegateMaxConcurrent is exported so the system-prompt recipe can steer the
+// model to split a port into ~this many chunks — matching the number of workers
+// that actually run at once. Over-splitting past this just queues the extras
+// into later waves and makes the port slower, not faster.
+func DelegateMaxConcurrent() int {
 	if v := os.Getenv("GOCLAW_DELEGATE_MAX_CONCURRENT"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return n
@@ -94,7 +98,7 @@ var (
 // acquireDelegateSlot blocks until a concurrency slot is free (or ctx is
 // cancelled), returning a release func to free the slot when the run finishes.
 func acquireDelegateSlot(ctx context.Context) (func(), error) {
-	delegateSemOnce.Do(func() { delegateSem = make(chan struct{}, delegateMaxConcurrent()) })
+	delegateSemOnce.Do(func() { delegateSem = make(chan struct{}, DelegateMaxConcurrent()) })
 	select {
 	case delegateSem <- struct{}{}:
 		return func() { <-delegateSem }, nil
