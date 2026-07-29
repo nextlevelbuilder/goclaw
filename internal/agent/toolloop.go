@@ -285,6 +285,17 @@ func (s *toolLoopState) detectSameResult(toolName, resultHash string) (level, me
 	if strings.HasSuffix(toolName, "generate_image") || strings.HasSuffix(toolName, "generate_video") {
 		return "", ""
 	}
+	// delegate_external fans out to SEVERAL parallel coding-agent workers in one
+	// turn (whole-repo port: one delegation per chunk). Those workers legitimately
+	// return the same text as each other — most importantly the same failure
+	// notice when they all hit the same wall (e.g. every worker exceeding the
+	// delegation time limit). Counting that as a runaway loop killed the run
+	// mid-workflow, before the INTEGRATE + PUBLISH steps, discarding a completed
+	// port. Each call is a distinct worker doing distinct work, so identical
+	// results are not evidence of no progress here.
+	if strings.HasSuffix(toolName, "delegate_external") {
+		return "", ""
+	}
 	var count int
 	for _, rec := range s.history {
 		if rec.toolName == toolName && rec.resultHash == resultHash {

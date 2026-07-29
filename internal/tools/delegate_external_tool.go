@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -64,26 +65,45 @@ func delegateMemoryMB() int {
 	return 1024
 }
 
-// delegateMaxConcurrent bounds how many delegated coding runs execute AT ONCE
-// across the whole process. The agent loop happily launches every tool call in
-// one message in parallel, so a fan-out that splits a repo into N chunks would
-// try to run N memory-heavy `go build` sandboxes simultaneously and OOM the
-// host. This cap lets the model split into as many independent chunks as it
-// likes (better load-balancing) while the platform runs only as many at a time
-// as the host RAM allows; the rest queue for a free slot. Size it to
-// host_RAM / GOCLAW_DELEGATE_MEMORY_MB (8 GB host ÷ 3 GB ≈ 3). Override with
-// GOCLAW_DELEGATE_MAX_CONCURRENT.
-// DelegateMaxConcurrent is exported so the system-prompt recipe can steer the
-// model to split a port into ~this many chunks — matching the number of workers
-// that actually run at once. Over-splitting past this just queues the extras
-// into later waves and makes the port slower, not faster.
+// DelegateMaxConcurrent bounds how many delegated coding runs execute AT ONCE
+// across the whole process. The agent loop launches every tool call in one
+// message in parallel, so a fan-out that splits a repo into N chunks would
+// otherwise run N `go build` sandboxes at once and swamp the host.
+//
+// The default DERIVES FROM THE HOST'S vCPU COUNT, because a delegated port is
+// CPU-bound in its build phase (measured on a 2-vCPU host: two building workers
+// pegged both cores at ~99%/94%, while LLM-waiting workers idled at 2-4%; RAM
+// was never the constraint — usage was ~300-400 MB against a 1.5 GB cap). One
+// worker per vCPU, clamped to [2,8]: enough parallelism to overlap the long
+// LLM-generation waits without oversubscribing the cores during builds.
+//
+// Deriving it (instead of hardcoding) means the box can be resized UP for a big
+// port and back DOWN afterwards with no config change and no redeploy — the
+// effective concurrency, and the recipe's chunk target that reads this, follow
+// the instance size automatically. GOCLAW_DELEGATE_MAX_CONCURRENT still wins
+// when set, for pinning a value regardless of host size.
+//
+// Exported so the system-prompt recipe can steer the model to split a port into
+// ~this many chunks — matching the number of workers that actually run at once.
+// Over-splitting past this just queues the extras into later waves, making the
+// port slower rather than faster.
 func DelegateMaxConcurrent() int {
 	if v := os.Getenv("GOCLAW_DELEGATE_MAX_CONCURRENT"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			return n
 		}
 	}
-	return 3
+	// runtime.NumCPU reflects the CPUs available to this process (host vCPUs
+	// unless a cpuset pins it), so it tracks an instance resize.
+	n := runtime.NumCPU()
+	switch {
+	case n < 2:
+		return 2
+	case n > 8:
+		return 8
+	default:
+		return n
+	}
 }
 
 // delegateSem is a process-wide semaphore capping concurrent delegated runs.
@@ -379,19 +399,30 @@ func (t *DelegateExternalTool) runCLI(ctx context.Context, conn *config.Connecte
 	// The final answer is the stream's "result" event. If it's missing, the run
 	// didn't finish — classify why so the agent gets an actionable error instead
 	// of a benign empty result (or, worse, a dump of raw stream-json).
+	// Identify which worker this was. On a parallel fan-out several delegations
+	// run at once, so an un-labelled message ("the connected agent timed out")
+	// is ambiguous to the user AND indistinguishable between workers.
+	who := conn.Name
+	if w := strings.TrimSpace(worker); w != "" {
+		who = fmt.Sprintf("%s [worker %s]", conn.Name, w)
+	}
+
 	out := strings.TrimSpace(streamer.finalResult)
 	if out == "" {
 		switch result.ExitCode {
 		case -1:
 			mins := delegateExecTimeoutSec() / 60
-			return ErrorResult(fmt.Sprintf("the connected agent %q ran past the %d-minute time limit and was stopped before finishing. Give it a smaller, self-contained slice of the work (one module/package at a time) and delegate again, or raise GOCLAW_DELEGATE_TIMEOUT_SEC.", conn.Name, mins))
+			// Partial work IS kept: the worker writes into the shared workspace as
+			// it goes, so tell the agent to continue the workflow (re-delegate the
+			// remainder, then integrate + publish) rather than treat this as fatal.
+			return ErrorResult(fmt.Sprintf("%s ran past the %d-minute time limit and was stopped before finishing (%d steps done). Whatever it already wrote to the workspace is KEPT — inspect what remains, delegate the leftover slice as a smaller task, then continue with the integrate + publish steps. Do not abandon the run.", who, mins, streamer.eventCount))
 		case 137:
-			return ErrorResult(fmt.Sprintf("the connected agent %q was killed for running out of memory (the sandbox cap is %d MB) before it finished. Give it a smaller slice of the work, or raise GOCLAW_DELEGATE_MEMORY_MB (and ensure the host has the RAM).", conn.Name, delegateMemoryMB()))
+			return ErrorResult(fmt.Sprintf("%s was killed for running out of memory (sandbox cap %d MB) after %d steps. Its partial output in the workspace is KEPT — delegate a smaller slice for the remainder, then continue with integrate + publish.", who, delegateMemoryMB(), streamer.eventCount))
 		case 0:
-			return NewResult(fmt.Sprintf("Delegated to %s (%s):\n\n(the connected agent finished but returned no result — after %d steps of activity)", conn.Name, conn.Provider, streamer.eventCount))
+			return NewResult(fmt.Sprintf("Delegated to %s (%s):\n\n(the connected agent finished but returned no result — after %d steps of activity)", who, conn.Provider, streamer.eventCount))
 		default:
-			return ErrorResult(fmt.Sprintf("the connected agent %q did not finish (exit %d) after %d steps. stderr: %s", conn.Name, result.ExitCode, streamer.eventCount, truncate(result.Stderr, 400)))
+			return ErrorResult(fmt.Sprintf("%s did not finish (exit %d) after %d steps. stderr: %s", who, result.ExitCode, streamer.eventCount, truncate(result.Stderr, 400)))
 		}
 	}
-	return NewResult(fmt.Sprintf("Delegated to %s (%s):\n\n%s", conn.Name, conn.Provider, out))
+	return NewResult(fmt.Sprintf("Delegated to %s (%s):\n\n%s", who, conn.Provider, out))
 }
