@@ -69,18 +69,18 @@ func (sm *SubagentManager) sweepArchivedTasks() {
 		scope := TaskScope{
 			TenantID: task.OriginTenantID, RootAgentID: task.RootAgentID, RootAgentKey: task.RootAgentKey,
 		}
-		persistent[scope.TenantID.String()+":"+scope.RootAgentKey] = persistentSweep{
+		persistent[scope.TenantID.String()+":"+scope.RootAgentID.String()] = persistentSweep{
 			scope: scope, ttl: time.Duration(task.spawnConfig.ArchiveAfterMinutes) * time.Minute,
 		}
 	}
 	sm.mu.Unlock()
 
 	for _, sweep := range persistent {
-		if sm.taskStore == nil || sweep.scope.RootAgentKey == "" {
+		if sm.taskStore == nil || sweep.scope.RootAgentID == uuid.Nil {
 			continue
 		}
 		ctx := store.WithTenantID(context.Background(), sweep.scope.TenantID)
-		if _, err := sm.taskStore.Archive(ctx, sweep.scope.RootAgentKey, sweep.ttl, subagentArchiveBatchSize); err != nil {
+		if _, err := sm.taskStore.Archive(ctx, sweep.scope.RootAgentID, sweep.ttl, subagentArchiveBatchSize); err != nil {
 			slog.Warn("subagent archive sweep failed", "root_agent", sweep.scope.RootAgentKey, "error", err)
 		}
 	}

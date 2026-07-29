@@ -27,6 +27,8 @@ const (
 	ExecDefaultTimeoutSeconds = 60
 	ExecMinTimeoutSeconds     = 1
 	ExecMaxTimeoutSeconds     = 3600
+
+	delegatedExecSandboxRequiredError = "delegated artifact exec requires an active sandbox manager and sandbox key; host execution is not allowed"
 )
 
 // Dangerous command patterns organized into configurable deny groups.
@@ -244,6 +246,14 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 	// Reject NUL bytes — they cause silent shell truncation enabling injection.
 	if strings.ContainsRune(command, '\x00') {
 		return ErrorResult("command contains invalid NUL byte")
+	}
+
+	// Delegation artifact runs are a physical isolation boundary. Reject before
+	// credential lookup, adapter preparation, approval prompts, or ordinary
+	// command handling unless execution can be routed into an identified sandbox.
+	if IsDelegationArtifactRun(ctx) &&
+		(t.sandboxMgr == nil || ToolSandboxKeyFromCtx(ctx) == "") {
+		return ErrorResult(delegatedExecSandboxRequiredError)
 	}
 
 	// Normalize command before all deny checks: NFKC + zero-width strip prevents
@@ -663,6 +673,9 @@ func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKe
 	sb, err := acquireToolSandbox(ctx, t.sandboxMgr, sandboxKey, mountWorkspace)
 	if err != nil {
 		if errors.Is(err, sandbox.ErrSandboxDisabled) {
+			if IsDelegationArtifactRun(ctx) {
+				return ErrorResult(delegatedExecSandboxRequiredError)
+			}
 			return t.executeOnHost(ctx, command, cwd)
 		}
 		// Docker unavailable (binary missing, daemon down) → fail closed.

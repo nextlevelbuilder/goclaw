@@ -56,18 +56,20 @@ func (c *Channel) handleSubagentsList(ctx context.Context, chatID int64, isGroup
 		return
 	}
 
-	agentKey := c.AgentID()
-	if agentKey == "" {
-		send("Subagent tasks are not available (no agent configured).")
+	rootAgentID, err := c.resolveAgentUUID(ctx)
+	if err != nil {
+		slog.Warn("subagents command: resolve agent UUID failed", "error", err)
+		send("Subagent tasks are not available (agent could not be resolved).")
 		return
 	}
 
-	tasks, err := c.subagentTaskStore.ListByParent(ctx, agentKey, "")
+	tasks, err := c.subagentTaskStore.ListByParent(ctx, rootAgentID, "")
 	if err != nil {
 		slog.Warn("subagents command: ListByParent failed", "error", err)
 		send("Failed to list subagent tasks. Please try again.")
 		return
 	}
+	tasks = filterSelfCloneTasks(tasks)
 
 	if len(tasks) == 0 {
 		send("No subagent tasks found.")
@@ -146,12 +148,13 @@ func (c *Channel) handleSubagentDetail(ctx context.Context, chatID int64, text s
 		return
 	}
 
-	rootAgentKey := c.AgentID()
-	if rootAgentKey == "" {
-		send("Subagent tasks are not available (no agent configured).")
+	rootAgentID, err := c.resolveAgentUUID(ctx)
+	if err != nil {
+		slog.Warn("subagent command: resolve agent UUID failed", "error", err)
+		send("Subagent tasks are not available (agent could not be resolved).")
 		return
 	}
-	task, err := c.subagentTaskStore.Get(ctx, rootAgentKey, taskID)
+	task, err := c.subagentTaskStore.Get(ctx, rootAgentID, taskID)
 	if err != nil {
 		slog.Warn("subagent command: Get failed", "id", idArg, "error", err)
 		send("Failed to load subagent task. Please try again.")
@@ -159,6 +162,10 @@ func (c *Channel) handleSubagentDetail(ctx context.Context, chatID int64, text s
 	}
 	if task == nil {
 		send(fmt.Sprintf("Task %q not found. Use /subagents to see available tasks.", idArg[:8]))
+		return
+	}
+	if isDelegationCompletion(task) {
+		send(fmt.Sprintf("Task %q is a delegation result; retrieve it with the delegate tool.", idArg[:8]))
 		return
 	}
 
@@ -190,12 +197,13 @@ func (c *Channel) handleSubagentCallback(ctx context.Context, query *telego.Call
 		return
 	}
 
-	rootAgentKey := c.AgentID()
-	if rootAgentKey == "" {
-		send("Subagent tasks are not available (no agent configured).")
+	rootAgentID, err := c.resolveAgentUUID(ctx)
+	if err != nil {
+		slog.Warn("subagent callback: resolve agent UUID failed", "error", err)
+		send("Subagent tasks are not available (agent could not be resolved).")
 		return
 	}
-	task, err := c.subagentTaskStore.Get(ctx, rootAgentKey, taskID)
+	task, err := c.subagentTaskStore.Get(ctx, rootAgentID, taskID)
 	if err != nil {
 		slog.Warn("subagent callback: Get failed", "id", taskIDStr, "error", err)
 		send("Failed to load subagent task.")
@@ -203,6 +211,10 @@ func (c *Channel) handleSubagentCallback(ctx context.Context, query *telego.Call
 	}
 	if task == nil {
 		send(fmt.Sprintf("Task %s not found.", taskIDStr[:8]))
+		return
+	}
+	if isDelegationCompletion(task) {
+		send("This task is a delegation result and is not part of /subagents.")
 		return
 	}
 
@@ -231,4 +243,22 @@ func formatSubagentDetail(t *store.SubagentTaskData) string {
 		sb.WriteString(fmt.Sprintf("\nResult:\n%s\n", truncateStr(*t.Result, 1000)))
 	}
 	return sb.String()
+}
+
+func filterSelfCloneTasks(tasks []store.SubagentTaskData) []store.SubagentTaskData {
+	filtered := tasks[:0]
+	for i := range tasks {
+		if !isDelegationCompletion(&tasks[i]) {
+			filtered = append(filtered, tasks[i])
+		}
+	}
+	return filtered
+}
+
+func isDelegationCompletion(task *store.SubagentTaskData) bool {
+	if task == nil || task.Metadata == nil {
+		return false
+	}
+	kind, _ := task.Metadata["completion_kind"].(string)
+	return kind == "delegate"
 }

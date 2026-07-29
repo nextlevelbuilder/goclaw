@@ -2,11 +2,28 @@ package tools
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
+
+type testMediaPathLoader struct {
+	path string
+	root string
+}
+
+func (l testMediaPathLoader) LoadPath(string) (string, error) {
+	return l.path, nil
+}
+
+func (l testMediaPathLoader) MediaRootPath() string {
+	return l.root
+}
 
 type readAudioUnsupportedProvider struct {
 	name      string
@@ -120,5 +137,204 @@ func TestReadAudioCallProvider_UnsupportedProviderDoesNotSendAudioAsImage(t *tes
 	}
 	if fake.chatCalls != 0 || fake.images != 0 {
 		t.Fatalf("unsupported audio route called chat fallback: calls=%d images=%d", fake.chatCalls, fake.images)
+	}
+}
+
+func TestResolveAudioFileRequiresExactMediaID(t *testing.T) {
+	workspace := t.TempDir()
+	audioPath := filepath.Join(workspace, ".uploads", "recording.mp3")
+	if err := os.MkdirAll(filepath.Dir(audioPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(audioPath, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ref := providers.MediaRef{
+		ID:       uuid.NewString(),
+		Kind:     "audio",
+		Path:     audioPath,
+		MimeType: "audio/mpeg",
+	}
+	tool := NewReadAudioTool(nil, nil)
+	ctx := WithToolWorkspace(context.Background(), workspace)
+	ctx = WithMediaAudioRefs(ctx, []providers.MediaRef{ref})
+
+	if gotPath, _, err := tool.resolveAudioFile(ctx, "recording.mp3"); err == nil {
+		t.Fatalf("non-ID value resolved to %q, want exact media_id error", gotPath)
+	}
+	gotPath, gotMime, err := tool.resolveAudioFile(ctx, ref.ID)
+	if err != nil {
+		t.Fatalf("exact media_id returned error: %v", err)
+	}
+	wantPath, err := filepath.EvalSymlinks(audioPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != wantPath || gotMime != "audio/mpeg" {
+		t.Fatalf("resolved (%q, %q), want (%q, audio/mpeg)", gotPath, gotMime, wantPath)
+	}
+}
+
+func TestResolveAudioFileOmittedMediaIDUsesNewestRef(t *testing.T) {
+	workspace := t.TempDir()
+	oldPath := filepath.Join(workspace, ".uploads", "old.mp3")
+	latestPath := filepath.Join(workspace, ".uploads", "latest.mp3")
+	if err := os.MkdirAll(filepath.Dir(oldPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{oldPath, latestPath} {
+		if err := os.WriteFile(path, []byte("audio"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	refs := []providers.MediaRef{
+		{ID: uuid.NewString(), Kind: "audio", Path: oldPath, MimeType: "audio/mpeg"},
+		{ID: uuid.NewString(), Kind: "audio", Path: latestPath, MimeType: "audio/mpeg"},
+	}
+	ctx := WithToolWorkspace(context.Background(), workspace)
+	ctx = WithMediaAudioRefs(ctx, refs)
+
+	gotPath, _, err := NewReadAudioTool(nil, nil).resolveAudioFile(ctx, "")
+	if err != nil {
+		t.Fatalf("omitted media_id returned error: %v", err)
+	}
+	wantPath, err := filepath.EvalSymlinks(latestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != wantPath {
+		t.Fatalf("path = %q, want newest %q", gotPath, wantPath)
+	}
+}
+
+func TestResolveAudioFileRejectsRefPathOutsideWorkspace(t *testing.T) {
+	workspace := t.TempDir()
+	outsidePath := filepath.Join(t.TempDir(), "secret.mp3")
+	if err := os.WriteFile(outsidePath, []byte("secret"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ref := providers.MediaRef{
+		ID:       uuid.NewString(),
+		Kind:     "audio",
+		Path:     outsidePath,
+		MimeType: "audio/mpeg",
+	}
+	ctx := WithToolWorkspace(context.Background(), workspace)
+	ctx = WithMediaAudioRefs(ctx, []providers.MediaRef{ref})
+
+	gotPath, _, err := NewReadAudioTool(nil, nil).resolveAudioFile(ctx, ref.ID)
+	if err == nil {
+		t.Fatalf("outside ref path resolved to %q, want containment error", gotPath)
+	}
+}
+
+func TestResolveAudioFileRejectsLegacyLoaderPathOutsideWorkspace(t *testing.T) {
+	workspace := t.TempDir()
+	outsidePath := filepath.Join(t.TempDir(), "legacy.mp3")
+	if err := os.WriteFile(outsidePath, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ref := providers.MediaRef{
+		ID:       uuid.NewString(),
+		Kind:     "audio",
+		MimeType: "audio/mpeg",
+	}
+	ctx := WithToolWorkspace(context.Background(), workspace)
+	ctx = WithMediaAudioRefs(ctx, []providers.MediaRef{ref})
+
+	gotPath, _, err := NewReadAudioTool(nil, testMediaPathLoader{path: outsidePath}).resolveAudioFile(ctx, ref.ID)
+	if err == nil {
+		t.Fatalf("outside legacy loader path resolved to %q, want containment error", gotPath)
+	}
+}
+
+func TestResolveAudioFileAcceptsConfiguredLegacyMediaRoot(t *testing.T) {
+	workspace := t.TempDir()
+	mediaRoot := filepath.Join(t.TempDir(), ".media")
+	audioPath := filepath.Join(mediaRoot, "session-hash", "legacy.mp3")
+	if err := os.MkdirAll(filepath.Dir(audioPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(audioPath, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ref := providers.MediaRef{
+		ID:       uuid.NewString(),
+		Kind:     "audio",
+		MimeType: "audio/mpeg",
+	}
+	ctx := WithToolWorkspace(context.Background(), workspace)
+	ctx = WithMediaAudioRefs(ctx, []providers.MediaRef{ref})
+
+	gotPath, _, err := NewReadAudioTool(nil, testMediaPathLoader{
+		path: audioPath,
+		root: mediaRoot,
+	}).resolveAudioFile(ctx, ref.ID)
+	if err != nil {
+		t.Fatalf("configured legacy media path returned error: %v", err)
+	}
+	wantPath, err := filepath.EvalSymlinks(audioPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != wantPath {
+		t.Fatalf("path = %q, want %q", gotPath, wantPath)
+	}
+}
+
+func TestResolveAudioFileAcceptsLegacyLoaderPathInsideWorkspace(t *testing.T) {
+	workspace := t.TempDir()
+	audioPath := filepath.Join(workspace, ".uploads", "legacy.mp3")
+	if err := os.MkdirAll(filepath.Dir(audioPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(audioPath, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ref := providers.MediaRef{
+		ID:       uuid.NewString(),
+		Kind:     "audio",
+		MimeType: "audio/mpeg",
+	}
+	ctx := WithToolWorkspace(context.Background(), workspace)
+	ctx = WithMediaAudioRefs(ctx, []providers.MediaRef{ref})
+
+	gotPath, _, err := NewReadAudioTool(nil, testMediaPathLoader{path: audioPath}).resolveAudioFile(ctx, ref.ID)
+	if err != nil {
+		t.Fatalf("inside legacy loader path returned error: %v", err)
+	}
+	wantPath, err := filepath.EvalSymlinks(audioPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != wantPath {
+		t.Fatalf("path = %q, want %q", gotPath, wantPath)
+	}
+}
+
+func TestResolveAudioFileAcceptsDelegationInputRef(t *testing.T) {
+	ctx, inputs, _ := delegationArtifactToolContext(t)
+	audioPath := filepath.Join(inputs, "recording.mp3")
+	if err := os.WriteFile(audioPath, []byte("audio"), 0o440); err != nil {
+		t.Fatal(err)
+	}
+	ref := providers.MediaRef{
+		ID:       uuid.NewString(),
+		Kind:     "audio",
+		Path:     audioPath,
+		MimeType: "audio/mpeg",
+	}
+	ctx = WithMediaAudioRefs(ctx, []providers.MediaRef{ref})
+
+	gotPath, _, err := NewReadAudioTool(nil, nil).resolveAudioFile(ctx, ref.ID)
+	if err != nil {
+		t.Fatalf("delegation input ref returned error: %v", err)
+	}
+	wantPath, err := filepath.EvalSymlinks(audioPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != wantPath {
+		t.Fatalf("path = %q, want staged input %q", gotPath, wantPath)
 	}
 }

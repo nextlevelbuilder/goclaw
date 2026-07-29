@@ -18,7 +18,13 @@ import (
 
 // announceTask publishes terminal state after child-run execution capacity has
 // been released. Slow bus consumers and callbacks must never hold admission.
-func (sm *SubagentManager) announceTask(ctx context.Context, task *SubagentTask, callback AsyncCallback, iterations int) {
+func (sm *SubagentManager) announceTask(
+	ctx context.Context,
+	task *SubagentTask,
+	callback AsyncCallback,
+	iterations int,
+	terminalPersisted bool,
+) {
 	// Announce result to parent via bus (matching TS subagent-announce.ts pattern).
 	// The announce goes through the parent agent's session so the agent can
 	// reformulate the result for the user.
@@ -26,17 +32,19 @@ func (sm *SubagentManager) announceTask(ctx context.Context, task *SubagentTask,
 		elapsed := time.Since(time.UnixMilli(task.CreatedAt))
 
 		item := AnnounceQueueItem{
-			SubagentID:   task.ID,
-			ParentTaskID: task.ParentTaskID,
-			Depth:        task.Depth,
-			Label:        task.Label,
-			Status:       task.Status,
-			Result:       task.Result,
-			Media:        task.Media,
-			Runtime:      elapsed,
-			Iterations:   iterations,
-			InputTokens:  task.TotalInputTokens,
-			OutputTokens: task.TotalOutputTokens,
+			SubagentID:       task.ID,
+			CompletionID:     task.dbID,
+			DurablyPersisted: terminalPersisted,
+			ParentTaskID:     task.ParentTaskID,
+			Depth:            task.Depth,
+			Label:            task.Label,
+			Status:           task.Status,
+			Result:           task.Result,
+			Media:            task.Media,
+			Runtime:          elapsed,
+			Iterations:       iterations,
+			InputTokens:      task.TotalInputTokens,
+			OutputTokens:     task.TotalOutputTokens,
 		}
 		meta := AnnounceMetadata{
 			OriginChannel:    task.OriginChannel,
@@ -98,7 +106,7 @@ func (sm *SubagentManager) announceTask(ctx context.Context, task *SubagentTask,
 			if task.OriginUserID != "" {
 				announceMeta[MetaOriginUserID] = task.OriginUserID
 			}
-			sm.msgBus.PublishInbound(bus.InboundMessage{
+			delivered := PublishAsyncCompletion(ctx, sm.msgBus, bus.InboundMessage{
 				Channel:  "system",
 				SenderID: fmt.Sprintf("subagent:%s", task.ID),
 				ChatID:   task.OriginChatID,
@@ -108,6 +116,24 @@ func (sm *SubagentManager) announceTask(ctx context.Context, task *SubagentTask,
 				Metadata: announceMeta,
 				Media:    task.Media,
 			})
+			if terminalPersisted {
+				sm.UpdateAnnouncementStatus(ctx, task.RootAgentID, task.dbID, delivered)
+			} else {
+				slog.Error("subagent.announce_without_durable_terminal",
+					"task_id", task.ID,
+					"completion_id", task.dbID,
+					"root_agent_id", task.RootAgentID,
+					"delivered", delivered,
+				)
+			}
+			if !delivered {
+				slog.Warn("subagent.announce_deferred_to_ledger",
+					"task_id", task.ID,
+					"completion_id", task.dbID,
+					"root_agent_id", task.RootAgentID,
+					"reason", "inbound_bus_full",
+				)
+			}
 		}
 	}
 

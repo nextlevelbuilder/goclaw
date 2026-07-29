@@ -4,6 +4,7 @@ package tools
 
 import (
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -159,15 +160,23 @@ func (r *artifactSecureRoot) readDir(relativePath string) ([]string, error) {
 	if entry.kind != artifactEntryDirectory {
 		return nil, ErrArtifactNonRegular
 	}
-	dirEntries, err := entry.file.ReadDir(-1)
-	if err != nil {
-		return nil, err
+
+	names := make([]string, 0, artifactSecureReadBatchSize)
+	for {
+		dirEntries, readErr := entry.readDirBatch()
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			return nil, readErr
+		}
+		if len(dirEntries) > artifactSecureMaxDirectoryEntries-len(names) {
+			return nil, ErrArtifactLimitExceeded
+		}
+		for _, dirEntry := range dirEntries {
+			names = append(names, dirEntry.Name())
+		}
+		if errors.Is(readErr, io.EOF) {
+			return names, nil
+		}
 	}
-	names := make([]string, 0, len(dirEntries))
-	for _, dirEntry := range dirEntries {
-		names = append(names, dirEntry.Name())
-	}
-	return names, nil
 }
 
 func (r *artifactSecureRoot) exists(relativePath string) (bool, error) {
@@ -210,10 +219,18 @@ func (r *artifactSecureRoot) removeTree(relativePath string) error {
 		return err
 	}
 	defer unix.Close(parent)
-	return removeArtifactTreeAt(parent, name)
+	remaining := artifactSecureCleanupEntryBudget
+	return removeArtifactTreeAt(parent, name, 0, &remaining)
 }
 
-func removeArtifactTreeAt(parent int, name string) error {
+func removeArtifactTreeAt(parent int, name string, depth int, remaining *int) error {
+	if depth > artifactSecureMaxDepth {
+		return ErrArtifactLimitExceeded
+	}
+	if *remaining <= 0 {
+		return ErrArtifactLimitExceeded
+	}
+	*remaining--
 	var stat unix.Stat_t
 	if err := unix.Fstatat(parent, name, &stat, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		if errors.Is(err, unix.ENOENT) {
@@ -235,15 +252,20 @@ func removeArtifactTreeAt(parent int, name string) error {
 		return translateArtifactPOSIXError(err)
 	}
 	dir := os.NewFile(uintptr(fd), name)
-	entries, readErr := dir.ReadDir(-1)
-	if readErr != nil {
-		_ = dir.Close()
-		return readErr
-	}
-	for _, entry := range entries {
-		if err := removeArtifactTreeAt(fd, entry.Name()); err != nil {
+	for {
+		entries, readErr := dir.ReadDir(artifactSecureReadBatchSize)
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
 			_ = dir.Close()
-			return err
+			return readErr
+		}
+		for _, entry := range entries {
+			if err := removeArtifactTreeAt(fd, entry.Name(), depth+1, remaining); err != nil {
+				_ = dir.Close()
+				return err
+			}
+		}
+		if errors.Is(readErr, io.EOF) {
+			break
 		}
 	}
 	if err := dir.Close(); err != nil {

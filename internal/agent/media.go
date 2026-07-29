@@ -300,13 +300,23 @@ func copyMediaFile(src, dst string) error {
 	return out.Close()
 }
 
-// enrichDocumentPaths updates the last user message to include persisted file paths
-// in <media:document> tags. This allows skills (e.g. pdf skill via exec) to access
-// the file directly, matching how Claude Code skills work with file paths.
-func (l *Loop) enrichDocumentPaths(messages []providers.Message, refs []providers.MediaRef) {
+// enrichDocumentPaths updates document tags with exact media IDs and
+// workspace-relative paths. It upgrades historical tags and pairs current refs
+// with the last user message. Paths outside the active workspace are omitted.
+func (l *Loop) enrichDocumentPaths(messages []providers.Message, refs []providers.MediaRef, workspace string) {
 	if len(messages) == 0 {
 		return
 	}
+
+	// Upgrade historical tags as they re-enter the prompt. Current-turn refs
+	// are handled below because they are not yet attached to message history.
+	for i := range messages {
+		if messages[i].Role != "user" || len(messages[i].MediaRefs) == 0 {
+			continue
+		}
+		messages[i].Content = l.enrichDocumentTagContent(messages[i].Content, messages[i].MediaRefs, workspace)
+	}
+
 	lastIdx := -1
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == "user" {
@@ -317,41 +327,62 @@ func (l *Loop) enrichDocumentPaths(messages []providers.Message, refs []provider
 	if lastIdx < 0 {
 		return
 	}
+	messages[lastIdx].Content = l.enrichDocumentTagContent(messages[lastIdx].Content, refs, workspace)
+}
 
-	content := messages[lastIdx].Content
+func (l *Loop) enrichDocumentTagContent(content string, refs []providers.MediaRef, workspace string) string {
 	for _, ref := range refs {
 		if ref.Kind != "document" {
 			continue
 		}
 		p := ref.Path
 		if p == "" && l.mediaStore != nil {
-			var err error
-			p, err = l.mediaStore.LoadPath(ref.ID)
-			if err != nil {
-				continue
+			if loaded, err := l.mediaStore.LoadPath(ref.ID); err == nil {
+				p = loaded
 			}
 		}
-		if p == "" {
+		logical := logicalWorkspaceMediaPath(workspace, p)
+
+		updateTag := func(tag string) string {
+			tag = setTagAttr(tag, "id", ref.ID)
+			if logical == "" {
+				return removeTagAttr(tag, "path")
+			}
+			return setTagAttr(tag, "path", logical)
+		}
+
+		// Prefer a tag already carrying the exact media ID. This also upgrades
+		// legacy absolute paths without relying on attribute order.
+		var replaced bool
+		content, replaced = replaceFirstMediaTag(content, "<media:document", func(tag string) bool {
+			return tagHasAttrValue(tag, "id", ref.ID)
+		}, updateTag)
+		if replaced {
 			continue
 		}
-		pathAttr := fmt.Sprintf(" path=%q", p)
 
-		// Match first <media:document> without a path — covers bare, named, and file= variants.
+		// Fallback: pair the next tag without an ID with this persisted ref.
 		content, _ = replaceFirstMediaTag(content, "<media:document", func(tag string) bool {
-			return !tagHasAttr(tag, "path")
-		}, func(tag string) string {
-			return appendTagAttrs(tag, pathAttr)
-		})
+			return !tagHasAttr(tag, "id")
+		}, updateTag)
 	}
-	messages[lastIdx].Content = content
+	return content
 }
 
-// enrichAudioIDs updates the last user message to embed persisted media IDs
-// in <media:audio> and <media:voice> tags so the LLM can reference them.
-func (l *Loop) enrichAudioIDs(messages []providers.Message, refs []providers.MediaRef) {
+// enrichAudioIDs updates audio/voice tags with exact media IDs and logical
+// workspace paths. Historical tags are upgraded when they re-enter the prompt.
+func (l *Loop) enrichAudioIDs(messages []providers.Message, refs []providers.MediaRef, workspace string) {
 	if len(messages) == 0 {
 		return
 	}
+
+	for i := range messages {
+		if messages[i].Role != "user" || len(messages[i].MediaRefs) == 0 {
+			continue
+		}
+		messages[i].Content = l.enrichAudioTagContent(messages[i].Content, messages[i].MediaRefs, workspace)
+	}
+
 	lastIdx := -1
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == "user" {
@@ -362,31 +393,55 @@ func (l *Loop) enrichAudioIDs(messages []providers.Message, refs []providers.Med
 	if lastIdx < 0 {
 		return
 	}
+	messages[lastIdx].Content = l.enrichAudioTagContent(messages[lastIdx].Content, refs, workspace)
+}
 
-	content := messages[lastIdx].Content
+func (l *Loop) enrichAudioTagContent(content string, refs []providers.MediaRef, workspace string) string {
 	for _, ref := range refs {
 		if ref.Kind != "audio" {
 			continue
 		}
-		idAttr := fmt.Sprintf(" id=%q", ref.ID)
+		p := ref.Path
+		if p == "" && l.mediaStore != nil {
+			if loaded, err := l.mediaStore.LoadPath(ref.ID); err == nil {
+				p = loaded
+			}
+		}
+		logical := logicalWorkspaceMediaPath(workspace, p)
+		updateTag := func(tag string) string {
+			tag = setTagAttr(tag, "id", ref.ID)
+			if logical == "" {
+				return removeTagAttr(tag, "path")
+			}
+			return setTagAttr(tag, "path", logical)
+		}
 
+		// Upgrade a historical tag already carrying this exact ID first.
 		var replaced bool
 		content, replaced = replaceFirstMediaTag(content, "<media:audio", func(tag string) bool {
-			return !tagHasAttr(tag, "id")
-		}, func(tag string) string {
-			return appendTagAttrs(tag, idAttr)
-		})
+			return tagHasAttrValue(tag, "id", ref.ID)
+		}, updateTag)
+		if replaced {
+			continue
+		}
+		content, replaced = replaceFirstMediaTag(content, "<media:voice", func(tag string) bool {
+			return tagHasAttrValue(tag, "id", ref.ID)
+		}, updateTag)
 		if replaced {
 			continue
 		}
 
-		content, _ = replaceFirstMediaTag(content, "<media:voice", func(tag string) bool {
+		// Pair a current ref with the next unowned audio/voice tag.
+		content, replaced = replaceFirstMediaTag(content, "<media:audio", func(tag string) bool {
 			return !tagHasAttr(tag, "id")
-		}, func(tag string) string {
-			return appendTagAttrs(tag, idAttr)
-		})
+		}, updateTag)
+		if !replaced {
+			content, _ = replaceFirstMediaTag(content, "<media:voice", func(tag string) bool {
+				return !tagHasAttr(tag, "id")
+			}, updateTag)
+		}
 	}
-	messages[lastIdx].Content = content
+	return content
 }
 
 // enrichVideoIDs updates the last user message to embed persisted media IDs

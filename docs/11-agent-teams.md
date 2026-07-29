@@ -619,9 +619,32 @@ Agent Team shared-workspace behavior is unchanged.
 
 Successful publications persist with `manifest.json` and logical `outputs/...`
 entries. Failed/cancelled exchanges are retained for 60 minutes for diagnostics
-and removed by a restart-safe bounded janitor. Traces correlate by
+and removed by a restart-safe janitor whose per-sweep item and filesystem-entry
+work are both bounded. Traces correlate by
 `delegation_id` and record only logical paths, sizes, hashes, status, and
 timestamps—never physical exchange or caller host paths.
+
+Async Agent Link dispatch also creates a durable completion row before the
+child-run ticket is activated. The full terminal result and logical published
+artifact paths are persisted before the automatic parent announcement. If
+bounded announcement retries cannot enter the inbound queue, the source agent
+can retrieve the result after the run—or after a gateway restart—with:
+
+```text
+delegate(action="get", delegation_id="<uuid>")
+```
+
+Retrieval is scoped by tenant and the immutable UUID of the source agent. It
+does not grant the target agent, another linked source, or a later same-key
+agent access to the result. Delegation completion rows are excluded from
+`/subagents` and self-clone roster queries.
+
+Terminal database writes use per-attempt deadlines plus an extended bounded
+retry window. If the database remains unavailable for that whole window, the
+live announcement is still attempted but is not recorded as durably delivered;
+a crash during the same outage can leave the accepted row stale. Graceful
+gateway shutdown waits for accepted completion persistence before tearing down
+runtime dependencies.
 
 ### Trace Linking
 

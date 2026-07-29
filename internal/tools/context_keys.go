@@ -122,6 +122,13 @@ type MediaPathLoader interface {
 	LoadPath(id string) (string, error)
 }
 
+// MediaPathRootProvider optionally exposes the managed root that authorizes
+// legacy media returned by MediaPathLoader. Implementations must return a
+// stable root; callers still validate containment and regular-file semantics.
+type MediaPathRootProvider interface {
+	MediaRootPath() string
+}
+
 func WithToolChannel(ctx context.Context, channel string) context.Context {
 	return context.WithValue(ctx, ctxChannel, channel)
 }

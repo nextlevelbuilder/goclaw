@@ -17,17 +17,19 @@ var ErrAnnounceQueueDrainTimeout = errors.New("announce_queue_drain_timeout")
 
 // AnnounceQueueItem represents a single subagent result waiting to be announced.
 type AnnounceQueueItem struct {
-	SubagentID   string
-	ParentTaskID string
-	Depth        int
-	Label        string
-	Status       string // "completed", "failed", "cancelled"
-	Result       string
-	Media        []bus.MediaFile // media files from tool results
-	Runtime      time.Duration
-	Iterations   int
-	InputTokens  int64
-	OutputTokens int64
+	SubagentID       string
+	CompletionID     uuid.UUID
+	DurablyPersisted bool
+	ParentTaskID     string
+	Depth            int
+	Label            string
+	Status           string // "completed", "failed", "cancelled"
+	Result           string
+	Media            []bus.MediaFile // media files from tool results
+	Runtime          time.Duration
+	Iterations       int
+	InputTokens      int64
+	OutputTokens     int64
 }
 
 // AnnounceMetadata carries origin info for routing the batched announce.

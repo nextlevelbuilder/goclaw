@@ -70,6 +70,12 @@ func (s *Store) LoadPath(id string) (string, error) {
 	return matches[0], nil
 }
 
+// MediaRootPath exposes the managed legacy-media boundary to media reader
+// tools. Returned paths are still containment-checked by the caller.
+func (s *Store) MediaRootPath() string {
+	return s.baseDir
+}
+
 // DeleteSession removes all media files for a session.
 func (s *Store) DeleteSession(sessionKey string) error {
 	dir := s.sessionDir(sessionKey)

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"path"
 	"sort"
 	"strings"
@@ -12,6 +14,10 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// Keep logical output paths comfortably below the strictest supported host
+// path ceilings, leaving room for the captured root and publication staging.
+const artifactOutputMaxPathBytes = 768
 
 // Publish validates outputs and copies them into a sibling temporary directory
 // beneath the captured caller root. One atomic no-replace rename makes the
@@ -124,7 +130,12 @@ func (e *DelegationArtifactExchange) publishLocked(
 		)
 	}
 
-	outputPaths, err := enumerateArtifactOutputs(e.root, "outputs", e.limits.MaxFiles-e.inputCount)
+	outputPaths, err := enumerateArtifactOutputs(
+		ctx,
+		e.root,
+		"outputs",
+		e.limits.MaxFiles-e.inputCount,
+	)
 	if err != nil {
 		return DelegationArtifactPublication{}, err
 	}
@@ -254,8 +265,12 @@ func (e *DelegationArtifactExchange) publishLocked(
 		)
 	}
 	if err := publicationParent.syncDir("."); err != nil {
-		return DelegationArtifactPublication{}, artifactError(
-			"artifact_sync_failed", "sync_publication_parent", "", err,
+		// The final publication is already atomically visible and rollback is
+		// unsafe. Returning failure here would invite a duplicate delegation
+		// even though the caller can already consume the output.
+		slog.Warn("delegate.artifact_publication_parent_sync_failed",
+			"delegation_id", e.delegationID,
+			"error", err,
 		)
 	}
 
@@ -268,6 +283,7 @@ func (e *DelegationArtifactExchange) publishLocked(
 }
 
 func enumerateArtifactOutputs(
+	ctx context.Context,
 	root *artifactSecureRoot,
 	base string,
 	maxFiles int,
@@ -277,51 +293,164 @@ func enumerateArtifactOutputs(
 			"artifact_file_limit", "enumerate_outputs", "", ErrArtifactLimitExceeded,
 		)
 	}
+	// The configured file budget remains authoritative. Directory-only trees
+	// receive a matching budget, capped at the default artifact file ceiling.
+	maxDirectories := min(maxFiles, DelegationArtifactMaxFiles)
+	maxDepth := min(maxDirectories, artifactSecureMaxDepth)
+	maxEntries := maxFiles
+	maxInt := int(^uint(0) >> 1)
+	if maxDirectories <= maxInt-maxEntries {
+		maxEntries += maxDirectories
+	} else {
+		maxEntries = maxInt
+	}
+
 	var outputs []string
-	var walk func(string) error
-	walk = func(dir string) error {
-		entries, err := root.readDir(dir)
-		if err != nil {
-			return classifyArtifactOpenError("enumerate_outputs", dir, err)
+	type outputDirectory struct {
+		path  string
+		depth int
+	}
+	directories := []outputDirectory{{path: base}}
+	entriesSeen := 0
+	directoriesSeen := 0
+
+	for directoryIndex := 0; directoryIndex < len(directories); directoryIndex++ {
+		if err := checkArtifactContext(ctx); err != nil {
+			return nil, err
 		}
-		sort.Strings(entries)
-		for _, name := range entries {
-			logicalPath := path.Join(dir, name)
-			entry, err := root.openEntry(logicalPath)
+		directory := directories[directoryIndex]
+		err := func() error {
+			entry, err := root.openEntry(directory.path)
 			if err != nil {
-				return classifyArtifactOpenError("open_output", logicalPath, err)
+				return classifyArtifactOpenError("enumerate_outputs", directory.path, err)
 			}
-			switch entry.kind {
-			case artifactEntryDirectory:
-				entry.close()
-				if err := walk(logicalPath); err != nil {
-					return err
-				}
-			case artifactEntryRegular:
-				links := entry.links
-				entry.close()
-				if links != 1 {
-					return artifactError(
-						"artifact_hardlink", "open_output", logicalPath, ErrArtifactHardlink,
-					)
-				}
-				outputs = append(outputs, logicalPath)
-				if len(outputs) > maxFiles {
-					return artifactError(
-						"artifact_file_limit", "enumerate_outputs", logicalPath, ErrArtifactLimitExceeded,
-					)
-				}
-			default:
-				entry.close()
+			defer entry.close()
+			if entry.kind != artifactEntryDirectory {
 				return artifactError(
-					"artifact_non_regular", "open_output", logicalPath, ErrArtifactNonRegular,
+					"artifact_non_regular",
+					"enumerate_outputs",
+					directory.path,
+					ErrArtifactNonRegular,
 				)
 			}
+
+			for {
+				dirEntries, readErr := entry.readDirBatch()
+				if readErr != nil && !errors.Is(readErr, io.EOF) {
+					return classifyArtifactOpenError(
+						"enumerate_outputs",
+						directory.path,
+						readErr,
+					)
+				}
+				for _, dirEntry := range dirEntries {
+					if err := checkArtifactContext(ctx); err != nil {
+						return err
+					}
+					entriesSeen++
+					if entriesSeen > maxEntries {
+						return artifactError(
+							"artifact_entry_limit",
+							"enumerate_outputs",
+							directory.path,
+							ErrArtifactLimitExceeded,
+						)
+					}
+					name := dirEntry.Name()
+					if len(directory.path)+1+len(name) > artifactOutputMaxPathBytes {
+						return artifactError(
+							"artifact_path_limit",
+							"enumerate_outputs",
+							directory.path,
+							ErrArtifactLimitExceeded,
+						)
+					}
+					logicalPath := path.Join(directory.path, name)
+					child, err := root.openEntry(logicalPath)
+					if err != nil {
+						return classifyArtifactOpenError("open_output", logicalPath, err)
+					}
+					switch child.kind {
+					case artifactEntryDirectory:
+						if err := child.close(); err != nil {
+							return wrapArtifactFilesystemError(
+								"close_output",
+								logicalPath,
+								err,
+							)
+						}
+						directoriesSeen++
+						if directoriesSeen > maxDirectories {
+							return artifactError(
+								"artifact_directory_limit",
+								"enumerate_outputs",
+								logicalPath,
+								ErrArtifactLimitExceeded,
+							)
+						}
+						childDepth := directory.depth + 1
+						if childDepth > maxDepth {
+							return artifactError(
+								"artifact_depth_limit",
+								"enumerate_outputs",
+								logicalPath,
+								ErrArtifactLimitExceeded,
+							)
+						}
+						directories = append(directories, outputDirectory{
+							path:  logicalPath,
+							depth: childDepth,
+						})
+					case artifactEntryRegular:
+						links := child.links
+						if err := child.close(); err != nil {
+							return wrapArtifactFilesystemError(
+								"close_output",
+								logicalPath,
+								err,
+							)
+						}
+						if links != 1 {
+							return artifactError(
+								"artifact_hardlink",
+								"open_output",
+								logicalPath,
+								ErrArtifactHardlink,
+							)
+						}
+						outputs = append(outputs, logicalPath)
+						if len(outputs) > maxFiles {
+							return artifactError(
+								"artifact_file_limit",
+								"enumerate_outputs",
+								logicalPath,
+								ErrArtifactLimitExceeded,
+							)
+						}
+					default:
+						if err := child.close(); err != nil {
+							return wrapArtifactFilesystemError(
+								"close_output",
+								logicalPath,
+								err,
+							)
+						}
+						return artifactError(
+							"artifact_non_regular",
+							"open_output",
+							logicalPath,
+							ErrArtifactNonRegular,
+						)
+					}
+				}
+				if errors.Is(readErr, io.EOF) {
+					return nil
+				}
+			}
+		}()
+		if err != nil {
+			return nil, err
 		}
-		return nil
-	}
-	if err := walk(base); err != nil {
-		return nil, err
 	}
 	sort.Strings(outputs)
 	return outputs, nil

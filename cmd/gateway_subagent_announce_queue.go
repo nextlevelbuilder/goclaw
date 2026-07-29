@@ -72,7 +72,7 @@ func makeDelegateAnnounceCallback(
 			"tasks":   len(items),
 		})
 
-		msgBus.PublishInbound(bus.InboundMessage{
+		delivered := tools.PublishAsyncCompletion(context.Background(), msgBus, bus.InboundMessage{
 			Channel:  "system",
 			SenderID: senderID,
 			ChatID:   meta.OriginChatID,
@@ -82,6 +82,30 @@ func makeDelegateAnnounceCallback(
 			Metadata: batchMeta,
 			Media:    batchMedia,
 		})
+		for _, item := range items {
+			if !item.DurablyPersisted {
+				slog.Error("subagent.batch_announce_without_durable_terminal",
+					"task_id", item.SubagentID,
+					"completion_id", item.CompletionID,
+					"root_agent_id", meta.RootAgentID,
+					"delivered", delivered,
+				)
+				continue
+			}
+			subagentMgr.UpdateAnnouncementStatus(
+				store.WithTenantID(context.Background(), meta.OriginTenantID),
+				meta.RootAgentID,
+				item.CompletionID,
+				delivered,
+			)
+		}
+		if !delivered {
+			slog.Warn("subagent.batch_announce_deferred_to_ledger",
+				"root_agent_id", meta.RootAgentID,
+				"batch_size", len(items),
+				"reason", "inbound_bus_full",
+			)
+		}
 	}
 }
 

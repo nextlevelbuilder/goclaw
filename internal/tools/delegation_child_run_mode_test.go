@@ -67,13 +67,14 @@ func TestDelegateToolSchemaKeepsBoundedInputsOptional(t *testing.T) {
 	if got := inputs["maxItems"]; got != DelegationArtifactMaxFiles {
 		t.Fatalf("inputs maxItems = %#v, want %d", got, DelegationArtifactMaxFiles)
 	}
-	required, ok := schema["required"].([]string)
-	if !ok {
-		t.Fatalf("required = %#v", schema["required"])
-	}
-	for _, name := range required {
-		if name == "inputs" {
-			t.Fatal("inputs unexpectedly became required")
+	if required, ok := schema["required"].([]string); ok {
+		for _, name := range required {
+			if name == "inputs" {
+				t.Fatal("inputs unexpectedly became required")
+			}
 		}
+	}
+	if _, ok := properties["delegation_id"]; !ok {
+		t.Fatal("schema omitted durable delegation result lookup")
 	}
 }

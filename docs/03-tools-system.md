@@ -636,7 +636,33 @@ stateDiagram-v2
 delegation starts a new tree whose spawn depth, concurrency, fanout, retry, and
 model settings are resolved from the target agent.
 
-**Actions:** `spawn` (async, returns immediately), `run` (sync, blocks until done), `list`, `cancel` (by ID / `"all"` / `"last"`), `steer` (cancel + respawn with new message).
+**Actions:** `spawn(action="spawn", mode="async"|"sync")`, `get`, `list`,
+`cancel` (by ID / `"all"` / `"last"`), `steer` (cancel + respawn with new
+message), and `wait`.
+
+An accepted async spawn returns its short runtime `task_id` plus a durable
+`completion_id`. Terminal status, the full text result, and workspace-safe
+logical media descriptors are written to `subagent_tasks` before the parent
+announcement is attempted. Announcement delivery retries a bounded number of
+times; if the inbound queue is still full or the gateway restarts after
+terminal persistence, the owning root agent can recover the result and logical
+file paths with:
+
+```text
+spawn(action="get", completion_id="<uuid>")
+```
+
+The lookup is scoped by tenant and immutable root-agent UUID. A same-key agent
+created later, another agent in the tenant, and delegation completion rows
+cannot satisfy the lookup.
+
+Terminal persistence uses per-attempt database deadlines and a longer bounded
+retry window than announcement delivery. If the database remains unavailable
+for the entire window, GoClaw does not falsely mark the announcement as
+delivered; a live announcement is still attempted. A process crash during that
+database outage can leave the accepted row stale because no second durable
+database exists. Graceful gateway shutdown drains this completion lifecycle
+before provider and database teardown.
 
 Self-spawn and Agent Link callbacks also share a process safety cap (Standard:
 32; Lite: 2) and a bounded pending queue of 128. Inside an Agent Link artifact

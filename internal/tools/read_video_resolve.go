@@ -44,6 +44,7 @@ func (t *ReadVideoTool) resolveVideoFile(ctx context.Context, mediaID string) (p
 
 	// Prefer persisted workspace path; fall back to legacy .media/ lookup.
 	p := ref.Path
+	loadedLegacy := false
 	if p == "" {
 		var err error
 		if t.mediaLoader == nil {
@@ -53,6 +54,16 @@ func (t *ReadVideoTool) resolveVideoFile(ctx context.Context, mediaID string) (p
 		if err != nil {
 			return "", "", fmt.Errorf("video file not found: %v", err)
 		}
+		loadedLegacy = true
+	}
+
+	if loadedLegacy {
+		p, err = resolveLoadedMediaRefPath(ctx, t.mediaLoader, p, "video")
+	} else {
+		p, err = resolveStructuredMediaRefPath(ctx, p, "video")
+	}
+	if err != nil {
+		return "", "", err
 	}
 
 	mime = ref.MimeType

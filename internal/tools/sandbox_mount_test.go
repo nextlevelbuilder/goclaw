@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -153,6 +154,40 @@ func TestCredentialedExecSandboxUsesEffectiveWorkspaceMountAndContainerCwd(t *te
 	}
 	if mgr.sandbox.workDir != sandbox.DefaultContainerWorkdir {
 		t.Fatalf("sandbox exec workDir = %q, want %q", mgr.sandbox.workDir, sandbox.DefaultContainerWorkdir)
+	}
+}
+
+func TestCredentialedExecSandboxMountsCurrentDelegationExchange(t *testing.T) {
+	ctx, outputs := delegatedExecSandboxContext(t)
+	ctx = WithToolSandboxKey(ctx, "delegated-credentialed-session")
+	manager := &recordingSandboxManager{}
+	tool := NewSandboxedExecTool(outputs, true, manager)
+
+	result := tool.executeCredentialedSandbox(
+		ctx,
+		"/usr/bin/gh",
+		[]string{"api", "user"},
+		outputs,
+		"delegated-credentialed-session",
+		map[string]string{"GH_TOKEN": "secret"},
+		30*time.Second,
+	)
+
+	if result.IsError {
+		t.Fatalf("credentialed delegated sandbox exec failed: %s", result.ForLLM)
+	}
+	if manager.getOpts.WorkspaceAccessOverride == nil ||
+		*manager.getOpts.WorkspaceAccessOverride != sandbox.AccessRW {
+		t.Fatalf("delegation output access override = %#v, want rw", manager.getOpts.WorkspaceAccessOverride)
+	}
+	if len(manager.getOpts.ReadOnlyMounts) != 1 {
+		t.Fatalf("read-only mounts = %#v, want one inputs mount", manager.getOpts.ReadOnlyMounts)
+	}
+	mount := manager.getOpts.ReadOnlyMounts[0]
+	if mount.Name != "inputs" ||
+		mount.Destination != path.Join(sandbox.DefaultContainerWorkdir, "inputs") ||
+		filepath.Base(mount.HostPath) != "inputs" {
+		t.Fatalf("delegation input mount = %#v", mount)
 	}
 }
 

@@ -196,3 +196,22 @@ func TestDelegationArtifactResultPolicySuppressesUnpublishedMedia(t *testing.T) 
 		t.Fatalf("artifact result policy = %q", result.ForLLM)
 	}
 }
+
+func TestDelegationArtifactResultPolicyPreservesMediaDiscussion(t *testing.T) {
+	ctx := delegationArtifactTestContext()
+	result := &Result{
+		ForLLM: "The literal marker MEDIA: is documented here.\nGenerated MEDIA:outputs/report.pdf successfully.",
+	}
+
+	ApplyDelegationArtifactResultPolicy(ctx, result)
+
+	if !strings.Contains(result.ForLLM, "The literal marker MEDIA: is documented here.") {
+		t.Fatalf("legitimate MEDIA discussion was removed: %q", result.ForLLM)
+	}
+	if strings.Contains(result.ForLLM, "MEDIA:outputs/report.pdf") {
+		t.Fatalf("unpublished media path leaked: %q", result.ForLLM)
+	}
+	if !strings.Contains(result.ForLLM, "Generated  successfully.") {
+		t.Fatalf("surrounding tool result text was removed: %q", result.ForLLM)
+	}
+}

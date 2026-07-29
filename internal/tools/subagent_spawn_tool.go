@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -39,7 +40,7 @@ func (t *SpawnTool) Parameters() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"description": "'spawn' (default), 'list', 'cancel', 'steer', or 'wait'",
+				"description": "'spawn' (default), 'get', 'list', 'cancel', 'steer', or 'wait'",
 			},
 			"task": map[string]any{
 				"type":        "string",
@@ -61,6 +62,10 @@ func (t *SpawnTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "Task ID for cancel/steer. For cancel: use 'all' to cancel all or 'last' for most recent",
 			},
+			"completion_id": map[string]any{
+				"type":        "string",
+				"description": "Durable completion UUID returned by async spawn (required for action=get)",
+			},
 			"message": map[string]any{
 				"type":        "string",
 				"description": "New instructions (required for action=steer)",
@@ -70,7 +75,6 @@ func (t *SpawnTool) Parameters() map[string]any {
 				"description": "Timeout in seconds for action=wait (default 300)",
 			},
 		},
-		"required": []string{"task"},
 	}
 }
 
@@ -81,6 +85,8 @@ func (t *SpawnTool) Execute(ctx context.Context, args map[string]any) *Result {
 	}
 
 	switch action {
+	case "get":
+		return t.executeGet(ctx, args)
 	case "list":
 		return t.executeList(ctx)
 	case "cancel":
@@ -89,9 +95,32 @@ func (t *SpawnTool) Execute(ctx context.Context, args map[string]any) *Result {
 		return t.executeSteer(ctx, args)
 	case "wait":
 		return t.executeWait(ctx, args)
-	default:
+	case "spawn":
 		return t.executeSpawn(ctx, args)
+	default:
+		return ErrorResult(fmt.Sprintf("unknown spawn action %q", action))
 	}
+}
+
+func (t *SpawnTool) executeGet(ctx context.Context, args map[string]any) *Result {
+	rawID, _ := args["completion_id"].(string)
+	completionID, err := uuid.Parse(rawID)
+	if err != nil {
+		return ErrorResult("completion_id must be a valid UUID")
+	}
+	scope := subagentScopeFromContext(ctx)
+	task, err := t.subagentMgr.GetPersistedTask(ctx, scope, completionID)
+	if err != nil {
+		return ErrorResult(err.Error())
+	}
+	if task == nil {
+		return ErrorResult("subagent completion not found")
+	}
+	payload, err := json.Marshal(persistedCompletionPayload(task))
+	if err != nil {
+		return ErrorResult("failed to encode subagent completion")
+	}
+	return NewResult(string(payload))
 }
 
 func (t *SpawnTool) executeSpawn(ctx context.Context, args map[string]any) *Result {
@@ -143,17 +172,54 @@ func (t *SpawnTool) executeSubagentAsync(ctx context.Context, args map[string]an
 		parentID = t.parentID
 	}
 
-	msg, err := t.subagentMgr.Spawn(ctx, parentID, t.depth, task, label, modelOverride,
+	receipt, err := t.subagentMgr.SpawnWithReceipt(ctx, parentID, t.depth, task, label, modelOverride,
 		channel, chatID, peerKind, callback)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
 
-	forLLM := fmt.Sprintf(`{"status":"accepted","label":%q}
+	accepted := map[string]any{
+		"status":  "accepted",
+		"label":   label,
+		"task_id": receipt.TaskID,
+	}
+	if receipt.CompletionID != uuid.Nil {
+		accepted["completion_id"] = receipt.CompletionID.String()
+	}
+	acceptedJSON, _ := json.Marshal(accepted)
+	forLLM := fmt.Sprintf(`%s
 %s
-After all spawn tool calls in this turn are complete, briefly tell the user what tasks you've started. Subagents will announce results when done — do NOT wait or poll.`, label, msg)
+After all spawn tool calls in this turn are complete, briefly tell the user what tasks you've started. Subagents will announce results when done. If an announcement is missed, retrieve the durable result with spawn(action="get", completion_id="..."). Do NOT wait or poll while the task is running.`, acceptedJSON, receipt.Message)
 
 	return AsyncResult(forLLM)
+}
+
+func persistedCompletionPayload(task *store.SubagentTaskData) map[string]any {
+	payload := map[string]any{
+		"completion_id": task.ID.String(),
+		"status":        task.Status,
+		"subject":       task.Subject,
+		"created_at":    task.CreatedAt,
+		"updated_at":    task.UpdatedAt,
+	}
+	if task.Result != nil {
+		payload["result"] = *task.Result
+	}
+	if task.CompletedAt != nil {
+		payload["completed_at"] = *task.CompletedAt
+	}
+	if task.Metadata != nil {
+		if runtimeID, ok := task.Metadata[asyncCompletionRuntimeIDKey].(string); ok && runtimeID != "" {
+			payload["task_id"] = runtimeID
+		}
+		if delivery, ok := task.Metadata[asyncCompletionDeliveryKey].(string); ok && delivery != "" {
+			payload[asyncCompletionDeliveryKey] = delivery
+		}
+		if media := persistedCompletionMediaPayload(task.Metadata[asyncCompletionMediaKey]); len(media) > 0 {
+			payload["media"] = media
+		}
+	}
+	return payload
 }
 
 // executeSubagentSync runs a sync self-clone.

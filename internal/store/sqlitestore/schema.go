@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 58
+const SchemaVersion = 59
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -29,7 +29,78 @@ const SchemaVersion = 58
 //	}
 //
 // Then bump SchemaVersion to 2.
+const sqliteSubagentRootAgentScopeMigrationBody = `UPDATE subagent_tasks
+SET root_agent_id = json_extract(metadata, '$.root_agent_id')
+WHERE root_agent_id IS NULL
+  AND json_valid(metadata)
+  AND typeof(json_extract(metadata, '$.root_agent_id')) = 'text'
+  AND EXISTS (
+      SELECT 1
+      FROM agents
+      WHERE agents.tenant_id = subagent_tasks.tenant_id
+        AND agents.id = json_extract(subagent_tasks.metadata, '$.root_agent_id')
+  );
+UPDATE subagent_tasks
+SET root_agent_id = (
+    SELECT MIN(agents.id)
+    FROM agents
+    WHERE agents.tenant_id = subagent_tasks.tenant_id
+      AND agents.agent_key = subagent_tasks.parent_agent_key
+      AND agents.created_at < subagent_tasks.created_at
+)
+WHERE root_agent_id IS NULL
+  AND CASE
+      WHEN json_valid(metadata) THEN json_type(metadata, '$.root_agent_id') IS NULL
+      ELSE 1
+  END
+  AND (
+      SELECT COUNT(*)
+      FROM agents
+      WHERE agents.tenant_id = subagent_tasks.tenant_id
+        AND agents.agent_key = subagent_tasks.parent_agent_key
+        AND agents.created_at < subagent_tasks.created_at
+  ) = 1;
+CREATE INDEX IF NOT EXISTS idx_subagent_tasks_root_status
+  ON subagent_tasks(tenant_id, root_agent_id, status, created_at DESC)
+  WHERE root_agent_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_subagent_tasks_root_session
+  ON subagent_tasks(tenant_id, root_agent_id, session_key, created_at DESC)
+  WHERE root_agent_id IS NOT NULL AND session_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_subagent_tasks_root_archive
+  ON subagent_tasks(tenant_id, root_agent_id, completed_at, id)
+  WHERE root_agent_id IS NOT NULL
+    AND status IN ('completed', 'failed', 'cancelled')
+    AND archived_at IS NULL;
+CREATE TRIGGER IF NOT EXISTS trg_subagent_tasks_root_tenant_insert
+BEFORE INSERT ON subagent_tasks
+WHEN NEW.root_agent_id IS NOT NULL
+ AND NOT EXISTS (
+     SELECT 1 FROM agents
+     WHERE agents.id = NEW.root_agent_id
+       AND agents.tenant_id = NEW.tenant_id
+ )
+BEGIN
+    SELECT RAISE(ABORT, 'subagent root agent belongs to another tenant');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_subagent_tasks_root_tenant_update
+BEFORE UPDATE OF root_agent_id, tenant_id ON subagent_tasks
+WHEN NEW.root_agent_id IS NOT NULL
+ AND NOT EXISTS (
+     SELECT 1 FROM agents
+     WHERE agents.id = NEW.root_agent_id
+       AND agents.tenant_id = NEW.tenant_id
+ )
+BEGIN
+    SELECT RAISE(ABORT, 'subagent root agent belongs to another tenant');
+END;`
+
 var migrations = map[int]string{
+	// Version 58 → 59: scope persisted subagent tasks by immutable root-agent UUID.
+	// Metadata is authoritative; key fallback is allowed only for one matching
+	// agent that predates the task. Unmatched rows remain inaccessible.
+	58: `ALTER TABLE subagent_tasks
+	ADD COLUMN root_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL;
+` + sqliteSubagentRootAgentScopeMigrationBody,
 	// Version 57 → 58: restore custom skills previously converted by the bundled skill seeder.
 	57: `UPDATE skills
 SET is_system = 0,
@@ -1521,6 +1592,12 @@ func EnsureSchema(db *sql.DB) error {
 					return fmt.Errorf("inspect channel pending message parent column: %w", err)
 				}
 			}
+			if v == 58 {
+				patch, err = sqliteSubagentRootAgentMigrationPatch(db)
+				if err != nil {
+					return fmt.Errorf("inspect subagent task root-agent column: %w", err)
+				}
+			}
 			// Migrations that rebuild a table referenced by another table's FK
 			// require foreign_keys=OFF per SQLite altertable §7. The pragma is
 			// a no-op inside a transaction, so toggle it around BEGIN/COMMIT.
@@ -1678,6 +1755,19 @@ func sqlitePendingMessageParentMigrationPatch(db *sql.DB) (string, error) {
 	patch += `CREATE INDEX IF NOT EXISTS idx_channel_pending_messages_parent
   ON channel_pending_messages(channel_name, parent_history_key)
   WHERE parent_history_key <> '';`
+	return patch, nil
+}
+
+func sqliteSubagentRootAgentMigrationPatch(db *sql.DB) (string, error) {
+	hasColumn, err := sqliteColumnExists(db, "subagent_tasks", "root_agent_id")
+	if err != nil {
+		return "", err
+	}
+	patch := ""
+	if !hasColumn {
+		patch += "ALTER TABLE subagent_tasks ADD COLUMN root_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL;\n"
+	}
+	patch += sqliteSubagentRootAgentScopeMigrationBody
 	return patch, nil
 }
 

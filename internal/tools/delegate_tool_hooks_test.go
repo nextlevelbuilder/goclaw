@@ -1159,8 +1159,17 @@ func TestDelegateTool_AsyncReleasesAdmissionBeforeAnnouncement(t *testing.T) {
 	tool := NewDelegateToolWithAdmission(noopAgentLink{}, noopAgentCRUD{}, nil, runFn, admission)
 	tool.SetWorkspace(t.TempDir())
 	tool.SetMsgBus(messageBus)
+	taskStore := newRecordingSubagentTaskStore()
+	tool.SetTaskStore(taskStore)
+	if tool.announceToParent(DelegateRequest{
+		DelegationID: "backpressure-probe",
+		ChatID:       "chat-1",
+	}, "must not block", nil) {
+		t.Fatal("full message bus accepted an announcement")
+	}
 
 	ctx := WithToolChatID(makeDelegateCtx(t), "chat-1")
+	ctx = WithToolSessionKey(ctx, "delegate-parent-session")
 	first := tool.Execute(ctx, map[string]any{
 		"agent_key": "child-agent",
 		"task":      "first",
@@ -1188,18 +1197,108 @@ func TestDelegateTool_AsyncReleasesAdmissionBeforeAnnouncement(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("blocked announce retained the only child-run permit")
 	}
-
-	drainCtx, cancelDrain := context.WithTimeout(context.Background(), time.Second)
-	defer cancelDrain()
-	for i := range 1002 {
-		if _, ok := messageBus.ConsumeInbound(drainCtx); !ok {
-			t.Fatalf("message bus drained %d messages, want 1002", i)
+	for range 2 {
+		select {
+		case metadata := <-taskStore.metadata:
+			if metadata[asyncCompletionDeliveryKey] != asyncCompletionDeliveryMissed {
+				t.Fatalf("announcement metadata = %#v, want undelivered", metadata)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("delegation missed announcement was not recorded after bus saturation")
 		}
 	}
+
 	if err := admission.Close(context.Background()); err != nil {
 		t.Fatalf("close admission: %v", err)
 	}
 	tool.Close()
+}
+
+func TestDelegateToolCloseContextDrainsAsyncCompletion(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	tool := newDelegateTestTool(t, noopAgentLink{}, func(_ context.Context, _ DelegateRequest) (DelegateResult, error) {
+		close(started)
+		<-release
+		return DelegateResult{Content: "done"}, nil
+	})
+	tool.SetTaskStore(newRecordingSubagentTaskStore())
+
+	result := tool.Execute(makeDelegateCtx(t), map[string]any{
+		"agent_key": "child-agent",
+		"task":      "wait for shutdown drain",
+		"mode":      "async",
+	})
+	if result == nil || result.IsError {
+		t.Fatalf("delegate result = %#v, want accepted", result)
+	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("delegation did not start")
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	if err := tool.CloseContext(timeoutCtx); err == nil {
+		t.Fatal("CloseContext returned before async completion finished")
+	}
+
+	close(release)
+	if err := tool.CloseContext(context.Background()); err != nil {
+		t.Fatalf("CloseContext after completion: %v", err)
+	}
+}
+
+func TestDelegationTaskWithInputAliasesDoesNotRewriteProseSubstrings(t *testing.T) {
+	task := "Use the data file to update the database metadata."
+	inputs := []delegateInput{{
+		relativePath: "data",
+	}}
+	staged := []DelegationArtifact{{Path: "inputs/data"}}
+
+	got := delegationTaskWithInputAliases(task, inputs, staged)
+	if !strings.HasPrefix(got, task) {
+		t.Fatalf("task prose was rewritten: %q", got)
+	}
+	if !strings.Contains(got, "data => inputs/data") {
+		t.Fatalf("task is missing the explicit input mapping: %q", got)
+	}
+}
+
+func TestDelegationTaskWithInputAliasesRewritesOnlyExactPathTokens(t *testing.T) {
+	const reference = "/workspace/agent/.uploads/report.pdf"
+	task := "Read " + reference + ", but preserve " + reference + ".backup and prefix" + reference
+	inputs := []delegateInput{{
+		relativePath:   ".uploads/report.pdf",
+		taskReferences: []string{reference},
+	}}
+	staged := []DelegationArtifact{{Path: "inputs/report.pdf"}}
+
+	got := delegationTaskWithInputAliases(task, inputs, staged)
+	if !strings.Contains(got, "Read inputs/report.pdf,") {
+		t.Fatalf("exact path token was not rewritten: %q", got)
+	}
+	if !strings.Contains(got, reference+".backup") {
+		t.Fatalf("path substring suffix was rewritten: %q", got)
+	}
+	if !strings.Contains(got, "prefix"+reference) {
+		t.Fatalf("path substring prefix was rewritten: %q", got)
+	}
+}
+
+func TestRedactDelegationArtifactTextHandlesSlashVariants(t *testing.T) {
+	exchange := &DelegationArtifactExchange{
+		hostRoot: `C:\workspace\collaboration\delegations\123`,
+	}
+	text := `failed at C:/workspace/collaboration/delegations/123/inputs/file.txt`
+	got := redactDelegationArtifactText(text, exchange)
+	if strings.Contains(got, "C:/workspace") {
+		t.Fatalf("slash-normalized host path was not redacted: %q", got)
+	}
+	if !strings.Contains(got, "inputs/file.txt") {
+		t.Fatalf("logical input path missing after redaction: %q", got)
+	}
 }
 
 func TestDelegateTool_RetainsFailedExchange(t *testing.T) {
@@ -1698,6 +1797,174 @@ func TestDelegateTool_RecoversStaleArtifactLifecycleStates(t *testing.T) {
 				t.Fatalf("final UUID publication directory was modified: %q, %v", got, err)
 			}
 		})
+	}
+}
+
+func TestDelegateTool_RecoveryPromotesDurablePublishingState(t *testing.T) {
+	tenantWorkspace := t.TempDir()
+	callerWorkspace := filepath.Join(tenantWorkspace, "agents", "caller")
+	if err := os.MkdirAll(callerWorkspace, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	callerRoot, err := OpenDelegationArtifactRoot(callerWorkspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	delegationID := uuid.New()
+	exchange, err := NewDelegationArtifactExchange(
+		tenantWorkspace,
+		store.MasterTenantID,
+		delegationID,
+		DelegationArtifactLimits{},
+		time.Minute,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := NewDelegateTool(
+		noopAgentLink{},
+		noopAgentCRUD{},
+		nil,
+		func(_ context.Context, _ DelegateRequest) (DelegateResult, error) {
+			return DelegateResult{}, nil
+		},
+	)
+	first.workspace = tenantWorkspace
+	job := &delegateArtifactJob{
+		req:             DelegateRequest{DelegationID: delegationID.String()},
+		callerRoot:      callerRoot,
+		callerWorkspace: callerWorkspace,
+		tenantWorkspace: tenantWorkspace,
+		tenantID:        store.MasterTenantID,
+		delegationID:    delegationID,
+	}
+	job.callerLocation = first.resolveDelegationCallerLocation(job)
+	if err := first.updateActiveDelegationLifecycle(exchange, job); err != nil {
+		t.Fatalf("update lifecycle: %v", err)
+	}
+	if err := first.markDelegationRunning(exchange, job, time.Now()); err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(exchange.OutputsHostPath(), "result.txt"),
+		[]byte("durable result"),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+	publication, err := exchange.publishWithPreparation(
+		context.Background(),
+		callerRoot,
+		time.Now(),
+		func(tempPath string) error {
+			return first.markDelegationPublishing(exchange, job, tempPath, time.Now())
+		},
+	)
+	if err != nil {
+		t.Fatalf("publish before simulated crash: %v", err)
+	}
+	if err := exchange.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := callerRoot.Close(); err != nil {
+		t.Fatal(err)
+	}
+	first.Close()
+
+	restarted := NewDelegateTool(
+		noopAgentLink{},
+		noopAgentCRUD{},
+		nil,
+		func(_ context.Context, _ DelegateRequest) (DelegateResult, error) {
+			return DelegateResult{}, nil
+		},
+	)
+	restarted.SetWorkspace(tenantWorkspace)
+	defer restarted.Close()
+
+	item, ok := restarted.retained[retainedDelegationArtifactKey(tenantWorkspace, delegationID)]
+	if !ok || !item.publicationDurable || !item.retainUntil.IsZero() {
+		t.Fatalf("recovered publication = %#v, want durable immediate cleanup", item)
+	}
+	lifecyclePath := filepath.Join(
+		tenantWorkspace,
+		"collaboration",
+		"delegations",
+		delegationID.String(),
+		delegationArtifactLifecycleFile,
+	)
+	stateBytes, err := os.ReadFile(lifecyclePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state delegationArtifactLifecycleState
+	if err := json.Unmarshal(stateBytes, &state); err != nil {
+		t.Fatal(err)
+	}
+	if state.Status != artifactLifecyclePublished || state.ReasonCode != "artifact_published" {
+		t.Fatalf("recovered lifecycle = %#v, want published", state)
+	}
+
+	restarted.sweepRetainedDelegationExchanges(time.Now())
+	if _, err := os.Stat(filepath.Dir(lifecyclePath)); !os.IsNotExist(err) {
+		t.Fatalf("published exchange remains after cleanup: %v", err)
+	}
+	publishedOutput := filepath.Join(
+		callerWorkspace,
+		filepath.FromSlash(publication.RootPath),
+		"outputs",
+		"result.txt",
+	)
+	if got, err := os.ReadFile(publishedOutput); err != nil || string(got) != "durable result" {
+		t.Fatalf("durable publication changed during recovery: %q, %v", got, err)
+	}
+}
+
+func TestDelegateTool_RecoveryCleansInvalidAndExpiresCorruptExchanges(t *testing.T) {
+	tenantWorkspace := t.TempDir()
+	delegationsRoot := filepath.Join(tenantWorkspace, "collaboration", "delegations")
+	invalidRoot := filepath.Join(delegationsRoot, "not-a-delegation")
+	if err := os.MkdirAll(invalidRoot, 0750); err != nil {
+		t.Fatal(err)
+	}
+	corruptID := uuid.New()
+	corruptRoot := filepath.Join(delegationsRoot, corruptID.String())
+	if err := os.MkdirAll(corruptRoot, 0750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(corruptRoot, delegationArtifactLifecycleFile),
+		[]byte("{not-json"),
+		0600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	tool := NewDelegateTool(
+		noopAgentLink{},
+		noopAgentCRUD{},
+		nil,
+		func(_ context.Context, _ DelegateRequest) (DelegateResult, error) {
+			return DelegateResult{}, nil
+		},
+	)
+	tool.SetWorkspace(tenantWorkspace)
+	defer tool.Close()
+
+	if _, err := os.Stat(invalidRoot); !os.IsNotExist(err) {
+		t.Fatalf("invalid exchange entry remains after recovery: %v", err)
+	}
+	item, ok := tool.retained[retainedDelegationArtifactKey(tenantWorkspace, corruptID)]
+	if !ok {
+		t.Fatalf("corrupt exchange was not registered for bounded retention: %#v", tool.retained)
+	}
+	tool.sweepRetainedDelegationExchanges(item.retainUntil.Add(-time.Nanosecond))
+	if _, err := os.Stat(corruptRoot); err != nil {
+		t.Fatalf("corrupt exchange removed before retention elapsed: %v", err)
+	}
+	tool.sweepRetainedDelegationExchanges(item.retainUntil)
+	if _, err := os.Stat(corruptRoot); !os.IsNotExist(err) {
+		t.Fatalf("corrupt exchange remains after retention elapsed: %v", err)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -125,6 +126,9 @@ func (t *ReadDocumentTool) Execute(ctx context.Context, args map[string]any) *Re
 	}
 	mediaID, _ := args["media_id"].(string)
 	docPathArg, _ := args["path"].(string)
+	if strings.TrimSpace(mediaID) != "" && strings.TrimSpace(docPathArg) != "" {
+		return ErrorResult("Specify either media_id or path, not both.")
+	}
 
 	// Resolve document file path from MediaRefs in context.
 	docPath, docMime, err := t.resolveDocumentFile(ctx, mediaID, docPathArg)
@@ -132,13 +136,7 @@ func (t *ReadDocumentTool) Execute(ctx context.Context, args map[string]any) *Re
 		return ErrorResult(err.Error())
 	}
 
-	displayPath := tracing.RedactText(ctx, docPath)
-	if IsDelegationArtifactRun(ctx) {
-		logical := path.Clean(strings.ReplaceAll(strings.TrimSpace(docPathArg), "\\", "/"))
-		if logical == "inputs" || strings.HasPrefix(logical, "inputs/") {
-			displayPath = logical
-		}
-	}
+	displayPath := logicalDocumentDisplayPath(ctx, docPath, docPathArg)
 	slog.Info("read_document: resolved file", "path", displayPath, "mime", docMime, "media_id", mediaID)
 
 	if isArchiveDocumentPath(docPath) {
@@ -151,11 +149,11 @@ func (t *ReadDocumentTool) Execute(ctx context.Context, args map[string]any) *Re
 	// Read document file.
 	data, err := os.ReadFile(docPath)
 	if err != nil {
-		return ErrorResult(fmt.Sprintf(
-			"Failed to read document file %s: %s",
-			displayPath,
-			tracing.RedactText(ctx, err.Error()),
-		))
+		slog.Warn("read_document: file read failed",
+			"path", displayPath,
+			"error", tracing.RedactText(ctx, err.Error()),
+		)
+		return ErrorResult(fmt.Sprintf("Failed to read document file %s.", displayPath))
 	}
 	slog.Info("read_document: file loaded", "size_bytes", len(data))
 	if len(data) > documentMaxBytes {
@@ -218,6 +216,35 @@ func (t *ReadDocumentTool) Execute(ctx context.Context, args map[string]any) *Re
 	result.Provider = chainResult.Provider
 	result.Model = chainResult.Model
 	return result
+}
+
+// logicalDocumentDisplayPath returns only model-safe paths. Resolved host
+// paths remain runtime-only even when tracing redaction is not configured.
+func logicalDocumentDisplayPath(ctx context.Context, resolvedPath, requestedPath string) string {
+	requested := path.Clean(strings.ReplaceAll(strings.TrimSpace(requestedPath), "\\", "/"))
+	if requestedPath != "" && requested != "." && requested != ".." &&
+		!strings.HasPrefix(requested, "../") && !path.IsAbs(requested) {
+		return requested
+	}
+
+	if inputRoot := DelegationArtifactInputsFromCtx(ctx); inputRoot != "" {
+		if relative, ok := artifactRelativeToRoot(inputRoot, resolvedPath); ok &&
+			relative != "." {
+			return path.Join("inputs", relative)
+		}
+	}
+	if workspace := ToolWorkspaceFromCtx(ctx); workspace != "" {
+		if relative, ok := artifactRelativeToRoot(workspace, resolvedPath); ok &&
+			relative != "." {
+			return relative
+		}
+	}
+
+	name := filepath.Base(resolvedPath)
+	if name == "." || name == string(filepath.Separator) || name == "" {
+		return "document"
+	}
+	return name
 }
 
 // validateExecPath confirms a resolved document path is workspace-confined

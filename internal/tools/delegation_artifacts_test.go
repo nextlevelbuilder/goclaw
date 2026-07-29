@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -280,6 +281,130 @@ func TestDelegationArtifactPublishEmptyManifest(t *testing.T) {
 	}
 	if !strings.Contains(string(manifestBytes), `"outputs": []`) {
 		t.Fatalf("empty outputs must encode as [], manifest: %s", manifestBytes)
+	}
+}
+
+func TestDelegationArtifactPublishRejectsExcessEmptyDirectories(t *testing.T) {
+	exchange := newTestDelegationExchange(
+		t,
+		t.TempDir(),
+		uuid.New(),
+		uuid.New(),
+		DelegationArtifactLimits{},
+	)
+	for index := 0; index <= DelegationArtifactMaxFiles; index++ {
+		name := fmt.Sprintf("empty-%03d", index)
+		if err := os.Mkdir(filepath.Join(exchange.OutputsHostPath(), name), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, err := exchange.Publish(
+		context.Background(),
+		openTestArtifactRoot(t, t.TempDir()),
+		time.Now(),
+	)
+	var artifactErr *DelegationArtifactError
+	if !errors.Is(err, ErrArtifactLimitExceeded) ||
+		!errors.As(err, &artifactErr) ||
+		artifactErr.Code != "artifact_directory_limit" {
+		t.Fatalf("Publish() error = %v, want artifact_directory_limit", err)
+	}
+}
+
+func TestDelegationArtifactPublishRejectsDeepOutputTree(t *testing.T) {
+	exchange := newTestDelegationExchange(
+		t,
+		t.TempDir(),
+		uuid.New(),
+		uuid.New(),
+		DelegationArtifactLimits{},
+	)
+	current := exchange.OutputsHostPath()
+	for depth := 0; depth <= artifactSecureMaxDepth; depth++ {
+		current = filepath.Join(current, "d")
+		if err := os.Mkdir(current, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, err := exchange.Publish(
+		context.Background(),
+		openTestArtifactRoot(t, t.TempDir()),
+		time.Now(),
+	)
+	var artifactErr *DelegationArtifactError
+	if !errors.Is(err, ErrArtifactLimitExceeded) ||
+		!errors.As(err, &artifactErr) ||
+		artifactErr.Code != "artifact_depth_limit" {
+		t.Fatalf("Publish() error = %v, want artifact_depth_limit", err)
+	}
+}
+
+func TestDelegationArtifactPublishRejectsLongLogicalOutputPath(t *testing.T) {
+	exchange := newTestDelegationExchange(
+		t,
+		t.TempDir(),
+		uuid.New(),
+		uuid.New(),
+		DelegationArtifactLimits{},
+	)
+	currentHostPath := exchange.OutputsHostPath()
+	logicalPath := "outputs"
+	for depth := 0; len(logicalPath) <= artifactOutputMaxPathBytes; depth++ {
+		if depth >= artifactSecureMaxDepth {
+			t.Fatal("test path reached depth limit before path-length limit")
+		}
+		component := fmt.Sprintf("%02d-%s", depth, strings.Repeat("x", 47))
+		currentHostPath = filepath.Join(currentHostPath, component)
+		logicalPath += "/" + component
+		if err := os.Mkdir(currentHostPath, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, err := exchange.Publish(
+		context.Background(),
+		openTestArtifactRoot(t, t.TempDir()),
+		time.Now(),
+	)
+	var artifactErr *DelegationArtifactError
+	if !errors.Is(err, ErrArtifactLimitExceeded) ||
+		!errors.As(err, &artifactErr) ||
+		artifactErr.Code != "artifact_path_limit" {
+		t.Fatalf("Publish() error = %v, want artifact_path_limit", err)
+	}
+}
+
+func TestDelegationArtifactPublishPreservesRegularOutputFileLimit(t *testing.T) {
+	limits := DelegationArtifactLimits{
+		MaxFileBytes:  8,
+		MaxTotalBytes: 32,
+		MaxFiles:      2,
+	}
+	exchange := newTestDelegationExchange(
+		t,
+		t.TempDir(),
+		uuid.New(),
+		uuid.New(),
+		limits,
+	)
+	for _, name := range []string{"one.txt", "two.txt", "three.txt"} {
+		if err := os.WriteFile(filepath.Join(exchange.OutputsHostPath(), name), []byte(name), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, err := exchange.Publish(
+		context.Background(),
+		openTestArtifactRoot(t, t.TempDir()),
+		time.Now(),
+	)
+	var artifactErr *DelegationArtifactError
+	if !errors.Is(err, ErrArtifactLimitExceeded) ||
+		!errors.As(err, &artifactErr) ||
+		artifactErr.Code != "artifact_file_limit" {
+		t.Fatalf("Publish() error = %v, want artifact_file_limit", err)
 	}
 }
 

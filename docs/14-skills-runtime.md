@@ -166,13 +166,20 @@ Uploaded files (from web chat, Telegram, Discord, etc.) are persisted to:
 
 Uploads without a usable original filename fall back to `{uuid}.{ext}`. Legacy media refs may still resolve from `.media/{sessionHash}/{uuid}.{ext}`.
 
-The `enrichDocumentPaths()` function injects the full path into `<media:document>` tags:
+The `enrichDocumentPaths()` function injects the exact media ID and a logical
+path relative to the active agent workspace into `<media:document>` tags:
 
 ```
-<media:document name="report.pdf" path="/app/workspace/.uploads/report-a1b2c3d4.pdf">
+<media:document name="report.pdf" id="..." path=".uploads/report-a1b2c3d4.pdf">
 ```
 
-Agents can read these files directly via exec — no copy to `/tmp` needed. For archive uploads such as `.zip`, inspect or extract with commands like `unzip -l "<path>"` or `unzip -q "<path>" -d <output-dir>`.
+Normal agent runs can read these workspace files directly via `exec` — no copy
+to `/tmp` is needed. Agent Link delegations instead receive selected files as
+read-only `inputs/...` paths in an isolated delegation exchange. Their `exec`
+calls fail closed unless an active sandbox is available, and generated files
+must be written under `outputs/` for validation and publication back to the
+caller. For archive uploads such as `.zip`, inspect or extract them within the
+authorized workspace or delegation paths.
 
 ---
 

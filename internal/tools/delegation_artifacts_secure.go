@@ -2,7 +2,15 @@ package tools
 
 import (
 	"errors"
+	"io/fs"
 	"os"
+)
+
+const (
+	artifactSecureReadBatchSize       = 64
+	artifactSecureMaxDirectoryEntries = 4096
+	artifactSecureMaxDepth            = 64
+	artifactSecureCleanupEntryBudget  = 4096
 )
 
 var (
@@ -30,4 +38,11 @@ func (e *artifactSecureEntry) close() error {
 		return nil
 	}
 	return e.file.Close()
+}
+
+func (e *artifactSecureEntry) readDirBatch() ([]fs.DirEntry, error) {
+	if e == nil || e.file == nil || e.kind != artifactEntryDirectory {
+		return nil, ErrArtifactNonRegular
+	}
+	return e.file.ReadDir(artifactSecureReadBatchSize)
 }

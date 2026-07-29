@@ -84,6 +84,24 @@ func drainSubagentManagerWithRetry(
 	return fmt.Errorf("%w after retry", tools.ErrSubagentLifecycleDrainTimeout)
 }
 
+func drainDelegateToolWithRetry(
+	tool interface{ CloseContext(context.Context) error },
+	firstTimeout time.Duration,
+	retryTimeout time.Duration,
+) error {
+	for attempt, timeout := range []time.Duration{firstTimeout, retryTimeout} {
+		drainCtx, drainCancel := context.WithTimeout(context.Background(), timeout)
+		err := tool.CloseContext(drainCtx)
+		drainCancel()
+		if err == nil {
+			return nil
+		}
+		slog.Error("gateway: delegate completion drain attempt failed",
+			"attempt", attempt+1, "timeout", timeout, "error", err)
+	}
+	return fmt.Errorf("delegate completion drain failed after retry")
+}
+
 // runLifecycle wires config-reload subscribers, starts consumers, task recovery,
 // the signal handler goroutine, and finally starts the gateway server.
 // This is the last phase of runGateway() — called after all setup is complete.
@@ -277,12 +295,24 @@ func (d *gatewayDeps) runLifecycle(
 		}
 
 		if delegate, ok := d.toolsReg.Get("delegate"); ok {
-			if closer, ok := delegate.(interface{ Close() }); ok {
+			if closer, ok := delegate.(interface {
+				CloseContext(context.Context) error
+			}); ok {
+				if err := drainDelegateToolWithRetry(closer, 65*time.Second, 10*time.Second); err != nil {
+					slog.Error("gateway: terminating after delegate completion drain failure", "error", err)
+					terminate := deps.terminateProcess
+					if terminate == nil {
+						terminate = os.Exit
+					}
+					terminate(1)
+					return
+				}
+			} else if closer, ok := delegate.(interface{ Close() }); ok {
 				closer.Close()
 			}
 		}
 		if deps.subagentMgr != nil {
-			if err := drainSubagentManagerWithRetry(deps.subagentMgr, 5*time.Second, 5*time.Second); err != nil {
+			if err := drainSubagentManagerWithRetry(deps.subagentMgr, 65*time.Second, 10*time.Second); err != nil {
 				slog.Error("gateway: terminating after subagent lifecycle drain failure", "error", err)
 				terminate := deps.terminateProcess
 				if terminate == nil {

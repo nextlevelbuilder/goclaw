@@ -24,10 +24,13 @@ func stripArtifactMediaLines(content string) string {
 	kept := make([]string, 0, len(lines))
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "[[audio_as_voice]]") || strings.Contains(trimmed, "MEDIA:") {
+		if strings.HasPrefix(trimmed, "[[audio_as_voice]]") {
 			continue
 		}
-		kept = append(kept, line)
+		cleaned := strings.TrimRight(embeddedMediaPattern.ReplaceAllString(line, ""), " \t")
+		if strings.TrimSpace(cleaned) != "" {
+			kept = append(kept, cleaned)
+		}
 	}
 	return strings.TrimSpace(strings.Join(kept, "\n"))
 }

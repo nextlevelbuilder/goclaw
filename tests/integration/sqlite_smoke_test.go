@@ -91,6 +91,7 @@ func TestSQLiteSmokeTest(t *testing.T) {
 		taskID := uuid.Must(uuid.NewV7())
 		task := &store.SubagentTaskData{
 			ParentAgentKey: agentKey,
+			RootAgentID:    agentID,
 			Subject:        "smoke task",
 			Description:    "test",
 			Status:         "running",
@@ -102,7 +103,7 @@ func TestSQLiteSmokeTest(t *testing.T) {
 		if err := stores.SubagentTasks.Create(ctx, task); err != nil {
 			t.Fatalf("Create: %v", err)
 		}
-		got, err := stores.SubagentTasks.Get(ctx, agentKey, taskID)
+		got, err := stores.SubagentTasks.Get(ctx, agentID, taskID)
 		if err != nil {
 			t.Fatalf("Get: %v", err)
 		}

@@ -14,20 +14,27 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 )
 
-// Spawn creates a new subagent task that runs asynchronously.
-// Returns immediately with a status message. The subagent runs in a goroutine.
-// modelOverride optionally overrides the LLM model for this subagent (matching TS sessions-spawn-tool.ts).
-func (sm *SubagentManager) Spawn(
+// SpawnReceipt identifies both the in-memory runtime task and its durable
+// completion row. CompletionID is empty only when no task store is configured.
+type SpawnReceipt struct {
+	TaskID       string
+	CompletionID uuid.UUID
+	Message      string
+}
+
+// SpawnWithReceipt creates an asynchronous self-clone and returns identifiers
+// that remain useful if the automatic parent announcement cannot be delivered.
+func (sm *SubagentManager) SpawnWithReceipt(
 	ctx context.Context,
 	parentID string,
 	depth int,
 	task, label, modelOverride string,
 	channel, chatID, peerKind string,
 	callback AsyncCallback,
-) (string, error) {
+) (SpawnReceipt, error) {
 	finishLifecycle, ok := sm.beginLifecycleOperation()
 	if !ok {
-		return "", fmt.Errorf("subagent manager is closed")
+		return SpawnReceipt{}, fmt.Errorf("subagent manager is closed")
 	}
 	lifecycleTransferred := false
 	defer func() {
@@ -37,12 +44,12 @@ func (sm *SubagentManager) Spawn(
 	}()
 
 	if err := validateDelegationChildRunMode(ctx, "spawn", "async"); err != nil {
-		return "", err
+		return SpawnReceipt{}, err
 	}
 	cfg := sm.effectiveSpawnConfig(ctx)
 	depth = subagentDepthFromContext(ctx, depth)
 	if depth >= cfg.MaxSpawnDepth {
-		return "", fmt.Errorf("spawn depth limit reached (%d/%d)", depth, cfg.MaxSpawnDepth)
+		return SpawnReceipt{}, fmt.Errorf("spawn depth limit reached (%d/%d)", depth, cfg.MaxSpawnDepth)
 	}
 
 	scope := subagentScopeFromContext(ctx)
@@ -50,7 +57,7 @@ func (sm *SubagentManager) Spawn(
 		scope.RootAgentKey = parentID
 	}
 	if scope.TenantID == uuid.Nil || scope.RootAgentID == uuid.Nil || scope.RootAgentKey == "" {
-		return "", fmt.Errorf("spawn requires tenant and root-agent context")
+		return SpawnReceipt{}, fmt.Errorf("spawn requires tenant and root-agent context")
 	}
 	parentTaskID := subagentTaskIDFromContext(ctx)
 	admissionParentID := subagentAdmissionParentID(parentTaskID, scope)
@@ -86,35 +93,60 @@ func (sm *SubagentManager) Spawn(
 		sm.markTaskRunning(subTask)
 		iterations = sm.executeTask(withSubagentExecution(runCtx, scope, subTask.ID, subTask.Depth, lease), subTask)
 		lease.Release()
-		sm.persistStatus(runCtx, subTask, iterations)
 	})
 	if err != nil {
 		taskCancel()
-		return "", err
+		return SpawnReceipt{}, err
 	}
 	subTask.admissionTicket = ticket
 
-	sm.acceptTask(taskCtx, subTask)
+	if _, err := sm.acceptTask(taskCtx, subTask); err != nil {
+		ticket.Cancel()
+		taskCancel()
+		return SpawnReceipt{}, err
+	}
 	if err := ticket.Activate(); err != nil {
 		sm.rollbackRejectedTask(taskCtx, subTask, err)
 		taskCancel()
-		return "", err
+		return SpawnReceipt{}, err
 	}
 	announceCtx := context.WithoutCancel(taskCtx)
 	completion := func() {
 		defer finishLifecycle()
 		<-ticket.Done()
 		sm.finishTicketTask(announceCtx, subTask, ticket, iterations)
+		terminalPersisted := sm.persistStatus(announceCtx, subTask, iterations) == nil
 		taskCancel()
-		sm.announceTask(announceCtx, subTask, callback, iterations)
+		sm.announceTask(announceCtx, subTask, callback, iterations, terminalPersisted)
 	}
 	lifecycleTransferred = true
 	go completion()
 
 	slog.Info("subagent queued", "id", subTask.ID, "parent_task", parentTaskID, "depth", subTask.Depth, "label", subTask.Label)
 
-	return fmt.Sprintf("Spawned subagent '%s' (id=%s, depth=%d) for task: %s",
-		subTask.Label, subTask.ID, subTask.Depth, truncate(task, 100)), nil
+	message := fmt.Sprintf("Spawned subagent '%s' (id=%s, depth=%d) for task: %s",
+		subTask.Label, subTask.ID, subTask.Depth, truncate(task, 100))
+	return SpawnReceipt{
+		TaskID:       subTask.ID,
+		CompletionID: subTask.dbID,
+		Message:      message,
+	}, nil
+}
+
+// Spawn preserves the existing manager API for internal control flows.
+func (sm *SubagentManager) Spawn(
+	ctx context.Context,
+	parentID string,
+	depth int,
+	task, label, modelOverride string,
+	channel, chatID, peerKind string,
+	callback AsyncCallback,
+) (string, error) {
+	receipt, err := sm.SpawnWithReceipt(
+		ctx, parentID, depth, task, label, modelOverride,
+		channel, chatID, peerKind, callback,
+	)
+	return receipt.Message, err
 }
 
 // RunSync executes a subagent task synchronously, blocking until completion.
@@ -168,8 +200,15 @@ func (sm *SubagentManager) RunSync(
 		Depth:        admissionDepth,
 	}
 	var iterations int
+	var acceptErr error
+	acceptedBeforeActivate := false
 	run := func(runCtx context.Context, lease *orchestration.ChildRunLease) {
-		sm.acceptTask(runCtx, subTask)
+		if !acceptedBeforeActivate {
+			if _, acceptErr = sm.acceptTask(runCtx, subTask); acceptErr != nil {
+				lease.Release()
+				return
+			}
+		}
 		sm.markTaskRunning(subTask)
 		iterations = sm.executeTask(withSubagentExecution(runCtx, scope, subTask.ID, subTask.Depth, lease), subTask)
 		lease.Release()
@@ -188,6 +227,10 @@ func (sm *SubagentManager) RunSync(
 			taskCancel()
 			return "", nil, iterations, err
 		}
+		if acceptErr != nil {
+			taskCancel()
+			return "", nil, iterations, acceptErr
+		}
 	} else {
 		ticket, err := sm.admission.Enqueue(taskCtx, constraints, run)
 		if err != nil {
@@ -195,7 +238,12 @@ func (sm *SubagentManager) RunSync(
 			return "", nil, 0, err
 		}
 		subTask.admissionTicket = ticket
-		sm.acceptTask(taskCtx, subTask)
+		if _, err := sm.acceptTask(taskCtx, subTask); err != nil {
+			ticket.Cancel()
+			taskCancel()
+			return "", nil, 0, err
+		}
+		acceptedBeforeActivate = true
 		if err := ticket.Activate(); err != nil {
 			sm.rollbackRejectedTask(taskCtx, subTask, err)
 			taskCancel()
@@ -237,6 +285,10 @@ func newSubagentTask(
 	if label == "" {
 		label = truncate(task, 50)
 	}
+	mediaPathPrefix := ""
+	if IsDelegationArtifactRun(ctx) {
+		mediaPathPrefix = "outputs"
+	}
 	return &SubagentTask{
 		ID:                  generateSubagentID(),
 		ParentID:            scope.RootAgentKey,
@@ -262,6 +314,8 @@ func newSubagentTask(
 		OriginRootSpanID:    tracing.ParentSpanIDFromContext(ctx),
 		OriginContextWindow: store.AgentContextWindowFromContext(ctx),
 		OriginMaxTokens:     store.AgentMaxTokensFromContext(ctx),
+		Workspace:           ToolWorkspaceFromCtx(ctx),
+		MediaPathPrefix:     mediaPathPrefix,
 		CreatedAt:           time.Now().UnixMilli(),
 		spawnConfig:         cfg,
 	}
@@ -303,19 +357,26 @@ func (sm *SubagentManager) markTaskFailed(task *SubagentTask, err error) {
 	}
 }
 
-func (sm *SubagentManager) acceptTask(ctx context.Context, task *SubagentTask) bool {
+func (sm *SubagentManager) acceptTask(ctx context.Context, task *SubagentTask) (bool, error) {
 	sm.mu.Lock()
 	if _, exists := sm.tasks[task.ID]; exists {
 		sm.mu.Unlock()
-		return false
+		return false, fmt.Errorf("subagent task ID collision: %s", task.ID)
 	}
 	sm.tasks[task.ID] = task
 	sm.mu.Unlock()
+	if err := sm.persistCreate(ctx, task); err != nil {
+		sm.mu.Lock()
+		if sm.tasks[task.ID] == task {
+			delete(sm.tasks, task.ID)
+		}
+		sm.mu.Unlock()
+		return false, err
+	}
 	if task.spawnConfig.ArchiveAfterMinutes > 0 {
 		sm.startArchiveSweeper()
 	}
-	sm.persistCreate(ctx, task)
-	return true
+	return true, nil
 }
 
 func (sm *SubagentManager) taskAccepted(taskID string) bool {

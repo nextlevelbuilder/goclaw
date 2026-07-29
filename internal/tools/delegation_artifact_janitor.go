@@ -1,7 +1,10 @@
 package tools
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path"
@@ -15,6 +18,20 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
+
+const delegationArtifactManifestMaxBytes = 1024 * 1024
+
+type recoveredPublicationStatus uint8
+
+const (
+	recoveredPublicationMissing recoveredPublicationStatus = iota
+	recoveredPublicationInvalid
+	recoveredPublicationValid
+)
+
+func isArtifactSymlinkError(err error) bool {
+	return errors.Is(err, errArtifactSymlink) || errors.Is(err, errArtifactReparsePoint)
+}
 
 type retainedDelegationArtifact struct {
 	tenantWorkspace     string
@@ -321,15 +338,38 @@ func (t *DelegateTool) recoverTenantDelegationExchanges(tenantWorkspace string) 
 	for _, name := range names {
 		delegationID, err := uuid.Parse(name)
 		if err != nil || delegationID == uuid.Nil || delegationID.String() != name {
+			if cleanupErr := delegationsRoot.removeTree(name); cleanupErr != nil {
+				slog.Warn("delegate.artifact_invalid_exchange_cleanup_failed",
+					"entry", name,
+					"error", cleanupErr,
+				)
+			} else {
+				slog.Warn("security.delegation_artifact_invalid_exchange_removed",
+					"entry", name,
+				)
+			}
 			continue
 		}
 		exchangeRoot, err := delegationsRoot.openSubroot(name)
 		if err != nil {
+			slog.Warn("delegate.artifact_exchange_recovery_open_failed",
+				"delegation_id", delegationID,
+				"error", err,
+			)
 			continue
 		}
 		state, stateErr := readDelegationArtifactLifecycleState(exchangeRoot, delegationID)
 		if stateErr != nil {
 			_ = exchangeRoot.close()
+			t.addRetainedDelegationArtifact(retainedDelegationArtifact{
+				tenantWorkspace: tenantWorkspace,
+				delegationID:    delegationID,
+				retainUntil:     recoveredAt.Add(delegationArtifactFailureTTL),
+			})
+			slog.Warn("delegate.artifact_corrupt_exchange_retained",
+				"delegation_id", delegationID,
+				"error", stateErr,
+			)
 			continue
 		}
 		tenantID, err := uuid.Parse(state.TenantID)
@@ -342,8 +382,45 @@ func (t *DelegateTool) recoverTenantDelegationExchanges(tenantWorkspace string) 
 			continue
 		}
 		retainUntil := state.RetainUntil
+		publicationDurable := false
 		switch state.Status {
-		case artifactLifecycleStaging, artifactLifecycleRunning, artifactLifecyclePublishing:
+		case artifactLifecyclePublishing:
+			item := retainedDelegationArtifact{
+				tenantWorkspace:     tenantWorkspace,
+				tenantID:            tenantID,
+				tenantSlug:          state.TenantSlug,
+				delegationID:        delegationID,
+				retainUntil:         state.RetainUntil,
+				callerLocation:      state.CallerLocation,
+				publicationTempPath: state.PublicationTempPath,
+			}
+			publicationStatus, inspectErr := t.inspectRecoveredPublication(item)
+			if inspectErr != nil {
+				_ = exchangeRoot.close()
+				t.addRetainedDelegationArtifact(item)
+				slog.Warn("delegate.artifact_publication_recovery_deferred",
+					"delegation_id", delegationID,
+					"error", inspectErr,
+				)
+				continue
+			}
+			if publicationStatus == recoveredPublicationValid {
+				state.Status = artifactLifecyclePublished
+				state.FailedAt = nil
+				state.RetainUntil = recoveredAt
+				state.ReasonCode = "artifact_published"
+				retainUntil = time.Time{}
+				publicationDurable = true
+				if err := persistDelegationArtifactLifecycleState(exchangeRoot, delegationID, state); err != nil {
+					slog.Warn("delegate.artifact_publication_recovery_state_failed",
+						"delegation_id", delegationID,
+						"error", err,
+					)
+				}
+				break
+			}
+			fallthrough
+		case artifactLifecycleStaging, artifactLifecycleRunning:
 			failedAt := recoveredAt
 			state.Status = artifactLifecycleFailed
 			state.FailedAt = &failedAt
@@ -356,6 +433,7 @@ func (t *DelegateTool) recoverTenantDelegationExchanges(tenantWorkspace string) 
 			retainUntil = state.RetainUntil
 		case artifactLifecyclePublished:
 			retainUntil = time.Time{}
+			publicationDurable = true
 		}
 		_ = exchangeRoot.close()
 		t.addRetainedDelegationArtifact(retainedDelegationArtifact{
@@ -366,10 +444,111 @@ func (t *DelegateTool) recoverTenantDelegationExchanges(tenantWorkspace string) 
 			retainUntil:         retainUntil,
 			callerLocation:      state.CallerLocation,
 			publicationTempPath: state.PublicationTempPath,
-			publicationDurable:  state.Status == artifactLifecyclePublished,
+			publicationDurable:  publicationDurable,
 		})
 	}
 	return nil
+}
+
+func (t *DelegateTool) inspectRecoveredPublication(
+	item retainedDelegationArtifact,
+) (recoveredPublicationStatus, error) {
+	callerRootPath, err := t.resolveRetainedCallerRoot(item)
+	if err != nil {
+		return recoveredPublicationInvalid, nil
+	}
+	callerRoot, err := openArtifactSecureRoot(callerRootPath)
+	if err != nil {
+		if isArtifactNotExist(err) {
+			return recoveredPublicationMissing, nil
+		}
+		return recoveredPublicationMissing, err
+	}
+	defer callerRoot.close()
+
+	finalPath := path.Join(".delegations", item.delegationID.String())
+	publicationRoot, err := callerRoot.openSubroot(finalPath)
+	if err != nil {
+		switch {
+		case isArtifactNotExist(err):
+			return recoveredPublicationMissing, nil
+		case isArtifactSymlinkError(err):
+			return recoveredPublicationInvalid, nil
+		default:
+			return recoveredPublicationMissing, err
+		}
+	}
+	defer publicationRoot.close()
+
+	entry, err := publicationRoot.openEntry("manifest.json")
+	if err != nil {
+		if isArtifactNotExist(err) || isArtifactSymlinkError(err) {
+			return recoveredPublicationInvalid, nil
+		}
+		return recoveredPublicationMissing, err
+	}
+	defer entry.close()
+	if entry.kind != artifactEntryRegular || entry.links != 1 ||
+		entry.size <= 0 || entry.size > delegationArtifactManifestMaxBytes {
+		return recoveredPublicationInvalid, nil
+	}
+	encoded, err := io.ReadAll(io.LimitReader(entry.file, delegationArtifactManifestMaxBytes+1))
+	if err != nil {
+		return recoveredPublicationMissing, err
+	}
+	if len(encoded) > delegationArtifactManifestMaxBytes {
+		return recoveredPublicationInvalid, nil
+	}
+	var manifest DelegationArtifactManifest
+	if err := json.Unmarshal(encoded, &manifest); err != nil {
+		return recoveredPublicationInvalid, nil
+	}
+	if manifest.SchemaVersion != DelegationArtifactManifestVersion ||
+		manifest.DelegationID != item.delegationID.String() ||
+		manifest.OutputCount != len(manifest.Outputs) ||
+		manifest.OutputCount < 0 ||
+		manifest.OutputCount > DelegationArtifactMaxFiles ||
+		manifest.OutputBytes < 0 ||
+		manifest.OutputBytes > DelegationArtifactMaxTotalBytes {
+		return recoveredPublicationInvalid, nil
+	}
+
+	seen := make(map[string]struct{}, len(manifest.Outputs))
+	var totalBytes int64
+	for _, output := range manifest.Outputs {
+		if err := validateManifestOutputPath(output.Path); err != nil ||
+			output.SizeBytes < 0 ||
+			output.SizeBytes > DelegationArtifactMaxFileBytes ||
+			output.SHA256 == "" {
+			return recoveredPublicationInvalid, nil
+		}
+		if _, exists := seen[output.Path]; exists {
+			return recoveredPublicationInvalid, nil
+		}
+		seen[output.Path] = struct{}{}
+		outputEntry, err := publicationRoot.openEntry(output.Path)
+		if err != nil {
+			if isArtifactNotExist(err) || isArtifactSymlinkError(err) {
+				return recoveredPublicationInvalid, nil
+			}
+			return recoveredPublicationMissing, err
+		}
+		valid := outputEntry.kind == artifactEntryRegular &&
+			outputEntry.links == 1 &&
+			outputEntry.size == output.SizeBytes
+		_ = outputEntry.close()
+		if !valid {
+			return recoveredPublicationInvalid, nil
+		}
+		totalBytes += output.SizeBytes
+		if totalBytes > DelegationArtifactMaxTotalBytes {
+			return recoveredPublicationInvalid, nil
+		}
+	}
+	if totalBytes != manifest.OutputBytes {
+		return recoveredPublicationInvalid, nil
+	}
+	return recoveredPublicationValid, nil
 }
 
 func (t *DelegateTool) lifecycleStateMatchesTenantWorkspace(

@@ -121,15 +121,15 @@ func (l *Loop) enrichInputMedia(ctx context.Context, req *RunRequest, messages [
 	// 2c. Collect document MediaRefs (historical + current) for read_document tool.
 	if docRefs := collectRefsByKind(messages, mediaRefs, "document"); len(docRefs) > 0 {
 		ctx = tools.WithMediaDocRefs(ctx, docRefs)
-		// Enrich the last user message with persisted file paths so skills can access
-		// documents via exec (e.g. pypdf). Only for current-turn refs (just persisted).
-		l.enrichDocumentPaths(messages, mediaRefs)
+		// Enrich the last user message with exact IDs and logical workspace paths.
+		// Only current-turn refs are paired with current-turn tags.
+		l.enrichDocumentPaths(messages, mediaRefs, tools.ToolWorkspaceFromCtx(ctx))
 	}
 
 	// 2d. Collect audio MediaRefs (historical + current) for read_audio tool.
 	if audioRefs := collectRefsByKind(messages, mediaRefs, "audio"); len(audioRefs) > 0 {
 		ctx = tools.WithMediaAudioRefs(ctx, audioRefs)
-		l.enrichAudioIDs(messages, mediaRefs)
+		l.enrichAudioIDs(messages, mediaRefs, tools.ToolWorkspaceFromCtx(ctx))
 	}
 
 	// 2e. Collect video MediaRefs (historical + current) for read_video tool.

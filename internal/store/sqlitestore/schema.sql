@@ -1678,6 +1678,7 @@ CREATE INDEX IF NOT EXISTS idx_system_configs_tenant ON system_configs(tenant_id
 CREATE TABLE IF NOT EXISTS subagent_tasks (
     id                TEXT PRIMARY KEY,
     tenant_id         TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    root_agent_id     TEXT REFERENCES agents(id) ON DELETE SET NULL,
     parent_agent_key  VARCHAR(255) NOT NULL,
     session_key       VARCHAR(500),
     subject           VARCHAR(255) NOT NULL,
@@ -1706,6 +1707,39 @@ CREATE TABLE IF NOT EXISTS subagent_tasks (
 CREATE INDEX IF NOT EXISTS idx_subagent_tasks_parent_status ON subagent_tasks(tenant_id, parent_agent_key, status);
 CREATE INDEX IF NOT EXISTS idx_subagent_tasks_session ON subagent_tasks(session_key);
 CREATE INDEX IF NOT EXISTS idx_subagent_tasks_created ON subagent_tasks(tenant_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_subagent_tasks_root_status
+    ON subagent_tasks(tenant_id, root_agent_id, status, created_at DESC)
+    WHERE root_agent_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_subagent_tasks_root_session
+    ON subagent_tasks(tenant_id, root_agent_id, session_key, created_at DESC)
+    WHERE root_agent_id IS NOT NULL AND session_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_subagent_tasks_root_archive
+    ON subagent_tasks(tenant_id, root_agent_id, completed_at, id)
+    WHERE root_agent_id IS NOT NULL
+      AND status IN ('completed', 'failed', 'cancelled')
+      AND archived_at IS NULL;
+CREATE TRIGGER IF NOT EXISTS trg_subagent_tasks_root_tenant_insert
+BEFORE INSERT ON subagent_tasks
+WHEN NEW.root_agent_id IS NOT NULL
+ AND NOT EXISTS (
+     SELECT 1 FROM agents
+     WHERE agents.id = NEW.root_agent_id
+       AND agents.tenant_id = NEW.tenant_id
+ )
+BEGIN
+    SELECT RAISE(ABORT, 'subagent root agent belongs to another tenant');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_subagent_tasks_root_tenant_update
+BEFORE UPDATE OF root_agent_id, tenant_id ON subagent_tasks
+WHEN NEW.root_agent_id IS NOT NULL
+ AND NOT EXISTS (
+     SELECT 1 FROM agents
+     WHERE agents.id = NEW.root_agent_id
+       AND agents.tenant_id = NEW.tenant_id
+ )
+BEGIN
+    SELECT RAISE(ABORT, 'subagent root agent belongs to another tenant');
+END;
 
 -- ============================================================
 -- Table: episodic_summaries (V3 Tier 2 memory)

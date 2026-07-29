@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -71,8 +71,9 @@ type DelegateTool struct {
 	agents         store.AgentCRUDStore
 	eventBus       eventbus.DomainEventBus
 	runFn          DelegateRunFunc
-	msgBus         *bus.MessageBus  // for async announce back to parent
-	hookDispatcher hooks.Dispatcher // optional; nil-safe
+	msgBus         *bus.MessageBus         // for async announce back to parent
+	taskStore      store.SubagentTaskStore // durable async completion ledger
+	hookDispatcher hooks.Dispatcher        // optional; nil-safe
 	admission      *orchestration.ChildRunAdmission
 	workspace      string
 	dataDir        string
@@ -84,10 +85,19 @@ type DelegateTool struct {
 	sweeperClosed  bool
 	sweeperStop    chan struct{}
 	sweeperDone    chan struct{}
+
+	completionMu     sync.Mutex
+	completionClosed bool
+	completionWG     sync.WaitGroup
+	closeOnce        sync.Once
+	closeDone        chan struct{}
 }
 
 // SetMsgBus sets the message bus for async result delivery to parent agent.
 func (t *DelegateTool) SetMsgBus(mb *bus.MessageBus) { t.msgBus = mb }
+
+// SetTaskStore configures the durable ledger used by async delegations.
+func (t *DelegateTool) SetTaskStore(s store.SubagentTaskStore) { t.taskStore = s }
 
 // SetHookDispatcher sets the hook dispatcher for SubagentStart/Stop events.
 func (t *DelegateTool) SetHookDispatcher(d hooks.Dispatcher) { t.hookDispatcher = d }
@@ -104,23 +114,58 @@ func (t *DelegateTool) SetWorkspace(workspace string) {
 // needed only to retry publication-temp cleanup after restart.
 func (t *DelegateTool) SetDataDir(dataDir string) { t.dataDir = dataDir }
 
-// Close stops the failed-exchange retention sweeper. Call it only after child
-// run admission has drained so no admitted callback can register new failures.
+// Close stops the failed-exchange retention sweeper and drains accepted async
+// completion persistence/announcement work.
 func (t *DelegateTool) Close() {
-	t.retainedMu.Lock()
-	if t.sweeperClosed {
-		t.retainedMu.Unlock()
-		return
+	_ = t.CloseContext(context.Background())
+}
+
+// CloseContext prevents new async completion ownership and waits for accepted
+// completion work. Gateway callers close child-run admission before this drain.
+func (t *DelegateTool) CloseContext(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	t.sweeperClosed = true
-	if !t.sweeperStarted {
+	t.closeOnce.Do(func() {
+		t.completionMu.Lock()
+		t.completionClosed = true
+		t.completionMu.Unlock()
+
+		t.retainedMu.Lock()
+		t.sweeperClosed = true
+		sweeperStarted := t.sweeperStarted
+		if sweeperStarted {
+			close(t.sweeperStop)
+		}
 		t.retainedMu.Unlock()
-		return
+
+		go func() {
+			if sweeperStarted {
+				<-t.sweeperDone
+			}
+			t.completionWG.Wait()
+			close(t.closeDone)
+		}()
+	})
+	select {
+	case <-t.closeDone:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("delegate completion drain timeout: %w", ctx.Err())
 	}
-	close(t.sweeperStop)
-	done := t.sweeperDone
-	t.retainedMu.Unlock()
-	<-done
+}
+
+func (t *DelegateTool) beginAsyncCompletion() (func(), bool) {
+	t.completionMu.Lock()
+	defer t.completionMu.Unlock()
+	if t.completionClosed {
+		return nil, false
+	}
+	t.completionWG.Add(1)
+	var once sync.Once
+	return func() {
+		once.Do(t.completionWG.Done)
+	}, true
 }
 
 // NewDelegateTool creates a delegate tool.
@@ -153,6 +198,7 @@ func NewDelegateToolWithAdmission(
 		retained:    make(map[string]retainedDelegationArtifact),
 		sweeperStop: make(chan struct{}),
 		sweeperDone: make(chan struct{}),
+		closeDone:   make(chan struct{}),
 	}
 }
 
@@ -169,6 +215,15 @@ func (t *DelegateTool) Parameters() map[string]any {
 			"agent_key": map[string]any{
 				"type":        "string",
 				"description": "The agent_key of the target agent to delegate to",
+			},
+			"action": map[string]any{
+				"type":        "string",
+				"enum":        []string{"delegate", "get"},
+				"description": "delegate (default) starts work; get retrieves a durable async result",
+			},
+			"delegation_id": map[string]any{
+				"type":        "string",
+				"description": "Delegation UUID returned by async mode (required for action=get)",
 			},
 			"task": map[string]any{
 				"type":        "string",
@@ -190,11 +245,20 @@ func (t *DelegateTool) Parameters() map[string]any {
 				"description": "Caller-workspace relative files to stage as read-only delegation inputs",
 			},
 		},
-		"required": []string{"agent_key", "task"},
 	}
 }
 
 func (t *DelegateTool) Execute(ctx context.Context, args map[string]any) *Result {
+	action, _ := args["action"].(string)
+	if action == "" {
+		action = "delegate"
+	}
+	if action == "get" {
+		return t.executeGetCompletion(ctx, args)
+	}
+	if action != "delegate" {
+		return ErrorResult(fmt.Sprintf("unknown delegate action %q", action))
+	}
 	agentKey, _ := args["agent_key"].(string)
 	task, _ := args["task"].(string)
 	mode, _ := args["mode"].(string)
@@ -379,6 +443,17 @@ func (t *DelegateTool) executeSyncMode(ctx context.Context, job *delegateArtifac
 // executeAsyncMode spawns a goroutine and returns immediately.
 func (t *DelegateTool) executeAsyncMode(ctx context.Context, job *delegateArtifactJob) *Result {
 	req := job.req
+	finishCompletion, ok := t.beginAsyncCompletion()
+	if !ok {
+		job.closeCallerRoot()
+		return ErrorResult("delegate tool is closing")
+	}
+	completionTransferred := false
+	defer func() {
+		if !completionTransferred {
+			finishCompletion()
+		}
+	}()
 	// Detach from parent cancellation but keep a bounded admitted callback.
 	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Minute)
 	announceCtx := context.WithoutCancel(ctx)
@@ -386,6 +461,7 @@ func (t *DelegateTool) executeAsyncMode(ctx context.Context, job *delegateArtifa
 	var runErr error
 	ticket, err := t.admission.Enqueue(bgCtx, delegateAdmissionConstraints(ctx, req), func(runCtx context.Context, lease *orchestration.ChildRunLease) {
 		defer job.closeCallerRoot()
+		_ = t.updateDelegateCompletion(req, TaskStatusRunning, nil)
 		runCtx = withDelegatedAgentExecution(runCtx, lease)
 		dr, runErr = t.runArtifactExchange(runCtx, job)
 		lease.Release()
@@ -395,10 +471,18 @@ func (t *DelegateTool) executeAsyncMode(ctx context.Context, job *delegateArtifa
 		job.closeCallerRoot()
 		return ErrorResult(err.Error())
 	}
+	if err := t.createDelegateCompletion(ctx, req); err != nil {
+		ticket.Cancel()
+		cancel()
+		job.closeCallerRoot()
+		return ErrorResult(err.Error())
+	}
 	if err := ticket.Activate(); err != nil {
 		ticket.Cancel()
 		cancel()
 		job.closeCallerRoot()
+		result := err.Error()
+		_ = t.updateDelegateCompletion(req, TaskStatusFailed, &result)
 		return ErrorResult(err.Error())
 	}
 
@@ -406,6 +490,7 @@ func (t *DelegateTool) executeAsyncMode(ctx context.Context, job *delegateArtifa
 	// returned, which proves its execution permit has been released. A blocked
 	// message bus or event consumer must never consume child-run capacity.
 	go func() {
+		defer finishCompletion()
 		<-ticket.Done()
 		job.closeCallerRoot()
 		cancel()
@@ -413,6 +498,8 @@ func (t *DelegateTool) executeAsyncMode(ctx context.Context, job *delegateArtifa
 			runErr = ticket.Err()
 		}
 		if runErr != nil {
+			result := runErr.Error()
+			terminalPersisted := t.updateDelegateCompletion(req, TaskStatusFailed, &result) == nil
 			t.emitEvent(announceCtx, eventbus.EventDelegateFailed, eventbus.DelegateFailedPayload{
 				DelegationID: req.DelegationID,
 				FromAgent:    req.FromAgentKey,
@@ -420,8 +507,30 @@ func (t *DelegateTool) executeAsyncMode(ctx context.Context, job *delegateArtifa
 				Error:        runErr.Error(),
 			})
 			slog.Warn("delegate.async.failed", "to", req.ToAgentKey, "error", runErr)
-			t.announceToParent(req, fmt.Sprintf("[Delegation to %s failed: %v]", req.ToAgentKey, runErr), nil)
+			content := fmt.Sprintf("[Delegation to %s failed: %v]", req.ToAgentKey, runErr)
+			delivered := t.announceToParent(req, content, nil)
+			if terminalPersisted {
+				t.updateDelegateAnnouncement(req, delivered)
+			} else {
+				slog.Error("delegate.async.announce_without_durable_terminal",
+					"delegation_id", req.DelegationID,
+					"to", req.ToAgentKey,
+					"delivered", delivered,
+				)
+			}
+			if !delivered {
+				slog.Warn("delegate.async.announce_deferred_to_ledger",
+					"delegation_id", req.DelegationID,
+					"to", req.ToAgentKey,
+					"reason", "inbound_bus_full",
+				)
+			}
 			return
+		}
+		completionMedia := completionMediaDescriptors(dr.Media, job.callerWorkspace, "")
+		terminalPersisted := t.updateDelegateCompletionMedia(req, completionMedia) == nil
+		if terminalPersisted {
+			terminalPersisted = t.updateDelegateCompletion(req, TaskStatusCompleted, &dr.Content) == nil
 		}
 		t.emitEvent(announceCtx, eventbus.EventDelegateCompleted, eventbus.DelegateCompletedPayload{
 			DelegationID: req.DelegationID,
@@ -430,8 +539,26 @@ func (t *DelegateTool) executeAsyncMode(ctx context.Context, job *delegateArtifa
 			Content:      truncate(dr.Content, 500),
 			MediaCount:   len(dr.Media),
 		})
-		t.announceToParent(req, fmt.Sprintf("[Delegation result from %s]\n\n%s", req.ToAgentKey, dr.Content), dr.Media)
+		content := fmt.Sprintf("[Delegation result from %s]\n\n%s", req.ToAgentKey, dr.Content)
+		delivered := t.announceToParent(req, content, dr.Media)
+		if terminalPersisted {
+			t.updateDelegateAnnouncement(req, delivered)
+		} else {
+			slog.Error("delegate.async.announce_without_durable_terminal",
+				"delegation_id", req.DelegationID,
+				"to", req.ToAgentKey,
+				"delivered", delivered,
+			)
+		}
+		if !delivered {
+			slog.Warn("delegate.async.announce_deferred_to_ledger",
+				"delegation_id", req.DelegationID,
+				"to", req.ToAgentKey,
+				"reason", "inbound_bus_full",
+			)
+		}
 	}()
+	completionTransferred = true
 
 	result, _ := json.Marshal(map[string]any{
 		"delegation_id": req.DelegationID,
@@ -472,8 +599,8 @@ func (t *DelegateTool) runAdmitted(
 }
 
 type delegateInput struct {
-	relativePath string
-	references   []string
+	relativePath   string
+	taskReferences []string
 }
 
 type delegateArtifactJob struct {
@@ -532,16 +659,25 @@ func parseDelegateInputs(raw any) ([]string, error) {
 func collectDelegateInputs(callerWorkspace string, explicitInputs, currentMedia []string) ([]delegateInput, error) {
 	inputs := make([]delegateInput, 0, len(explicitInputs)+len(currentMedia))
 	positions := make(map[string]int, cap(inputs))
-	add := func(relativePath string, references ...string) {
-		if index, exists := positions[relativePath]; exists {
-			inputs[index].references = append(inputs[index].references, references...)
+	add := func(relativePath string, taskReferences ...string) {
+		if position, exists := positions[relativePath]; exists {
+			for _, reference := range taskReferences {
+				if reference != "" && !slices.Contains(inputs[position].taskReferences, reference) {
+					inputs[position].taskReferences = append(inputs[position].taskReferences, reference)
+				}
+			}
 			return
 		}
 		positions[relativePath] = len(inputs)
-		inputs = append(inputs, delegateInput{relativePath: relativePath, references: references})
+		inputs = append(inputs, delegateInput{
+			relativePath: relativePath,
+			taskReferences: slices.DeleteFunc(taskReferences, func(reference string) bool {
+				return reference == ""
+			}),
+		})
 	}
 	for _, relativePath := range explicitInputs {
-		add(relativePath, relativePath)
+		add(relativePath)
 	}
 	for i, mediaPath := range currentMedia {
 		absolutePath, err := filepath.Abs(mediaPath)
@@ -557,7 +693,7 @@ func collectDelegateInputs(callerWorkspace string, explicitInputs, currentMedia 
 		if err != nil || normalized == "." || strings.HasPrefix(normalized, "../") {
 			return nil, fmt.Errorf("current media input %d is outside the caller workspace", i+1)
 		}
-		add(normalized, mediaPath, absolutePath)
+		add(normalized, absolutePath, filepath.ToSlash(absolutePath))
 	}
 	if len(inputs) > DelegationArtifactMaxFiles {
 		return nil, fmt.Errorf("delegation inputs may contain at most %d files", DelegationArtifactMaxFiles)
@@ -712,7 +848,14 @@ func (t *DelegateTool) runArtifactExchange(ctx context.Context, job *delegateArt
 	}
 	durablePublished = true
 	if err := t.markDelegationPublished(exchange, job, publication.Manifest.PublishedAt); err != nil {
-		return DelegateResult{}, err
+		// The no-replace rename and directory sync completed before this
+		// best-effort lifecycle update. Reporting the delegation as failed here
+		// invites a retry that creates a second durable publication even though
+		// the caller already owns the first one.
+		slog.Warn("delegate.artifact_lifecycle_published_failed",
+			"delegation_id", job.req.DelegationID,
+			"error", err,
+		)
 	}
 	dr.Media = publicationMedia(job.callerWorkspace, publication)
 	emitDelegationArtifactLifecycleSpan(
@@ -820,37 +963,60 @@ func delegationTaskWithInputAliases(task string, inputs []delegateInput, staged 
 	if len(staged) == 0 {
 		return task
 	}
-	type inputReplacement struct {
-		reference string
-		alias     string
-	}
-	aliases := make([]string, len(staged))
-	replacements := make([]inputReplacement, 0, len(staged))
+	aliases := make([]string, 0, len(staged))
 	for i, artifact := range staged {
-		aliases[i] = artifact.Path
-		for _, reference := range inputs[i].references {
-			if reference != "" {
-				replacements = append(replacements, inputReplacement{
-					reference: reference,
-					alias:     artifact.Path,
-				})
-			}
+		for _, reference := range inputs[i].taskReferences {
+			task = replaceExactPathReference(task, reference, artifact.Path)
 		}
-	}
-	sort.Slice(replacements, func(i, j int) bool {
-		if len(replacements[i].reference) != len(replacements[j].reference) {
-			return len(replacements[i].reference) > len(replacements[j].reference)
+		source := inputs[i].relativePath
+		if source == "" || source == artifact.Path {
+			aliases = append(aliases, artifact.Path)
+			continue
 		}
-		return replacements[i].reference < replacements[j].reference
-	})
-	replacerValues := make([]string, 0, len(replacements)*2)
-	for _, replacement := range replacements {
-		replacerValues = append(replacerValues, replacement.reference, replacement.alias)
-	}
-	if len(replacerValues) > 0 {
-		task = strings.NewReplacer(replacerValues...).Replace(task)
+		aliases = append(aliases, source+" => "+artifact.Path)
 	}
 	return task + "\n\nRead-only delegation inputs: " + strings.Join(aliases, ", ")
+}
+
+func replaceExactPathReference(text, reference, replacement string) string {
+	if reference == "" || reference == replacement {
+		return text
+	}
+	var rewritten strings.Builder
+	remaining := text
+	for {
+		index := strings.Index(remaining, reference)
+		if index < 0 {
+			rewritten.WriteString(remaining)
+			return rewritten.String()
+		}
+		beforeOK := index == 0 || !isPathReferenceByte(remaining[index-1])
+		afterIndex := index + len(reference)
+		afterOK := afterIndex == len(remaining) || !isPathReferenceByte(remaining[afterIndex])
+		if beforeOK && afterOK {
+			rewritten.WriteString(remaining[:index])
+			rewritten.WriteString(replacement)
+			remaining = remaining[afterIndex:]
+			continue
+		}
+		rewritten.WriteString(remaining[:index+len(reference)])
+		remaining = remaining[index+len(reference):]
+	}
+}
+
+func isPathReferenceByte(value byte) bool {
+	switch {
+	case value >= 'a' && value <= 'z',
+		value >= 'A' && value <= 'Z',
+		value >= '0' && value <= '9':
+		return true
+	}
+	switch value {
+	case '_', '-', '.', '/', '\\':
+		return true
+	default:
+		return false
+	}
 }
 
 func publicationMedia(callerWorkspace string, publication DelegationArtifactPublication) []bus.MediaFile {
@@ -897,9 +1063,34 @@ func redactDelegationArtifactText(text string, exchange *DelegationArtifactExcha
 		{exchange.hostRoot, "delegation exchange"},
 	}
 	for _, replacement := range replacements {
-		text = strings.ReplaceAll(text, replacement.hostPath, replacement.alias)
+		for _, variant := range artifactPathRedactionVariants(replacement.hostPath) {
+			text = strings.ReplaceAll(text, variant, replacement.alias)
+		}
 	}
 	return text
+}
+
+func artifactPathRedactionVariants(hostPath string) []string {
+	variants := []string{
+		hostPath,
+		filepath.ToSlash(hostPath),
+		filepath.FromSlash(hostPath),
+		strings.ReplaceAll(hostPath, `\`, "/"),
+		strings.ReplaceAll(hostPath, "/", `\`),
+	}
+	seen := make(map[string]struct{}, len(variants))
+	result := make([]string, 0, len(variants))
+	for _, variant := range variants {
+		if variant == "" {
+			continue
+		}
+		if _, ok := seen[variant]; ok {
+			continue
+		}
+		seen[variant] = struct{}{}
+		result = append(result, variant)
+	}
+	return result
 }
 
 func delegationEventTask(
@@ -936,9 +1127,9 @@ func delegateAdmissionConstraints(ctx context.Context, req DelegateRequest) orch
 
 // announceToParent delivers the delegate result back to the parent agent's
 // conversation via msgBus, following the same pattern as subagent announce.
-func (t *DelegateTool) announceToParent(req DelegateRequest, content string, media []bus.MediaFile) {
+func (t *DelegateTool) announceToParent(req DelegateRequest, content string, media []bus.MediaFile) bool {
 	if t.msgBus == nil || req.ChatID == "" {
-		return
+		return false
 	}
 	tenantUUID, _ := uuid.Parse(req.TenantID)
 	meta := map[string]string{
@@ -961,7 +1152,7 @@ func (t *DelegateTool) announceToParent(req DelegateRequest, content string, med
 	if req.UserID != "" {
 		meta[MetaOriginUserID] = req.UserID
 	}
-	t.msgBus.PublishInbound(bus.InboundMessage{
+	return PublishAsyncCompletion(context.Background(), t.msgBus, bus.InboundMessage{
 		Channel:  "system",
 		SenderID: fmt.Sprintf("subagent:delegate:%s", req.DelegationID),
 		ChatID:   req.ChatID,

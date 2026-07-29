@@ -476,6 +476,7 @@ func wireExtras(
 		delegateTool.SetDataDir(appCfg.DataDir)
 		delegateTool.SetWorkspace(workspace)
 		delegateTool.SetMsgBus(msgBus)
+		delegateTool.SetTaskStore(stores.SubagentTasks)
 		delegateTool.SetHookDispatcher(hookDispatcher)
 		toolsReg.Register(delegateTool)
 		slog.Info("delegate tool wired")

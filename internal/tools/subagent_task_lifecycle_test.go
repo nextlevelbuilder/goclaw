@@ -15,30 +15,42 @@ import (
 )
 
 type taskLifecycleUpdate struct {
-	rootAgentKey string
-	id           uuid.UUID
-	status       string
-	result       string
+	rootAgentID uuid.UUID
+	id          uuid.UUID
+	status      string
+	result      string
 }
 
 type recordingSubagentTaskStore struct {
 	mu            sync.Mutex
 	creates       []store.SubagentTaskData
+	rows          map[uuid.UUID]store.SubagentTaskData
 	updates       chan taskLifecycleUpdate
+	metadata      chan map[string]any
 	createStarted chan struct{}
 	createRelease chan struct{}
+	createErr     error
+	updateErr     error
 	updateStarted chan struct{}
 	updateRelease chan struct{}
 	updateOnce    sync.Once
 }
 
 func newRecordingSubagentTaskStore() *recordingSubagentTaskStore {
-	return &recordingSubagentTaskStore{updates: make(chan taskLifecycleUpdate, 16)}
+	return &recordingSubagentTaskStore{
+		rows:     make(map[uuid.UUID]store.SubagentTaskData),
+		updates:  make(chan taskLifecycleUpdate, 16),
+		metadata: make(chan map[string]any, 16),
+	}
 }
 
 func (s *recordingSubagentTaskStore) Create(_ context.Context, task *store.SubagentTaskData) error {
+	if s.createErr != nil {
+		return s.createErr
+	}
 	s.mu.Lock()
 	s.creates = append(s.creates, *task)
+	s.rows[task.ID] = *task
 	s.mu.Unlock()
 	if s.createStarted != nil {
 		close(s.createStarted)
@@ -47,13 +59,20 @@ func (s *recordingSubagentTaskStore) Create(_ context.Context, task *store.Subag
 	return nil
 }
 
-func (s *recordingSubagentTaskStore) Get(context.Context, string, uuid.UUID) (*store.SubagentTaskData, error) {
-	return nil, nil
+func (s *recordingSubagentTaskStore) Get(_ context.Context, rootAgentID, id uuid.UUID) (*store.SubagentTaskData, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	task, ok := s.rows[id]
+	if !ok || task.RootAgentID != rootAgentID {
+		return nil, nil
+	}
+	copy := task
+	return &copy, nil
 }
 
 func (s *recordingSubagentTaskStore) UpdateStatus(
 	_ context.Context,
-	rootAgentKey string,
+	rootAgentID uuid.UUID,
 	id uuid.UUID,
 	status string,
 	result *string,
@@ -65,11 +84,21 @@ func (s *recordingSubagentTaskStore) UpdateStatus(
 		value = *result
 	}
 	s.updates <- taskLifecycleUpdate{
-		rootAgentKey: rootAgentKey,
-		id:           id,
-		status:       status,
-		result:       value,
+		rootAgentID: rootAgentID,
+		id:          id,
+		status:      status,
+		result:      value,
 	}
+	if s.updateErr != nil {
+		return s.updateErr
+	}
+	s.mu.Lock()
+	if task, ok := s.rows[id]; ok && task.RootAgentID == rootAgentID {
+		task.Status = status
+		task.Result = result
+		s.rows[id] = task
+	}
+	s.mu.Unlock()
 	if s.updateStarted != nil {
 		s.updateOnce.Do(func() { close(s.updateStarted) })
 		<-s.updateRelease
@@ -77,19 +106,31 @@ func (s *recordingSubagentTaskStore) UpdateStatus(
 	return nil
 }
 
-func (s *recordingSubagentTaskStore) ListByParent(context.Context, string, string) ([]store.SubagentTaskData, error) {
+func (s *recordingSubagentTaskStore) ListByParent(context.Context, uuid.UUID, string) ([]store.SubagentTaskData, error) {
 	return nil, nil
 }
 
-func (s *recordingSubagentTaskStore) ListBySession(context.Context, string, string) ([]store.SubagentTaskData, error) {
+func (s *recordingSubagentTaskStore) ListBySession(context.Context, uuid.UUID, string) ([]store.SubagentTaskData, error) {
 	return nil, nil
 }
 
-func (s *recordingSubagentTaskStore) Archive(context.Context, string, time.Duration, int) (int64, error) {
+func (s *recordingSubagentTaskStore) Archive(context.Context, uuid.UUID, time.Duration, int) (int64, error) {
 	return 0, nil
 }
 
-func (s *recordingSubagentTaskStore) UpdateMetadata(context.Context, string, uuid.UUID, map[string]any) error {
+func (s *recordingSubagentTaskStore) UpdateMetadata(_ context.Context, rootAgentID, id uuid.UUID, metadata map[string]any) error {
+	s.mu.Lock()
+	if task, ok := s.rows[id]; ok && task.RootAgentID == rootAgentID {
+		if task.Metadata == nil {
+			task.Metadata = make(map[string]any)
+		}
+		for key, value := range metadata {
+			task.Metadata[key] = value
+		}
+		s.rows[id] = task
+	}
+	s.mu.Unlock()
+	s.metadata <- metadata
 	return nil
 }
 
@@ -245,12 +286,18 @@ func TestCancelQueuedTaskPersistsCancelledStatus(t *testing.T) {
 	if len(tasks) != 1 || tasks[0].Status != TaskStatusQueued {
 		t.Fatalf("queued tasks = %#v", tasks)
 	}
+	taskStore.mu.Lock()
+	if len(taskStore.creates) != 1 || taskStore.creates[0].RootAgentID != scope.RootAgentID {
+		t.Fatalf("persisted create root ownership = %#v, want %s", taskStore.creates, scope.RootAgentID)
+	}
+	taskStore.mu.Unlock()
 	if !manager.CancelTask(scope, tasks[0].ID) {
 		t.Fatal("queued task was not cancelled")
 	}
 	select {
 	case update := <-taskStore.updates:
-		if update.status != TaskStatusCancelled || update.result != "cancelled by user" {
+		if update.rootAgentID != scope.RootAgentID ||
+			update.status != TaskStatusCancelled || update.result != "cancelled by user" {
 			t.Fatalf("cancel update = %#v", update)
 		}
 	case <-time.After(time.Second):

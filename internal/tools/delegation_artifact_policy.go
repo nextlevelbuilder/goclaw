@@ -53,6 +53,46 @@ func rejectDelegationInputMutation(ctx context.Context, raw string) error {
 // readers without widening filesystem-tool authority. Outside an artifact run
 // it preserves the normal workspace and Agent Team read rules.
 func resolveStructuredMediaPath(ctx context.Context, raw, kind string) (string, error) {
+	return resolveStructuredMediaPathWithAllowed(ctx, raw, kind, allowedWithTeamWorkspace(ctx, nil))
+}
+
+// resolveStructuredMediaRefPath resolves paths sourced from conversation
+// MediaRefs. Unlike explicit user/tool paths, a ref is authoritative only for
+// the active workspace or the current delegation's staged inputs.
+func resolveStructuredMediaRefPath(ctx context.Context, raw, kind string) (string, error) {
+	if inputRoot := DelegationArtifactInputsFromCtx(ctx); inputRoot != "" && filepath.IsAbs(raw) {
+		if resolved, err := resolvePathWithAllowed(raw, inputRoot, true, nil); err == nil {
+			if err := ValidateRegularFileForRead(resolved); err != nil {
+				return "", fmt.Errorf("%s delegation input is not a safe regular file", kind)
+			}
+			return filepath.Clean(resolved), nil
+		}
+	}
+	return resolveStructuredMediaPathWithAllowed(ctx, raw, kind, nil)
+}
+
+// resolveLoadedMediaRefPath preserves legacy media-store compatibility without
+// treating an arbitrary loader return value as filesystem authority.
+func resolveLoadedMediaRefPath(
+	ctx context.Context,
+	loader MediaPathLoader,
+	raw, kind string,
+) (string, error) {
+	if rooted, ok := loader.(MediaPathRootProvider); ok {
+		root := rooted.MediaRootPath()
+		if root != "" {
+			if resolved, err := resolvePathWithAllowed(raw, root, true, nil); err == nil {
+				if err := ValidateRegularFileForRead(resolved); err != nil {
+					return "", fmt.Errorf("%s legacy media is not a safe regular file", kind)
+				}
+				return filepath.Clean(resolved), nil
+			}
+		}
+	}
+	return resolveStructuredMediaRefPath(ctx, raw, kind)
+}
+
+func resolveStructuredMediaPathWithAllowed(ctx context.Context, raw, kind string, allowedPrefixes []string) (string, error) {
 	if resolved, handled, err := resolveDelegationInputPath(ctx, raw); handled {
 		if err != nil {
 			return "", fmt.Errorf("invalid %s delegation input path", kind)
@@ -64,7 +104,7 @@ func resolveStructuredMediaPath(ctx context.Context, raw, kind string) (string, 
 	}
 
 	workspace := ToolWorkspaceFromCtx(ctx)
-	resolved, err := resolvePathWithAllowed(raw, workspace, effectiveRestrict(ctx, true), allowedWithTeamWorkspace(ctx, nil))
+	resolved, err := resolvePathWithAllowed(raw, workspace, effectiveRestrict(ctx, true), allowedPrefixes)
 	if err != nil {
 		return "", fmt.Errorf("invalid %s path: %w", kind, err)
 	}

@@ -17,12 +17,14 @@ func createPGSubagentTask(
 	t *testing.T,
 	taskStore *PGSubagentTaskStore,
 	ctx context.Context,
+	rootAgentID uuid.UUID,
 	rootAgentKey, sessionKey, status string,
 ) uuid.UUID {
 	t.Helper()
 
 	id := uuid.Must(uuid.NewV7())
 	task := &store.SubagentTaskData{
+		RootAgentID:    rootAgentID,
 		ParentAgentKey: rootAgentKey,
 		SessionKey:     &sessionKey,
 		Subject:        "store test",
@@ -40,8 +42,8 @@ func createPGSubagentTask(
 
 func TestPGSubagentTaskStoreRequiresTenantAndRootScope(t *testing.T) {
 	db := hooksTestDB(t)
-	tenantA, _ := seedTenantAndAgent(t, db)
-	tenantB, _ := seedTenantAndAgent(t, db)
+	tenantA, rootAID := seedTenantAndAgent(t, db)
+	tenantB, tenantBRootID := seedTenantAndAgent(t, db)
 	ctxA := tenantScopedCtx(tenantA)
 	ctxB := tenantScopedCtx(tenantB)
 	taskStore := NewPGSubagentTaskStore(db)
@@ -51,11 +53,37 @@ func TestPGSubagentTaskStoreRequiresTenantAndRootScope(t *testing.T) {
 		rootB     = "root-b"
 		sessionID = "shared-session"
 	)
-	taskA := createPGSubagentTask(t, taskStore, ctxA, rootA, sessionID, "queued")
-	taskB := createPGSubagentTask(t, taskStore, ctxA, rootB, sessionID, "queued")
-	_ = createPGSubagentTask(t, taskStore, ctxB, rootA, sessionID, "queued")
+	rootBID := uuid.Must(uuid.NewV7())
+	if _, err := db.Exec(
+		`INSERT INTO agents (id, tenant_id, agent_key, agent_type, status, provider, model, owner_id)
+		 VALUES ($1,$2,$3,'predefined','active','test','test-model','owner')`,
+		rootBID, tenantA, rootB,
+	); err != nil {
+		t.Fatalf("seed second root agent: %v", err)
+	}
+	taskA := createPGSubagentTask(t, taskStore, ctxA, rootAID, rootA, sessionID, "queued")
+	taskB := createPGSubagentTask(t, taskStore, ctxA, rootBID, rootB, sessionID, "queued")
+	delegationTask := createPGSubagentTask(t, taskStore, ctxA, rootAID, rootA, sessionID, "queued")
+	if err := taskStore.UpdateMetadata(ctxA, rootAID, delegationTask, map[string]any{
+		"completion_kind": "delegate",
+	}); err != nil {
+		t.Fatalf("mark delegation completion: %v", err)
+	}
+	_ = createPGSubagentTask(t, taskStore, ctxB, tenantBRootID, rootA, sessionID, "queued")
+	crossTenantTask := &store.SubagentTaskData{
+		BaseModel:      store.BaseModel{ID: uuid.Must(uuid.NewV7())},
+		RootAgentID:    tenantBRootID,
+		ParentAgentKey: rootA,
+		Subject:        "cross tenant",
+		Description:    "must be rejected",
+		Status:         "queued",
+		Depth:          1,
+	}
+	if err := taskStore.Create(ctxA, crossTenantTask); err == nil {
+		t.Fatal("Create accepted root agent from another tenant")
+	}
 
-	got, err := taskStore.Get(ctxA, rootA, taskA)
+	got, err := taskStore.Get(ctxA, rootAID, taskA)
 	if err != nil {
 		t.Fatalf("Get owning scope: %v", err)
 	}
@@ -63,7 +91,7 @@ func TestPGSubagentTaskStoreRequiresTenantAndRootScope(t *testing.T) {
 		t.Fatalf("Get owning scope = %#v, want task %s", got, taskA)
 	}
 
-	got, err = taskStore.Get(ctxA, rootB, taskA)
+	got, err = taskStore.Get(ctxA, rootBID, taskA)
 	if err != nil {
 		t.Fatalf("Get cross-root: %v", err)
 	}
@@ -71,7 +99,7 @@ func TestPGSubagentTaskStoreRequiresTenantAndRootScope(t *testing.T) {
 		t.Fatalf("Get cross-root = %#v, want nil", got)
 	}
 
-	got, err = taskStore.Get(ctxB, rootA, taskA)
+	got, err = taskStore.Get(ctxB, rootAID, taskA)
 	if err != nil {
 		t.Fatalf("Get cross-tenant: %v", err)
 	}
@@ -79,10 +107,10 @@ func TestPGSubagentTaskStoreRequiresTenantAndRootScope(t *testing.T) {
 		t.Fatalf("Get cross-tenant = %#v, want nil", got)
 	}
 
-	if err := taskStore.UpdateStatus(ctxA, rootB, taskA, "completed", nil, 3, 10, 20); err != nil {
-		t.Fatalf("UpdateStatus cross-root: %v", err)
+	if err := taskStore.UpdateStatus(ctxA, rootBID, taskA, "completed", nil, 3, 10, 20); !errors.Is(err, store.ErrSubagentTaskNotFound) {
+		t.Fatalf("UpdateStatus cross-root error = %v, want scoped not found", err)
 	}
-	got, err = taskStore.Get(ctxA, rootA, taskA)
+	got, err = taskStore.Get(ctxA, rootAID, taskA)
 	if err != nil {
 		t.Fatalf("Get after cross-root status update: %v", err)
 	}
@@ -90,25 +118,53 @@ func TestPGSubagentTaskStoreRequiresTenantAndRootScope(t *testing.T) {
 		t.Fatalf("cross-root status update changed task: status=%q completed_at=%v", got.Status, got.CompletedAt)
 	}
 
-	if err := taskStore.UpdateMetadata(ctxA, rootB, taskA, map[string]any{"denied": true}); err != nil {
-		t.Fatalf("UpdateMetadata cross-root: %v", err)
+	if err := taskStore.UpdateMetadata(ctxA, rootBID, taskA, map[string]any{"denied": true}); !errors.Is(err, store.ErrSubagentTaskNotFound) {
+		t.Fatalf("UpdateMetadata cross-root error = %v, want scoped not found", err)
 	}
-	got, err = taskStore.Get(ctxA, rootA, taskA)
+	got, err = taskStore.Get(ctxA, rootAID, taskA)
 	if err != nil {
 		t.Fatalf("Get after cross-root metadata update: %v", err)
 	}
 	if _, exists := got.Metadata["denied"]; exists {
 		t.Fatalf("cross-root metadata update changed task: %#v", got.Metadata)
 	}
+	if err := taskStore.UpdateMetadata(ctxA, rootAID, taskA, map[string]any{
+		"announcement_status": "undelivered",
+		"delivered":           false,
+	}); err != nil {
+		t.Fatalf("UpdateMetadata owning scope: %v", err)
+	}
+	got, err = taskStore.Get(ctxA, rootAID, taskA)
+	if err != nil {
+		t.Fatalf("Get after owning metadata update: %v", err)
+	}
+	if got.Metadata["announcement_status"] != "undelivered" || got.Metadata["delivered"] != false {
+		t.Fatalf("metadata JSON types were not preserved: %#v", got.Metadata)
+	}
 
-	tasksA, err := taskStore.ListBySession(ctxA, rootA, sessionID)
+	parentTasksA, err := taskStore.ListByParent(ctxA, rootAID, "")
+	if err != nil {
+		t.Fatalf("ListByParent root A: %v", err)
+	}
+	if len(parentTasksA) != 1 || parentTasksA[0].ID != taskA {
+		t.Fatalf("ListByParent root A = %#v, want only self-clone %s", parentTasksA, taskA)
+	}
+	parentTasksB, err := taskStore.ListByParent(ctxA, rootBID, "queued")
+	if err != nil {
+		t.Fatalf("ListByParent root B: %v", err)
+	}
+	if len(parentTasksB) != 1 || parentTasksB[0].ID != taskB {
+		t.Fatalf("ListByParent root B = %#v, want only %s", parentTasksB, taskB)
+	}
+
+	tasksA, err := taskStore.ListBySession(ctxA, rootAID, sessionID)
 	if err != nil {
 		t.Fatalf("ListBySession root A: %v", err)
 	}
 	if len(tasksA) != 1 || tasksA[0].ID != taskA {
-		t.Fatalf("ListBySession root A = %#v, want only %s", tasksA, taskA)
+		t.Fatalf("ListBySession root A = %#v, want only self-clone %s", tasksA, taskA)
 	}
-	tasksB, err := taskStore.ListBySession(ctxA, rootB, sessionID)
+	tasksB, err := taskStore.ListBySession(ctxA, rootBID, sessionID)
 	if err != nil {
 		t.Fatalf("ListBySession root B: %v", err)
 	}
@@ -116,17 +172,68 @@ func TestPGSubagentTaskStoreRequiresTenantAndRootScope(t *testing.T) {
 		t.Fatalf("ListBySession root B = %#v, want only %s", tasksB, taskB)
 	}
 
-	if _, err := taskStore.Get(context.Background(), rootA, taskA); err == nil {
+	if _, err := taskStore.Get(context.Background(), rootAID, taskA); err == nil {
 		t.Fatal("Get without tenant context returned nil error")
 	}
-	if _, err := taskStore.Get(ctxA, "", taskA); !errors.Is(err, store.ErrSubagentRootAgentKeyRequired) {
-		t.Fatalf("Get empty root error = %v, want %v", err, store.ErrSubagentRootAgentKeyRequired)
+	if _, err := taskStore.Get(ctxA, uuid.Nil, taskA); !errors.Is(err, store.ErrSubagentRootAgentIDRequired) {
+		t.Fatalf("Get empty root error = %v, want %v", err, store.ErrSubagentRootAgentIDRequired)
+	}
+}
+
+func TestPGSubagentTaskStoreRejectsRecreatedAgentWithSameKey(t *testing.T) {
+	db := hooksTestDB(t)
+	tenantID, oldRootAgentID := seedTenantAndAgent(t, db)
+	ctx := tenantScopedCtx(tenantID)
+	taskStore := NewPGSubagentTaskStore(db)
+
+	const rootAgentKey = "recreated-root"
+	if _, err := db.Exec(
+		`UPDATE agents SET agent_key = $1 WHERE id = $2`,
+		rootAgentKey, oldRootAgentID,
+	); err != nil {
+		t.Fatalf("rename original root agent: %v", err)
+	}
+	taskID := createPGSubagentTask(
+		t, taskStore, ctx, oldRootAgentID, rootAgentKey, "recreated-root-session", "queued",
+	)
+
+	if _, err := db.Exec(`DELETE FROM agents WHERE id = $1`, oldRootAgentID); err != nil {
+		t.Fatalf("delete original root agent: %v", err)
+	}
+	newRootAgentID := uuid.Must(uuid.NewV7())
+	if _, err := db.Exec(
+		`INSERT INTO agents (id, tenant_id, agent_key, agent_type, status, provider, model, owner_id)
+		 VALUES ($1,$2,$3,'predefined','active','test','test-model','owner')`,
+		newRootAgentID, tenantID, rootAgentKey,
+	); err != nil {
+		t.Fatalf("recreate root agent: %v", err)
+	}
+
+	got, err := taskStore.Get(ctx, newRootAgentID, taskID)
+	if err != nil {
+		t.Fatalf("Get with recreated root agent: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("Get with recreated root agent returned old task %s", got.ID)
+	}
+	if err := taskStore.UpdateStatus(ctx, newRootAgentID, taskID, "completed", nil, 1, 2, 3); !errors.Is(err, store.ErrSubagentTaskNotFound) {
+		t.Fatalf("UpdateStatus with recreated root agent error = %v, want scoped not found", err)
+	}
+	var status string
+	var rootAgentID uuid.NullUUID
+	if err := db.QueryRow(
+		`SELECT status, root_agent_id FROM subagent_tasks WHERE id = $1`, taskID,
+	).Scan(&status, &rootAgentID); err != nil {
+		t.Fatalf("read preserved old task: %v", err)
+	}
+	if status != "queued" || rootAgentID.Valid {
+		t.Fatalf("old task after recreate: status=%q root_agent_id=%s, want queued/NULL", status, rootAgentID.UUID)
 	}
 }
 
 func TestPGSubagentTaskStoreCompletedAtOnlyForTerminalStatus(t *testing.T) {
 	db := hooksTestDB(t)
-	tenantID, _ := seedTenantAndAgent(t, db)
+	tenantID, rootAgentID := seedTenantAndAgent(t, db)
 	ctx := tenantScopedCtx(tenantID)
 	taskStore := NewPGSubagentTaskStore(db)
 
@@ -146,11 +253,11 @@ func TestPGSubagentTaskStoreCompletedAtOnlyForTerminalStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.status, func(t *testing.T) {
 			rootAgentKey := "root-" + tt.status
-			id := createPGSubagentTask(t, taskStore, ctx, rootAgentKey, "session-"+tt.status, "queued")
-			if err := taskStore.UpdateStatus(ctx, rootAgentKey, id, tt.status, nil, 0, 0, 0); err != nil {
+			id := createPGSubagentTask(t, taskStore, ctx, rootAgentID, rootAgentKey, "session-"+tt.status, "queued")
+			if err := taskStore.UpdateStatus(ctx, rootAgentID, id, tt.status, nil, 0, 0, 0); err != nil {
 				t.Fatalf("UpdateStatus(%q): %v", tt.status, err)
 			}
-			got, err := taskStore.Get(ctx, rootAgentKey, id)
+			got, err := taskStore.Get(ctx, rootAgentID, id)
 			if err != nil {
 				t.Fatalf("Get(%q): %v", tt.status, err)
 			}
@@ -163,8 +270,8 @@ func TestPGSubagentTaskStoreCompletedAtOnlyForTerminalStatus(t *testing.T) {
 
 func TestPGSubagentTaskStoreArchiveIsScopedAndBounded(t *testing.T) {
 	db := hooksTestDB(t)
-	tenantA, _ := seedTenantAndAgent(t, db)
-	tenantB, _ := seedTenantAndAgent(t, db)
+	tenantA, rootAID := seedTenantAndAgent(t, db)
+	tenantB, tenantBRootID := seedTenantAndAgent(t, db)
 	ctxA := tenantScopedCtx(tenantA)
 	ctxB := tenantScopedCtx(tenantB)
 	taskStore := NewPGSubagentTaskStore(db)
@@ -173,26 +280,34 @@ func TestPGSubagentTaskStoreArchiveIsScopedAndBounded(t *testing.T) {
 		rootA = "root-a"
 		rootB = "root-b"
 	)
+	rootBID := uuid.Must(uuid.NewV7())
+	if _, err := db.Exec(
+		`INSERT INTO agents (id, tenant_id, agent_key, agent_type, status, provider, model, owner_id)
+		 VALUES ($1,$2,$3,'predefined','active','test','test-model','owner')`,
+		rootBID, tenantA, rootB,
+	); err != nil {
+		t.Fatalf("seed second root agent: %v", err)
+	}
 	var rootATasks []uuid.UUID
 	for i := range 3 {
 		rootATasks = append(rootATasks, createPGSubagentTask(
-			t, taskStore, ctxA, rootA, fmt.Sprintf("session-a-%d", i), "queued",
+			t, taskStore, ctxA, rootAID, rootA, fmt.Sprintf("session-a-%d", i), "queued",
 		))
 	}
-	rootBTask := createPGSubagentTask(t, taskStore, ctxA, rootB, "session-b", "queued")
-	tenantBTask := createPGSubagentTask(t, taskStore, ctxB, rootA, "session-other-tenant", "queued")
-	queuedTask := createPGSubagentTask(t, taskStore, ctxA, rootA, "session-queued", "queued")
+	rootBTask := createPGSubagentTask(t, taskStore, ctxA, rootBID, rootB, "session-b", "queued")
+	tenantBTask := createPGSubagentTask(t, taskStore, ctxB, tenantBRootID, rootA, "session-other-tenant", "queued")
+	queuedTask := createPGSubagentTask(t, taskStore, ctxA, rootAID, rootA, "session-queued", "queued")
 
 	for _, item := range []struct {
 		ctx  context.Context
-		root string
+		root uuid.UUID
 		id   uuid.UUID
 	}{
-		{ctx: ctxA, root: rootA, id: rootATasks[0]},
-		{ctx: ctxA, root: rootA, id: rootATasks[1]},
-		{ctx: ctxA, root: rootA, id: rootATasks[2]},
-		{ctx: ctxA, root: rootB, id: rootBTask},
-		{ctx: ctxB, root: rootA, id: tenantBTask},
+		{ctx: ctxA, root: rootAID, id: rootATasks[0]},
+		{ctx: ctxA, root: rootAID, id: rootATasks[1]},
+		{ctx: ctxA, root: rootAID, id: rootATasks[2]},
+		{ctx: ctxA, root: rootBID, id: rootBTask},
+		{ctx: ctxB, root: tenantBRootID, id: tenantBTask},
 	} {
 		if err := taskStore.UpdateStatus(item.ctx, item.root, item.id, "completed", nil, 0, 0, 0); err != nil {
 			t.Fatalf("UpdateStatus(%s): %v", item.id, err)
@@ -211,7 +326,7 @@ func TestPGSubagentTaskStoreArchiveIsScopedAndBounded(t *testing.T) {
 		t.Fatalf("backdate queued task: %v", err)
 	}
 
-	archived, err := taskStore.Archive(ctxA, rootA, time.Hour, 2)
+	archived, err := taskStore.Archive(ctxA, rootAID, time.Hour, 2)
 	if err != nil {
 		t.Fatalf("Archive first batch: %v", err)
 	}
@@ -219,18 +334,18 @@ func TestPGSubagentTaskStoreArchiveIsScopedAndBounded(t *testing.T) {
 		t.Fatalf("Archive first batch affected %d rows, want 2", archived)
 	}
 
-	assertPGArchivedCount(t, db, tenantA, rootA, 2)
-	assertPGArchivedCount(t, db, tenantA, rootB, 0)
-	assertPGArchivedCount(t, db, tenantB, rootA, 0)
+	assertPGArchivedCount(t, db, tenantA, rootAID, 2)
+	assertPGArchivedCount(t, db, tenantA, rootBID, 0)
+	assertPGArchivedCount(t, db, tenantB, tenantBRootID, 0)
 
-	archived, err = taskStore.Archive(ctxA, rootA, time.Hour, 2)
+	archived, err = taskStore.Archive(ctxA, rootAID, time.Hour, 2)
 	if err != nil {
 		t.Fatalf("Archive second batch: %v", err)
 	}
 	if archived != 1 {
 		t.Fatalf("Archive second batch affected %d rows, want 1", archived)
 	}
-	assertPGArchivedCount(t, db, tenantA, rootA, 3)
+	assertPGArchivedCount(t, db, tenantA, rootAID, 3)
 
 	var queuedArchived sql.NullTime
 	if err := db.QueryRow(`SELECT archived_at FROM subagent_tasks WHERE id = $1`, queuedTask).Scan(&queuedArchived); err != nil {
@@ -242,18 +357,18 @@ func TestPGSubagentTaskStoreArchiveIsScopedAndBounded(t *testing.T) {
 }
 
 func assertPGArchivedCount(
-	t *testing.T, db *sql.DB, tenantID uuid.UUID, rootAgentKey string, want int,
+	t *testing.T, db *sql.DB, tenantID, rootAgentID uuid.UUID, want int,
 ) {
 	t.Helper()
 	var got int
 	if err := db.QueryRow(
 		`SELECT COUNT(*) FROM subagent_tasks
-		 WHERE tenant_id = $1 AND parent_agent_key = $2 AND archived_at IS NOT NULL`,
-		tenantID, rootAgentKey,
+		 WHERE tenant_id = $1 AND root_agent_id = $2 AND archived_at IS NOT NULL`,
+		tenantID, rootAgentID,
 	).Scan(&got); err != nil {
-		t.Fatalf("count archived tasks for %s/%s: %v", tenantID, rootAgentKey, err)
+		t.Fatalf("count archived tasks for %s/%s: %v", tenantID, rootAgentID, err)
 	}
 	if got != want {
-		t.Fatalf("archived tasks for %s/%s = %d, want %d", tenantID, rootAgentKey, got, want)
+		t.Fatalf("archived tasks for %s/%s = %d, want %d", tenantID, rootAgentID, got, want)
 	}
 }

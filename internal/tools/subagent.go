@@ -70,6 +70,8 @@ type SubagentTask struct {
 	CreatedAt         int64           `json:"createdAt"`
 	CompletedAt       int64           `json:"completedAt,omitempty"`
 	Media             []bus.MediaFile `json:"-"` // media files from tool results
+	Workspace         string          `json:"-"` // physical root used only to derive safe completion media paths
+	MediaPathPrefix   string          `json:"-"` // logical prefix, e.g. outputs/ in a delegation exchange
 	OriginAgentID     uuid.UUID       `json:"-"` // parent agent UUID for usage caps and scoped tools
 	OriginTenantID    uuid.UUID       `json:"-"` // parent's tenant for announce routing
 	RootAgentID       uuid.UUID       `json:"-"`
@@ -107,7 +109,7 @@ type SubagentManager struct {
 	// createTools builds a tool registry for subagents (without spawn/subagent tools).
 	createTools     func() *Registry
 	announceQueue   *AnnounceQueue          // optional: batches announces with debounce
-	taskStore       store.SubagentTaskStore // optional: persists tasks to DB (fire-and-forget)
+	taskStore       store.SubagentTaskStore // optional: durable async completion ledger
 	usageCaps       *usagecaps.Service
 	admission       *orchestration.ChildRunAdmission
 	sweeperOnce     sync.Once
@@ -181,7 +183,7 @@ func (sm *SubagentManager) SetAnnounceQueue(q *AnnounceQueue) {
 	sm.announceQueue = q
 }
 
-// SetTaskStore sets the persistent store for subagent tasks (write-through, fire-and-forget).
+// SetTaskStore sets the persistent store for task lifecycle and async retrieval.
 func (sm *SubagentManager) SetTaskStore(s store.SubagentTaskStore) {
 	sm.taskStore = s
 }

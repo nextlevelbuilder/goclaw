@@ -8,7 +8,10 @@ import (
 	"github.com/google/uuid"
 )
 
-var ErrSubagentRootAgentKeyRequired = errors.New("subagent root agent key required")
+var (
+	ErrSubagentRootAgentIDRequired = errors.New("subagent root agent ID required")
+	ErrSubagentTaskNotFound        = errors.New("subagent task not found in owner scope")
+)
 
 // IsTerminalSubagentTaskStatus reports whether a status ends the task
 // lifecycle and therefore receives a completed_at timestamp.
@@ -25,6 +28,7 @@ func IsTerminalSubagentTaskStatus(status string) bool {
 type SubagentTaskData struct {
 	BaseModel
 	TenantID       uuid.UUID      `json:"tenant_id" db:"tenant_id"`
+	RootAgentID    uuid.UUID      `json:"root_agent_id" db:"root_agent_id"`
 	ParentAgentKey string         `json:"parent_agent_key" db:"parent_agent_key"`
 	SessionKey     *string        `json:"session_key,omitempty" db:"session_key"`
 	Subject        string         `json:"subject" db:"subject"`
@@ -53,23 +57,23 @@ type SubagentTaskStore interface {
 	// Create persists a new subagent task at spawn time.
 	Create(ctx context.Context, task *SubagentTaskData) error
 
-	// Get retrieves a task owned by the tenant and immutable root-agent key.
-	Get(ctx context.Context, rootAgentKey string, id uuid.UUID) (*SubagentTaskData, error)
+	// Get retrieves a task owned by the tenant and immutable root-agent UUID.
+	Get(ctx context.Context, rootAgentID, id uuid.UUID) (*SubagentTaskData, error)
 
 	// UpdateStatus updates status, result, iterations, and token counts on completion/failure.
-	UpdateStatus(ctx context.Context, rootAgentKey string, id uuid.UUID, status string, result *string, iterations int, inputTokens, outputTokens int64) error
+	UpdateStatus(ctx context.Context, rootAgentID, id uuid.UUID, status string, result *string, iterations int, inputTokens, outputTokens int64) error
 
-	// ListByParent returns tasks for a parent agent key, optionally filtered by status.
+	// ListByParent returns tasks owned by a root-agent UUID, optionally filtered by status.
 	// Empty statusFilter returns all statuses. Ordered by created_at DESC.
-	ListByParent(ctx context.Context, parentAgentKey string, statusFilter string) ([]SubagentTaskData, error)
+	ListByParent(ctx context.Context, rootAgentID uuid.UUID, statusFilter string) ([]SubagentTaskData, error)
 
-	// ListBySession returns tasks for a session owned by the tenant and immutable root-agent key.
-	ListBySession(ctx context.Context, rootAgentKey, sessionKey string) ([]SubagentTaskData, error)
+	// ListBySession returns tasks for a session owned by the tenant and immutable root-agent UUID.
+	ListBySession(ctx context.Context, rootAgentID uuid.UUID, sessionKey string) ([]SubagentTaskData, error)
 
 	// Archive marks at most limit old terminal tasks owned by the tenant and
-	// immutable root-agent key as archived. Returns the number of rows affected.
-	Archive(ctx context.Context, rootAgentKey string, olderThan time.Duration, limit int) (int64, error)
+	// immutable root-agent UUID as archived. Returns the number of rows affected.
+	Archive(ctx context.Context, rootAgentID uuid.UUID, olderThan time.Duration, limit int) (int64, error)
 
 	// UpdateMetadata merges metadata on an existing task.
-	UpdateMetadata(ctx context.Context, rootAgentKey string, id uuid.UUID, metadata map[string]any) error
+	UpdateMetadata(ctx context.Context, rootAgentID, id uuid.UUID, metadata map[string]any) error
 }

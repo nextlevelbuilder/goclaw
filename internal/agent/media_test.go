@@ -342,40 +342,116 @@ func TestEnrichImagePaths_MultipleRefsKeepTagAlignment(t *testing.T) {
 }
 
 func TestEnrichDocumentPaths_MultipleRefs(t *testing.T) {
+	workspace := t.TempDir()
 	messages := []providers.Message{{
 		Role:    "user",
 		Content: "first <media:document>\nsecond <media:document>",
 	}}
 	refs := []providers.MediaRef{
-		{ID: "doc-a", Kind: "document", Path: "/tmp/a.pdf"},
-		{ID: "doc-b", Kind: "document", Path: "/tmp/b.pdf"},
+		{ID: "doc-a", Kind: "document", Path: filepath.Join(workspace, ".uploads", "a.pdf")},
+		{ID: "doc-b", Kind: "document", Path: filepath.Join(workspace, ".uploads", "b.pdf")},
 	}
 
 	var loop Loop
-	loop.enrichDocumentPaths(messages, refs)
+	loop.enrichDocumentPaths(messages, refs, workspace)
 
-	want := `first <media:document path="/tmp/a.pdf">` + "\n" + `second <media:document path="/tmp/b.pdf">`
+	want := `first <media:document id="doc-a" path=".uploads/a.pdf">` + "\n" +
+		`second <media:document id="doc-b" path=".uploads/b.pdf">`
 	if messages[0].Content != want {
 		t.Fatalf("multi-ref alignment:\n got %q\nwant %q", messages[0].Content, want)
 	}
 }
 
+func TestEnrichDocumentPathsStripsOutsideWorkspacePath(t *testing.T) {
+	workspace := filepath.Join(t.TempDir(), "current-agent")
+	outside := filepath.Join(filepath.Dir(workspace), "other-agent", ".uploads", "secret.pdf")
+	messages := []providers.Message{{
+		Role:    "user",
+		Content: `<media:document name="secret.pdf" path="/legacy/secret.pdf">`,
+	}}
+	refs := []providers.MediaRef{{
+		ID:   "doc-1",
+		Kind: "document",
+		Path: outside,
+	}}
+
+	var loop Loop
+	loop.enrichDocumentPaths(messages, refs, workspace)
+
+	want := `<media:document name="secret.pdf" id="doc-1">`
+	if messages[0].Content != want {
+		t.Fatalf("outside workspace path was not stripped: got %q, want %q", messages[0].Content, want)
+	}
+}
+
+func TestEnrichDocumentPathsUpgradesHistoricalAbsolutePath(t *testing.T) {
+	workspace := t.TempDir()
+	docPath := filepath.Join(workspace, ".uploads", "history.pdf")
+	messages := []providers.Message{
+		{
+			Role:    "user",
+			Content: `<media:document id="doc-old" path="/legacy/history.pdf">`,
+			MediaRefs: []providers.MediaRef{{
+				ID:   "doc-old",
+				Kind: "document",
+				Path: docPath,
+			}},
+		},
+		{Role: "user", Content: "follow up"},
+	}
+
+	var loop Loop
+	loop.enrichDocumentPaths(messages, nil, workspace)
+
+	want := `<media:document id="doc-old" path=".uploads/history.pdf">`
+	if messages[0].Content != want {
+		t.Fatalf("historical path was not upgraded: got %q, want %q", messages[0].Content, want)
+	}
+}
+
 func TestEnrichAudioIDs_MultipleRefs(t *testing.T) {
+	workspace := t.TempDir()
 	messages := []providers.Message{{
 		Role:    "user",
 		Content: "first <media:audio>\nsecond <media:audio>",
 	}}
 	refs := []providers.MediaRef{
-		{ID: "aud-a", Kind: "audio"},
-		{ID: "aud-b", Kind: "audio"},
+		{ID: "aud-a", Kind: "audio", Path: filepath.Join(workspace, ".uploads", "a.mp3")},
+		{ID: "aud-b", Kind: "audio", Path: filepath.Join(workspace, ".uploads", "b.mp3")},
 	}
 
 	var loop Loop
-	loop.enrichAudioIDs(messages, refs)
+	loop.enrichAudioIDs(messages, refs, workspace)
 
-	want := `first <media:audio id="aud-a">` + "\n" + `second <media:audio id="aud-b">`
+	want := `first <media:audio id="aud-a" path=".uploads/a.mp3">` + "\n" +
+		`second <media:audio id="aud-b" path=".uploads/b.mp3">`
 	if messages[0].Content != want {
 		t.Fatalf("multi-ref alignment:\n got %q\nwant %q", messages[0].Content, want)
+	}
+}
+
+func TestEnrichAudioIDsUpgradesHistoricalLogicalPath(t *testing.T) {
+	workspace := t.TempDir()
+	audioPath := filepath.Join(workspace, ".uploads", "history.mp3")
+	messages := []providers.Message{
+		{
+			Role:    "user",
+			Content: `<media:voice id="aud-old" path="/legacy/history.mp3">`,
+			MediaRefs: []providers.MediaRef{{
+				ID:   "aud-old",
+				Kind: "audio",
+				Path: audioPath,
+			}},
+		},
+		{Role: "user", Content: "follow up"},
+	}
+
+	var loop Loop
+	loop.enrichAudioIDs(messages, nil, workspace)
+
+	want := `<media:voice id="aud-old" path=".uploads/history.mp3">`
+	if messages[0].Content != want {
+		t.Fatalf("historical audio path was not upgraded: got %q, want %q", messages[0].Content, want)
 	}
 }
 
@@ -450,7 +526,7 @@ func TestEnrichAudioIDs_MixedAudioAndVoice(t *testing.T) {
 	}
 
 	var loop Loop
-	loop.enrichAudioIDs(messages, refs)
+	loop.enrichAudioIDs(messages, refs, "")
 
 	want := `hear this <media:audio id="aud-1">` + "\n" + `and this <media:voice id="aud-2">`
 	if messages[0].Content != want {

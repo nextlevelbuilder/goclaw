@@ -727,7 +727,7 @@ func (t *ExecTool) executeCredentialedSandbox(ctx context.Context, absPath strin
 		return ErrorResult(fmt.Sprintf("credentialed sandbox path mapping: %v", cwdErr))
 	}
 
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, mountWorkspace, SandboxConfigFromCtx(ctx))
+	sb, err := acquireToolSandbox(ctx, t.sandboxMgr, sandboxKey, mountWorkspace)
 	if err != nil {
 		slog.Warn("security.credentialed_exec_sandbox_unavailable",
 			"binary", absPath, "error", err)
