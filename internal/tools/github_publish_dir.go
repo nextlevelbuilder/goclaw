@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // GithubPublishDirTool publishes a directory of files from the workspace to a
@@ -125,18 +126,39 @@ func (t *GithubPublishDirTool) Execute(ctx context.Context, args map[string]any)
 	// Fast path: commit ALL files in ONE commit (which also creates the branch
 	// from base_branch). Writing 100+ files one-by-one takes minutes and overruns
 	// the chat request timeout; a single multi-file commit takes seconds and gives
-	// a clean one-commit PR. Fall back to per-file if the multi-file tool is
-	// unavailable or errors.
-	fast := reg.Execute(ctx, composioToolPrefix+"GITHUB_COMMIT_MULTIPLE_FILES", map[string]any{
-		"owner":       owner,
-		"repo":        repo,
-		"branch":      branch,
-		"base_branch": baseBranch,
-		"message":     commitMsg,
-		"upserts":     upserts,
-	})
+	// a clean one-commit PR. Per-file is the last-resort fallback.
+	//
+	// A 100+ file commit can trip GitHub's SECONDARY rate limit, which is a
+	// throttle (not a permanent failure) — GitHub's own guidance is to wait and
+	// retry. Retrying the fast path is far better than degrading to ~100 per-file
+	// writes, which take minutes and hit the same limiter harder.
+	var fast *Result
+	for attempt := 1; ; attempt++ {
+		fast = reg.Execute(ctx, composioToolPrefix+"GITHUB_COMMIT_MULTIPLE_FILES", map[string]any{
+			"owner":       owner,
+			"repo":        repo,
+			"branch":      branch,
+			"base_branch": baseBranch,
+			"message":     commitMsg,
+			"upserts":     upserts,
+		})
+		if fast != nil && !fast.IsError {
+			break
+		}
+		if attempt >= 3 || !isRateLimited(resultText(fast)) {
+			break
+		}
+		backoff := time.Duration(attempt*20) * time.Second
+		slog.Info("github_publish_dir: secondary rate limit, backing off before retry",
+			"attempt", attempt, "sleep", backoff.String())
+		select {
+		case <-time.After(backoff):
+		case <-ctx.Done():
+			return ErrorResult(fmt.Sprintf("publish cancelled while waiting out a GitHub rate limit: %v", ctx.Err()))
+		}
+	}
 	if fast == nil || fast.IsError {
-		slog.Info("github_publish_dir: multi-file commit unavailable — falling back to per-file", "detail", truncateStr(resultText(fast), 160))
+		slog.Info("github_publish_dir: multi-file commit failed — falling back to per-file", "detail", truncateStr(resultText(fast), 160))
 		if errMsg := t.publishPerFile(ctx, reg, owner, repo, branch, baseBranch, commitMsg, upserts); errMsg != "" {
 			return ErrorResult(errMsg)
 		}
@@ -180,6 +202,16 @@ func (t *GithubPublishDirTool) branchExists(ctx context.Context, reg *Registry, 
 	return res != nil && !res.IsError
 }
 
+// isRateLimited reports whether a GitHub error body is a rate-limit throttle
+// (primary or secondary) rather than a hard failure — i.e. worth retrying.
+func isRateLimited(body string) bool {
+	b := strings.ToLower(body)
+	return strings.Contains(b, "secondary rate limit") ||
+		strings.Contains(b, "rate limit") ||
+		strings.Contains(b, "abuse detection") ||
+		strings.Contains(b, "retry your request again later")
+}
+
 // shortRandID returns 6 hex chars for uniquifying a colliding branch name.
 func shortRandID() string {
 	b := make([]byte, 3)
@@ -208,7 +240,17 @@ func (t *GithubPublishDirTool) publishPerFile(ctx context.Context, reg *Registry
 		"owner": owner, "repo": repo, "ref": "refs/heads/" + branch, "sha": baseSHA,
 	})
 	if refRes == nil || refRes.IsError {
-		return fmt.Sprintf("couldn't create branch %q (it may already exist — pick a new name): %s", branch, resultText(refRes))
+		// "Reference already exists" is EXPECTED on this path: the fast
+		// multi-file commit creates the branch, and if it then fails partway
+		// (e.g. GitHub secondary rate limits) we fall back here with the branch
+		// already in place. Reuse it and keep writing files instead of failing
+		// the whole publish — the files are what matter, and per-file writes are
+		// idempotent upserts.
+		if txt := resultText(refRes); strings.Contains(strings.ToLower(txt), "already exists") {
+			slog.Info("github_publish_dir: branch already created by the fast path, reusing it", "branch", branch)
+		} else {
+			return fmt.Sprintf("couldn't create branch %q: %s", branch, txt)
+		}
 	}
 	for i, u := range upserts {
 		path, _ := u["path"].(string)
