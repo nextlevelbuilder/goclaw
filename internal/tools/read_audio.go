@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -62,7 +63,7 @@ func (t *ReadAudioTool) Name() string { return "read_audio" }
 func (t *ReadAudioTool) Description() string {
 	return "Analyze audio files (speech, music, sounds) attached to the conversation. " +
 		"Use when you see <media:audio> tags and need to transcribe, summarize, or analyze audio content. " +
-		"Specify what you want to extract or analyze."
+		"A workspace-relative path such as inputs/recording.mp3 may also be provided. Specify what you want to extract or analyze."
 }
 
 func (t *ReadAudioTool) Parameters() map[string]any {
@@ -77,6 +78,10 @@ func (t *ReadAudioTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "Optional: specific media_id from <media:audio> tag. If omitted, uses most recent audio.",
 			},
+			"path": map[string]any{
+				"type":        "string",
+				"description": "Optional workspace-relative audio path. Delegated inputs use inputs/<name>.",
+			},
 		},
 		"required": []string{"prompt"},
 	}
@@ -88,16 +93,30 @@ func (t *ReadAudioTool) Execute(ctx context.Context, args map[string]any) *Resul
 		prompt = "Analyze this audio and describe its contents."
 	}
 	mediaID, _ := args["media_id"].(string)
+	audioArg, _ := args["path"].(string)
+	if mediaID != "" && audioArg != "" {
+		return ErrorResult("Both 'media_id' and 'path' parameters cannot be specified. Choose only one.")
+	}
 
-	audioPath, audioMime, err := t.resolveAudioFile(ctx, mediaID)
+	var audioPath, audioMime string
+	var err error
+	if audioArg != "" {
+		audioPath, err = resolveStructuredMediaPath(ctx, audioArg, "audio")
+		audioMime = mimeFromAudioExt(filepath.Ext(audioPath))
+	} else {
+		audioPath, audioMime, err = t.resolveAudioFile(ctx, mediaID)
+	}
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
 
-	slog.Info("read_audio: resolved file", "path", audioPath, "mime", audioMime, "media_id", mediaID)
+	slog.Info("read_audio: resolved file", "mime", audioMime, "media_id", mediaID, "logical_path", audioArg)
 
 	data, err := os.ReadFile(audioPath)
 	if err != nil {
+		if audioArg != "" && IsDelegationArtifactRun(ctx) {
+			return ErrorResult("Failed to read delegation audio input")
+		}
 		return ErrorResult(fmt.Sprintf("Failed to read audio file: %v", err))
 	}
 	slog.Info("read_audio: file loaded", "size_bytes", len(data))

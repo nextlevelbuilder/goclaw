@@ -1,15 +1,17 @@
 package tools
 
-import "fmt"
+import (
+	"fmt"
+)
 
-// DefaultSubagentConfig returns sensible defaults matching OpenClaw TS spec.
-// TS sources: agent-limits.ts, sessions-spawn-tool.ts, subagent-registry.ts.
+// DefaultSubagentConfig returns GoClaw's runtime defaults. Per-root admission is
+// independent from the Standard/Lite process safety cap.
 func DefaultSubagentConfig() SubagentConfig {
 	return SubagentConfig{
-		MaxConcurrent:       8,  // TS: DEFAULT_SUBAGENT_MAX_CONCURRENT = 8
-		MaxSpawnDepth:       1,  // TS: maxSpawnDepth ?? 1
-		MaxChildrenPerAgent: 5,  // TS: maxChildrenPerAgent ?? 5
-		ArchiveAfterMinutes: 60, // TS: archiveAfterMinutes ?? 60
+		MaxConcurrent:       20,
+		MaxSpawnDepth:       1,
+		MaxChildrenPerAgent: 5,
+		ArchiveAfterMinutes: 60,
 		MaxRetries:          2,
 	}
 }
@@ -74,8 +76,8 @@ Your final response IS the deliverable — it will be forwarded to the user.
 
 ## Sub-Agent Spawning
 You CAN spawn your own sub-agents for parallel or complex work using the spawn tool.
-Your sub-agents will announce their results back to you automatically (not to the main agent).
-Coordinate their work and synthesize results before reporting back.`
+Asynchronous descendants report to the root orchestrator with their direct-parent lineage.
+Synchronous descendants return their result directly to you.`
 	} else if task.Depth >= 2 {
 		prompt += `
 

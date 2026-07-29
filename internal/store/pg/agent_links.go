@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -257,10 +258,15 @@ func (s *PGAgentLinkStore) GetLinkBetween(ctx context.Context, fromAgentID, toAg
 			(source_agent_id = $1 AND target_agent_id = $2 AND direction IN ('outbound', 'bidirectional'))
 			OR
 			(source_agent_id = $2 AND target_agent_id = $1 AND direction IN ('inbound', 'bidirectional'))
-		 ) LIMIT 1`, args...)
+		 )
+		 ORDER BY CASE WHEN source_agent_id = $1 THEN 0 ELSE 1 END, created_at, id
+		 LIMIT 1`, args...)
 	d, err := scanLinkRow(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil, nil // no link found
+		return nil, err
 	}
 	return d, nil
 }

@@ -575,9 +575,14 @@ func processNormalMessage(
 			return
 		}
 
-		// Suppress empty/NO_REPLY responses (matching TS normalize-reply.ts).
-		// Still publish an empty outbound so channels can clean up placeholder/thinking indicators.
-		if outcome.Result.Content == "" || agent.IsSilentReply(outcome.Result.Content) {
+		// Suppress silent text only when the result has no media. A tool or
+		// delegate may legitimately return NO_REPLY with an attached artifact;
+		// that must continue as a media-only outbound message.
+		resultContent, shouldDeliver := normalizeAgentOutboundContent(
+			outcome.Result.Content,
+			len(outcome.Result.Media),
+		)
+		if !shouldDeliver {
 			slog.Info("inbound: suppressed silent/empty reply",
 				"channel", channel,
 				"chat_id", chatID,
@@ -615,7 +620,7 @@ func processNormalMessage(
 		// Sanitize voice agent replies: replace technical errors with user-friendly fallback.
 		replyContent := voiceguard.SanitizeReply(
 			deps.Cfg.Channels.Telegram.VoiceAgentID, agentKey,
-			channel, peerKind, inboundContent, outcome.Result.Content,
+			channel, peerKind, inboundContent, resultContent,
 			deps.Cfg.Channels.Telegram.AudioGuardFallbackTranscript,
 			deps.Cfg.Channels.Telegram.AudioGuardFallbackNoTranscript,
 			deps.Cfg.Channels.Telegram.AudioGuardErrorMarkers,

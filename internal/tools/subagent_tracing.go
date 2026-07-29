@@ -52,7 +52,7 @@ func (sm *SubagentManager) emitLLMSpanStart(ctx context.Context, start time.Time
 			span.InputPreview = truncate(string(b), 100000)
 		}
 	}
-	collector.EmitSpan(span)
+	collector.EmitSpan(tracing.RedactSpan(ctx, span))
 	return spanID
 }
 
@@ -97,7 +97,7 @@ func (sm *SubagentManager) emitLLMSpanEnd(ctx context.Context, spanID uuid.UUID,
 		}
 		updates["output_preview"] = truncate(resp.Content, previewLimit)
 	}
-	collector.EmitSpanUpdate(spanID, traceID, updates)
+	collector.EmitSpanUpdate(spanID, traceID, tracing.RedactSpanUpdates(ctx, updates))
 }
 
 // ---------------------------------------------------------------------------
@@ -139,7 +139,7 @@ func (sm *SubagentManager) emitToolSpanStart(ctx context.Context, start time.Tim
 	if span.TenantID == uuid.Nil {
 		span.TenantID = store.MasterTenantID
 	}
-	collector.EmitSpan(span)
+	collector.EmitSpan(tracing.RedactSpan(ctx, span))
 	return spanID
 }
 
@@ -169,7 +169,7 @@ func (sm *SubagentManager) emitToolSpanEnd(ctx context.Context, spanID uuid.UUID
 		updates["status"] = store.SpanStatusError
 		updates["error"] = truncate(output, 200)
 	}
-	collector.EmitSpanUpdate(spanID, traceID, updates)
+	collector.EmitSpanUpdate(spanID, traceID, tracing.RedactSpanUpdates(ctx, updates))
 }
 
 // ---------------------------------------------------------------------------
@@ -210,7 +210,7 @@ func (sm *SubagentManager) emitSubagentSpanStart(ctx context.Context, spanID uui
 	if span.TenantID == uuid.Nil {
 		span.TenantID = store.MasterTenantID
 	}
-	collector.EmitSpan(span)
+	collector.EmitSpan(tracing.RedactSpan(ctx, span))
 }
 
 // emitSubagentSpanEnd finalizes the running subagent root span.
@@ -239,5 +239,5 @@ func (sm *SubagentManager) emitSubagentSpanEnd(ctx context.Context, spanID uuid.
 		updates["status"] = store.SpanStatusError
 		updates["error"] = truncate(task.Result, 200)
 	}
-	collector.EmitSpanUpdate(spanID, traceID, updates)
+	collector.EmitSpanUpdate(spanID, traceID, tracing.RedactSpanUpdates(ctx, updates))
 }

@@ -384,6 +384,6 @@ func makeToolEmitRun(l *Loop, req *RunRequest) func(AgentEvent) {
 		event.Channel = req.Channel
 		event.ChatID = req.ChatID
 		event.TenantID = l.tenantID
-		l.emit(event)
+		l.emit(redactDelegationAgentEvent(req, event))
 	}
 }

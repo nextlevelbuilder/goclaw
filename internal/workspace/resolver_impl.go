@@ -29,39 +29,15 @@ func (r *defaultResolver) Resolve(_ context.Context, params ResolveParams) (*Wor
 		return nil, fmt.Errorf("workspace: base dir is required")
 	}
 
-	// Priority: delegation > team > personal/predefined
+	// Agent Link artifact runs construct their fail-closed workspace directly
+	// from the admitted exchange. This resolver handles durable team/personal
+	// workspaces only.
 	switch {
-	case params.DelegateCtx != nil:
-		return r.resolveDelegate(params)
 	case params.TeamID != nil && *params.TeamID != "":
 		return r.resolveTeam(params), nil
 	default:
 		return r.resolvePersonal(params), nil
 	}
-}
-
-// resolveDelegate handles delegated task workspace.
-// ActivePath = delegate's shared path, read-only exports from delegator.
-// Validates SharedPath is under BaseDir to prevent directory traversal.
-func (r *defaultResolver) resolveDelegate(p ResolveParams) (*WorkspaceContext, error) {
-	shared := filepath.Clean(p.DelegateCtx.SharedPath)
-	base := filepath.Clean(p.BaseDir)
-	if !strings.HasPrefix(shared+string(filepath.Separator), base+string(filepath.Separator)) {
-		return nil, fmt.Errorf("workspace: delegate shared path escapes base dir")
-	}
-
-	wc := &WorkspaceContext{
-		ActivePath:       shared,
-		Scope:            ScopeDelegate,
-		ReadOnlyPaths:    p.DelegateCtx.ExportPaths,
-		SharedPath:       &p.DelegateCtx.SharedPath,
-		OwnerID:          p.UserID,
-		MemoryScope:      "user",
-		KGScope:          "user",
-		EnforcementLabel: DefaultEnforcementLabel(ScopeDelegate, false),
-	}
-	ensureDir(wc.ActivePath)
-	return wc, nil
 }
 
 // resolveTeam handles team workspace (shared or isolated).

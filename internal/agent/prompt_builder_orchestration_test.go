@@ -111,4 +111,10 @@ func TestBridgePromptBuilder_OrchestrationTargetContent(t *testing.T) {
 	if !strings.Contains(output, "Does work") {
 		t.Error("output should contain description")
 	}
+	if !strings.Contains(output, "Return generated files or media artifacts to the caller") {
+		t.Error("output should tell delegates to return media artifacts through the caller")
+	}
+	if !strings.Contains(output, "Do not ask the delegatee to send directly to your current chat") {
+		t.Error("output should prevent direct delivery attempts from the delegate channel")
+	}
 }

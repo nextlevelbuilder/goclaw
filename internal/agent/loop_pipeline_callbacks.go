@@ -40,7 +40,7 @@ func (l *Loop) pipelineCallbacks(req *RunRequest, bridgeRS *runState) pipelineCa
 		event.ChatID = req.ChatID
 		event.SessionKey = req.SessionKey
 		event.TenantID = l.tenantID
-		l.emit(event)
+		l.emit(redactDelegationAgentEvent(req, event))
 	}
 	return pipelineCallbackSet{
 		emitRun:            emitRun,
@@ -188,13 +188,30 @@ func (l *Loop) makeEnrichMedia(req *RunRequest) func(ctx context.Context, state 
 		if len(msgs) == 0 {
 			return nil
 		}
-		enrichedCtx, enrichedMsgs, _ := l.enrichInputMedia(ctx, req, msgs)
+		enrichedCtx, enrichedMsgs, currentRefs := l.enrichInputMedia(ctx, req, msgs)
 		// Propagate enriched context (media images/docs/audio/video refs for tools).
 		state.Ctx = enrichedCtx
 		// Update history with enriched messages (media tags, inline images).
 		// Skip system message (index 0) — only history + user messages are enriched.
 		if len(enrichedMsgs) > 1 {
 			state.Messages.SetHistory(enrichedMsgs[1:])
+		}
+		// Preserve the enriched current input for the first session checkpoint.
+		// Inline image bytes stay request-local; durable history stores only the
+		// logical tags plus absolute MediaRefs used internally for exact lookup.
+		if len(currentRefs) > 0 {
+			for i := len(enrichedMsgs) - 1; i >= 0; i-- {
+				if enrichedMsgs[i].Role != "user" {
+					continue
+				}
+				req.enrichedInputMessage = providers.Message{
+					Role:      "user",
+					Content:   enrichedMsgs[i].Content,
+					MediaRefs: append([]providers.MediaRef(nil), currentRefs...),
+				}
+				req.hasEnrichedInputMessage = true
+				break
+			}
 		}
 		return nil
 	}
@@ -365,6 +382,12 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 		chatReq.Options[providers.OptPeerKind] = req.PeerKind
 		chatReq.Options[providers.OptLocalKey] = req.LocalKey
 		chatReq.Options[providers.OptWorkspace] = tools.ToolWorkspaceFromCtx(ctx)
+		if delegationID := tools.DelegationIDFromCtx(ctx); delegationID != "" {
+			chatReq.Options[providers.OptDelegationID] = delegationID
+		}
+		if inputs := tools.DelegationArtifactInputsFromCtx(ctx); inputs != "" {
+			chatReq.Options[providers.OptDelegationInputs] = inputs
+		}
 		// Pass the policy-filtered allowed tool set so the Claude CLI provider
 		// can restrict its native built-in tools (Bash, Edit, Write, Read,
 		// WebFetch, WebSearch) to what the agent's tool policy actually allows.
@@ -706,13 +729,17 @@ func (l *Loop) makeFlushMessages(req *RunRequest) func(ctx context.Context, sess
 	return func(ctx context.Context, sessionKey string, msgs []providers.Message) error {
 		if !userMsgFlushed && !req.HideInput && req.Message != "" {
 			userMsgFlushed = true
-			l.sessions.AddMessage(ctx, sessionKey, providers.Message{
+			inputMessage := providers.Message{
 				Role:    "user",
 				Content: req.Message,
-			})
+			}
+			if req.hasEnrichedInputMessage {
+				inputMessage = req.enrichedInputMessage
+			}
+			l.sessions.AddMessage(ctx, sessionKey, redactDelegationMessage(req, inputMessage))
 		}
 		for _, msg := range msgs {
-			l.sessions.AddMessage(ctx, sessionKey, msg)
+			l.sessions.AddMessage(ctx, sessionKey, redactDelegationMessage(req, msg))
 		}
 		return nil
 	}

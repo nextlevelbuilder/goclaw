@@ -72,7 +72,7 @@ func (t *ListFilesTool) Execute(ctx context.Context, args map[string]any) *Resul
 	}
 
 	// Virtual FS: route memory directory listing to DB
-	if t.memIntc != nil {
+	if !IsDelegationArtifactRun(ctx) && t.memIntc != nil {
 		if listing, handled, err := t.memIntc.ListFiles(ctx, path); handled {
 			if err != nil {
 				return ErrorResult(fmt.Sprintf("failed to list memory files: %v", err))
@@ -90,6 +90,13 @@ func (t *ListFilesTool) Execute(ctx context.Context, args map[string]any) *Resul
 		return t.executeInSandbox(ctx, path, sandboxKey)
 	}
 
+	if resolved, handled, err := resolveDelegationInputPath(ctx, path); handled {
+		if err != nil {
+			return ErrorResult("cannot access delegation input")
+		}
+		return t.executeDelegationHostList(ctx, resolved, path)
+	}
+
 	// Host execution — use per-user workspace from context if available
 	workspace := ToolWorkspaceFromCtx(ctx)
 	if workspace == "" {
@@ -104,12 +111,24 @@ func (t *ListFilesTool) Execute(ctx context.Context, args map[string]any) *Resul
 		return ErrorResult(err.Error())
 	}
 
+	return t.executeHostList(ctx, resolved, path)
+}
+
+func (t *ListFilesTool) executeDelegationHostList(ctx context.Context, resolved, displayPath string) *Result {
+	result := t.executeHostList(ctx, resolved, displayPath)
+	if result.IsError {
+		return ErrorResult("failed to list delegation input directory")
+	}
+	return result
+}
+
+func (t *ListFilesTool) executeHostList(ctx context.Context, resolved, displayPath string) *Result {
 	entries, err := os.ReadDir(resolved)
 	if err != nil {
 		if os.IsNotExist(err) {
-			msg := fmt.Sprintf("Directory does not exist: %s", path)
+			msg := fmt.Sprintf("Directory does not exist: %s", displayPath)
 			if teamWs := ToolTeamWorkspaceFromCtx(ctx); teamWs != "" && !strings.HasPrefix(resolved, teamWs) {
-				msg += fmt.Sprintf("\nHint: try the team workspace path: list_files(path=\"%s/%s\")", teamWs, path)
+				msg += fmt.Sprintf("\nHint: try the team workspace path: list_files(path=\"%s/%s\")", teamWs, displayPath)
 			}
 			return SilentResult(msg)
 		}
@@ -144,7 +163,7 @@ func (t *ListFilesTool) executeInSandbox(ctx context.Context, path, sandboxKey s
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
-	containerCwd, cwdErr := sandboxCwdForHostPath(mountWorkspace, mountWorkspace, sandbox.DefaultContainerWorkdir)
+	containerCwd, cwdErr := sandboxCwdForHostPath(mountWorkspace, mountWorkspace, sandboxContainerWorkdir(ctx))
 	if cwdErr != nil {
 		return ErrorResult(fmt.Sprintf("sandbox path mapping: %v", cwdErr))
 	}
@@ -163,7 +182,7 @@ func (t *ListFilesTool) executeInSandbox(ctx context.Context, path, sandboxKey s
 }
 
 func (t *ListFilesTool) getFsBridge(ctx context.Context, sandboxKey, mountWorkspace, containerCwd string) (*sandbox.FsBridge, error) {
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, mountWorkspace, SandboxConfigFromCtx(ctx))
+	sb, err := acquireToolSandbox(ctx, t.sandboxMgr, sandboxKey, mountWorkspace)
 	if err != nil {
 		return nil, err
 	}

@@ -43,6 +43,7 @@ import (
 	mcpbridge "github.com/nextlevelbuilder/goclaw/internal/mcp"
 	mcpoauth "github.com/nextlevelbuilder/goclaw/internal/mcp/oauth"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
+	"github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/security"
@@ -456,7 +457,8 @@ func runGateway() {
 	}
 
 	// Subagent system (secureCLI store wired so subagent ExecTools enforce the gate)
-	subagentMgr := setupSubagents(providerRegistry, cfg, msgBus, toolsReg, workspace, sandboxMgr, pgStores.SecureCLI, usageCapSvc)
+	childRunAdmission := orchestration.NewChildRunAdmission(edition.Current().ChildRunLimit(), 128)
+	subagentMgr := setupSubagents(providerRegistry, cfg, msgBus, toolsReg, workspace, sandboxMgr, pgStores.SecureCLI, usageCapSvc, childRunAdmission)
 	if subagentMgr != nil {
 		// Wire announce queue for batched subagent result delivery (matching TS debounce pattern).
 		announceQueue := tools.NewAnnounceQueue(1000, 20, makeDelegateAnnounceCallback(subagentMgr, msgBus))
@@ -577,7 +579,7 @@ func runGateway() {
 	var mcpPool *mcpbridge.Pool
 	var mediaStore *media.Store
 	var postTurn tools.PostTurnProcessor
-	contextFileInterceptor, mcpPool, mediaStore, postTurn = wireExtras(pgStores, agentRouter, providerRegistry, modelReg, msgBus, pgStores.Sessions, toolsReg, toolPE, skillsLoader, hasMemory, traceCollector, workspace, cfg.Gateway.InjectionAction, cfg, sandboxMgr, redisClient, domainBus, usageCapSvc, mcpOAuthRefresher)
+	contextFileInterceptor, mcpPool, mediaStore, postTurn = wireExtras(pgStores, agentRouter, providerRegistry, modelReg, msgBus, pgStores.Sessions, toolsReg, toolPE, skillsLoader, hasMemory, traceCollector, workspace, cfg.Gateway.InjectionAction, cfg, sandboxMgr, redisClient, domainBus, usageCapSvc, mcpOAuthRefresher, childRunAdmission)
 	if mcpPool != nil {
 		defer mcpPool.Stop()
 	}
@@ -1042,9 +1044,11 @@ func runGateway() {
 		sandboxMgr:        sandboxMgr,
 		postTurn:          postTurn,
 		subagentMgr:       subagentMgr,
+		childRunAdmission: childRunAdmission,
 		consumerTeamStore: consumerTeamStore,
 		auditCh:           auditCh,
 		sigCh:             sigCh,
+		terminateProcess:  os.Exit,
 	})
 }
 

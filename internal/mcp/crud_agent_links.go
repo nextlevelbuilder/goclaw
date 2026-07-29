@@ -28,7 +28,7 @@ func registerAgentLinkCRUDTools(srv *mcpserver.MCPServer, links store.AgentLinkS
 		mcpgo.WithString("target_agent", mcpgo.Required(), mcpgo.Description("Target agent UUID.")),
 		mcpgo.WithString("direction", mcpgo.Enum("outbound", "inbound", "bidirectional"), mcpgo.Description("Link direction; defaults to \"outbound\".")),
 		mcpgo.WithString("description", mcpgo.Description("Human-readable description of the link.")),
-		mcpgo.WithNumber("max_concurrent", mcpgo.Description("Maximum concurrent delegated tasks.")),
+		mcpgo.WithNumber("max_concurrent", mcpgo.Description("Compatibility metadata reserved for future per-link scheduling; not enforced at runtime.")),
 	), handleAgentLinksCreate(links))
 
 	srv.AddTool(mcpgo.NewTool("goclaw_agent_links_update",
@@ -36,7 +36,7 @@ func registerAgentLinkCRUDTools(srv *mcpserver.MCPServer, links store.AgentLinkS
 		mcpgo.WithString("link_id", mcpgo.Required(), mcpgo.Description("Link UUID.")),
 		mcpgo.WithString("direction", mcpgo.Enum("outbound", "inbound", "bidirectional"), mcpgo.Description("New direction.")),
 		mcpgo.WithString("description", mcpgo.Description("New description.")),
-		mcpgo.WithNumber("max_concurrent", mcpgo.Description("New max concurrent delegated tasks.")),
+		mcpgo.WithNumber("max_concurrent", mcpgo.Description("New compatibility metadata value reserved for future per-link scheduling; not enforced at runtime.")),
 		mcpgo.WithString("status", mcpgo.Enum("active", "disabled"), mcpgo.Description("New status.")),
 	), handleAgentLinksUpdate(links))
 

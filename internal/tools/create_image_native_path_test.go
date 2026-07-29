@@ -396,6 +396,59 @@ func TestCreateImageTool_ResolveReferenceImage_ID(t *testing.T) {
 	}
 }
 
+func TestCreateImageTool_ResolveReferenceImage_ExactID(t *testing.T) {
+	workspace := t.TempDir()
+	firstPath := filepath.Join(workspace, "first.png")
+	secondPath := filepath.Join(workspace, "second.png")
+	firstData := []byte("first-image")
+	secondData := []byte("second-image")
+	if err := os.WriteFile(firstPath, firstData, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(secondPath, secondData, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := WithToolWorkspace(context.Background(), workspace)
+	ctx = WithMediaImageRefs(ctx, []providers.MediaRef{
+		{ID: "image-first", Kind: "image", MimeType: "image/png", Path: firstPath},
+		{ID: "image-second", Kind: "image", MimeType: "image/png", Path: secondPath},
+	})
+
+	got, err := NewCreateImageTool(nil).resolveReferenceImages(ctx, map[string]any{
+		"ref_images": []any{map[string]any{"id": "image-first"}},
+	})
+	if err != nil {
+		t.Fatalf("resolve exact media ID: %v", err)
+	}
+	if len(got) != 1 || string(got[0].Data) != string(firstData) {
+		t.Fatalf("resolved images = %#v, want exact first image", got)
+	}
+}
+
+func TestCreateImageTool_ResolveReferenceImage_UnknownIDFails(t *testing.T) {
+	workspace := t.TempDir()
+	imagePath := filepath.Join(workspace, "known.png")
+	if err := os.WriteFile(imagePath, []byte("known-image"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := WithToolWorkspace(context.Background(), workspace)
+	ctx = WithMediaImages(ctx, []providers.ImageContent{{
+		MimeType: "image/png",
+		Data:     base64.StdEncoding.EncodeToString([]byte("fallback-must-not-be-used")),
+	}})
+	ctx = WithMediaImageRefs(ctx, []providers.MediaRef{{
+		ID: "known-id", Kind: "image", MimeType: "image/png", Path: imagePath,
+	}})
+
+	_, err := NewCreateImageTool(nil).resolveReferenceImages(ctx, map[string]any{
+		"ref_images": []any{map[string]any{"id": "missing-id"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), `media_id "missing-id" not found`) {
+		t.Fatalf("unknown media ID error = %v", err)
+	}
+}
+
 func TestCreateImageTool_MultipleReferenceImages_MixedSources(t *testing.T) {
 	tmpDir := t.TempDir()
 	refFile := filepath.Join(tmpDir, "ref.png")

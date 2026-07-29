@@ -4,11 +4,20 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
 
+	"github.com/google/uuid"
+
+	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+)
+
+const (
+	delegationArtifactInputsDirName  = "inputs"
+	delegationArtifactOutputsDirName = "outputs"
 )
 
 // SandboxCwd maps the current effective workspace (from context) to its
@@ -57,6 +66,83 @@ func canonicalSandboxWorkspace(workspace string) string {
 		return real
 	}
 	return clean
+}
+
+func sandboxContainerWorkdir(ctx context.Context) string {
+	if cfg := SandboxConfigFromCtx(ctx); cfg != nil {
+		return cfg.ContainerWorkdir()
+	}
+	return sandbox.DefaultContainerWorkdir
+}
+
+// acquireToolSandbox attaches the delegation input exchange only to the exact
+// delegated run that owns it. The input/output sibling check prevents a forged
+// context from turning this runtime-only option into general host mounting.
+func acquireToolSandbox(
+	ctx context.Context,
+	manager sandbox.Manager,
+	key, workspace string,
+) (sandbox.Sandbox, error) {
+	cfg := SandboxConfigFromCtx(ctx)
+	inputRoot := DelegationArtifactInputsFromCtx(ctx)
+	if inputRoot == "" {
+		return manager.Get(ctx, key, workspace, cfg)
+	}
+	delegationID, err := uuid.Parse(DelegationIDFromCtx(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("delegation artifact sandbox context is invalid")
+	}
+
+	outputRoot := ToolWorkspaceFromCtx(ctx)
+	inputCanonical, err := canonicalRealDirectory(inputRoot)
+	if err != nil {
+		return nil, fmt.Errorf("delegation artifact input mount is unavailable")
+	}
+	outputCanonical, err := canonicalRealDirectory(outputRoot)
+	if err != nil {
+		return nil, fmt.Errorf("delegation artifact output mount is unavailable")
+	}
+	if filepath.Base(inputCanonical) != delegationArtifactInputsDirName ||
+		filepath.Base(outputCanonical) != delegationArtifactOutputsDirName ||
+		filepath.Dir(inputCanonical) != filepath.Dir(outputCanonical) {
+		return nil, fmt.Errorf("delegation artifact sandbox context is invalid")
+	}
+	exchangeRoot := filepath.Dir(inputCanonical)
+	if filepath.Base(exchangeRoot) != delegationID.String() ||
+		filepath.Base(filepath.Dir(exchangeRoot)) != "delegations" ||
+		filepath.Base(filepath.Dir(filepath.Dir(exchangeRoot))) != "collaboration" {
+		return nil, fmt.Errorf("delegation artifact sandbox context is invalid")
+	}
+
+	mount := sandbox.ReadOnlyMount{
+		Name:        "inputs",
+		HostPath:    inputCanonical,
+		Destination: path.Join(sandboxContainerWorkdir(ctx), "inputs"),
+	}
+	return manager.Get(
+		ctx,
+		key,
+		workspace,
+		cfg,
+		sandbox.WithWorkspaceAccessOverride(sandbox.AccessRW),
+		sandbox.WithReadOnlyMounts(mount),
+	)
+}
+
+func canonicalRealDirectory(raw string) (string, error) {
+	if raw == "" || !filepath.IsAbs(raw) {
+		return "", fmt.Errorf("directory path must be absolute")
+	}
+	clean := filepath.Clean(raw)
+	info, err := os.Lstat(clean)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("directory path is not a real directory")
+	}
+	real, err := filepath.EvalSymlinks(clean)
+	if err != nil {
+		return "", fmt.Errorf("directory path is not canonical")
+	}
+	return filepath.Clean(real), nil
 }
 
 func sandboxCwdForHostPath(hostCwd, mountWorkspace, containerBase string) (string, error) {

@@ -99,7 +99,7 @@
   "agents.subagents.maxConcurrent": "Макс. одновременно",
   "agents.subagents.maxConcurrentTip": "Максимальное количество субагентов, которые могут работать одновременно.",
   "agents.subagents.maxSpawnDepth": "Макс. глубина порождения",
-  "agents.subagents.maxSpawnDepthTip": "Максимальная глубина вложенности для цепочек субагентов.",
+  "agents.subagents.maxSpawnDepthTip": "Максимальная глубина собственного дерева субагентов каждого агента. Делегирование через Agent Link начинает новое дерево с настройками целевого агента. При глубине 1 агент может запустить прямых субагентов, но они не смогут запускать новых.",
   "agents.subagents.maxChildrenPerAgent": "Макс. дочерних на агента",
   "agents.subagents.maxChildrenPerAgentTip": "Максимальное количество дочерних субагентов, которое может породить один агент.",
   "agents.subagents.archiveAfterMin": "Архивировать через (мин)",

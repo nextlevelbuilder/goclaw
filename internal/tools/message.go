@@ -118,6 +118,9 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 	if message == "" {
 		return ErrorResult("message is required")
 	}
+	if IsDelegationArtifactRun(ctx) && strings.Contains(message, "MEDIA:") {
+		return ErrorResult("delegation files are published only after the delegated run completes")
+	}
 
 	channel := argString(args, "channel")
 	if channel == "" {
@@ -470,8 +473,8 @@ func (t *MessageTool) validateChannelTenant(ctx context.Context, channel, target
 
 // sendMedia sends a file as a media attachment via the outbound message bus.
 func (t *MessageTool) sendMedia(ctx context.Context, channel, target, filePath string) *Result {
-	if _, err := os.Stat(filePath); err != nil {
-		return ErrorResult(fmt.Sprintf("file not found: %s", filePath))
+	if err := ValidateRegularFileForRead(filePath); err != nil {
+		return ErrorResult(fmt.Sprintf("media path is not a safe regular file: %v", err))
 	}
 	if t.msgBus == nil {
 		return ErrorResult("media sending requires message bus")
@@ -530,6 +533,9 @@ func (t *MessageTool) extractEmbeddedMedia(ctx context.Context, message string) 
 		// Extract each MEDIA: path and resolve via security-checked path resolution.
 		for _, raw := range matches {
 			if resolved, ok := t.resolveMediaPath(ctx, raw); ok {
+				if err := ValidateRegularFileForRead(resolved); err != nil {
+					continue
+				}
 				media = append(media, bus.MediaAttachment{
 					URL:         resolved,
 					ContentType: mimeFromPath(resolved),
@@ -622,11 +628,10 @@ func isGroupContext(ctx context.Context) bool {
 
 // resolveMediaPath extracts and validates a file path from a "MEDIA:path" string.
 // Uses the same workspace-aware path resolution as other filesystem tools.
-// Multi-tenant isolation forces MEDIA: paths through restricted resolution
-// first, with one explicit fallback for generated media artifacts under /tmp/.
+// Multi-tenant isolation forces MEDIA: paths through restricted resolution.
 // In practice MEDIA: paths may resolve to:
 //   - files inside the agent workspace
-//   - absolute paths under /tmp/ for generated media artifacts
+//   - files inside an explicitly authorized team/collaboration read root
 //
 // Relative paths are resolved against the agent's workspace.
 func (t *MessageTool) resolveMediaPath(ctx context.Context, s string) (string, bool) {
@@ -645,17 +650,10 @@ func (t *MessageTool) resolveMediaPath(ctx context.Context, s string) (string, b
 	}
 	restrict := effectiveRestrict(ctx, t.restrict)
 
-	// resolvePath handles relative→absolute, symlink, hardlink, boundary checks.
-	resolved, err := resolvePath(raw, workspace, restrict)
+	// Use the read-only prefix set so orchestrators can publish media produced
+	// by linked agents or team members without granting mutation access.
+	resolved, err := resolvePathWithAllowed(raw, workspace, restrict, allowedWithTeamWorkspace(ctx, nil))
 	if err != nil {
-		// When restricted, also allow /tmp/ paths (used by create_image, create_audio, etc.)
-		// But reject paths that are siblings of the workspace — these are likely traversal
-		// attacks where workspace/../X resolves inside /tmp/ because workspace itself is in /tmp/.
-		cleaned := filepath.Clean(raw)
-		wsParent := filepath.Dir(filepath.Clean(workspace))
-		if restrict && isInTempDir(cleaned) && !isPathInside(cleaned, wsParent) {
-			return cleaned, true
-		}
 		return "", false
 	}
 

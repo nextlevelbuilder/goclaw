@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,12 +19,14 @@ type recordingSandboxManager struct {
 	key       string
 	workspace string
 	cfg       *sandbox.Config
+	getOpts   sandbox.GetOpts
 }
 
-func (m *recordingSandboxManager) Get(ctx context.Context, key string, workspace string, cfg *sandbox.Config) (sandbox.Sandbox, error) {
+func (m *recordingSandboxManager) Get(ctx context.Context, key string, workspace string, cfg *sandbox.Config, opts ...sandbox.GetOption) (sandbox.Sandbox, error) {
 	m.key = key
 	m.workspace = workspace
 	m.cfg = cfg
+	m.getOpts = sandbox.ApplyGetOpts(opts)
 	if m.sandbox == nil {
 		m.sandbox = &recordingSandbox{}
 	}
@@ -241,6 +244,97 @@ func TestSandboxFileToolsUseEffectiveWorkspaceMount(t *testing.T) {
 				t.Fatalf("sandbox manager workspace = %q, want tenant workspace %q", mgr.workspace, tenantWorkspace)
 			}
 		})
+	}
+}
+
+func TestAcquireToolSandboxMountsOnlyCurrentDelegationInputs(t *testing.T) {
+	tenantWorkspace := t.TempDir()
+	delegationID := uuid.New()
+	root := filepath.Join(tenantWorkspace, "collaboration", "delegations", delegationID.String())
+	inputs := filepath.Join(root, "inputs")
+	outputs := filepath.Join(root, "outputs")
+	if err := os.MkdirAll(inputs, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(outputs, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	cfg := sandbox.DefaultConfig()
+	cfg.Mode = sandbox.ModeAll
+	cfg.WorkspaceAccess = sandbox.AccessNone
+	ctx := WithDelegationID(context.Background(), delegationID.String())
+	ctx = WithDelegationArtifactInputs(ctx, inputs)
+	ctx = WithToolWorkspace(ctx, outputs)
+	ctx = WithSandboxConfig(ctx, &cfg)
+
+	mgr := &recordingSandboxManager{}
+	if _, err := acquireToolSandbox(ctx, mgr, "delegate-session", outputs); err != nil {
+		t.Fatalf("acquireToolSandbox: %v", err)
+	}
+	if len(mgr.getOpts.ReadOnlyMounts) != 1 {
+		t.Fatalf("read-only mounts = %#v, want one input mount", mgr.getOpts.ReadOnlyMounts)
+	}
+	if mgr.getOpts.WorkspaceAccessOverride == nil ||
+		*mgr.getOpts.WorkspaceAccessOverride != sandbox.AccessRW {
+		t.Fatalf("delegation output access override = %#v, want rw", mgr.getOpts.WorkspaceAccessOverride)
+	}
+	mount := mgr.getOpts.ReadOnlyMounts[0]
+	wantInputs, err := filepath.EvalSymlinks(inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mount.Name != "inputs" || mount.HostPath != wantInputs || mount.Destination != "/workspace/inputs" {
+		t.Fatalf("input mount = %#v", mount)
+	}
+}
+
+func TestAcquireToolSandboxRejectsExchangePathNotBoundToDelegationID(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "collaboration", "delegations", uuid.NewString())
+	inputs := filepath.Join(root, "inputs")
+	outputs := filepath.Join(root, "outputs")
+	if err := os.MkdirAll(inputs, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(outputs, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := WithDelegationID(context.Background(), uuid.NewString())
+	ctx = WithDelegationArtifactInputs(ctx, inputs)
+	ctx = WithToolWorkspace(ctx, outputs)
+	mgr := &recordingSandboxManager{}
+	if _, err := acquireToolSandbox(ctx, mgr, "delegate-session", outputs); err == nil {
+		t.Fatal("forged exchange path unexpectedly mounted")
+	}
+	if mgr.key != "" {
+		t.Fatal("sandbox manager called for forged exchange path")
+	}
+}
+
+func TestDelegationInputMutationRejectedBeforeSandboxAcquisition(t *testing.T) {
+	ctx, _, outputs := delegationArtifactToolContext(t)
+	ctx = WithToolSandboxKey(ctx, "delegate-session")
+
+	writeManager := &recordingSandboxManager{}
+	writeResult := NewSandboxedWriteFileTool(outputs, true, writeManager).Execute(ctx, map[string]any{
+		"path": "inputs/source.txt", "content": "mutated",
+	})
+	if !writeResult.IsError || !strings.Contains(writeResult.ForLLM, "read-only") {
+		t.Fatalf("write input result = %#v", writeResult)
+	}
+	if writeManager.key != "" {
+		t.Fatalf("write acquired sandbox before rejecting input mutation")
+	}
+
+	editManager := &recordingSandboxManager{}
+	editResult := NewSandboxedEditTool(outputs, true, editManager).Execute(ctx, map[string]any{
+		"path": "inputs/source.txt", "old_string": "a", "new_string": "b",
+	})
+	if !editResult.IsError || !strings.Contains(editResult.ForLLM, "read-only") {
+		t.Fatalf("edit input result = %#v", editResult)
+	}
+	if editManager.key != "" {
+		t.Fatalf("edit acquired sandbox before rejecting input mutation")
 	}
 }
 

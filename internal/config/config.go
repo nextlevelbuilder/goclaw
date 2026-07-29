@@ -606,10 +606,10 @@ func (cc CronConfig) ToRetryConfig() cron.RetryConfig {
 	return cfg
 }
 
-// SubagentsConfig configures the subagent system (matching TS agents.defaults.subagents).
+// SubagentsConfig configures the GoClaw subagent system.
 // All fields optional — zero values mean "use default".
 type SubagentsConfig struct {
-	MaxConcurrent       int    `json:"maxConcurrent,omitempty"`       // default 8 (TS: DEFAULT_SUBAGENT_MAX_CONCURRENT)
+	MaxConcurrent       int    `json:"maxConcurrent,omitempty"`       // executing descendants per root agent; default 20
 	MaxSpawnDepth       int    `json:"maxSpawnDepth,omitempty"`       // default 1, range 1-5
 	MaxChildrenPerAgent int    `json:"maxChildrenPerAgent,omitempty"` // default 5, range 1-20
 	ArchiveAfterMinutes int    `json:"archiveAfterMinutes,omitempty"` // default 60

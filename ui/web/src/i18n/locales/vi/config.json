@@ -94,7 +94,7 @@
   "agents.subagents.maxConcurrent": "Tối đa đồng thời",
   "agents.subagents.maxConcurrentTip": "Số subagent tối đa có thể chạy đồng thời.",
   "agents.subagents.maxSpawnDepth": "Độ sâu tạo tối đa",
-  "agents.subagents.maxSpawnDepthTip": "Độ sâu lồng nhau tối đa cho chuỗi subagent.",
+  "agents.subagents.maxSpawnDepthTip": "Độ sâu tối đa của cây sub-agent do từng agent tự spawn. Delegate qua Agent Link bắt đầu một cây mới và dùng setting của agent đích. Với depth 1, agent có thể spawn sub-agent trực tiếp, nhưng các sub-agent đó không thể spawn tiếp.",
   "agents.subagents.maxChildrenPerAgent": "Subagent tối đa mỗi agent",
   "agents.subagents.maxChildrenPerAgentTip": "Số subagent tối đa mà một agent có thể tạo.",
   "agents.subagents.archiveAfterMin": "Lưu trữ sau (phút)",

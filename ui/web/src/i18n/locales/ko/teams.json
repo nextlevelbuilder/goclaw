@@ -386,6 +386,7 @@
     "description": "설명",
     "descriptionPlaceholder": "선택적 설명...",
     "maxConcurrent": "최대 동시",
+    "maxConcurrentHint": "호환성 메타데이터로만 유지됩니다. Agent Link 런타임 승인은 프로세스 안전 한도와 제한된 대기열을 사용합니다.",
     "status": "상태",
     "active": "활성",
     "disabled": "비활성화됨",

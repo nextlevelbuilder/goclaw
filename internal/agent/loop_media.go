@@ -1,9 +1,12 @@
 package agent
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // parseMediaResult extracts a MediaResult from a tool result string containing "MEDIA:" prefix.
@@ -94,8 +97,7 @@ func confineToWorkspace(mediaPath, workspace string) (string, bool) {
 		path = filepath.Join(wsRoot, path)
 	}
 	cleaned := filepath.Clean(path)
-	info, err := os.Lstat(cleaned)
-	if err != nil || !info.Mode().IsRegular() {
+	if err := tools.ValidateRegularFileForRead(cleaned); err != nil {
 		return "", false
 	}
 	resolved, err := filepath.EvalSymlinks(cleaned)
@@ -109,17 +111,30 @@ func confineToWorkspace(mediaPath, workspace string) (string, bool) {
 	return cleaned, true
 }
 
-// confineToAnyRoot accepts mediaPath if it is contained by ANY of the allowed
-// roots (each checked with the hardened confineToWorkspace). Used for the
-// result.Media egress: a tool's media legitimately lives in the agent
-// workspace, the team workspace, OR a tenant-allowed path — the same scopes the
-// producing tools (create_*, send_file, delegate) validate against. A path
-// outside every root (e.g. /etc/passwd from a prompt-injected path) is rejected,
-// so the egress guard holds without dropping legitimate cross-workspace media.
+// confineToAnyRoot accepts an absolute mediaPath if it is contained by any
+// allowed root. Relative paths are intentionally anchored to the first root,
+// which is always the active tool workspace; extra roots authorize explicit
+// paths but never change the meaning of an ambiguous relative path.
 func confineToAnyRoot(mediaPath string, roots []string) (string, bool) {
-	for _, root := range roots {
+	if len(roots) == 0 {
+		return "", false
+	}
+	if !filepath.IsAbs(mediaPath) {
+		return confineToWorkspace(mediaPath, roots[0])
+	}
+	for i, root := range roots {
 		if root == "" {
 			continue
+		}
+		// The active workspace (index 0) may itself be reached through an
+		// operator-managed symlink. Extra read roots are authorization
+		// boundaries and must be real directories, not partner-controlled
+		// symlink aliases to arbitrary locations.
+		if i > 0 {
+			if info, err := os.Lstat(root); err == nil &&
+				(info.Mode()&os.ModeSymlink != 0 || !info.IsDir()) {
+				continue
+			}
 		}
 		if cleaned, ok := confineToWorkspace(mediaPath, root); ok {
 			return cleaned, true
@@ -128,17 +143,43 @@ func confineToAnyRoot(mediaPath string, roots []string) (string, bool) {
 	return "", false
 }
 
+// mediaEgressRoots returns every read-authorized root that may supply outbound
+// media. The active workspace stays first to preserve relative path semantics.
+func (l *Loop) mediaEgressRoots(ctx context.Context) []string {
+	tenantAllowedPaths := tools.TenantAllowedPathsFromCtx(ctx)
+	candidates := make([]string, 0, 3+len(tenantAllowedPaths))
+	candidates = append(candidates,
+		tools.ToolWorkspaceFromCtx(ctx),
+		tools.ToolTeamWorkspaceFromCtx(ctx),
+		tools.ToolTeamRootFromCtx(ctx),
+	)
+	candidates = append(candidates, tenantAllowedPaths...)
+
+	seen := make(map[string]struct{}, len(candidates))
+	roots := make([]string, 0, len(candidates))
+	for _, root := range candidates {
+		if root == "" {
+			continue
+		}
+		cleaned := filepath.Clean(root)
+		if _, ok := seen[cleaned]; ok {
+			continue
+		}
+		seen[cleaned] = struct{}{}
+		roots = append(roots, cleaned)
+	}
+	return roots
+}
+
 // extractMediaFromContent scans text for MEDIA:<path> tokens the LLM may echo
 // in its final response (e.g. when a tool returned the MEDIA: prefix as plain
-// text instead of setting Result.Media). Relative paths are resolved against
-// workspace. Called before sanitize strips the tokens so the attachments are
-// still delivered.
+// text instead of setting Result.Media). The first root is the active workspace
+// used for relative paths; later roots authorize explicit absolute paths.
+// Called before sanitize strips the tokens so the attachments are delivered.
 //
-// Security: only paths accepted by confineToWorkspace are emitted. An LLM cannot
-// inject attachments pointing at /etc/passwd, a sibling tenant's workspace, or a
-// hallucinated path — the extractor silently drops them.
-func extractMediaFromContent(content, workspace string) []MediaResult {
-	if !strings.Contains(content, "MEDIA:") || workspace == "" {
+// Security: only paths accepted by confineToAnyRoot are emitted.
+func extractMediaFromContent(content string, roots []string) []MediaResult {
+	if !strings.Contains(content, "MEDIA:") || len(roots) == 0 {
 		return nil
 	}
 	matches := mediaPathPattern.FindAllString(content, -1)
@@ -158,7 +199,7 @@ func extractMediaFromContent(content, workspace string) []MediaResult {
 		if path == "" {
 			continue
 		}
-		cleaned, ok := confineToWorkspace(path, workspace)
+		cleaned, ok := confineToAnyRoot(path, roots)
 		if !ok {
 			continue
 		}

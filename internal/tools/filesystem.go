@@ -117,8 +117,10 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]any) *Result
 		}
 	}
 
-	// Virtual FS: route context files to DB
-	if t.contextFileIntc != nil {
+	// Agent Link artifact runs are a physical exchange boundary. Virtual
+	// context files belong to the delegate's persistent identity and must not
+	// masquerade as staged inputs.
+	if !IsDelegationArtifactRun(ctx) && t.contextFileIntc != nil {
 		if content, handled, err := t.contextFileIntc.ReadFile(ctx, path); handled {
 			if err != nil {
 				return ErrorResult(fmt.Sprintf("failed to read context file: %v", err))
@@ -132,13 +134,16 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]any) *Result
 
 	// Virtual system files: TEAM.md, DELEGATION.md, AVAILABILITY.md are injected
 	// into the system prompt and don't exist on disk. Return a helpful hint.
-	baseName := filepath.Base(path)
-	if hint, ok := virtualSystemFiles[baseName]; ok {
-		return SilentResult(hint)
+	if !IsDelegationArtifactRun(ctx) {
+		baseName := filepath.Base(path)
+		if hint, ok := virtualSystemFiles[baseName]; ok {
+			return SilentResult(hint)
+		}
 	}
 
-	// Virtual FS: route memory files to DB
-	if t.memIntc != nil {
+	// Delegated runs use physical exchange files only. Context and memory
+	// virtual-file routing must not cross the Agent Link boundary.
+	if !IsDelegationArtifactRun(ctx) && t.memIntc != nil {
 		if content, handled, err := t.memIntc.ReadFile(ctx, path); handled {
 			if err != nil {
 				return ErrorResult(fmt.Sprintf("failed to read memory file: %v", err))
@@ -150,10 +155,29 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]any) *Result
 		}
 	}
 
-	// Sandbox routing (sandboxKey from ctx — thread-safe)
+	// Sandboxed delegation inputs are addressed by their logical alias. The
+	// acquisition helper mounts only this exchange at /workspace/inputs:ro.
 	sandboxKey := ToolSandboxKeyFromCtx(ctx)
 	if t.sandboxMgr != nil && sandboxKey != "" {
 		return t.executeInSandbox(ctx, path, sandboxKey, args)
+	}
+
+	if resolved, handled, err := resolveDelegationInputPath(ctx, path); handled {
+		if err != nil {
+			return ErrorResult("cannot access delegation input")
+		}
+		if err := ValidateRegularFileForRead(resolved); err != nil {
+			return ErrorResult("delegation input is not a safe regular file")
+		}
+		if isBinaryFileExt(resolved) {
+			ext := strings.ToLower(filepath.Ext(resolved))
+			return ErrorResult(fmt.Sprintf("cannot read binary file (%s). Use the appropriate tool: read_image for images, read_document for documents, read_audio for audio, read_video for video.", ext))
+		}
+		data, err := os.ReadFile(resolved)
+		if err != nil {
+			return ErrorResult("failed to read delegation input")
+		}
+		return t.paginateOutput(string(data), args)
 	}
 
 	// Host execution — use per-user workspace from context if available
@@ -168,6 +192,9 @@ func (t *ReadFileTool) Execute(ctx context.Context, args map[string]any) *Result
 	}
 	if err := checkDeniedPath(resolved, t.workspace, t.deniedPrefixes); err != nil {
 		return ErrorResult(err.Error())
+	}
+	if err := ValidateRegularFileForRead(resolved); err != nil {
+		return ErrorResult(fmt.Sprintf("cannot read path: %v", err))
 	}
 
 	// Block binary files — reading them wastes context with garbled data.
@@ -200,7 +227,7 @@ func (t *ReadFileTool) executeInSandbox(ctx context.Context, path, sandboxKey st
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
-	containerCwd, cwdErr := sandboxCwdForHostPath(mountWorkspace, mountWorkspace, sandbox.DefaultContainerWorkdir)
+	containerCwd, cwdErr := sandboxCwdForHostPath(mountWorkspace, mountWorkspace, sandboxContainerWorkdir(ctx))
 	if cwdErr != nil {
 		return ErrorResult(fmt.Sprintf("sandbox path mapping: %v", cwdErr))
 	}
@@ -219,7 +246,7 @@ func (t *ReadFileTool) executeInSandbox(ctx context.Context, path, sandboxKey st
 }
 
 func (t *ReadFileTool) getFsBridge(ctx context.Context, sandboxKey, mountWorkspace, containerCwd string) (*sandbox.FsBridge, error) {
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, mountWorkspace, SandboxConfigFromCtx(ctx))
+	sb, err := acquireToolSandbox(ctx, t.sandboxMgr, sandboxKey, mountWorkspace)
 	if err != nil {
 		return nil, err
 	}
@@ -332,9 +359,8 @@ func allowedWriteWithTeamWorkspace(ctx context.Context, base []string) []string 
 	return buildAllowedPrefixes(ctx, base, false)
 }
 
-// buildAllowedPrefixes merges base + tenant paths + team workspace, optionally
-// including team root. Extracted to share the slice-building logic between read
-// and write variants without duplication.
+// buildAllowedPrefixes merges base + tenant paths + team workspace and,
+// for read operations, the explicit Agent Team root.
 func buildAllowedPrefixes(ctx context.Context, base []string, includeTeamRoot bool) []string {
 	tenantPaths := TenantAllowedPathsFromCtx(ctx)
 	teamWs := ToolTeamWorkspaceFromCtx(ctx)
@@ -342,7 +368,6 @@ func buildAllowedPrefixes(ctx context.Context, base []string, includeTeamRoot bo
 	if includeTeamRoot {
 		teamRoot = ToolTeamRootFromCtx(ctx)
 	}
-
 	if len(tenantPaths) == 0 && teamWs == "" && teamRoot == "" {
 		return base
 	}
@@ -393,12 +418,36 @@ func resolvePathWithAllowed(path, workspace string, restrict bool, allowedPrefix
 			prefixReal = absPrefix
 		}
 		if isPathInside(real, prefixReal) {
+			// Preserve the same filesystem hardening as resolvePath. Allowed
+			// prefixes widen the containment boundary only; they must not
+			// weaken symlink or hardlink protections.
+			if hasMutableSymlinkParent(real) {
+				slog.Warn("security.mutable_symlink_parent", "path", path, "resolved", real)
+				return "", fmt.Errorf("access denied: path contains mutable symlink component")
+			}
+			if err := checkHardlink(real); err != nil {
+				return "", err
+			}
 			slog.Debug("read_file: allowed by prefix", "path", real, "prefix", prefixReal)
 			return real, nil
 		}
 	}
 	slog.Warn("read_file: access denied", "path", cleaned, "workspace", workspace, "allowedPrefixes", allowedPrefixes)
 	return "", err
+}
+
+// ValidateRegularFileForRead enforces the final leaf-file boundary used by
+// outbound media paths. It rejects missing paths, directories, devices,
+// sockets, FIFOs, symlinks, and hardlinked regular files.
+func ValidateRegularFileForRead(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("path is not a regular file")
+	}
+	return checkHardlink(path)
 }
 
 // checkDeniedPath returns an error if the resolved path falls under any denied prefix.

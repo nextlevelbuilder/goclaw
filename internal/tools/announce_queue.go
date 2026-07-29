@@ -1,6 +1,8 @@
 package tools
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -11,17 +13,21 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 )
 
+var ErrAnnounceQueueDrainTimeout = errors.New("announce_queue_drain_timeout")
+
 // AnnounceQueueItem represents a single subagent result waiting to be announced.
 type AnnounceQueueItem struct {
-	SubagentID    string
-	Label         string
-	Status        string // "completed", "failed", "cancelled"
-	Result        string
-	Media         []bus.MediaFile // media files from tool results
-	Runtime       time.Duration
-	Iterations    int
-	InputTokens   int64
-	OutputTokens  int64
+	SubagentID   string
+	ParentTaskID string
+	Depth        int
+	Label        string
+	Status       string // "completed", "failed", "cancelled"
+	Result       string
+	Media        []bus.MediaFile // media files from tool results
+	Runtime      time.Duration
+	Iterations   int
+	InputTokens  int64
+	OutputTokens int64
 }
 
 // AnnounceMetadata carries origin info for routing the batched announce.
@@ -31,10 +37,11 @@ type AnnounceMetadata struct {
 	OriginPeerKind   string
 	OriginLocalKey   string // composite key with topic/thread suffix for routing
 	OriginUserID     string
-	OriginSenderID   string // real acting sender; preserves permission attribution through re-ingress (#915)
-	OriginRole       string // caller's RBAC role; bypasses per-user grants for admin/operator/owner (#915)
-	OriginSessionKey string // exact parent session key (WS uses non-standard format)
+	OriginSenderID   string    // real acting sender; preserves permission attribution through re-ingress (#915)
+	OriginRole       string    // caller's RBAC role; bypasses per-user grants for admin/operator/owner (#915)
+	OriginSessionKey string    // exact parent session key (WS uses non-standard format)
 	OriginTenantID   uuid.UUID // parent tenant for announce routing
+	RootAgentID      uuid.UUID
 	ParentAgent      string
 	OriginTraceID    string // parent trace UUID for announce linking
 	OriginRootSpanID string // parent agent's root span UUID
@@ -47,7 +54,9 @@ type AnnounceQueue struct {
 	queues   map[string]*sessionQueue // session key → queue
 	debounce time.Duration            // default 1000ms
 	cap      int                      // max items per session before immediate drain (default 20)
-	onDrain func(sessionKey string, items []AnnounceQueueItem, meta AnnounceMetadata)
+	onDrain  func(sessionKey string, items []AnnounceQueueItem, meta AnnounceMetadata)
+	closed   bool
+	drainWG  sync.WaitGroup
 }
 
 type sessionQueue struct {
@@ -81,6 +90,9 @@ func NewAnnounceQueue(
 func (aq *AnnounceQueue) Enqueue(sessionKey string, item AnnounceQueueItem, meta AnnounceMetadata) {
 	aq.mu.Lock()
 	defer aq.mu.Unlock()
+	if aq.closed {
+		return
+	}
 
 	sq, ok := aq.queues[sessionKey]
 	if !ok {
@@ -98,7 +110,7 @@ func (aq *AnnounceQueue) Enqueue(sessionKey string, item AnnounceQueueItem, meta
 		items := sq.items
 		sqMeta := sq.meta
 		delete(aq.queues, sessionKey)
-		go aq.drain(sessionKey, items, sqMeta)
+		aq.startDrainLocked(sessionKey, items, sqMeta)
 		return
 	}
 
@@ -116,10 +128,60 @@ func (aq *AnnounceQueue) Enqueue(sessionKey string, item AnnounceQueueItem, meta
 		items := sq.items
 		sqMeta := sq.meta
 		delete(aq.queues, sessionKey)
+		aq.startDrainLocked(sessionKey, items, sqMeta)
 		aq.mu.Unlock()
-
-		aq.drain(sessionKey, items, sqMeta)
 	})
+}
+
+func (aq *AnnounceQueue) startDrainLocked(
+	sessionKey string,
+	items []AnnounceQueueItem,
+	meta AnnounceMetadata,
+) {
+	if aq.closed {
+		return
+	}
+	aq.drainWG.Add(1)
+	go func() {
+		defer aq.drainWG.Done()
+		aq.drain(sessionKey, items, meta)
+	}()
+}
+
+// CloseContext closes intake, drops pending debounce batches, and waits for any
+// drain callback that already started. Dropping pending parent-resume messages
+// during process shutdown avoids starting new agent runs against dependencies
+// that are being torn down; task terminal state remains durable.
+func (aq *AnnounceQueue) CloseContext(ctx context.Context) error {
+	if aq == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	aq.mu.Lock()
+	if !aq.closed {
+		aq.closed = true
+		for _, queue := range aq.queues {
+			if queue.timer != nil {
+				queue.timer.Stop()
+			}
+		}
+		clear(aq.queues)
+	}
+	aq.mu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		aq.drainWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("%w: %v", ErrAnnounceQueueDrainTimeout, ctx.Err())
+	}
 }
 
 // drain merges items into a single announce message and calls onDrain.
@@ -147,11 +209,11 @@ func FormatBatchedAnnounce(items []AnnounceQueueItem, roster SubagentRoster) str
 		replyInstruction := BuildReplyInstruction(roster)
 
 		return fmt.Sprintf(
-			"[System Message] A subagent task %q just %s.\n\n"+
+			"[System Message] A subagent task %q just %s (task=%s, parent=%s, depth=%d).\n\n"+
 				"Result:\n%s\n\n"+
 				"Stats: runtime %s, iterations %d, tokens %d in / %d out\n\n"+
 				"%s",
-			item.Label, statusLabel, item.Result,
+			item.Label, statusLabel, item.SubagentID, item.ParentTaskID, item.Depth, item.Result,
 			item.Runtime.Round(time.Millisecond), item.Iterations,
 			item.InputTokens, item.OutputTokens,
 			replyInstruction,
@@ -171,8 +233,8 @@ func FormatBatchedAnnounce(items []AnnounceQueueItem, roster SubagentRoster) str
 		}
 
 		sb.WriteString(fmt.Sprintf(
-			"\n---\nTask #%d: %q %s (runtime %s, iterations %d, tokens %d/%d)\nResult: %s\n",
-			i+1, item.Label, statusLabel,
+			"\n---\nTask #%d: %q %s (task=%s, parent=%s, depth=%d, runtime %s, iterations %d, tokens %d/%d)\nResult: %s\n",
+			i+1, item.Label, statusLabel, item.SubagentID, item.ParentTaskID, item.Depth,
 			item.Runtime.Round(time.Millisecond), item.Iterations,
 			item.InputTokens, item.OutputTokens,
 			item.Result,
@@ -188,11 +250,12 @@ func FormatBatchedAnnounce(items []AnnounceQueueItem, roster SubagentRoster) str
 // buildReplyInstruction generates the instruction block for the parent LLM,
 // including a deterministic roster of all subagent tasks with their statuses.
 func BuildReplyInstruction(roster SubagentRoster) string {
-	// Count running tasks from roster
-	running := 0
-	for _, e := range roster.Entries {
-		if e.Status == TaskStatusRunning {
-			running++
+	running := roster.Active
+	if running == 0 {
+		for _, entry := range roster.Entries {
+			if entry.Status == TaskStatusRunning {
+				running++
+			}
 		}
 	}
 
@@ -200,8 +263,10 @@ func BuildReplyInstruction(roster SubagentRoster) string {
 	var rosterBlock string
 	if len(roster.Entries) > 0 {
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("Subagent roster (%d spawned, max %d per agent):\n",
-			roster.Total, roster.MaxPerAgent))
+		sb.WriteString(fmt.Sprintf(
+			"Subagent roster (%d active / %d max; %d retained total):\n",
+			running, roster.MaxPerAgent, roster.Total,
+		))
 		for _, e := range roster.Entries {
 			sb.WriteString(fmt.Sprintf("  [%-9s]  %s\n", e.Status, e.Label))
 		}

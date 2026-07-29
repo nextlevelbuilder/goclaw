@@ -106,6 +106,9 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]any) *Result {
 	if oldStr == newStr {
 		return ErrorResult("old_string and new_string are identical")
 	}
+	if err := rejectDelegationInputMutation(ctx, path); err != nil {
+		return ErrorResult(err.Error())
+	}
 
 	// Group write permission check
 	if t.permStore != nil {
@@ -115,7 +118,7 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]any) *Result {
 	}
 
 	// Virtual FS: context files
-	if t.contextFileIntc != nil {
+	if !IsDelegationArtifactRun(ctx) && t.contextFileIntc != nil {
 		if content, handled, err := t.contextFileIntc.ReadFile(ctx, path); handled {
 			if err != nil {
 				return ErrorResult(fmt.Sprintf("failed to read context file: %v", err))
@@ -135,7 +138,7 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]any) *Result {
 	}
 
 	// Virtual FS: memory files
-	if t.memIntc != nil {
+	if !IsDelegationArtifactRun(ctx) && t.memIntc != nil {
 		if content, handled, err := t.memIntc.ReadFile(ctx, path); handled {
 			if err != nil {
 				return ErrorResult(fmt.Sprintf("failed to read memory file: %v", err))
@@ -178,7 +181,6 @@ func (t *EditTool) Execute(ctx context.Context, args map[string]any) *Result {
 	if err := checkDeniedPath(resolved, t.workspace, t.deniedPrefixes); err != nil {
 		return ErrorResult(err.Error())
 	}
-
 	data, err := os.ReadFile(resolved)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to read file: %v", err))
@@ -211,12 +213,12 @@ func (t *EditTool) executeInSandbox(ctx context.Context, path, oldStr, newStr st
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
-	containerCwd, cwdErr := sandboxCwdForHostPath(mountWorkspace, mountWorkspace, sandbox.DefaultContainerWorkdir)
+	containerCwd, cwdErr := sandboxCwdForHostPath(mountWorkspace, mountWorkspace, sandboxContainerWorkdir(ctx))
 	if cwdErr != nil {
 		return ErrorResult(fmt.Sprintf("sandbox path mapping: %v", cwdErr))
 	}
 
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, mountWorkspace, SandboxConfigFromCtx(ctx))
+	sb, err := acquireToolSandbox(ctx, t.sandboxMgr, sandboxKey, mountWorkspace)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("sandbox error: %v", err))
 	}

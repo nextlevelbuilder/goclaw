@@ -252,7 +252,11 @@ Open **About** dialog → click **Update Now** (admin only). The update includes
   <img src="_statics/Agent Orchestration.jpg" alt="Agent Orchestration" width="800" />
 </p>
 
-Each agent runs with its own identity, tools, LLM provider, and context files. Three delegation modes — sync (wait), async (fire-and-forget), bidirectional — connected through explicit permission links with concurrency limits.
+Each agent runs with its own identity, tools, LLM provider, and context files.
+Agent Links define outbound, inbound, or bidirectional permission edges.
+Delegation can run synchronously or asynchronously and exchanges files through
+an isolated delegation workspace; validated outputs are published back under
+the caller's `.delegations/<delegation-id>/` directory.
 
 > Details: [Agent Teams docs](https://docs.goclaw.sh/#teams-what-are-teams)
 

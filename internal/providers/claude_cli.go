@@ -32,6 +32,11 @@ const OptPeerKind = "peer_kind"
 // OptWorkspace passes the agent workspace path so MCP bridge tools can resolve file paths.
 const OptWorkspace = "workspace"
 
+// OptDelegationID and OptDelegationInputs pass signed artifact-run context to
+// MCP bridge tools. They are runtime-only and are not included in model prompts.
+const OptDelegationID = "delegation_id"
+const OptDelegationInputs = "delegation_inputs"
+
 // OptTenantID passes the tenant UUID string for per-session MCP config.
 // Required for memory indexing and tenant-scoped queries via bridge tools.
 const OptTenantID = "tenant_id"

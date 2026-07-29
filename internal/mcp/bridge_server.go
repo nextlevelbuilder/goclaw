@@ -205,6 +205,10 @@ func makeToolHandler(reg *tools.Registry, toolName string, msgBus *bus.MessageBu
 			return mcpgo.NewToolResultError(result.ForLLM), nil
 		}
 
+		// A delegated artifact is not outbound media until DelegateTool validates
+		// and atomically publishes its manifest back into the caller workspace.
+		tools.ApplyDelegationArtifactResultPolicy(ctx, result)
+
 		// Forward media files to the outbound bus so they reach the user as attachments.
 		// This is necessary because Claude CLI processes tool results internally —
 		// GoClaw's agent loop never sees result.Media from bridge tool calls.
@@ -216,7 +220,7 @@ func makeToolHandler(reg *tools.Registry, toolName string, msgBus *bus.MessageBu
 
 // forwardMediaToOutbound publishes media files from a tool result to the outbound bus.
 func forwardMediaToOutbound(ctx context.Context, msgBus *bus.MessageBus, toolName string, result *tools.Result) {
-	if msgBus == nil || len(result.Media) == 0 {
+	if msgBus == nil || tools.IsDelegationArtifactRun(ctx) || len(result.Media) == 0 {
 		return
 	}
 	channel := tools.ToolChannelFromCtx(ctx)

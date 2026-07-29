@@ -42,6 +42,25 @@ func TestReadImage_PrivateURL_Error(t *testing.T) {
 	}
 }
 
+func TestResolveImageMediaRefRequiresExactID(t *testing.T) {
+	ctx := WithMediaImageRefs(context.Background(), []providers.MediaRef{
+		{ID: "first-id", Kind: "image", Path: ".uploads/first.png"},
+		{ID: "second-id", Kind: "image", Path: ".uploads/second.png"},
+	})
+
+	got, err := resolveImageMediaRef(ctx, "first-id")
+	if err != nil || got.ID != "first-id" {
+		t.Fatalf("exact media ID = %#v, %v", got, err)
+	}
+	latest, err := resolveImageMediaRef(ctx, "latest")
+	if err != nil || latest.ID != "second-id" {
+		t.Fatalf("latest media ID = %#v, %v", latest, err)
+	}
+	if _, err := resolveImageMediaRef(ctx, "missing-id"); err == nil {
+		t.Fatal("unknown media ID unexpectedly resolved")
+	}
+}
+
 func TestReadImage_AnthropicURL_Error(t *testing.T) {
 	tool := NewReadImageTool(nil)
 

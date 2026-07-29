@@ -84,14 +84,16 @@ func mcpConfigBaseDir() string {
 
 // BridgeContext holds per-call context for MCP bridge headers.
 type BridgeContext struct {
-	AgentID   string
-	UserID    string
-	Channel   string
-	ChatID    string
-	PeerKind  string
-	Workspace string
-	TenantID  string
-	LocalKey  string
+	AgentID          string
+	UserID           string
+	Channel          string
+	ChatID           string
+	PeerKind         string
+	Workspace        string
+	TenantID         string
+	LocalKey         string
+	DelegationID     string
+	DelegationInputs string
 }
 
 // WriteMCPConfig writes a per-session MCP config file with agent context headers.
@@ -99,10 +101,27 @@ type BridgeContext struct {
 // outside the agent's workDir so tokens are not exposed.
 // Skips write if content is unchanged. Returns the file path.
 func (d *MCPConfigData) WriteMCPConfig(ctx context.Context, sessionKey string, bc BridgeContext) string {
-	return d.writeMCPConfigInternal(ctx, sessionKey, bc.AgentID, bc.UserID, bc.Channel, bc.ChatID, bc.PeerKind, bc.Workspace, bc.TenantID, bc.LocalKey)
+	return d.writeMCPConfigInternal(
+		ctx,
+		sessionKey,
+		bc.AgentID,
+		bc.UserID,
+		bc.Channel,
+		bc.ChatID,
+		bc.PeerKind,
+		bc.Workspace,
+		bc.TenantID,
+		bc.LocalKey,
+		bc.DelegationID,
+		bc.DelegationInputs,
+	)
 }
 
-func (d *MCPConfigData) writeMCPConfigInternal(ctx context.Context, sessionKey, agentID, userID, channel, chatID, peerKind, workspace, tenantID, localKey string) string {
+func (d *MCPConfigData) writeMCPConfigInternal(
+	ctx context.Context,
+	sessionKey, agentID, userID, channel, chatID, peerKind, workspace, tenantID, localKey string,
+	delegationID, delegationInputs string,
+) string {
 	if d == nil || (len(d.Servers) == 0 && d.GatewayAddr == "" && d.AgentMCPLookup == nil) {
 		return ""
 	}
@@ -158,9 +177,29 @@ func (d *MCPConfigData) writeMCPConfigInternal(ctx context.Context, sessionKey, 
 		if sessionKey != "" && !strings.ContainsAny(sessionKey, "\r\n\x00") {
 			headers["X-Session-Key"] = sessionKey
 		}
+		if delegationID != "" && !strings.ContainsAny(delegationID, "\r\n\x00") {
+			headers["X-Delegation-ID"] = delegationID
+		}
+		if delegationInputs != "" && !strings.ContainsAny(delegationInputs, "\r\n\x00") {
+			headers["X-Delegation-Inputs"] = delegationInputs
+		}
 		// HMAC signature over all context fields to prevent header forgery
 		if d.GatewayToken != "" && (agentID != "" || userID != "") {
-			headers["X-Bridge-Sig"] = SignBridgeContext(d.GatewayToken, agentID, userID, channel, chatID, peerKind, workspace, tenantID, localKey, sessionKey)
+			extra := []string{localKey, sessionKey}
+			if delegationID != "" || delegationInputs != "" {
+				extra = append(extra, delegationID, delegationInputs)
+			}
+			headers["X-Bridge-Sig"] = SignBridgeContext(
+				d.GatewayToken,
+				agentID,
+				userID,
+				channel,
+				chatID,
+				peerKind,
+				workspace,
+				tenantID,
+				extra...,
+			)
 		}
 
 		bridgeEntry := map[string]any{

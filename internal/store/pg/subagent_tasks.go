@@ -77,14 +77,20 @@ func scanTask(row interface{ Scan(...any) error }) (*store.SubagentTaskData, err
 	return &t, nil
 }
 
-// Get retrieves a single task by ID (tenant-scoped).
-func (s *PGSubagentTaskStore) Get(ctx context.Context, id uuid.UUID) (*store.SubagentTaskData, error) {
+// Get retrieves a task owned by the tenant and immutable root-agent key.
+func (s *PGSubagentTaskStore) Get(
+	ctx context.Context, rootAgentKey string, id uuid.UUID,
+) (*store.SubagentTaskData, error) {
 	tid, err := requireTenantID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	q := fmt.Sprintf(`SELECT %s FROM subagent_tasks WHERE id = $1 AND tenant_id = $2`, subagentTaskSelectCols)
-	row := s.db.QueryRowContext(ctx, q, id, tid)
+	if rootAgentKey == "" {
+		return nil, store.ErrSubagentRootAgentKeyRequired
+	}
+	q := fmt.Sprintf(`SELECT %s FROM subagent_tasks
+		WHERE id = $1 AND tenant_id = $2 AND parent_agent_key = $3`, subagentTaskSelectCols)
+	row := s.db.QueryRowContext(ctx, q, id, tid, rootAgentKey)
 	t, err := scanTask(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -94,7 +100,7 @@ func (s *PGSubagentTaskStore) Get(ctx context.Context, id uuid.UUID) (*store.Sub
 
 // UpdateStatus updates status, result, iterations, and token counts.
 func (s *PGSubagentTaskStore) UpdateStatus(
-	ctx context.Context, id uuid.UUID,
+	ctx context.Context, rootAgentKey string, id uuid.UUID,
 	status string, result *string, iterations int,
 	inputTokens, outputTokens int64,
 ) error {
@@ -102,9 +108,12 @@ func (s *PGSubagentTaskStore) UpdateStatus(
 	if err != nil {
 		return err
 	}
+	if rootAgentKey == "" {
+		return store.ErrSubagentRootAgentKeyRequired
+	}
 
 	var completedAt *time.Time
-	if status != "running" {
+	if store.IsTerminalSubagentTaskStatus(status) {
 		now := time.Now().UTC()
 		completedAt = &now
 	}
@@ -113,10 +122,10 @@ func (s *PGSubagentTaskStore) UpdateStatus(
 		status = $1, result = $2, iterations = $3,
 		input_tokens = $4, output_tokens = $5,
 		completed_at = $6, updated_at = NOW()
-		WHERE id = $7 AND tenant_id = $8`
+		WHERE id = $7 AND tenant_id = $8 AND parent_agent_key = $9`
 	_, err = s.db.ExecContext(ctx, q,
 		status, result, iterations, inputTokens, outputTokens,
-		completedAt, id, tid,
+		completedAt, id, tid, rootAgentKey,
 	)
 	return err
 }
@@ -128,6 +137,9 @@ func (s *PGSubagentTaskStore) ListByParent(
 	tid, err := requireTenantID(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if parentAgentKey == "" {
+		return nil, store.ErrSubagentRootAgentKeyRequired
 	}
 
 	var rows *sql.Rows
@@ -152,17 +164,20 @@ func (s *PGSubagentTaskStore) ListByParent(
 
 // ListBySession returns tasks for a specific session key (tenant-scoped).
 func (s *PGSubagentTaskStore) ListBySession(
-	ctx context.Context, sessionKey string,
+	ctx context.Context, rootAgentKey, sessionKey string,
 ) ([]store.SubagentTaskData, error) {
 	tid, err := requireTenantID(ctx)
 	if err != nil {
 		return nil, err
 	}
+	if rootAgentKey == "" {
+		return nil, store.ErrSubagentRootAgentKeyRequired
+	}
 
 	q := fmt.Sprintf(`SELECT %s FROM subagent_tasks
-		WHERE tenant_id = $1 AND session_key = $2
+		WHERE tenant_id = $1 AND parent_agent_key = $2 AND session_key = $3
 		ORDER BY created_at DESC LIMIT 50`, subagentTaskSelectCols)
-	rows, err := s.db.QueryContext(ctx, q, tid, sessionKey)
+	rows, err := s.db.QueryContext(ctx, q, tid, rootAgentKey, sessionKey)
 	if err != nil {
 		return nil, err
 	}
@@ -171,24 +186,53 @@ func (s *PGSubagentTaskStore) ListBySession(
 	return collectTasks(rows)
 }
 
-// Archive marks old completed/failed/cancelled tasks as archived.
-func (s *PGSubagentTaskStore) Archive(ctx context.Context, olderThan time.Duration) (int64, error) {
+// Archive marks a bounded batch of old terminal tasks as archived.
+func (s *PGSubagentTaskStore) Archive(
+	ctx context.Context, rootAgentKey string, olderThan time.Duration, limit int,
+) (int64, error) {
+	tid, err := requireTenantID(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if rootAgentKey == "" {
+		return 0, store.ErrSubagentRootAgentKeyRequired
+	}
+	if limit <= 0 {
+		return 0, nil
+	}
+
 	cutoff := time.Now().UTC().Add(-olderThan)
-	q := `UPDATE subagent_tasks SET archived_at = NOW(), updated_at = NOW()
-		WHERE status IN ('completed', 'failed', 'cancelled')
-		AND archived_at IS NULL AND completed_at < $1`
-	res, err := s.db.ExecContext(ctx, q, cutoff)
+	q := `WITH candidates AS (
+			SELECT id
+			FROM subagent_tasks
+			WHERE tenant_id = $1 AND parent_agent_key = $2
+				AND status IN ('completed', 'failed', 'cancelled')
+				AND archived_at IS NULL AND completed_at < $3
+			ORDER BY completed_at, id
+			LIMIT $4
+			FOR UPDATE SKIP LOCKED
+		)
+		UPDATE subagent_tasks AS task
+		SET archived_at = NOW(), updated_at = NOW()
+		FROM candidates
+		WHERE task.id = candidates.id`
+	res, err := s.db.ExecContext(ctx, q, tid, rootAgentKey, cutoff, limit)
 	if err != nil {
 		return 0, err
 	}
 	return res.RowsAffected()
 }
 
-// UpdateMetadata merges metadata on an existing task.
-func (s *PGSubagentTaskStore) UpdateMetadata(ctx context.Context, id uuid.UUID, metadata map[string]any) error {
+// UpdateMetadata merges metadata on a task owned by the tenant and root agent.
+func (s *PGSubagentTaskStore) UpdateMetadata(
+	ctx context.Context, rootAgentKey string, id uuid.UUID, metadata map[string]any,
+) error {
 	tid, err := requireTenantID(ctx)
 	if err != nil {
 		return err
+	}
+	if rootAgentKey == "" {
+		return store.ErrSubagentRootAgentKeyRequired
 	}
 
 	metaJSON, err := json.Marshal(metadata)
@@ -197,8 +241,8 @@ func (s *PGSubagentTaskStore) UpdateMetadata(ctx context.Context, id uuid.UUID, 
 	}
 
 	q := `UPDATE subagent_tasks SET metadata = metadata || $1, updated_at = NOW()
-		WHERE id = $2 AND tenant_id = $3`
-	_, err = s.db.ExecContext(ctx, q, metaJSON, id, tid)
+		WHERE id = $2 AND tenant_id = $3 AND parent_agent_key = $4`
+	_, err = s.db.ExecContext(ctx, q, metaJSON, id, tid, rootAgentKey)
 	return err
 }
 

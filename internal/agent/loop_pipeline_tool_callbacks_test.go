@@ -2,9 +2,11 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -69,6 +71,44 @@ func newTestLoopForToolCallbacks(onEvent func(AgentEvent)) *Loop {
 		id:      "test-agent",
 		tools:   &stubExecutor{},
 		onEvent: onEvent,
+	}
+}
+
+func TestProcessToolResultSuppressesUnpublishedArtifactMediaBeforeEvent(t *testing.T) {
+	col := &eventCollector{}
+	loop := newTestLoopForToolCallbacks(col.onEvent)
+	req := &RunRequest{RunID: "run-artifact"}
+	ctx := tools.WithDelegationID(context.Background(), "delegation-1")
+	ctx = tools.WithDelegationArtifactInputs(ctx, "/runtime/delegations/delegation-1/inputs")
+	result := &tools.Result{
+		ForLLM: "created image\nMEDIA:/runtime/delegations/delegation-1/outputs/image.png",
+		Media:  []bus.MediaFile{{Path: "/runtime/delegations/delegation-1/outputs/image.png"}},
+	}
+
+	toolMsg, _, _ := loop.processToolResult(
+		ctx,
+		&runState{},
+		req,
+		col.onEvent,
+		providers.ToolCall{ID: "tc-artifact", Name: "create_image"},
+		"create_image",
+		result,
+		false,
+	)
+
+	if strings.Contains(toolMsg.Content, "MEDIA:") || len(result.Media) != 0 {
+		t.Fatalf("unpublished media survived result policy: message=%q media=%#v", toolMsg.Content, result.Media)
+	}
+	events := col.filter(protocol.AgentEventToolResult)
+	if len(events) != 1 {
+		t.Fatalf("tool result events = %d, want 1", len(events))
+	}
+	payload, ok := events[0].Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("event payload type = %T", events[0].Payload)
+	}
+	if value, _ := payload["result"].(string); strings.Contains(value, "MEDIA:") {
+		t.Fatalf("event leaked unpublished media marker: %q", value)
 	}
 }
 

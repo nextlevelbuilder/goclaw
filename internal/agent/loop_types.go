@@ -666,11 +666,13 @@ type RunRequest struct {
 	OnTraceCreated func(traceID uuid.UUID)
 
 	// Delegation context (set when running as a delegate agent)
-	DelegationID  string // delegation ID for event correlation
-	TeamID        string // team ID (if delegation is team-scoped)
-	TeamTaskID    string // team task ID (if delegation has an associated task)
-	ParentAgentID string // parent agent key that initiated the delegation
-	LeaderAgentID string // leader agent UUID for member memory read fallback
+	DelegationID        string // delegation ID for event correlation
+	DelegateInputsPath  string // runtime-only read-only staged inputs root
+	DelegateOutputsPath string // runtime-only writable exchange workspace
+	TeamID              string // team ID (if delegation is team-scoped)
+	TeamTaskID          string // team task ID (if delegation has an associated task)
+	ParentAgentID       string // parent agent key that initiated the delegation
+	LeaderAgentID       string // leader agent UUID for member memory read fallback
 
 	// Workspace scope propagation (set by delegation, read by workspace tools)
 	WorkspaceChannel string
@@ -678,6 +680,12 @@ type RunRequest struct {
 	// TeamWorkspace overrides the member agent's workspace with the team's workspace
 	// so file operations (read/write/image/audio) use the shared team directory.
 	TeamWorkspace string
+
+	// enrichedInputMessage is populated by the media stage and consumed by the
+	// first persistence checkpoint. It keeps current-turn MediaRefs and logical
+	// tags durable without storing inline image bytes.
+	enrichedInputMessage    providers.Message
+	hasEnrichedInputMessage bool
 }
 
 // RunResult is the output of a completed agent run.

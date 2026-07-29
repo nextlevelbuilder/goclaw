@@ -735,6 +735,7 @@
       "description": "Kiểm soát giới hạn sinh sản agent con và hành vi",
       "maxConcurrent": "Tối đa đồng thời",
       "maxSpawnDepth": "Độ sâu sinh sản tối đa",
+      "maxSpawnDepthTip": "Độ sâu tối đa của cây sub-agent do từng agent tự spawn. Delegate qua Agent Link bắt đầu một cây mới và dùng setting của agent đích. Với depth 1, agent có thể spawn sub-agent trực tiếp, nhưng các sub-agent đó không thể spawn tiếp.",
       "maxChildrenPerAgent": "Con tối đa mỗi agent",
       "archiveAfter": "Lưu trữ sau (phút)",
       "maxRetries": "Số lần thử lại tối đa",

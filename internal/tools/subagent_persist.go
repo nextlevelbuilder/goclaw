@@ -19,7 +19,8 @@ func detachedCtx(ctx context.Context) context.Context {
 	return bg
 }
 
-// persistCreate writes a new subagent task to the DB (fire-and-forget).
+// persistCreate writes the accepted queued task before its admission ticket is
+// activated. Persistence is audit-best-effort and never authorizes execution.
 func (sm *SubagentManager) persistCreate(ctx context.Context, task *SubagentTask) {
 	if sm.taskStore == nil {
 		return
@@ -52,10 +53,23 @@ func (sm *SubagentManager) persistCreate(ctx context.Context, task *SubagentTask
 		originUserID = &task.OriginUserID
 	}
 
+	var spawnedBy *uuid.UUID
+	if task.ParentTaskID != "" {
+		sm.mu.RLock()
+		if parent := sm.tasks[task.ParentTaskID]; parent != nil && parent.dbID != uuid.Nil &&
+			taskMatchesScope(parent, TaskScope{
+				TenantID: task.OriginTenantID, RootAgentID: task.RootAgentID, RootAgentKey: task.RootAgentKey,
+			}) {
+			parentID := parent.dbID
+			spawnedBy = &parentID
+		}
+		sm.mu.RUnlock()
+	}
+
 	data := &store.SubagentTaskData{
 		BaseModel:      store.BaseModel{ID: task.dbID},
 		TenantID:       task.OriginTenantID,
-		ParentAgentKey: task.ParentID,
+		ParentAgentKey: task.RootAgentKey,
 		SessionKey:     sessionKey,
 		Subject:        task.Label,
 		Description:    task.Task,
@@ -67,6 +81,12 @@ func (sm *SubagentManager) persistCreate(ctx context.Context, task *SubagentTask
 		OriginChatID:   originChatID,
 		OriginPeerKind: originPeerKind,
 		OriginUserID:   originUserID,
+		SpawnedBy:      spawnedBy,
+		Metadata: map[string]any{
+			"root_agent_id":  task.RootAgentID.String(),
+			"parent_task_id": task.ParentTaskID,
+			"depth":          task.Depth,
+		},
 	}
 
 	if err := sm.taskStore.Create(dbCtx, data); err != nil {
@@ -82,15 +102,19 @@ func (sm *SubagentManager) persistStatus(ctx context.Context, task *SubagentTask
 
 	dbCtx := detachedCtx(ctx)
 
+	sm.mu.RLock()
+	snapshot := cloneSubagentTask(task)
+	sm.mu.RUnlock()
+
 	var result *string
-	if task.Result != "" {
-		result = &task.Result
+	if snapshot.Result != "" {
+		result = &snapshot.Result
 	}
 
 	if err := sm.taskStore.UpdateStatus(
-		dbCtx, task.dbID,
-		task.Status, result, iterations,
-		task.TotalInputTokens, task.TotalOutputTokens,
+		dbCtx, snapshot.RootAgentKey, snapshot.dbID,
+		snapshot.Status, result, iterations,
+		snapshot.TotalInputTokens, snapshot.TotalOutputTokens,
 	); err != nil {
 		slog.Warn("subagent_persist: update status failed", "id", task.ID, "error", err)
 	}

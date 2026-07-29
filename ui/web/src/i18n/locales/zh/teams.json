@@ -394,6 +394,7 @@
     "description": "描述",
     "descriptionPlaceholder": "可选描述...",
     "maxConcurrent": "最大并发数",
+    "maxConcurrentHint": "仅保留为兼容元数据；Agent Link 运行时准入使用进程安全上限和有界等待队列。",
     "status": "状态",
     "active": "活跃",
     "disabled": "禁用",

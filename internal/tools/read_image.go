@@ -17,6 +17,7 @@ import (
 // --- Context helpers for media images ---
 
 const ctxMediaImages toolContextKey = "tool_media_images"
+const ctxMediaImageRefs toolContextKey = "tool_media_image_refs"
 
 // WithMediaImages stores base64-encoded images in context for read_image tool access.
 func WithMediaImages(ctx context.Context, images []providers.ImageContent) context.Context {
@@ -26,6 +27,18 @@ func WithMediaImages(ctx context.Context, images []providers.ImageContent) conte
 // MediaImagesFromCtx retrieves stored images from context.
 func MediaImagesFromCtx(ctx context.Context) []providers.ImageContent {
 	v, _ := ctx.Value(ctxMediaImages).([]providers.ImageContent)
+	return v
+}
+
+// WithMediaImageRefs stores image MediaRefs in chronological order for exact
+// media_id resolution by image tools.
+func WithMediaImageRefs(ctx context.Context, refs []providers.MediaRef) context.Context {
+	return context.WithValue(ctx, ctxMediaImageRefs, refs)
+}
+
+// MediaImageRefsFromCtx retrieves image MediaRefs available to the current run.
+func MediaImageRefsFromCtx(ctx context.Context) []providers.MediaRef {
+	v, _ := ctx.Value(ctxMediaImageRefs).([]providers.MediaRef)
 	return v
 }
 
@@ -76,7 +89,11 @@ func (t *ReadImageTool) Parameters() map[string]any {
 			},
 			"path": map[string]any{
 				"type":        "string",
-				"description": "Optional file path to an image in the workspace. Use this for generated images or attachments. If omitted, analyzes images from the conversation.",
+				"description": "Optional logical file path to an image in the workspace (for example .uploads/photo.jpg or inputs/photo.jpg). Never reconstruct an absolute workspace path.",
+			},
+			"media_id": map[string]any{
+				"type":        "string",
+				"description": "Optional exact media ID from a <media:image id=\"...\"> tag for in-process tool execution. Claude CLI/MCP callers should use the tag's logical path.",
 			},
 			"url": map[string]any{
 				"type":        "string",
@@ -98,15 +115,32 @@ func (t *ReadImageTool) Execute(ctx context.Context, args map[string]any) *Resul
 
 	imgPath, _ := args["path"].(string)
 	imgURL, _ := args["url"].(string)
+	mediaID, _ := args["media_id"].(string)
 
-	if imgPath != "" && imgURL != "" {
+	if imgPath != "" && imgURL != "" && mediaID == "" {
 		return ErrorResult("Both 'path' and 'url' parameters cannot be specified. Choose only one.")
+	}
+	if mediaID != "" && (imgPath != "" || imgURL != "") {
+		return ErrorResult("Only one of 'path', 'url', or 'media_id' may be specified.")
 	}
 
 	// If path is provided, load image from workspace file
 	images := MediaImagesFromCtx(ctx)
 	if imgPath != "" {
 		fileImages, err := t.loadImageFromPath(ctx, imgPath)
+		if err != nil {
+			return ErrorResult(err.Error())
+		}
+		images = fileImages
+	} else if mediaID != "" {
+		ref, err := resolveImageMediaRef(ctx, mediaID)
+		if err != nil {
+			return ErrorResult(err.Error())
+		}
+		if ref.Path == "" {
+			return ErrorResult(fmt.Sprintf("image media_id %q has no accessible workspace path", mediaID))
+		}
+		fileImages, err := t.loadImageFromPath(ctx, ref.Path)
 		if err != nil {
 			return ErrorResult(err.Error())
 		}
@@ -150,6 +184,22 @@ func (t *ReadImageTool) Execute(ctx context.Context, args map[string]any) *Resul
 	result.Provider = chainResult.Provider
 	result.Model = chainResult.Model
 	return result
+}
+
+func resolveImageMediaRef(ctx context.Context, mediaID string) (providers.MediaRef, error) {
+	refs := MediaImageRefsFromCtx(ctx)
+	if len(refs) == 0 {
+		return providers.MediaRef{}, fmt.Errorf("no image media references available in this conversation")
+	}
+	if mediaID == "latest" {
+		return refs[len(refs)-1], nil
+	}
+	for _, ref := range refs {
+		if ref.ID == mediaID {
+			return ref, nil
+		}
+	}
+	return providers.MediaRef{}, fmt.Errorf("image media_id %q not found in this conversation", mediaID)
 }
 
 // callProvider dispatches the vision call using provider.Chat().
@@ -235,13 +285,8 @@ func (t *ReadImageTool) loadImageFromPath(ctx context.Context, path string) ([]p
 		return nil, fmt.Errorf("unsupported image format: %s (supported: jpg, png, gif, webp, bmp)", ext)
 	}
 
-	// Resolve path within workspace (respect workspace restriction).
-	workspace := ToolWorkspaceFromCtx(ctx)
-	resolved, err := resolvePathWithAllowed(path, workspace, effectiveRestrict(ctx, true), allowedWithTeamWorkspace(ctx, nil))
+	resolved, err := resolveStructuredMediaPath(ctx, path, "image")
 	if err != nil {
-		return nil, fmt.Errorf("invalid image path: %w", err)
-	}
-	if err := checkDeniedPath(resolved, workspace, nil); err != nil {
 		return nil, err
 	}
 

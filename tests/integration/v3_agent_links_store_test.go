@@ -3,8 +3,9 @@
 package integration
 
 import (
-	"errors"
+	"context"
 	"database/sql"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -266,6 +267,47 @@ func TestStoreAgentLink_GetLinkBetween(t *testing.T) {
 	}
 }
 
+func TestStoreAgentLink_GetLinkBetweenContract(t *testing.T) {
+	db := testDB(t)
+	tenantID, agentA := seedTenantAgent(t, db)
+	_, agentB := seedTenantAgent(t, db)
+	_, agentC := seedTenantAgent(t, db)
+	ctx := tenantCtx(tenantID)
+	ls := newLinkStore(db)
+
+	reverse := makeLink(agentB, agentA, store.LinkDirectionInbound, store.LinkStatusActive)
+	direct := makeLink(agentA, agentB, store.LinkDirectionOutbound, store.LinkStatusActive)
+	for _, link := range []*store.AgentLinkData{reverse, direct} {
+		if err := ls.CreateLink(ctx, link); err != nil {
+			t.Fatalf("CreateLink: %v", err)
+		}
+		linkID := link.ID
+		t.Cleanup(func() { _, _ = db.Exec("DELETE FROM agent_links WHERE id = $1", linkID) })
+	}
+
+	got, err := ls.GetLinkBetween(ctx, agentA, agentB)
+	if err != nil {
+		t.Fatalf("GetLinkBetween(deterministic): %v", err)
+	}
+	if got == nil || got.ID != direct.ID {
+		t.Fatalf("GetLinkBetween chose %#v, want delegator-authored %s", got, direct.ID)
+	}
+
+	missing, err := ls.GetLinkBetween(ctx, agentA, agentC)
+	if err != nil {
+		t.Fatalf("GetLinkBetween(not found): %v", err)
+	}
+	if missing != nil {
+		t.Fatalf("GetLinkBetween(not found) = %#v, want nil", missing)
+	}
+
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := ls.GetLinkBetween(cancelled, agentA, agentB); !errors.Is(err, context.Canceled) {
+		t.Fatalf("GetLinkBetween(cancelled) error = %v, want context.Canceled", err)
+	}
+}
+
 func TestStoreAgentLink_TenantIsolation(t *testing.T) {
 	db := testDB(t)
 	tenantA, agentA1 := seedTenantAgent(t, db)
@@ -317,13 +359,17 @@ func TestStoreAgentLink_DelegateTargets(t *testing.T) {
 	tenantID, agentA := seedTenantAgent(t, db)
 	_, agentB := seedTenantAgent(t, db)
 	_, agentC := seedTenantAgent(t, db)
+	_, agentD := seedTenantAgent(t, db)
 	ctx := tenantCtx(tenantID)
 	ls := newLinkStore(db)
 
-	// Active outbound A→B, active outbound A→C.
+	// A→B outbound: A delegates to B.
+	// A→C inbound: C delegates to A.
+	// A↔D bidirectional: both delegate to each other.
 	lAB := makeLink(agentA, agentB, store.LinkDirectionOutbound, store.LinkStatusActive)
-	lAC := makeLink(agentA, agentC, store.LinkDirectionOutbound, store.LinkStatusActive)
-	for _, l := range []*store.AgentLinkData{lAB, lAC} {
+	lAC := makeLink(agentA, agentC, store.LinkDirectionInbound, store.LinkStatusActive)
+	lAD := makeLink(agentA, agentD, store.LinkDirectionBidirectional, store.LinkStatusActive)
+	for _, l := range []*store.AgentLinkData{lAB, lAC, lAD} {
 		if err := ls.CreateLink(ctx, l); err != nil {
 			t.Fatalf("CreateLink: %v", err)
 		}
@@ -331,20 +377,48 @@ func TestStoreAgentLink_DelegateTargets(t *testing.T) {
 	t.Cleanup(func() {
 		db.Exec("DELETE FROM agent_links WHERE id = $1", lAB.ID)
 		db.Exec("DELETE FROM agent_links WHERE id = $1", lAC.ID)
+		db.Exec("DELETE FROM agent_links WHERE id = $1", lAD.ID)
 	})
 
-	targets, err := ls.DelegateTargets(ctx, agentA)
-	if err != nil {
-		t.Fatalf("DelegateTargets: %v", err)
+	assertTargets := func(from uuid.UUID, want ...uuid.UUID) {
+		t.Helper()
+		targets, err := ls.DelegateTargets(ctx, from)
+		if err != nil {
+			t.Fatalf("DelegateTargets(%s): %v", from, err)
+		}
+		got := make(map[uuid.UUID]bool, len(targets))
+		for _, link := range targets {
+			got[link.ID] = true
+		}
+		for _, id := range want {
+			if !got[id] {
+				t.Errorf("DelegateTargets(%s): link %s not found", from, id)
+			}
+		}
+		if len(got) != len(want) {
+			t.Errorf("DelegateTargets(%s): got %d links, want %d", from, len(got), len(want))
+		}
 	}
-	found := map[uuid.UUID]bool{}
-	for _, l := range targets {
-		found[l.ID] = true
+
+	assertTargets(agentA, lAB.ID, lAD.ID)
+	assertTargets(agentB)
+	assertTargets(agentC, lAC.ID)
+	assertTargets(agentD, lAD.ID)
+
+	if err := ls.UpdateLink(ctx, lAB.ID, map[string]any{"status": store.LinkStatusDisabled}); err != nil {
+		t.Fatalf("disable outbound link: %v", err)
 	}
-	if !found[lAB.ID] {
-		t.Error("DelegateTargets: lAB not found")
+	assertTargets(agentA, lAD.ID)
+
+	if err := ls.UpdateLink(ctx, lAC.ID, map[string]any{"direction": store.LinkDirectionOutbound}); err != nil {
+		t.Fatalf("change inbound direction: %v", err)
 	}
-	if !found[lAC.ID] {
-		t.Error("DelegateTargets: lAC not found")
+	assertTargets(agentA, lAC.ID, lAD.ID)
+	assertTargets(agentC)
+
+	if err := ls.DeleteLink(ctx, lAD.ID); err != nil {
+		t.Fatalf("delete bidirectional link: %v", err)
 	}
+	assertTargets(agentA, lAC.ID)
+	assertTargets(agentD)
 }

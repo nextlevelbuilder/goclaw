@@ -1,13 +1,16 @@
 package agent
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // TestEnrichImageIDs_BareTag verifies enrichment of a bare <media:image> tag
@@ -20,12 +23,59 @@ func TestEnrichImageIDs_BareTag(t *testing.T) {
 	refs := []providers.MediaRef{{ID: "img-1", Kind: "image", Path: "/tmp/a.jpg"}}
 
 	var loop Loop
-	loop.enrichImageIDs(messages, refs)
+	loop.enrichImageIDs(messages, refs, "/tmp")
 
 	got := messages[0].Content
-	want := `check <media:image id="img-1" path="/tmp/a.jpg">`
+	want := `check <media:image id="img-1" path="a.jpg">`
 	if got != want {
 		t.Fatalf("bare tag enrichment:\n got %q\nwant %q", got, want)
+	}
+}
+
+func TestEnrichInputMedia_DelegateRehomesCallerAttachment(t *testing.T) {
+	callerWorkspace := t.TempDir()
+	delegateWorkspace := t.TempDir()
+	source := filepath.Join(callerWorkspace, "reference.jpg")
+	if err := os.WriteFile(source, []byte("reference"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	req := &RunRequest{
+		SessionKey: "delegate:parent:cppai-media:test",
+		RunKind:    "delegate",
+		Media: []bus.MediaFile{{
+			Path:     source,
+			MimeType: "image/jpeg",
+			Filename: "reference.jpg",
+		}},
+	}
+	messages := []providers.Message{{
+		Role:    "user",
+		Content: "Use this exact reference: " + source,
+	}}
+	ctx := tools.WithToolWorkspace(context.Background(), delegateWorkspace)
+
+	loop := Loop{id: "cppai-media"}
+	_, gotMessages, refs := loop.enrichInputMedia(ctx, req, messages)
+
+	if len(refs) != 1 {
+		t.Fatalf("refs = %#v, want one delegate-owned attachment", refs)
+	}
+	if !strings.HasPrefix(refs[0].Path, filepath.Join(delegateWorkspace, ".uploads")+string(filepath.Separator)) {
+		t.Fatalf("persisted path = %q, want under delegate workspace %q", refs[0].Path, delegateWorkspace)
+	}
+	if strings.Contains(gotMessages[0].Content, source) {
+		t.Fatalf("delegate message still exposes caller path: %q", gotMessages[0].Content)
+	}
+	logicalPath := logicalWorkspaceMediaPath(delegateWorkspace, refs[0].Path)
+	if logicalPath == "" || !strings.Contains(gotMessages[0].Content, logicalPath) {
+		t.Fatalf("delegate message = %q, want logical copied path %q", gotMessages[0].Content, logicalPath)
+	}
+	if strings.Contains(gotMessages[0].Content, delegateWorkspace) {
+		t.Fatalf("delegate message leaked delegate workspace: %q", gotMessages[0].Content)
+	}
+	if !strings.Contains(gotMessages[0].Content, `<media:image`) {
+		t.Fatalf("delegate message = %q, want explicit image attachment tag", gotMessages[0].Content)
 	}
 }
 
@@ -41,7 +91,7 @@ func TestEnrichImageIDs_PreservesExistingTagAttributes(t *testing.T) {
 	}}
 
 	var loop Loop
-	loop.enrichImageIDs(messages, refs)
+	loop.enrichImageIDs(messages, refs, "/tmp")
 
 	got := messages[0].Content
 	if !strings.Contains(got, `url="https://cdn.discordapp.com/attachments/1/2/photo.jpg"`) {
@@ -50,7 +100,7 @@ func TestEnrichImageIDs_PreservesExistingTagAttributes(t *testing.T) {
 	if !strings.Contains(got, `id="image-1"`) {
 		t.Fatalf("expected id attribute to be added, got %q", got)
 	}
-	if !strings.Contains(got, `path="/tmp/photo.jpg"`) {
+	if !strings.Contains(got, `path="photo.jpg"`) {
 		t.Fatalf("expected path attribute to be added, got %q", got)
 	}
 }
@@ -66,7 +116,7 @@ func TestEnrichImageIDs_SkipsAlreadyEnriched(t *testing.T) {
 	refs := []providers.MediaRef{{ID: "new-id", Kind: "image", Path: "/new/path.jpg"}}
 
 	var loop Loop
-	loop.enrichImageIDs(messages, refs)
+	loop.enrichImageIDs(messages, refs, "/new")
 
 	if messages[0].Content != original {
 		t.Fatalf("already-enriched tag should not be modified:\n got %q\nwant %q", messages[0].Content, original)
@@ -111,9 +161,9 @@ func testMediaStore(t *testing.T) *media.Store {
 	return s
 }
 
-// TestEnrichImagePaths_NoDoubleEnrich verifies that historical messages with
-// url+id+path are not re-enriched on subsequent turns.
-func TestEnrichImagePaths_NoDoubleEnrich(t *testing.T) {
+// TestEnrichImagePaths_UpgradesLegacyAbsolutePath verifies that historical
+// host paths are replaced by the current logical workspace contract.
+func TestEnrichImagePaths_UpgradesLegacyAbsolutePath(t *testing.T) {
 	original := `<media:image url="https://cdn.example.com/photo.jpg" id="img-1" path="/workspace/.uploads/img-1.jpg">`
 	messages := []providers.Message{{
 		Role:    "user",
@@ -126,10 +176,69 @@ func TestEnrichImagePaths_NoDoubleEnrich(t *testing.T) {
 	}}
 
 	loop := Loop{mediaStore: testMediaStore(t)}
-	loop.enrichImagePaths(messages)
+	loop.enrichImagePaths(messages, "/workspace")
 
-	if messages[0].Content != original {
-		t.Fatalf("double-enrichment detected:\n got %q\nwant %q", messages[0].Content, original)
+	want := `<media:image url="https://cdn.example.com/photo.jpg" id="img-1" path=".uploads/img-1.jpg">`
+	if messages[0].Content != want {
+		t.Fatalf("legacy path was not upgraded:\n got %q\nwant %q", messages[0].Content, want)
+	}
+}
+
+func TestEnrichImagePathsEscapesLogicalPathAttribute(t *testing.T) {
+	workspace := t.TempDir()
+	mediaPath := filepath.Join(workspace, ".uploads", `photo"quoted.jpg`)
+	messages := []providers.Message{{
+		Role:    "user",
+		Content: `<media:image id="img-1" path="/legacy/photo.jpg">`,
+		MediaRefs: []providers.MediaRef{{
+			ID:   "img-1",
+			Kind: "image",
+			Path: mediaPath,
+		}},
+	}}
+
+	var loop Loop
+	loop.enrichImagePaths(messages, workspace)
+
+	want := `<media:image id="img-1" path=".uploads/photo\"quoted.jpg">`
+	if messages[0].Content != want {
+		t.Fatalf("escaped path = %q, want %q", messages[0].Content, want)
+	}
+}
+
+func TestLogicalWorkspaceMediaPathRejectsOutsideWorkspace(t *testing.T) {
+	workspace := filepath.Join(t.TempDir(), "agent")
+	inside := filepath.Join(workspace, ".uploads", "photo.jpg")
+	outside := filepath.Join(filepath.Dir(workspace), "other-agent", ".uploads", "photo.jpg")
+
+	if got := logicalWorkspaceMediaPath(workspace, inside); got != ".uploads/photo.jpg" {
+		t.Fatalf("inside path = %q, want %q", got, ".uploads/photo.jpg")
+	}
+	if got := logicalWorkspaceMediaPath(workspace, outside); got != "" {
+		t.Fatalf("outside path = %q, want omitted", got)
+	}
+	if got := logicalWorkspaceMediaPath(workspace, "../escape.jpg"); got != "" {
+		t.Fatalf("traversal path = %q, want omitted", got)
+	}
+}
+
+func TestEnrichImagePathsStripsOutsideWorkspacePath(t *testing.T) {
+	messages := []providers.Message{{
+		Role:    "user",
+		Content: `<media:image id="img-1" path="/workspace/other-agent/.uploads/photo.jpg">`,
+		MediaRefs: []providers.MediaRef{{
+			ID:   "img-1",
+			Kind: "image",
+			Path: "/workspace/other-agent/.uploads/photo.jpg",
+		}},
+	}}
+
+	var loop Loop
+	loop.enrichImagePaths(messages, "/workspace/current-agent")
+
+	want := `<media:image id="img-1">`
+	if messages[0].Content != want {
+		t.Fatalf("outside workspace path was not stripped: got %q, want %q", messages[0].Content, want)
 	}
 }
 
@@ -148,10 +257,10 @@ func TestEnrichImagePaths_AttributeOrderIndependence(t *testing.T) {
 	}}
 
 	loop := Loop{mediaStore: testMediaStore(t)}
-	loop.enrichImagePaths(messages)
+	loop.enrichImagePaths(messages, "/workspace")
 
 	got := messages[0].Content
-	if !strings.Contains(got, `path="/workspace/.uploads/img-1.jpg"`) {
+	if !strings.Contains(got, `path=".uploads/img-1.jpg"`) {
 		t.Fatalf("expected path to be added regardless of attribute order, got %q", got)
 	}
 	if !strings.Contains(got, `url="https://cdn.example.com/photo.jpg"`) {
@@ -173,9 +282,9 @@ func TestEnrichImageIDs_MultipleRefs(t *testing.T) {
 	}
 
 	var loop Loop
-	loop.enrichImageIDs(messages, refs)
+	loop.enrichImageIDs(messages, refs, "/tmp")
 
-	want := `first <media:image id="img-a" path="/tmp/a.jpg">` + "\n" + `second <media:image id="img-b" path="/tmp/b.jpg">`
+	want := `first <media:image id="img-a" path="a.jpg">` + "\n" + `second <media:image id="img-b" path="b.jpg">`
 	if messages[0].Content != want {
 		t.Fatalf("multi-ref alignment:\n got %q\nwant %q", messages[0].Content, want)
 	}
@@ -223,10 +332,10 @@ func TestEnrichImagePaths_MultipleRefsKeepTagAlignment(t *testing.T) {
 
 	var loop Loop
 	loop.mediaStore = mediaStore
-	loop.enrichImagePaths(messages)
+	loop.enrichImagePaths(messages, "/persisted")
 
-	want := `first <media:image id="` + idA + `" path="` + pathA + `">` +
-		"\n" + `second <media:image id="` + idB + `" path="` + pathB + `">`
+	want := `first <media:image id="` + idA + `" path="a.jpg">` +
+		"\n" + `second <media:image id="` + idB + `" path="b.jpg">`
 	if messages[0].Content != want {
 		t.Fatalf("enrichImagePaths() content = %q, want %q", messages[0].Content, want)
 	}
@@ -301,9 +410,9 @@ func TestEnrichImageIDs_MoreRefsThanTags(t *testing.T) {
 	}
 
 	var loop Loop
-	loop.enrichImageIDs(messages, refs)
+	loop.enrichImageIDs(messages, refs, "/tmp")
 
-	want := `only one <media:image id="img-a" path="/tmp/a.jpg">`
+	want := `only one <media:image id="img-a" path="a.jpg">`
 	if messages[0].Content != want {
 		t.Fatalf("more refs than tags:\n got %q\nwant %q", messages[0].Content, want)
 	}
@@ -320,9 +429,9 @@ func TestEnrichImageIDs_MoreTagsThanRefs(t *testing.T) {
 	}
 
 	var loop Loop
-	loop.enrichImageIDs(messages, refs)
+	loop.enrichImageIDs(messages, refs, "/tmp")
 
-	want := `first <media:image id="img-a" path="/tmp/a.jpg">` + "\n" + `second <media:image>`
+	want := `first <media:image id="img-a" path="a.jpg">` + "\n" + `second <media:image>`
 	if messages[0].Content != want {
 		t.Fatalf("more tags than refs:\n got %q\nwant %q", messages[0].Content, want)
 	}

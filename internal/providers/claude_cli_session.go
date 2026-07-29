@@ -285,14 +285,16 @@ func extractStringSliceOpt(opts map[string]any, key string) []string {
 // bridgeContextFromOpts builds a BridgeContext from the Options map.
 func bridgeContextFromOpts(opts map[string]any) BridgeContext {
 	return BridgeContext{
-		AgentID:   extractStringOpt(opts, OptAgentID),
-		UserID:    extractStringOpt(opts, OptUserID),
-		Channel:   extractStringOpt(opts, OptChannel),
-		ChatID:    extractStringOpt(opts, OptChatID),
-		PeerKind:  extractStringOpt(opts, OptPeerKind),
-		Workspace: extractStringOpt(opts, OptWorkspace),
-		TenantID:  extractStringOpt(opts, OptTenantID),
-		LocalKey:  extractStringOpt(opts, OptLocalKey),
+		AgentID:          extractStringOpt(opts, OptAgentID),
+		UserID:           extractStringOpt(opts, OptUserID),
+		Channel:          extractStringOpt(opts, OptChannel),
+		ChatID:           extractStringOpt(opts, OptChatID),
+		PeerKind:         extractStringOpt(opts, OptPeerKind),
+		Workspace:        extractStringOpt(opts, OptWorkspace),
+		TenantID:         extractStringOpt(opts, OptTenantID),
+		LocalKey:         extractStringOpt(opts, OptLocalKey),
+		DelegationID:     extractStringOpt(opts, OptDelegationID),
+		DelegationInputs: extractStringOpt(opts, OptDelegationInputs),
 	}
 }
 

@@ -655,12 +655,12 @@ func (t *ExecTool) executeInSandbox(ctx context.Context, command, cwd, sandboxKe
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
-	containerCwd, cwdErr := sandboxCwdForHostPath(cwd, mountWorkspace, sandbox.DefaultContainerWorkdir)
+	containerCwd, cwdErr := sandboxCwdForHostPath(cwd, mountWorkspace, sandboxContainerWorkdir(ctx))
 	if cwdErr != nil {
 		return ErrorResult(fmt.Sprintf("sandbox path mapping: %v", cwdErr))
 	}
 
-	sb, err := t.sandboxMgr.Get(ctx, sandboxKey, mountWorkspace, SandboxConfigFromCtx(ctx))
+	sb, err := acquireToolSandbox(ctx, t.sandboxMgr, sandboxKey, mountWorkspace)
 	if err != nil {
 		if errors.Is(err, sandbox.ErrSandboxDisabled) {
 			return t.executeOnHost(ctx, command, cwd)

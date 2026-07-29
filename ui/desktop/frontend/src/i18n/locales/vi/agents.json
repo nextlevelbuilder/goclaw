@@ -340,6 +340,7 @@
       "title": "Agent con",
       "description": "Kiểm soát giới hạn sinh sản agent con và hành vi",
       "maxConcurrent": "Tối đa đồng thời",
+      "maxConcurrentLiteHint": "Cài đặt theo agent; giới hạn an toàn toàn tiến trình của Lite: 2",
       "maxSpawnDepth": "Độ sâu sinh sản tối đa",
       "maxChildrenPerAgent": "Con tối đa mỗi agent",
       "archiveAfter": "Lưu trữ sau (phút)",

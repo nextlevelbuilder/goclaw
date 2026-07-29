@@ -96,7 +96,7 @@
   "agents.subagents.maxConcurrent": "최대 동시",
   "agents.subagents.maxConcurrentTip": "동시에 실행할 수 있는 서브에이전트의 최대 수입니다.",
   "agents.subagents.maxSpawnDepth": "최대 생성 깊이",
-  "agents.subagents.maxSpawnDepthTip": "서브에이전트 체인의 최대 중첩 깊이입니다.",
+  "agents.subagents.maxSpawnDepthTip": "각 에이전트가 직접 생성하는 서브에이전트 트리의 최대 깊이입니다. Agent Link 위임은 대상 에이전트의 설정을 사용하는 새 트리를 시작합니다. 깊이가 1이면 직접 서브에이전트를 생성할 수 있지만 해당 서브에이전트는 다시 생성할 수 없습니다.",
   "agents.subagents.maxChildrenPerAgent": "에이전트당 최대 자식",
   "agents.subagents.maxChildrenPerAgentTip": "단일 에이전트가 생성할 수 있는 최대 자식 서브에이전트 수입니다.",
   "agents.subagents.archiveAfterMin": "보관 시간 (분)",

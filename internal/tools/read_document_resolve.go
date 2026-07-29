@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -73,20 +72,7 @@ func (t *ReadDocumentTool) resolveDocumentFile(ctx context.Context, mediaID, doc
 }
 
 func resolveDocumentPathArg(ctx context.Context, path string) (string, error) {
-	workspace := ToolWorkspaceFromCtx(ctx)
-	resolved, err := resolvePathWithAllowed(path, workspace, effectiveRestrict(ctx, true), allowedWithTeamWorkspace(ctx, nil))
-	if err != nil {
-		return "", fmt.Errorf("invalid document path: %w", err)
-	}
-	if err := checkDeniedPath(resolved, workspace, nil); err != nil {
-		return "", err
-	}
-	if info, err := os.Stat(resolved); err != nil {
-		return "", fmt.Errorf("failed to stat document file: %w", err)
-	} else if info.IsDir() {
-		return "", fmt.Errorf("document path is a directory: %s", path)
-	}
-	return resolved, nil
+	return resolveStructuredMediaPath(ctx, path, "document")
 }
 
 func documentRefMatches(ref providers.MediaRef, mediaID string) bool {

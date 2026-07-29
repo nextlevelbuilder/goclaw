@@ -67,7 +67,7 @@ func (t *ReadVideoTool) Name() string { return "read_video" }
 func (t *ReadVideoTool) Description() string {
 	return "Analyze video files attached to the conversation. " +
 		"Use when you see <media:video> tags and need to describe, summarize, or analyze video content. " +
-		"Specify what you want to extract or analyze."
+		"A workspace-relative path such as inputs/clip.mp4 may also be provided. Specify what you want to extract or analyze."
 }
 
 func (t *ReadVideoTool) Parameters() map[string]any {
@@ -86,6 +86,10 @@ func (t *ReadVideoTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "Optional URL to a video file. Use this to analyze videos hosted online.",
 			},
+			"path": map[string]any{
+				"type":        "string",
+				"description": "Optional workspace-relative video path. Delegated inputs use inputs/<name>.",
+			},
 		},
 		"required": []string{"prompt"},
 	}
@@ -98,9 +102,19 @@ func (t *ReadVideoTool) Execute(ctx context.Context, args map[string]any) *Resul
 	}
 	mediaID, _ := args["media_id"].(string)
 	videoURL, _ := args["url"].(string)
+	videoArg, _ := args["path"].(string)
 
-	if mediaID != "" && videoURL != "" {
-		return ErrorResult("Both 'media_id' and 'url' parameters cannot be specified. Choose only one.")
+	sourceCount := 0
+	for _, source := range []string{mediaID, videoURL, videoArg} {
+		if source != "" {
+			sourceCount++
+		}
+	}
+	if sourceCount > 1 {
+		if videoArg == "" && mediaID != "" && videoURL != "" {
+			return ErrorResult("Both 'media_id' and 'url' parameters cannot be specified. Choose only one.")
+		}
+		return ErrorResult("Only one of 'media_id', 'url', or 'path' may be specified.")
 	}
 
 	var data []byte
@@ -118,15 +132,25 @@ func (t *ReadVideoTool) Execute(ctx context.Context, args map[string]any) *Resul
 		ext := filepath.Ext(validatedURL.Path)
 		videoMime = mimeFromVideoExt(ext)
 	} else {
-		videoPath, mime, err := t.resolveVideoFile(ctx, mediaID)
+		var videoPath, mime string
+		var err error
+		if videoArg != "" {
+			videoPath, err = resolveStructuredMediaPath(ctx, videoArg, "video")
+			mime = mimeFromVideoExt(filepath.Ext(videoPath))
+		} else {
+			videoPath, mime, err = t.resolveVideoFile(ctx, mediaID)
+		}
 		if err != nil {
 			return ErrorResult(err.Error())
 		}
 		videoMime = mime
-		slog.Info("read_video: resolved file", "path", videoPath, "mime", videoMime, "media_id", mediaID)
+		slog.Info("read_video: resolved file", "mime", videoMime, "media_id", mediaID, "logical_path", videoArg)
 
 		fileData, err := os.ReadFile(videoPath)
 		if err != nil {
+			if videoArg != "" && IsDelegationArtifactRun(ctx) {
+				return ErrorResult("Failed to read delegation video input")
+			}
 			return ErrorResult(fmt.Sprintf("Failed to read video file: %v", err))
 		}
 		slog.Info("read_video: file loaded", "size_bytes", len(fileData))

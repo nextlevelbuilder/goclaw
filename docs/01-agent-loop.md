@@ -111,7 +111,7 @@ Agents support three orchestration modes that determine which inter-agent tools 
 - **Use case**: Agent with linked delegate targets
 - **Tools available**: `spawn`, `delegate` (dispatch to linked agents)
 - **Tools hidden**: `team_tasks`
-- **Resolution**: When `agent_links` table has rows with source = this agent
+- **Resolution**: When `agent_links` grants this agent an effective outbound delegation edge
 
 ### ModeTeam
 - **Use case**: Agent in a team (multiple agents collaborating)
@@ -121,7 +121,9 @@ Agents support three orchestration modes that determine which inter-agent tools 
 
 **Mode Resolution Priority**: Team > Delegate > Spawn
 
-The system prompt includes relevant details for each mode (delegate targets, team context, shared workspace paths).
+The system prompt includes relevant details for each mode. Agent Team runs use
+their existing shared workspace. Agent Link runs receive only delegation-scoped
+`inputs/` and `outputs/` aliases.
 
 ---
 

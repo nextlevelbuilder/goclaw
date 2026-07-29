@@ -25,12 +25,12 @@ export function SubagentsSection({ enabled, value, onToggle, onChange }: Subagen
         <div className="space-y-1">
           <label className="text-[11px] font-medium text-text-secondary">{t('configSections.subagents.maxConcurrent')}</label>
           <input
-            type="number" min={1} max={2}
-            value={value.maxConcurrent ?? 2}
-            onChange={(e) => update({ maxConcurrent: Math.min(numOrUndef(e.target.value) ?? 2, 2) })}
+            type="number" min={1}
+            value={value.maxConcurrent ?? 20}
+            onChange={(e) => update({ maxConcurrent: numOrUndef(e.target.value) ?? 20 })}
             className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-base md:text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
           />
-          <p className="text-[10px] text-text-muted">Lite limit: 2</p>
+          <p className="text-[10px] text-text-muted">{t('configSections.subagents.maxConcurrentLiteHint')}</p>
         </div>
         <div className="space-y-1">
           <label className="text-[11px] font-medium text-text-secondary">{t('configSections.subagents.maxSpawnDepth')}</label>

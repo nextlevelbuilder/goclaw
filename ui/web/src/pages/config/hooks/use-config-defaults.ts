@@ -51,7 +51,7 @@ export const CONFIG_DEFAULTS_FALLBACK: ConfigDefaults = {
       hardClear: { enabled: true, placeholder: "[Old tool result content cleared]" },
     },
     subagents: {
-      maxConcurrent: 8,
+      maxConcurrent: 20,
       maxSpawnDepth: 1,
       maxChildrenPerAgent: 5,
       archiveAfterMinutes: 60,

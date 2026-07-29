@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -207,6 +208,7 @@ func (s *SQLiteAgentLinkStore) GetLinkBetween(ctx context.Context, fromAgentID, 
 		tenantFilter = " AND tenant_id = ?"
 		args = append(args, tenantID)
 	}
+	args = append(args, fromAgentID)
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+linkSelectCols+`
 		 FROM agent_links WHERE status = 'active'
@@ -214,10 +216,15 @@ func (s *SQLiteAgentLinkStore) GetLinkBetween(ctx context.Context, fromAgentID, 
 			(source_agent_id = ? AND target_agent_id = ? AND direction IN ('outbound', 'bidirectional'))
 			OR
 			(source_agent_id = ? AND target_agent_id = ? AND direction IN ('inbound', 'bidirectional'))
-		 )`+tenantFilter+` LIMIT 1`, args...)
+		 )`+tenantFilter+`
+		 ORDER BY CASE WHEN source_agent_id = ? THEN 0 ELSE 1 END, created_at, id
+		 LIMIT 1`, args...)
 	d, err := scanLinkRow(row)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
+	}
+	if err != nil {
+		return nil, err
 	}
 	return d, nil
 }

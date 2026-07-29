@@ -3,8 +3,6 @@ package sandbox
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -34,12 +32,19 @@ type DockerSandbox struct {
 	workspace   string
 	createdAt   time.Time
 	lastUsed    time.Time
+	destroyFunc func(context.Context) error
 	mu          sync.Mutex // protects lastUsed
 }
 
 // newDockerSandbox creates and starts a Docker container for sandboxed execution.
 // Matching TS buildSandboxCreateArgs() + createSandboxContainer().
-func newDockerSandbox(ctx context.Context, name string, cfg Config, workspace string) (*DockerSandbox, error) {
+func newDockerSandbox(
+	ctx context.Context,
+	name string,
+	cfg Config,
+	workspace string,
+	readOnlyMounts ...ReadOnlyMount,
+) (*DockerSandbox, error) {
 	args := []string{
 		"run", "-d",
 		"--name", name,
@@ -90,17 +95,18 @@ func newDockerSandbox(ctx context.Context, name string, cfg Config, workspace st
 		args = append(args, "--network", "none")
 	}
 
-	// Workspace mount — resolve host path for DooD (Docker-out-of-Docker) setups.
-	containerWorkdir := cfg.ContainerWorkdir()
-	if workspace != "" && cfg.WorkspaceAccess != AccessNone {
-		mountOpt := "rw"
-		if cfg.WorkspaceAccess == AccessRO {
-			mountOpt = "ro"
-		}
-		hostPath := resolveHostWorkspacePath(ctx, workspace)
-		args = append(args, "-v", fmt.Sprintf("%s:%s:%s", hostPath, containerWorkdir, mountOpt))
+	args, sensitiveMountRoots, err := appendDockerMountArgs(
+		ctx,
+		args,
+		cfg,
+		workspace,
+		readOnlyMounts,
+		resolveHostWorkspacePath,
+	)
+	if err != nil {
+		return nil, err
 	}
-	args = append(args, "-w", containerWorkdir)
+	args = append(args, "-w", cfg.ContainerWorkdir())
 
 	// Environment variables
 	for k, v := range cfg.Env {
@@ -110,7 +116,12 @@ func newDockerSandbox(ctx context.Context, name string, cfg Config, workspace st
 	// Image + keep-alive command
 	args = append(args, cfg.Image, "sleep", "infinity")
 
-	slog.Debug("creating sandbox container", "name", name, "args", args)
+	slog.Debug(
+		"creating sandbox container",
+		"name", name,
+		"image", cfg.Image,
+		"additional_read_only_mounts", len(readOnlyMounts),
+	)
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	var stdout, stderr bytes.Buffer
@@ -118,7 +129,8 @@ func newDockerSandbox(ctx context.Context, name string, cfg Config, workspace st
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("docker run failed: %w\nstderr: %s", err, stderr.String())
+		safeStderr := redactMountRoots(stderr.String(), sensitiveMountRoots)
+		return nil, fmt.Errorf("docker run failed: %w\nstderr: %s", err, safeStderr)
 	}
 
 	containerID := strings.TrimSpace(stdout.String())
@@ -214,6 +226,9 @@ func (s *DockerSandbox) Exec(ctx context.Context, command []string, workDir stri
 
 // Destroy removes the container.
 func (s *DockerSandbox) Destroy(ctx context.Context) error {
+	if s.destroyFunc != nil {
+		return s.destroyFunc(ctx)
+	}
 	cmd := exec.CommandContext(ctx, "docker", "rm", "-f", s.containerID)
 	if err := cmd.Run(); err != nil {
 		slog.Warn("failed to remove sandbox container", "id", s.containerID, "error", err)
@@ -234,6 +249,8 @@ type DockerManager struct {
 	stopCh    chan struct{} // signals pruning goroutine to stop
 }
 
+var _ Manager = (*DockerManager)(nil)
+
 // NewDockerManager creates a manager for Docker sandboxes.
 // Automatically starts background pruning if configured.
 func NewDockerManager(cfg Config) *DockerManager {
@@ -248,7 +265,13 @@ func NewDockerManager(cfg Config) *DockerManager {
 
 // Get returns an existing sandbox or creates a new one for the given key.
 // If cfgOverride is non-nil, it is used for new containers instead of the global config.
-func (m *DockerManager) Get(ctx context.Context, key string, workspace string, cfgOverride *Config) (Sandbox, error) {
+func (m *DockerManager) Get(
+	ctx context.Context,
+	key string,
+	workspace string,
+	cfgOverride *Config,
+	opts ...GetOption,
+) (Sandbox, error) {
 	cfg := m.config
 	if cfgOverride != nil {
 		cfg = *cfgOverride
@@ -256,7 +279,13 @@ func (m *DockerManager) Get(ctx context.Context, key string, workspace string, c
 	if cfg.Mode == ModeOff {
 		return nil, ErrSandboxDisabled
 	}
-	cacheKey := dockerCacheKey(key, workspace, cfg)
+	getOpts := ApplyGetOpts(opts)
+	cfg = applyGetOptsToConfig(cfg, getOpts)
+	readOnlyMounts, err := validateReadOnlyMounts(cfg, getOpts.ReadOnlyMounts)
+	if err != nil {
+		return nil, err
+	}
+	cacheKey := dockerCacheKey(key, workspace, cfg, readOnlyMounts...)
 
 	m.mu.RLock()
 	if sb, ok := m.sandboxes[cacheKey]; ok {
@@ -278,7 +307,7 @@ func (m *DockerManager) Get(ctx context.Context, key string, workspace string, c
 		prefix = "goclaw-sbx-"
 	}
 	name := prefix + sanitizeKey(cacheKey)
-	sb, err := newDockerSandbox(ctx, name, cfg, workspace)
+	sb, err := newDockerSandbox(ctx, name, cfg, workspace, readOnlyMounts...)
 	if err != nil {
 		return nil, err
 	}
@@ -287,35 +316,21 @@ func (m *DockerManager) Get(ctx context.Context, key string, workspace string, c
 	return sb, nil
 }
 
-func dockerCacheKey(key, workspace string, cfg Config) string {
-	if workspace == "" {
-		return key
-	}
-	h := sha256.Sum256([]byte(strings.Join([]string{
-		workspace,
-		string(cfg.WorkspaceAccess),
-		cfg.ContainerWorkdir(),
-		cfg.Image,
-	}, "\x00")))
-	return "w" + hex.EncodeToString(h[:])[:16] + ":" + key
-}
-
 // Release destroys a sandbox by key.
 func (m *DockerManager) Release(ctx context.Context, key string) error {
 	m.mu.Lock()
-	sbs := make([]*DockerSandbox, 0, 1)
-	for cacheKey, sb := range m.sandboxes {
-		if cacheKey == key || strings.HasSuffix(cacheKey, ":"+key) {
-			delete(m.sandboxes, cacheKey)
-			sbs = append(sbs, sb)
-		}
-	}
-	m.mu.Unlock()
+	defer m.mu.Unlock()
 
 	var firstErr error
-	for _, sb := range sbs {
-		if err := sb.Destroy(ctx); err != nil && firstErr == nil {
-			firstErr = err
+	for cacheKey, sb := range m.sandboxes {
+		if cacheKey == key || strings.HasSuffix(cacheKey, ":"+key) {
+			if err := sb.Destroy(ctx); err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			delete(m.sandboxes, cacheKey)
 		}
 	}
 	return firstErr

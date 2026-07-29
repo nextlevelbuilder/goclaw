@@ -183,6 +183,7 @@ export function LinkCreateDialog({
               onChange={(e) => setMaxConcurrent(Math.max(1, Math.min(50, Number(e.target.value) || 5)))}
               className="w-full rounded-md border bg-background px-3 py-2 text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
+            <p className="text-xs text-muted-foreground">{t("links.maxConcurrentHint")}</p>
           </div>
 
           {/* Actions */}

@@ -16,7 +16,7 @@ Keep agent workspaces tidy, predictable, and collision-free — and discoverable
 This skill governs file/folder layout and discovery inside:
 
 - `ActivePath` — primary read/write root for the current run
-- `SharedPath` — delegate exchange area (when delegating)
+- `inputs/` — read-only staged input alias available during an Agent Link artifact run
 - `TeamPath` — team workspace root (when in a team context)
 - **Vault** — the cross-workspace knowledge index (personal / team / shared scopes); searched via `vault_search`, read via `vault_read`
 
@@ -173,12 +173,13 @@ Never set `deliver=true` on a `tmp/` file or unpromoted draft.
 - **Never overwrite a file in another teammate's namespace** (`shared/<other-agent-key>/...`). Read is fine; write/move/delete is not
 - Before writing in the team root, list the directory and run `vault_search` first
 
-### Delegate workspace (`Scope = delegate`, with `SharedPath`)
+### Delegate workspace (`Scope = delegate`, isolated Agent Link exchange)
 
-- **Inputs from delegator** live in `SharedPath/inputs/` — read-only unless told otherwise
-- **Outputs back to delegator** go in `SharedPath/outputs/`
-- Working notes the delegatee needs only for itself stay in `ActivePath`
-- End each delegated task with `SharedPath/outputs/SUMMARY.md` describing what was produced and where
+- **Inputs from delegator** are readable only through logical `inputs/...` paths.
+- `ActivePath` is the logical `outputs/` root. Write output files using ordinary relative paths such as `report.md`; do not prefix them with `outputs/`.
+- Files are not visible to the caller until the run and every synchronous nested child finish, then runtime validation publishes them atomically.
+- After success, the caller can revisit the durable publication at `.delegations/<delegation-id>/`, including `manifest.json` and logical `outputs/...` entries.
+- End each delegated task with `SUMMARY.md` describing what was produced and where. The runtime publishes it as `outputs/SUMMARY.md`.
 
 ## Workflow: Before Every File Write in a Shared Workspace
 

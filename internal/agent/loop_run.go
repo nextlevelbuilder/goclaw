@@ -18,6 +18,7 @@ import (
 func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 	l.activeRuns.Add(1)
 	defer l.activeRuns.Add(-1)
+	ctx = withDelegationArtifactTextRedactor(ctx, &req)
 
 	// Per-run emit wrapper: enriches every AgentEvent with delegation + routing context.
 	emitRun := func(event AgentEvent) {
@@ -32,7 +33,7 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		event.ChatID = req.ChatID
 		event.SessionKey = req.SessionKey
 		event.TenantID = store.TenantIDFromContext(ctx)
-		l.emit(event)
+		l.emit(redactDelegationAgentEvent(&req, event))
 	}
 
 	emitRun(AgentEvent{
@@ -75,7 +76,7 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 			UserID:       req.UserID,
 			Channel:      req.Channel,
 			Name:         traceName,
-			InputPreview: truncateStr(req.Message, l.traceCollector.PreviewMaxLen()),
+			InputPreview: tracing.RedactText(ctx, truncateStr(req.Message, l.traceCollector.PreviewMaxLen())),
 			Status:       store.TraceStatusRunning,
 			StartTime:    now,
 			CreatedAt:    now,
@@ -140,7 +141,7 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 				l.emitAgentSpanEnd(safeCtx, agentSpanID, runStart, nil, context.Canceled)
 			}
 			l.traceCollector.FinishTrace(safeCtx, traceID, store.TraceStatusError,
-				"trace finalized by safety net (likely panic or goroutine leak)", "")
+				tracing.RedactText(safeCtx, "trace finalized by safety net (likely panic or goroutine leak)"), "")
 		}()
 	}
 
@@ -195,7 +196,7 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 					traceCtx = context.WithoutCancel(ctx)
 					traceStatus = store.TraceStatusCancelled
 				}
-				l.traceCollector.FinishTrace(traceCtx, traceID, traceStatus, err.Error(), "")
+				l.traceCollector.FinishTrace(traceCtx, traceID, traceStatus, tracing.RedactText(traceCtx, err.Error()), "")
 			}
 			return nil, err
 		}
@@ -243,7 +244,8 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
 			traceFinalized = true
 			if result != nil {
-				l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", truncateStr(result.Content, l.traceCollector.PreviewMaxLen()))
+				l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "",
+					tracing.RedactText(ctx, truncateStr(result.Content, l.traceCollector.PreviewMaxLen())))
 			} else {
 				l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", "")
 			}

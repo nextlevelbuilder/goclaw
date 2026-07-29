@@ -2,13 +2,17 @@ package agent
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -24,6 +28,32 @@ func (p finalThinkingStreamProvider) ChatStream(context.Context, providers.ChatR
 
 func (p finalThinkingStreamProvider) DefaultModel() string { return "test-model" }
 func (p finalThinkingStreamProvider) Name() string         { return "test-provider" }
+
+type requestCaptureProvider struct {
+	request providers.ChatRequest
+}
+
+func (p *requestCaptureProvider) Chat(_ context.Context, req providers.ChatRequest) (*providers.ChatResponse, error) {
+	p.request = req
+	return &providers.ChatResponse{Content: "ok"}, nil
+}
+
+func (p *requestCaptureProvider) ChatStream(_ context.Context, req providers.ChatRequest, _ func(providers.StreamChunk)) (*providers.ChatResponse, error) {
+	p.request = req
+	return &providers.ChatResponse{Content: "ok"}, nil
+}
+
+func (p *requestCaptureProvider) DefaultModel() string { return "test-model" }
+func (p *requestCaptureProvider) Name() string         { return "test-provider" }
+
+type recordingSessionStore struct {
+	*nopSessionStore
+	added []providers.Message
+}
+
+func (s *recordingSessionStore) AddMessage(_ context.Context, _ string, msg providers.Message) {
+	s.added = append(s.added, msg)
+}
 
 func TestMakeCallLLM_StreamsFinalThinkingWhenNoThinkingChunkArrives(t *testing.T) {
 	col := &eventCollector{}
@@ -55,6 +85,73 @@ func TestMakeCallLLM_StreamsFinalThinkingWhenNoThinkingChunkArrives(t *testing.T
 	payload, ok := thinking[0].Payload.(map[string]string)
 	if !ok || payload["content"] != "final streamed thinking" {
 		t.Fatalf("thinking payload = %+v", thinking[0].Payload)
+	}
+}
+
+func TestMakeCallLLMPropagatesDelegationArtifactBridgeOptions(t *testing.T) {
+	provider := &requestCaptureProvider{}
+	loop := &Loop{id: "target-agent", agentUUID: uuid.New()}
+	req := &RunRequest{RunID: "run-1", SessionKey: "delegate:session"}
+	state := &pipeline.RunState{Provider: provider, Model: "test-model"}
+	ctx := tools.WithToolWorkspace(context.Background(), "/runtime/outputs")
+	ctx = tools.WithDelegationID(ctx, "delegation-id")
+	ctx = tools.WithDelegationArtifactInputs(ctx, "/runtime/inputs")
+
+	if _, err := loop.makeCallLLM(req, func(AgentEvent) {})(ctx, state, providers.ChatRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if provider.request.Options[providers.OptDelegationID] != "delegation-id" ||
+		provider.request.Options[providers.OptDelegationInputs] != "/runtime/inputs" {
+		t.Fatalf("delegation options = %#v", provider.request.Options)
+	}
+}
+
+func TestEnrichedInputMediaPersistsForNextTurn(t *testing.T) {
+	sourceDir := t.TempDir()
+	sourcePath := filepath.Join(sourceDir, "photo.png")
+	if err := os.WriteFile(sourcePath, minimalPNG, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	workspace := t.TempDir()
+	sessions := &recordingSessionStore{nopSessionStore: &nopSessionStore{}}
+	loop := &Loop{sessions: sessions}
+	req := &RunRequest{
+		SessionKey: "session-media",
+		Message:    `<media:image url="attachment://photo.png">`,
+		Media: []bus.MediaFile{{
+			Path:     sourcePath,
+			MimeType: "image/png",
+			Filename: "photo.png",
+		}},
+	}
+	state := &pipeline.RunState{Messages: pipeline.NewMessageBuffer(providers.Message{Role: "system"})}
+	state.Messages.SetHistory([]providers.Message{{Role: "user", Content: req.Message}})
+	ctx := tools.WithToolWorkspace(context.Background(), workspace)
+
+	if err := loop.makeEnrichMedia(req)(ctx, state); err != nil {
+		t.Fatal(err)
+	}
+	if err := loop.makeFlushMessages(req)(ctx, req.SessionKey, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(sessions.added) != 1 {
+		t.Fatalf("persisted messages = %d, want 1", len(sessions.added))
+	}
+	persisted := sessions.added[0]
+	if len(persisted.MediaRefs) != 1 {
+		t.Fatalf("persisted MediaRefs = %#v, want one image ref", persisted.MediaRefs)
+	}
+	if strings.Contains(persisted.Content, workspace) {
+		t.Fatalf("persisted content leaked workspace path: %q", persisted.Content)
+	}
+	if !strings.Contains(persisted.Content, `path=".uploads/`) {
+		t.Fatalf("persisted content lacks logical image path: %q", persisted.Content)
+	}
+
+	nextTurnRefs := collectRefsByKind([]providers.Message{persisted}, nil, "image")
+	if len(nextTurnRefs) != 1 || nextTurnRefs[0].ID != persisted.MediaRefs[0].ID {
+		t.Fatalf("next-turn refs = %#v, want persisted exact ID", nextTurnRefs)
 	}
 }
 

@@ -115,7 +115,7 @@ flowchart TD
 | `internal/skills/` | SKILL.md loader (5-tier hierarchy) + BM25 search + hot-reload via fsnotify |
 | `internal/channels/` | Channel manager + adapters: Telegram (forum topics, STT, bot commands), Feishu/Lark (streaming cards, media), Zalo OA, Zalo Personal, Discord, WhatsApp, Slack |
 | `internal/mcp/` | MCP server bridge (stdio, SSE, streamable-HTTP transports) |
-| `internal/scheduler/` | Lane-based concurrency control (main, subagent, cron, team lanes) with per-session serialization. Per-edition rate limits (`MaxSubagentConcurrent`, `MaxSubagentDepth`) with tenant-scoped concurrency |
+| `internal/scheduler/` | Lane-based concurrency control (main, subagent, cron, team lanes) with per-session serialization. Self-spawn and Agent Link callbacks additionally use process-wide child-run admission with per-root limits |
 | `internal/memory/` | Memory system (pgvector hybrid search) |
 | `internal/subagent/` | Subagent lifecycle: spawn, roster, task persistence (subagent_tasks table), announce queue (producer-consumer), auto-retry, per-edition rate limiting |
 | `internal/permissions/` | RBAC policy engine (admin, operator, viewer roles) |
@@ -192,7 +192,7 @@ flowchart TD
 - **SSRF hardening (HTTPHandler)**: Caller supplies net.Dialer pinning resolved IP, blocking loopback/link-local/private ranges; no HTTP redirects (CheckRedirect returns ErrUseLastResponse)
 - **Auth header encryption**: `Authorization` + other sensitive fields in cfg.Config["headers"] encrypted at rest via AES-256-GCM; decrypted only at HTTP send-time
 - **Audit logging**: All hook invocations logged to `hook_executions` table (encrypted, PII-redacted) with dedup_key for idempotency
-- **Loop-depth guard (M5)**: SubagentStart checks recursion depth; max 3 levels prevents infinite delegation chains
+- **Hook recursion guard (M5)**: Hook dispatch tracks recursive hook re-entry and rejects it after 3 levels. Agent Link delegation uses separate admission, concurrency, and timeout safeguards.
 - **Circuit breaker**: Auto-disables hook after 3 consecutive failures in recent window (C4 mitigation)
 
 ### Pipeline Integration

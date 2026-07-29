@@ -56,9 +56,9 @@ func TestResolveMediaPath(t *testing.T) {
 			want   string
 			wantOK bool
 		}{
-			// /tmp/ always allowed
-			{"valid temp file", "MEDIA:" + filepath.Join(tmpDir, "test.png"), filepath.Join(tmpDir, "test.png"), true},
-			{"valid nested temp", "MEDIA:" + filepath.Join(tmpDir, "sub", "file.txt"), filepath.Join(tmpDir, "sub", "file.txt"), true},
+			// Unscoped temp files are not tenant/run-owned.
+			{"unscoped temp file", "MEDIA:" + filepath.Join(tmpDir, "test.png"), "", false},
+			{"unscoped nested temp", "MEDIA:" + filepath.Join(tmpDir, "sub", "file.txt"), "", false},
 
 			// Workspace files allowed
 			{"workspace absolute", "MEDIA:" + testFileCanonical, testFileCanonical, true},
@@ -104,8 +104,8 @@ func TestResolveMediaPath(t *testing.T) {
 			{"absolute outside workspace", "MEDIA:" + outsidePath(workspaceCanonical, "etc/hostname"), false},
 			// Workspace-relative → allowed
 			{"workspace relative", "MEDIA:docs/report.pdf", true},
-			// /tmp/ → allowed (temp dir exception in restricted mode)
-			{"temp file", "MEDIA:" + filepath.Join(tmpDir, "test.png"), true},
+			// /tmp/ is not an implicit cross-tenant read root.
+			{"temp file", "MEDIA:" + filepath.Join(tmpDir, "test.png"), false},
 		}
 
 		for _, tt := range tests {
@@ -131,6 +131,29 @@ func TestResolveMediaPath(t *testing.T) {
 			t.Errorf("got %q, want %q", got, testFileCanonical)
 		}
 	})
+
+}
+
+func TestMessageMediaRejectsNonRegularFiles(t *testing.T) {
+	workspace := t.TempDir()
+	tool := NewMessageTool(workspace, true)
+	tool.SetMessageBus(bus.New())
+
+	if result := tool.sendMedia(context.Background(), "telegram", "chat-1", workspace); !result.IsError {
+		t.Fatal("sendMedia allowed a directory")
+	}
+
+	original := filepath.Join(workspace, "original.png")
+	if err := os.WriteFile(original, []byte("image"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	hardlink := filepath.Join(workspace, "hardlink.png")
+	if err := os.Link(original, hardlink); err != nil {
+		t.Skipf("hardlinks not supported: %v", err)
+	}
+	if result := tool.sendMedia(context.Background(), "telegram", "chat-1", hardlink); !result.IsError {
+		t.Fatal("sendMedia allowed a hardlinked file")
+	}
 }
 
 func TestIsInTempDir(t *testing.T) {
@@ -157,8 +180,6 @@ func TestIsInTempDir(t *testing.T) {
 }
 
 func TestExtractEmbeddedMedia(t *testing.T) {
-	tmpDir := os.TempDir()
-
 	workspace := t.TempDir()
 	workspaceCanonical, _ := filepath.EvalSymlinks(workspace)
 
@@ -215,7 +236,10 @@ func TestExtractEmbeddedMedia(t *testing.T) {
 	})
 
 	t.Run("multiple MEDIA: on same line", func(t *testing.T) {
-		img := filepath.Join(tmpDir, "photo.png")
+		img := filepath.Join(workspaceCanonical, "photo.png")
+		if err := os.WriteFile(img, []byte("image"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 		msg := "MEDIA:" + reportCanonical + " MEDIA:" + img
 		cleaned, media := tool.extractEmbeddedMedia(ctx, msg)
 
@@ -224,6 +248,17 @@ func TestExtractEmbeddedMedia(t *testing.T) {
 		}
 		if len(media) != 2 {
 			t.Fatalf("expected 2 media from same line, got %d", len(media))
+		}
+	})
+
+	t.Run("non-regular MEDIA path is stripped without attachment", func(t *testing.T) {
+		msg := "Directory:\nMEDIA:" + docsDir + "\nDone"
+		cleaned, media := tool.extractEmbeddedMedia(ctx, msg)
+		if cleaned != "Directory:\nDone" {
+			t.Fatalf("unexpected cleaned text: %q", cleaned)
+		}
+		if len(media) != 0 {
+			t.Fatalf("non-regular path produced attachments: %+v", media)
 		}
 	})
 
@@ -252,7 +287,11 @@ func TestExtractEmbeddedMedia(t *testing.T) {
 	})
 
 	t.Run("audio_as_voice tag stripped", func(t *testing.T) {
-		msg := "[[audio_as_voice]]\nMEDIA:" + filepath.Join(tmpDir, "voice.ogg") + "\nExtra text"
+		voice := filepath.Join(workspaceCanonical, "voice.ogg")
+		if err := os.WriteFile(voice, []byte("audio"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		msg := "[[audio_as_voice]]\nMEDIA:" + voice + "\nExtra text"
 		cleaned, media := tool.extractEmbeddedMedia(ctx, msg)
 
 		if cleaned != "Extra text" {
@@ -264,7 +303,10 @@ func TestExtractEmbeddedMedia(t *testing.T) {
 	})
 
 	t.Run("multiple MEDIA: paths", func(t *testing.T) {
-		img := filepath.Join(tmpDir, "photo.png")
+		img := filepath.Join(workspaceCanonical, "photo-2.png")
+		if err := os.WriteFile(img, []byte("image"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 		msg := "Files:\nMEDIA:" + reportCanonical + "\nMEDIA:" + img + "\nEnjoy!"
 		cleaned, media := tool.extractEmbeddedMedia(ctx, msg)
 
@@ -317,8 +359,8 @@ func TestValidateChannelTenant(t *testing.T) {
 
 	// Wire a mock checker.
 	channels := map[string]uuid.UUID{
-		"telegram":       tenantA,
-		"tenant-b-tg":   tenantB,
+		"telegram":    tenantA,
+		"tenant-b-tg": tenantB,
 	}
 	tool.SetChannelTenantChecker(func(name string) (uuid.UUID, bool) {
 		tid, ok := channels[name]

@@ -62,6 +62,7 @@ func wireExtras(
 	domainBus eventbus.DomainEventBus,
 	usageCapSvc *usagecaps.Service,
 	mcpOAuthProvider mcpbridge.OAuthTokenProvider, // nil = OAuth injection disabled
+	childRunAdmission *orchestration.ChildRunAdmission,
 ) (*tools.ContextFileInterceptor, *mcpbridge.Pool, *media.Store, tools.PostTurnProcessor) {
 	// 1. Build cache instances (in-memory or Redis depending on build tags)
 	agentCtxCache, userCtxCache := makeCaches(redisClient)
@@ -450,24 +451,30 @@ func wireExtras(
 			// Link delegate trace to parent trace
 			delegateCtx := tracing.WithDelegateParentTraceID(ctx, tracing.TraceIDFromContext(ctx))
 
-			runReq := agent.RunRequest{
-				RunID:         uuid.New().String(),
-				SessionKey:    sessionKey,
-				Message:       req.Task,
-				UserID:        req.UserID,
-				Channel:       "delegate",
-				RunKind:       "delegate",
-				DelegationID:  req.DelegationID,
-				ParentAgentID: req.FromAgentKey,
+			runReq := buildAgentLinkRunRequest(req, sessionKey)
+			var delegateTraceID uuid.UUID
+			runReq.OnTraceCreated = func(traceID uuid.UUID) {
+				delegateTraceID = traceID
+				if req.OnTraceCreated != nil {
+					req.OnTraceCreated(traceID)
+				}
 			}
-			result, err := loop.Run(delegateCtx, runReq)
-			if err != nil {
-				return tools.DelegateResult{}, err
+			result, runErr := loop.Run(delegateCtx, runReq)
+			if releaseErr := releaseDelegationSandbox(ctx, sandboxMgr, sessionKey); releaseErr != nil {
+				return tools.DelegateResult{TraceID: delegateTraceID}, releaseErr
 			}
-			cr := orchestration.CaptureFromRunResult(result, 0)
-			return tools.DelegateResult{Content: cr.Content, Media: cr.Media}, nil
+			if runErr != nil {
+				return tools.DelegateResult{TraceID: delegateTraceID}, runErr
+			}
+			return tools.DelegateResult{
+				Content: result.Content,
+				Media:   agentMediaToBusFiles(result.Media),
+				TraceID: delegateTraceID,
+			}, nil
 		}
-		delegateTool := tools.NewDelegateTool(stores.AgentLinks, stores.Agents, domainBus, delegateRunFn)
+		delegateTool := tools.NewDelegateToolWithAdmission(stores.AgentLinks, stores.Agents, domainBus, delegateRunFn, childRunAdmission)
+		delegateTool.SetDataDir(appCfg.DataDir)
+		delegateTool.SetWorkspace(workspace)
 		delegateTool.SetMsgBus(msgBus)
 		delegateTool.SetHookDispatcher(hookDispatcher)
 		toolsReg.Register(delegateTool)

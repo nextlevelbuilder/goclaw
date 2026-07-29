@@ -461,13 +461,18 @@ Browser pairing allows web UI clients to authenticate without full admin credent
 
 ## 12. Delegation Security
 
-Agent delegation is protected through delegation history tracking and concurrency controls.
+Agent delegation is protected through isolated artifact exchange, directional
+link permission checks, and bounded child-run admission.
 
 | Control | Scope | Description |
 |---------|-------|-------------|
-| Per-agent load cap | B (all sources) | `other_config.max_delegation_load` limits total concurrent delegations targeting B |
+| Artifact boundary | One Agent Link run | Staged inputs are read-only; the delegatee writes only to ephemeral outputs that are validated before atomic publish |
+| Per-root limit | One root agent's self-spawn tree | Agent `subagents.maxConcurrent`, default 20 |
+| Process safety cap | All self-spawn and Agent Link callbacks | Standard 32 / Lite 2, with at most 128 independent pending chains |
+| Nested lifetime | Agent Link artifact run | Async descendants are rejected; sync descendants complete before publication |
 
-When concurrency limits are hit, the error message is written for LLM reasoning: *"Agent at capacity (5/5). Try a different agent or handle it yourself."*
+`agent_links.max_concurrent` is retained as compatibility metadata and is not
+currently enforced by runtime admission.
 
 ---
 

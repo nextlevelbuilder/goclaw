@@ -49,7 +49,7 @@ export function SubagentsSection({ enabled, value, onToggle, onChange }: Subagen
           />
         </div>
         <div className="space-y-2">
-          <InfoLabel tip="How many levels deep sub-agents can spawn other sub-agents. Depth 1 means only the parent can spawn.">{t(`${s}.maxSpawnDepth`)}</InfoLabel>
+          <InfoLabel tip={t(`${s}.maxSpawnDepthTip`)}>{t(`${s}.maxSpawnDepth`)}</InfoLabel>
           <Select
             value={String(value.maxSpawnDepth ?? "")}
             onValueChange={(v) => onChange({ ...value, maxSpawnDepth: Number(v) })}

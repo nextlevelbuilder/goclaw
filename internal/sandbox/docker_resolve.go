@@ -27,7 +27,7 @@ func resolveHostWorkspacePath(ctx context.Context, localPath string) string {
 
 	containerID := detectContainerID()
 	if containerID == "" {
-		slog.Error("sandbox.resolve: cannot determine container ID — DooD volume mounts will fail", "path", localPath)
+		slog.Error("sandbox.resolve: cannot determine container ID — DooD volume mounts will fail")
 		return localPath
 	}
 
@@ -60,10 +60,7 @@ func resolveHostWorkspacePath(ctx context.Context, localPath string) string {
 	if resolved, err := filepath.EvalSymlinks(localPath); err == nil {
 		resolvedClean := filepath.Clean(resolved)
 		if resolvedClean != targetDir {
-			slog.Info("sandbox.resolve: symlink resolved",
-				"path", localPath,
-				"resolved", resolvedClean,
-			)
+			slog.Debug("sandbox.resolve: canonicalized local mount path")
 		}
 		targetDir = resolvedClean
 	}
@@ -88,7 +85,7 @@ func resolveHostWorkspacePath(ctx context.Context, localPath string) string {
 	}
 
 	if bestDest == "" {
-		slog.Warn("sandbox.resolve: no matching mount found", "path", localPath, "container", containerID)
+		slog.Warn("sandbox.resolve: no matching mount found", "container", containerID)
 		return localPath
 	}
 
@@ -96,7 +93,7 @@ func resolveHostWorkspacePath(ctx context.Context, localPath string) string {
 	// use the host source path (assumes local volume driver).
 	if bestType == "volume" && bestName != "" {
 		if bestRel == "." {
-			slog.Debug("sandbox.resolve: resolved to named volume", "path", localPath, "volume", bestName)
+			slog.Debug("sandbox.resolve: resolved mount to named volume")
 			return bestName
 		}
 		if bestSource != "" {
@@ -107,11 +104,11 @@ func resolveHostWorkspacePath(ctx context.Context, localPath string) string {
 	// Bind mount: join source with relative path.
 	if bestSource != "" {
 		resolved := filepath.Join(bestSource, bestRel)
-		slog.Debug("sandbox.resolve: resolved to host path", "path", localPath, "host", resolved)
+		slog.Debug("sandbox.resolve: resolved mount to host path")
 		return resolved
 	}
 
-	slog.Warn("sandbox.resolve: mount found but no source path", "path", localPath, "mount", bestDest)
+	slog.Warn("sandbox.resolve: mount found but no source path")
 	return localPath
 }
 

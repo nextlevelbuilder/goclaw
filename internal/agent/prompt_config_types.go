@@ -98,8 +98,6 @@ type WorkspaceSectionData struct {
 	ActivePath     string
 	Scope          string
 	Enforced       bool
-	ReadOnlyPaths  []string
-	SharedPath     *string
 	ContextFiles   []string
 	EnforcementMsg string
 }

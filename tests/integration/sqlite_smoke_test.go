@@ -102,7 +102,7 @@ func TestSQLiteSmokeTest(t *testing.T) {
 		if err := stores.SubagentTasks.Create(ctx, task); err != nil {
 			t.Fatalf("Create: %v", err)
 		}
-		got, err := stores.SubagentTasks.Get(ctx, taskID)
+		got, err := stores.SubagentTasks.Get(ctx, agentKey, taskID)
 		if err != nil {
 			t.Fatalf("Get: %v", err)
 		}

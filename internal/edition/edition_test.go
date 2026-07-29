@@ -295,6 +295,15 @@ func TestLiteEditionFeatures(t *testing.T) {
 	}
 }
 
+func TestEditionChildRunLimit(t *testing.T) {
+	if got := Standard.ChildRunLimit(); got != 32 {
+		t.Fatalf("Standard.ChildRunLimit() = %d, want 32", got)
+	}
+	if got := Lite.ChildRunLimit(); got != 2 {
+		t.Fatalf("Lite.ChildRunLimit() = %d, want 2", got)
+	}
+}
+
 // TestLiteEditionChannelLimits verifies Lite channel constraints.
 func TestLiteEditionChannelLimits(t *testing.T) {
 	e := Lite

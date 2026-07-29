@@ -3,9 +3,11 @@ package mcp
 import (
 	"context"
 	"testing"
+	"time"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
@@ -140,4 +142,22 @@ func toolNames(ts []mcpgo.Tool) []string {
 		out[i] = tt.Name
 	}
 	return out
+}
+
+func TestForwardMediaToOutboundSkipsDelegationArtifactRun(t *testing.T) {
+	msgBus := bus.New()
+	ctx := tools.WithToolChannel(context.Background(), "telegram")
+	ctx = tools.WithToolChatID(ctx, "chat-id")
+	ctx = tools.WithDelegationID(ctx, "delegation-id")
+	ctx = tools.WithDelegationArtifactInputs(ctx, "/runtime/inputs")
+
+	forwardMediaToOutbound(ctx, msgBus, "create_image", &tools.Result{
+		Media: []bus.MediaFile{{Path: "/runtime/outputs/generated.png", MimeType: "image/png"}},
+	})
+
+	waitCtx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	if msg, ok := msgBus.SubscribeOutbound(waitCtx); ok {
+		t.Fatalf("unpublished delegation media forwarded: %#v", msg)
+	}
 }

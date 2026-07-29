@@ -18,6 +18,10 @@ const maxSubagentsInList = 30
 // subagentStatusIcon returns an icon for each subagent task status.
 func subagentStatusIcon(status string) string {
 	switch status {
+	case "queued":
+		return "⏳"
+	case "running/waiting_child":
+		return "↪️"
 	case "completed":
 		return "✅"
 	case "failed":
@@ -142,7 +146,12 @@ func (c *Channel) handleSubagentDetail(ctx context.Context, chatID int64, text s
 		return
 	}
 
-	task, err := c.subagentTaskStore.Get(ctx, taskID)
+	rootAgentKey := c.AgentID()
+	if rootAgentKey == "" {
+		send("Subagent tasks are not available (no agent configured).")
+		return
+	}
+	task, err := c.subagentTaskStore.Get(ctx, rootAgentKey, taskID)
 	if err != nil {
 		slog.Warn("subagent command: Get failed", "id", idArg, "error", err)
 		send("Failed to load subagent task. Please try again.")
@@ -181,7 +190,12 @@ func (c *Channel) handleSubagentCallback(ctx context.Context, query *telego.Call
 		return
 	}
 
-	task, err := c.subagentTaskStore.Get(ctx, taskID)
+	rootAgentKey := c.AgentID()
+	if rootAgentKey == "" {
+		send("Subagent tasks are not available (no agent configured).")
+		return
+	}
+	task, err := c.subagentTaskStore.Get(ctx, rootAgentKey, taskID)
 	if err != nil {
 		slog.Warn("subagent callback: Get failed", "id", taskIDStr, "error", err)
 		send("Failed to load subagent task.")

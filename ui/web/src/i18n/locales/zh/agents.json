@@ -735,6 +735,7 @@
       "description": "控制子Agent生成限制和行为",
       "maxConcurrent": "最大并发数",
       "maxSpawnDepth": "最大生成深度",
+      "maxSpawnDepthTip": "每个 Agent 自己生成的子 Agent 树的最大深度。通过 Agent Link 委派会开始一棵新树，并使用目标 Agent 的设置。深度为 1 时，Agent 可以生成直接子 Agent，但这些子 Agent 不能继续生成。",
       "maxChildrenPerAgent": "每Agent最大子数",
       "archiveAfter": "归档时间（分钟）",
       "maxRetries": "最大重试次数",

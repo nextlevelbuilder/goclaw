@@ -2,12 +2,14 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"maps"
 	"sync"
 
 	"github.com/google/uuid"
 
+	orchestration "github.com/nextlevelbuilder/goclaw/internal/childrun"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -33,8 +35,75 @@ const (
 	ctxAgentPolicy                toolContextKey = "tool_agent_policy" // per-agent tool policy for MCP bridge enforcement
 	ctxSessionKey                 toolContextKey = "tool_session_key"  // origin session key for announce routing
 	ctxRunKind                    toolContextKey = "tool_run_kind"     // "notification", "announce", "delegation"
+	ctxSubagentScope              toolContextKey = "subagent_task_scope"
+	ctxSubagentTaskID             toolContextKey = "subagent_task_id"
+	ctxSubagentDepth              toolContextKey = "subagent_depth"
+	ctxChildRunLease              toolContextKey = "child_run_lease"
 	ctxTelegramManagerPermissions toolContextKey = "telegram_manager_permissions"
 )
+
+func withSubagentExecution(ctx context.Context, scope TaskScope, taskID string, depth int, lease *orchestration.ChildRunLease) context.Context {
+	ctx = context.WithValue(ctx, ctxSubagentScope, scope)
+	ctx = context.WithValue(ctx, ctxSubagentTaskID, taskID)
+	ctx = context.WithValue(ctx, ctxSubagentDepth, depth)
+	return context.WithValue(ctx, ctxChildRunLease, lease)
+}
+
+func childRunLeaseFromContext(ctx context.Context) *orchestration.ChildRunLease {
+	lease, _ := ctx.Value(ctxChildRunLease).(*orchestration.ChildRunLease)
+	return lease
+}
+
+// withDelegatedAgentExecution starts a fresh semantic spawn tree for the target
+// agent while retaining the admission lease used by synchronous continuations.
+func withDelegatedAgentExecution(ctx context.Context, lease *orchestration.ChildRunLease) context.Context {
+	ctx = context.WithValue(ctx, ctxSubagentScope, TaskScope{})
+	ctx = context.WithValue(ctx, ctxSubagentTaskID, "")
+	ctx = context.WithValue(ctx, ctxSubagentDepth, 0)
+	ctx = WithSubagentConfig(ctx, nil)
+	return context.WithValue(ctx, ctxChildRunLease, lease)
+}
+
+func subagentScopeFromContext(ctx context.Context) TaskScope {
+	if scope, ok := ctx.Value(ctxSubagentScope).(TaskScope); ok {
+		if scope.TenantID != uuid.Nil || scope.RootAgentID != uuid.Nil || scope.RootAgentKey != "" {
+			return scope
+		}
+	}
+	return TaskScope{
+		TenantID:     store.TenantIDFromContext(ctx),
+		RootAgentID:  store.AgentIDFromContext(ctx),
+		RootAgentKey: ToolAgentKeyFromCtx(ctx),
+	}
+}
+
+func subagentTaskIDFromContext(ctx context.Context) string {
+	id, _ := ctx.Value(ctxSubagentTaskID).(string)
+	return id
+}
+
+func subagentDepthFromContext(ctx context.Context, fallback int) int {
+	if depth, ok := ctx.Value(ctxSubagentDepth).(int); ok {
+		return depth
+	}
+	return fallback
+}
+
+// childRunContinuationLineage returns structural admission lineage. It is
+// intentionally separate from semantic sub-agent depth, which resets at every
+// Agent Link delegation boundary.
+func childRunContinuationLineage(
+	ctx context.Context,
+	fallbackParentTaskID string,
+	fallbackDepth int,
+) (string, int) {
+	if lease := childRunLeaseFromContext(ctx); lease != nil {
+		if parentTaskID, parentDepth, ok := lease.ContinuationParent(); ok {
+			return parentTaskID, parentDepth + 1
+		}
+	}
+	return fallbackParentTaskID, fallbackDepth
+}
 
 // ctxRateLimitOverride carries a per-agent tool rate limit (calls/hour) that
 // overrides the global tools.rate_limit_per_hour. 0 means "use the global".
@@ -137,7 +206,7 @@ func WithToolWorkspace(ctx context.Context, ws string) context.Context {
 }
 
 func ToolWorkspaceFromCtx(ctx context.Context) string {
-	if v, _ := ctx.Value(ctxWorkspace).(string); v != "" {
+	if v, ok := ctx.Value(ctxWorkspace).(string); ok {
 		return v
 	}
 	if rc := store.RunContextFromCtx(ctx); rc != nil {
@@ -374,7 +443,8 @@ func WithSubagentConfig(ctx context.Context, cfg *config.SubagentsConfig) contex
 }
 
 func SubagentConfigFromCtx(ctx context.Context) *config.SubagentsConfig {
-	if v, _ := ctx.Value(ctxSubagentCfg).(*config.SubagentsConfig); v != nil {
+	if raw := ctx.Value(ctxSubagentCfg); raw != nil {
+		v, _ := raw.(*config.SubagentsConfig)
 		return v
 	}
 	if rc := store.RunContextFromCtx(ctx); rc != nil {
@@ -432,7 +502,7 @@ func WithToolTeamID(ctx context.Context, teamID string) context.Context {
 
 // ToolTeamIDFromCtx returns the dispatching team's ID from context.
 func ToolTeamIDFromCtx(ctx context.Context) string {
-	if v, _ := ctx.Value(ctxTeamID).(string); v != "" {
+	if v, ok := ctx.Value(ctxTeamID).(string); ok {
 		return v
 	}
 	if rc := store.RunContextFromCtx(ctx); rc != nil {
@@ -453,7 +523,7 @@ func WithToolTeamWorkspace(ctx context.Context, dir string) context.Context {
 
 // ToolTeamWorkspaceFromCtx returns the team shared workspace directory path.
 func ToolTeamWorkspaceFromCtx(ctx context.Context) string {
-	if v, _ := ctx.Value(ctxTeamWorkspace).(string); v != "" {
+	if v, ok := ctx.Value(ctxTeamWorkspace).(string); ok {
 		return v
 	}
 	if rc := store.RunContextFromCtx(ctx); rc != nil {
@@ -495,7 +565,7 @@ func WithTeamTaskID(ctx context.Context, taskID string) context.Context {
 
 // TeamTaskIDFromCtx returns the delegation's team task ID from context.
 func TeamTaskIDFromCtx(ctx context.Context) string {
-	if v, _ := ctx.Value(ctxTeamTaskID).(string); v != "" {
+	if v, ok := ctx.Value(ctxTeamTaskID).(string); ok {
 		return v
 	}
 	if rc := store.RunContextFromCtx(ctx); rc != nil {
@@ -518,7 +588,7 @@ func WithDelegationID(ctx context.Context, id string) context.Context {
 // DelegationIDFromCtx returns the active delegation ID. Falls back to
 // RunContext when no explicit context key is present.
 func DelegationIDFromCtx(ctx context.Context) string {
-	if v, _ := ctx.Value(ctxDelegationID).(string); v != "" {
+	if v, ok := ctx.Value(ctxDelegationID).(string); ok {
 		return v
 	}
 	if rc := store.RunContextFromCtx(ctx); rc != nil {
@@ -539,7 +609,7 @@ func WithLeaderAgentID(ctx context.Context, id string) context.Context {
 
 // LeaderAgentIDFromCtx returns the leader's agent UUID string from context.
 func LeaderAgentIDFromCtx(ctx context.Context) string {
-	if v, _ := ctx.Value(ctxLeaderAgentID).(string); v != "" {
+	if v, ok := ctx.Value(ctxLeaderAgentID).(string); ok {
 		return v
 	}
 	if rc := store.RunContextFromCtx(ctx); rc != nil {
@@ -820,11 +890,39 @@ func WithTenantAllowedPaths(ctx context.Context, paths []string) context.Context
 // TenantAllowedPathsFromCtx returns tenant-specific allowed paths from context.
 // Falls back to RunContext for subagent inheritance.
 func TenantAllowedPathsFromCtx(ctx context.Context) []string {
-	if v, _ := ctx.Value(ctxTenantAllowedPaths).([]string); len(v) > 0 {
+	if v, ok := ctx.Value(ctxTenantAllowedPaths).([]string); ok {
 		return v
 	}
 	if rc := store.RunContextFromCtx(ctx); rc != nil {
 		return rc.TenantAllowedPaths
+	}
+	return nil
+}
+
+const ctxDelegationArtifactInputs toolContextKey = "tool_delegation_artifact_inputs"
+
+// WithDelegationArtifactInputs installs the runtime-only host root backing the
+// logical read-only inputs/ alias for an admitted Agent Link run.
+func WithDelegationArtifactInputs(ctx context.Context, root string) context.Context {
+	return context.WithValue(ctx, ctxDelegationArtifactInputs, root)
+}
+
+// DelegationArtifactInputsFromCtx returns the runtime-only staged-input root.
+// It is deliberately not copied into RunContext, prompts, traces, or results.
+func DelegationArtifactInputsFromCtx(ctx context.Context) string {
+	root, _ := ctx.Value(ctxDelegationArtifactInputs).(string)
+	return root
+}
+
+// IsDelegationArtifactRun reports whether filesystem/media tools are executing
+// inside an isolated Agent Link artifact exchange.
+func IsDelegationArtifactRun(ctx context.Context) bool {
+	return DelegationIDFromCtx(ctx) != "" && DelegationArtifactInputsFromCtx(ctx) != ""
+}
+
+func validateDelegationChildRunMode(ctx context.Context, operation, mode string) error {
+	if IsDelegationArtifactRun(ctx) && mode != "sync" {
+		return fmt.Errorf("%s mode %q is not allowed inside an Agent Link artifact run; use mode=\"sync\"", operation, mode)
 	}
 	return nil
 }

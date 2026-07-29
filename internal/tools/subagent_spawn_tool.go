@@ -116,6 +116,12 @@ func (t *SpawnTool) executeSpawn(ctx context.Context, args map[string]any) *Resu
 	}
 
 	mode, _ := args["mode"].(string)
+	if mode == "" {
+		mode = "async"
+	}
+	if err := validateDelegationChildRunMode(ctx, "spawn", mode); err != nil {
+		return ErrorResult(err.Error())
+	}
 	if mode == "sync" {
 		return t.executeSubagentSync(ctx, args, task)
 	}
@@ -166,7 +172,7 @@ func (t *SpawnTool) executeSubagentSync(ctx context.Context, args map[string]any
 		parentID = t.parentID
 	}
 
-	result, iterations, err := t.subagentMgr.RunSync(ctx, parentID, t.depth, task, label, modelOverride,
+	result, media, iterations, err := t.subagentMgr.RunSync(ctx, parentID, t.depth, task, label, modelOverride,
 		channel, chatID)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Subagent '%s' failed: %v", label, err))
@@ -182,7 +188,7 @@ func (t *SpawnTool) executeSubagentSync(ctx context.Context, args map[string]any
 	forLLM := fmt.Sprintf("Subagent '%s' completed in %d iterations.\n\nFull result:\n%s",
 		label, iterations, result)
 
-	return &Result{ForLLM: forLLM, ForUser: forUser}
+	return &Result{ForLLM: forLLM, ForUser: forUser, Media: media}
 }
 
 // SetContext is a no-op; channel/chatID are now read from ctx (thread-safe).
@@ -193,3 +199,11 @@ func (t *SpawnTool) SetPeerKind(peerKind string) {}
 
 // SetCallback is a no-op; callback is now read from ctx (thread-safe).
 func (t *SpawnTool) SetCallback(cb AsyncCallback) {}
+
+func (t *SpawnTool) scopeFromContext(ctx context.Context) TaskScope {
+	scope := subagentScopeFromContext(ctx)
+	if scope.RootAgentKey == "" {
+		scope.RootAgentKey = t.parentID
+	}
+	return scope
+}

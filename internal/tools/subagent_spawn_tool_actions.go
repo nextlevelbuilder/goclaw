@@ -7,26 +7,29 @@ import (
 	"time"
 )
 
-// executeList shows active subagent tasks.
+// executeList shows running and retained subagent tasks.
 func (t *SpawnTool) executeList(ctx context.Context) *Result {
-	parentID := ToolAgentKeyFromCtx(ctx)
-	if parentID == "" {
-		parentID = t.parentID
-	}
-	tasks := t.subagentMgr.ListTasks(parentID)
+	scope := t.scopeFromContext(ctx)
+	tasks := t.subagentMgr.ListTasks(scope, "")
 	if len(tasks) == 0 {
-		return &Result{ForLLM: "No active tasks found."}
+		return &Result{ForLLM: "No subagent tasks found."}
 	}
 
 	var lines []string
-	running, completed, cancelled := 0, 0, 0
+	queued, running, completed, failed, cancelled := 0, 0, 0, 0, 0
 	for _, task := range tasks {
 		switch task.Status {
-		case "running":
+		case TaskStatusQueued:
+			queued++
+		case TaskStatusRunning:
 			running++
-		case "completed":
+		case TaskStatusWaiting:
+			running++
+		case TaskStatusCompleted:
 			completed++
-		case "cancelled":
+		case TaskStatusFailed:
+			failed++
+		case TaskStatusCancelled:
 			cancelled++
 		}
 		line := fmt.Sprintf("- [%s] %s (id=%s, status=%s)", task.Label, truncate(task.Task, 60), task.ID, task.Status)
@@ -37,8 +40,10 @@ func (t *SpawnTool) executeList(ctx context.Context) *Result {
 		lines = append(lines, line)
 	}
 
-	return &Result{ForLLM: fmt.Sprintf("Subagent tasks: %d running, %d completed, %d cancelled\n%s",
-		running, completed, cancelled, strings.Join(lines, "\n"))}
+	return &Result{ForLLM: fmt.Sprintf(
+		"Subagent tasks: %d queued, %d active, %d completed, %d failed, %d cancelled (%d retained total)\n%s",
+		queued, running, completed, failed, cancelled, len(tasks), strings.Join(lines, "\n"),
+	)}
 }
 
 // executeCancel cancels a subagent task by ID.
@@ -48,7 +53,7 @@ func (t *SpawnTool) executeCancel(ctx context.Context, args map[string]any) *Res
 		return ErrorResult("id is required for action=cancel")
 	}
 
-	if t.subagentMgr.CancelTask(id) {
+	if t.subagentMgr.CancelTask(t.scopeFromContext(ctx), id) {
 		return &Result{ForLLM: fmt.Sprintf("Task '%s' cancelled.", id)}
 	}
 
@@ -66,7 +71,7 @@ func (t *SpawnTool) executeSteer(ctx context.Context, args map[string]any) *Resu
 		return ErrorResult("message is required for action=steer")
 	}
 
-	msg, err := t.subagentMgr.Steer(ctx, id, message, nil)
+	msg, err := t.subagentMgr.Steer(ctx, t.scopeFromContext(ctx), id, message, nil)
 	if err != nil {
 		return ErrorResult(err.Error())
 	}
@@ -75,17 +80,12 @@ func (t *SpawnTool) executeSteer(ctx context.Context, args map[string]any) *Resu
 
 // executeWait blocks until all children of the calling agent complete or timeout.
 func (t *SpawnTool) executeWait(ctx context.Context, args map[string]any) *Result {
-	parentID := ToolAgentKeyFromCtx(ctx)
-	if parentID == "" {
-		parentID = t.parentID
-	}
-
 	timeout := 300
 	if v, ok := args["timeout"].(float64); ok && v > 0 {
 		timeout = int(v)
 	}
 
-	tasks, err := t.subagentMgr.WaitForChildren(ctx, parentID, timeout)
+	tasks, err := t.subagentMgr.WaitForChildren(ctx, t.scopeFromContext(ctx), "", timeout)
 	return t.formatWaitResult(tasks, err)
 }
 

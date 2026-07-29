@@ -750,6 +750,7 @@
       "description": "Controls sub-agent spawning limits and behavior",
       "maxConcurrent": "Max Concurrent",
       "maxSpawnDepth": "Max Spawn Depth",
+      "maxSpawnDepthTip": "Maximum depth of each agent's own sub-agent spawn tree. Agent Link delegation starts a new tree governed by the target agent's settings. At depth 1, an agent can spawn direct sub-agents, but those sub-agents cannot spawn again.",
       "maxChildrenPerAgent": "Max Children Per Agent",
       "archiveAfter": "Archive After (minutes)",
       "maxRetries": "Max Retries",

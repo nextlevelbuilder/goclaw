@@ -144,7 +144,7 @@ Memory layers: L1 (`memory_search`) returns ranked abstracts; L2 (`memory_expand
 
 | Tool | Description |
 |---|---|
-| `delegate` | Inter-agent task delegation via agent_links (async/sync modes with timeout) |
+| `delegate` | Inter-agent task delegation via `agent_links` (async/sync, optional structured input files, isolated output publication) |
 
 ### Teams (`group:team`)
 
@@ -169,6 +169,19 @@ Memory layers: L1 (`memory_search`) returns ranked abstracts; L2 (`memory_expand
 | `read_audio` | Transcribe audio to text using Gemini File API, native OpenAI audio input, or OpenAI-compatible transcription models; unsupported provider/model routes fail closed instead of sending audio as image data |
 | `read_document` | Extract and analyze documents (PDF, DOCX, images). Supports local-first extraction via pdftotext/pandoc before falling back to cloud vision (opt-in via config) |
 | `read_video` | Analyze/transcribe video content |
+
+Image attachments keep absolute paths only in internal `MediaRef` storage.
+Model-visible `<media:image>` tags expose an exact media ID plus a logical path
+such as `.uploads/photo.jpg` or delegated `inputs/photo.jpg`. Image tools resolve
+those values against the active workspace; they never infer another agent's
+absolute workspace path. Unknown image IDs fail instead of falling back to an
+unrelated image. Exact `media_id` lookup is an in-process convenience; Claude
+CLI/MCP uses the workspace-confined logical `path` under signed bridge context.
+
+For Agent Link artifact runs, Claude CLI MCP requests carry a signed delegation
+ID and staged-input root. Bridge tools therefore apply the same read-only
+`inputs/` policy as in-process tools, and generated media remains inside
+`outputs/` until the delegation manifest is validated and atomically published.
 
 ### Skills & Content
 
@@ -613,13 +626,22 @@ stateDiagram-v2
 
 | Constraint | Default |
 |---|---|
-| Max concurrent | 8 (across all parents) |
+| Max concurrent | 20 executing descendants per root agent |
 | Max spawn depth | 1 |
 | Max children per agent | 5 |
 | Archive after | 60 min |
 | Max iterations | 20 per subagent |
 
+`maxSpawnDepth` applies only to an agent's own subagent tree. Agent Link
+delegation starts a new tree whose spawn depth, concurrency, fanout, retry, and
+model settings are resolved from the target agent.
+
 **Actions:** `spawn` (async, returns immediately), `run` (sync, blocks until done), `list`, `cancel` (by ID / `"all"` / `"last"`), `steer` (cancel + respawn with new message).
+
+Self-spawn and Agent Link callbacks also share a process safety cap (Standard:
+32; Lite: 2) and a bounded pending queue of 128. Inside an Agent Link artifact
+run, async `spawn` and async nested `delegate` are rejected; configured
+synchronous descendants complete before the outer artifact is published.
 
 Subagents share the same `SecureCLIStore` as their parent — the credentialed binary gate cannot be bypassed by delegating exec to a child.
 

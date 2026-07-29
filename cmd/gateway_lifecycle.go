@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/heartbeat"
+	"github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -33,9 +35,53 @@ type lifecycleDeps struct {
 	sandboxMgr        sandbox.Manager
 	postTurn          tools.PostTurnProcessor
 	subagentMgr       *tools.SubagentManager
+	childRunAdmission *orchestration.ChildRunAdmission
 	consumerTeamStore store.TeamStore
 	auditCh           chan bus.AuditEventPayload
 	sigCh             chan os.Signal
+	terminateProcess  func(int)
+}
+
+func drainChildRunsWithRetry(
+	admission *orchestration.ChildRunAdmission,
+	firstTimeout time.Duration,
+	retryTimeout time.Duration,
+) error {
+	if admission == nil {
+		return nil
+	}
+	for attempt, timeout := range []time.Duration{firstTimeout, retryTimeout} {
+		drainCtx, drainCancel := context.WithTimeout(context.Background(), timeout)
+		err := admission.Close(drainCtx)
+		drainCancel()
+		if err == nil {
+			return nil
+		}
+		slog.Error("gateway: child-run drain attempt failed",
+			"attempt", attempt+1, "timeout", timeout, "error", err)
+	}
+	return fmt.Errorf("%w after retry", orchestration.ErrChildRunDrainTimeout)
+}
+
+func drainSubagentManagerWithRetry(
+	manager *tools.SubagentManager,
+	firstTimeout time.Duration,
+	retryTimeout time.Duration,
+) error {
+	if manager == nil {
+		return nil
+	}
+	for attempt, timeout := range []time.Duration{firstTimeout, retryTimeout} {
+		drainCtx, drainCancel := context.WithTimeout(context.Background(), timeout)
+		err := manager.CloseContext(drainCtx)
+		drainCancel()
+		if err == nil {
+			return nil
+		}
+		slog.Error("gateway: subagent lifecycle drain attempt failed",
+			"attempt", attempt+1, "timeout", timeout, "error", err)
+	}
+	return fmt.Errorf("%w after retry", tools.ErrSubagentLifecycleDrainTimeout)
 }
 
 // runLifecycle wires config-reload subscribers, starts consumers, task recovery,
@@ -198,6 +244,20 @@ func (d *gatewayDeps) runLifecycle(
 		// Broadcast shutdown event
 		d.server.BroadcastEvent(*protocol.NewEvent(protocol.EventShutdown, nil))
 
+		// Close child-run intake first. A drain timeout must terminate without
+		// unwinding runGateway defers under a still-live child callback.
+		if deps.childRunAdmission != nil {
+			if err := drainChildRunsWithRetry(deps.childRunAdmission, 30*time.Second, 5*time.Second); err != nil {
+				slog.Error("gateway: terminating after child-run drain failure", "error", err)
+				terminate := deps.terminateProcess
+				if terminate == nil {
+					terminate = os.Exit
+				}
+				terminate(1)
+				return
+			}
+		}
+
 		// Stop channels, cron, heartbeat, and task ticker
 		d.channelMgr.StopAll(context.Background())
 		d.pgStores.Cron.Stop()
@@ -214,6 +274,23 @@ func (d *gatewayDeps) runLifecycle(
 		// Drain audit log queue before closing DB
 		if deps.auditCh != nil {
 			close(deps.auditCh)
+		}
+
+		if delegate, ok := d.toolsReg.Get("delegate"); ok {
+			if closer, ok := delegate.(interface{ Close() }); ok {
+				closer.Close()
+			}
+		}
+		if deps.subagentMgr != nil {
+			if err := drainSubagentManagerWithRetry(deps.subagentMgr, 5*time.Second, 5*time.Second); err != nil {
+				slog.Error("gateway: terminating after subagent lifecycle drain failure", "error", err)
+				terminate := deps.terminateProcess
+				if terminate == nil {
+					terminate = os.Exit
+				}
+				terminate(1)
+				return
+			}
 		}
 
 		// Close provider resources (e.g. Claude CLI temp files)

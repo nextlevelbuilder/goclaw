@@ -112,6 +112,7 @@ goclaw-patched-linux-amd64
 ui/web/nginx.staging.conf
 
 # Local scratchpad / one-shot artifacts (never commit)
+/.artifacts/
 **/debug-*.log
 /*.sql
 scripts/docker-patch-*.sql

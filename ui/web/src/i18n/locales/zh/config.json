@@ -94,7 +94,7 @@
   "agents.subagents.maxConcurrent": "最大并发数",
   "agents.subagents.maxConcurrentTip": "可同时运行的最大子 Agent 数量。",
   "agents.subagents.maxSpawnDepth": "最大生成深度",
-  "agents.subagents.maxSpawnDepthTip": "子 Agent 链的最大嵌套深度。",
+  "agents.subagents.maxSpawnDepthTip": "每个 Agent 自己生成的子 Agent 树的最大深度。通过 Agent Link 委派会开始一棵新树，并使用目标 Agent 的设置。深度为 1 时，Agent 可以生成直接子 Agent，但这些子 Agent 不能继续生成。",
   "agents.subagents.maxChildrenPerAgent": "每 Agent 最大子数",
   "agents.subagents.maxChildrenPerAgentTip": "单个 Agent 可生成的最大子 Agent 数量。",
   "agents.subagents.archiveAfterMin": "归档时间（分钟）",

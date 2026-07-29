@@ -10,9 +10,9 @@ import "context"
 type Scope string
 
 const (
-	ScopePersonal Scope = "personal"  // single user, isolated
-	ScopeTeam     Scope = "team"      // team context, shared or isolated
-	ScopeDelegate Scope = "delegate"  // delegated task, scoped access
+	ScopePersonal Scope = "personal" // single user, isolated
+	ScopeTeam     Scope = "team"     // team context, shared or isolated
+	ScopeDelegate Scope = "delegate" // delegated task, scoped access
 )
 
 // WorkspaceContext is resolved ONCE at run start, immutable for the entire run.
@@ -23,13 +23,6 @@ type WorkspaceContext struct {
 
 	// Scope describes the access boundary type.
 	Scope Scope
-
-	// ReadOnlyPaths are additional paths the agent can read but NOT write.
-	ReadOnlyPaths []string
-
-	// SharedPath is the shared delegate area (read/write by both delegator + delegatee).
-	// nil when not in delegation context.
-	SharedPath *string
 
 	// TeamPath is the team workspace root (nil if not in team context).
 	TeamPath *string
@@ -65,7 +58,6 @@ type ResolveParams struct {
 	PeerKind   string // "direct" | "group"
 	TeamID     *string
 	TeamConfig *TeamWorkspaceConfig
-	DelegateCtx *DelegateContext
 	BaseDir    string
 }
 
@@ -79,13 +71,6 @@ type TeamWorkspaceConfig struct {
 // IsShared returns true when workspace_scope is "shared".
 func (c *TeamWorkspaceConfig) IsShared() bool {
 	return c != nil && c.WorkspaceScope == "shared"
-}
-
-// DelegateContext carries delegation-specific workspace overrides.
-type DelegateContext struct {
-	LinkID      string
-	SharedPath  string
-	ExportPaths []string // read-only exports from delegator
 }
 
 // DefaultEnforcementLabel returns a human-readable workspace description

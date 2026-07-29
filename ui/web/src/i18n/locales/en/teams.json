@@ -394,6 +394,7 @@
     "description": "Description",
     "descriptionPlaceholder": "Optional description...",
     "maxConcurrent": "Max Concurrent",
+    "maxConcurrentHint": "Compatibility metadata only; Agent Link runtime admission uses the process safety cap and bounded pending queue.",
     "status": "Status",
     "active": "Active",
     "disabled": "Disabled",

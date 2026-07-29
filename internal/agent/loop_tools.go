@@ -36,6 +36,12 @@ func (l *Loop) processToolResult(
 	hadBootstrap bool,
 ) (toolMsg providers.Message, warningMsgs []providers.Message, action toolResultAction) {
 
+	// Agent Link outputs are not valid outbound media until the runtime has
+	// validated and atomically published the delegation manifest. Apply this
+	// before logs, events, loop detection, or message construction so no
+	// pre-publication MEDIA marker escapes through observability surfaces.
+	tools.ApplyDelegationArtifactResultPolicy(ctx, result)
+
 	// Record for loop detection.
 	argsHash := rs.loopDetector.record(registryName, tc.Arguments)
 	rs.loopDetector.recordResult(argsHash, result.ForLLM)
@@ -85,6 +91,7 @@ func (l *Loop) processToolResult(
 
 	// Collect MEDIA: paths from tool results.
 	// Prefer result.Media (explicit) over ForLLM MEDIA: prefix (legacy) to avoid duplicates.
+	mediaRoots := l.mediaEgressRoots(ctx)
 	if len(result.Media) > 0 {
 		// Egress containment: a tool that sets result.Media[].Path to a path
 		// outside every allowed scope (e.g. /etc/passwd from a prompt-injected
@@ -94,10 +101,6 @@ func (l *Loop) processToolResult(
 		// to — agent workspace, team workspace, and tenant-allowed paths — so a
 		// cross-workspace file (e.g. a teammate-produced file in the shared team
 		// workspace, or a synchronous delegatee's output) is not wrongly dropped.
-		mediaRoots := append([]string{
-			tools.ToolWorkspaceFromCtx(ctx),
-			tools.ToolTeamWorkspaceFromCtx(ctx),
-		}, l.tenantAllowedPaths...)
 		for i, mf := range result.Media {
 			cleaned, ok := confineToAnyRoot(mf.Path, mediaRoots)
 			if !ok {
@@ -123,7 +126,7 @@ func (l *Loop) processToolResult(
 		// Telegram sendDocument). A malicious or buggy tool emitting
 		// MEDIA:/etc/passwd is dropped here — fixing every channel at the source
 		// rather than per-channel. Mirrors extractMediaFromContent containment.
-		if cleaned, ok := confineToWorkspace(mr.Path, tools.ToolWorkspaceFromCtx(ctx)); ok {
+		if cleaned, ok := confineToAnyRoot(mr.Path, mediaRoots); ok {
 			mr.Path = cleaned
 			rs.mediaResults = append(rs.mediaResults, *mr)
 		} else {

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
@@ -46,8 +48,11 @@ func TestSubagentSpawn_CapturesOriginContextWindow(t *testing.T) {
 	// Calling agent configured at 128k/8192, propagated via ctx (as injectContext does).
 	ctx := store.WithAgentContextWindow(context.Background(), 128_000)
 	ctx = store.WithAgentMaxTokens(ctx, 8_192)
+	ctx = store.WithTenantID(ctx, uuid.New())
+	ctx = store.WithAgentID(ctx, uuid.New())
+	ctx = WithToolAgentKey(ctx, "parent")
 
-	_, _, err := manager.RunSync(ctx, "parent", 0, "task", "label", "", "chan", "chat")
+	_, _, _, err := manager.RunSync(ctx, "parent", 0, "task", "label", "", "chan", "chat")
 	if err != nil {
 		t.Fatalf("RunSync error: %v", err)
 	}

@@ -771,6 +771,8 @@ func buildOrchestrationSection(data OrchestrationSectionData) []string {
 	lines = append(lines,
 		"",
 		"Use `delegate` with the agent_key of the target agent. Do NOT invent agent keys.",
+		"Return generated files or media artifacts to the caller through the delegate result.",
+		"Do not ask the delegatee to send directly to your current chat; delegated runs use an internal `delegate` channel and the caller handles final delivery.",
 		"",
 	)
 	return lines

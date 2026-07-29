@@ -195,55 +195,6 @@ func TestResolve_TeamIsolated(t *testing.T) {
 	}
 }
 
-func TestResolve_Delegation(t *testing.T) {
-	base := t.TempDir()
-	sharedPath := filepath.Join(base, "shared-task")
-	exportPath := filepath.Join(base, "exports")
-
-	r := NewResolver()
-	wc, err := r.Resolve(context.Background(), ResolveParams{
-		AgentID:   "agent-1",
-		AgentType: "open",
-		UserID:    "user-1",
-		BaseDir:   base,
-		DelegateCtx: &DelegateContext{
-			LinkID:      "link-1",
-			SharedPath:  sharedPath,
-			ExportPaths: []string{exportPath},
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if wc.ActivePath != sharedPath {
-		t.Errorf("ActivePath = %q, want %q", wc.ActivePath, sharedPath)
-	}
-	if wc.Scope != ScopeDelegate {
-		t.Errorf("Scope = %q, want delegate", wc.Scope)
-	}
-	if len(wc.ReadOnlyPaths) != 1 || wc.ReadOnlyPaths[0] != exportPath {
-		t.Errorf("ReadOnlyPaths = %v", wc.ReadOnlyPaths)
-	}
-	assertDirExists(t, wc.ActivePath)
-}
-
-func TestResolve_DelegationEscapesBaseDir(t *testing.T) {
-	base := t.TempDir()
-	r := NewResolver()
-	_, err := r.Resolve(context.Background(), ResolveParams{
-		AgentID: "agent-1",
-		UserID:  "user-1",
-		BaseDir: base,
-		DelegateCtx: &DelegateContext{
-			SharedPath: "/etc/shadow",
-		},
-	})
-	if err == nil {
-		t.Error("expected error for delegate path escaping base dir")
-	}
-}
-
 func TestResolve_EnforcementLabel(t *testing.T) {
 	tests := []struct {
 		name   string

@@ -94,7 +94,7 @@
   "agents.subagents.maxConcurrent": "Max Concurrent",
   "agents.subagents.maxConcurrentTip": "Maximum number of sub-agents that can run simultaneously.",
   "agents.subagents.maxSpawnDepth": "Max Spawn Depth",
-  "agents.subagents.maxSpawnDepthTip": "Maximum nesting depth for sub-agent chains.",
+  "agents.subagents.maxSpawnDepthTip": "Maximum depth of each agent's own sub-agent spawn tree. Agent Link delegation starts a new tree governed by the target agent's settings. At depth 1, an agent can spawn direct sub-agents, but those sub-agents cannot spawn again.",
   "agents.subagents.maxChildrenPerAgent": "Max Children Per Agent",
   "agents.subagents.maxChildrenPerAgentTip": "Maximum number of child sub-agents a single agent can spawn.",
   "agents.subagents.archiveAfterMin": "Archive After (min)",

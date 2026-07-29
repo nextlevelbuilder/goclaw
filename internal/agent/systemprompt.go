@@ -207,7 +207,7 @@ var coreToolSummaries = map[string]string{
 	"session_status":         "Show session status (model, tokens, compaction count)",
 	"sessions_history":       "Fetch message history for a session",
 	"sessions_send":          "Send a message into another session",
-	"read_image":             "Analyze images — call with path from <media:image> tags, or a direct HTTP/HTTPS URL via the 'url' parameter",
+	"read_image":             "Analyze images — use the exact logical path from <media:image> tags; media_id and direct HTTP/HTTPS URLs are also supported",
 	"read_audio":             "Analyze audio — call with media_id from <media:audio> tags",
 	"read_video":             "Analyze video — call with media_id from <media:video> tags, or a direct HTTP/HTTPS URL via the 'url' parameter",
 	"create_video":           "Generate videos from text descriptions using AI",
@@ -673,7 +673,7 @@ func buildToolingSection(toolNames []string, hasSandbox bool, shellDenyGroups ma
 		lines = append(lines,
 			"",
 			"### Media Files",
-			`When users send media (<media:image path="...">, <media:video id="...">, <media:audio id="...">, <media:document path="...">), use the corresponding read_* tool with the path/media_id. For archives (.zip, .tar.gz, etc.), use exec with the document path to inspect/extract the archive.`,
+			`When users send media (<media:image id="..." path="...">, <media:video id="...">, <media:audio id="...">, <media:document path="...">), use the corresponding read_* tool with the exact path/media_id from the tag. Never reconstruct or guess an absolute workspace path. For archives (.zip, .tar.gz, etc.), use exec with the document path to inspect/extract the archive.`,
 			"You have full vision/audio/video capabilities. NEVER say you cannot see images or files.",
 		)
 	}

@@ -181,6 +181,61 @@ func ApplyExecOpts(opts []ExecOption) ExecOpts {
 	return o
 }
 
+// ReadOnlyMount describes an additional runtime-only bind mount.
+// HostPath must be an absolute, canonical host path. Destination must be an
+// absolute canonical container path strictly beneath the configured workdir.
+type ReadOnlyMount struct {
+	Name        string
+	HostPath    string
+	Destination string
+}
+
+// GetOption configures optional behavior for Manager.Get calls.
+type GetOption func(*GetOpts)
+
+// GetOpts holds optional settings applied via GetOption.
+type GetOpts struct {
+	ReadOnlyMounts          []ReadOnlyMount
+	WorkspaceAccessOverride *Access
+}
+
+// WithReadOnlyMounts adds runtime-only read-only mounts to a sandbox.
+func WithReadOnlyMounts(mounts ...ReadOnlyMount) GetOption {
+	copied := append([]ReadOnlyMount(nil), mounts...)
+	return func(o *GetOpts) {
+		o.ReadOnlyMounts = append(o.ReadOnlyMounts, copied...)
+	}
+}
+
+// WithWorkspaceAccessOverride changes access for this isolated sandbox
+// instance only. Callers must validate the workspace authority before using it.
+func WithWorkspaceAccessOverride(access Access) GetOption {
+	return func(o *GetOpts) {
+		override := access
+		o.WorkspaceAccessOverride = &override
+	}
+}
+
+// ApplyGetOpts resolves variadic GetOption values without retaining caller-owned
+// slices.
+func ApplyGetOpts(opts []GetOption) GetOpts {
+	var o GetOpts
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&o)
+		}
+	}
+	o.ReadOnlyMounts = append([]ReadOnlyMount(nil), o.ReadOnlyMounts...)
+	return o
+}
+
+func applyGetOptsToConfig(cfg Config, opts GetOpts) Config {
+	if opts.WorkspaceAccessOverride != nil {
+		cfg.WorkspaceAccess = *opts.WorkspaceAccessOverride
+	}
+	return cfg
+}
+
 // Sandbox is the interface for sandboxed code execution.
 type Sandbox interface {
 	// Exec runs a command inside the sandbox and returns the result.
@@ -203,7 +258,7 @@ type Manager interface {
 	// For agent scope: key = agentID
 	// For shared scope: key = "shared"
 	// If cfgOverride is non-nil, it is used instead of the global config for new containers.
-	Get(ctx context.Context, key string, workspace string, cfgOverride *Config) (Sandbox, error)
+	Get(ctx context.Context, key string, workspace string, cfgOverride *Config, opts ...GetOption) (Sandbox, error)
 
 	// Release destroys a sandbox by key.
 	Release(ctx context.Context, key string) error

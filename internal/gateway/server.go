@@ -373,6 +373,8 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 		workspace := r.Header.Get("X-Workspace")
 		localKey := r.Header.Get("X-Local-Key")
 		sessionKey := r.Header.Get("X-Session-Key")
+		delegationID := r.Header.Get("X-Delegation-ID")
+		delegationInputs := r.Header.Get("X-Delegation-Inputs")
 
 		if agentIDStr != "" || userID != "" {
 			// Reject context headers when no gateway token — prevents unauthenticated impersonation.
@@ -386,7 +388,44 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 			// Verify HMAC signature over all context fields.
 			tenantIDStr := r.Header.Get("X-Tenant-ID")
 			sig := r.Header.Get("X-Bridge-Sig")
-			ok, tenantVerified := providers.VerifyBridgeContext(gatewayToken, agentIDStr, userID, channel, chatID, peerKind, workspace, tenantIDStr, sig, localKey, sessionKey)
+			var ok, tenantVerified bool
+			hasDelegationContext := delegationID != "" || delegationInputs != ""
+			if hasDelegationContext {
+				if delegationID == "" || delegationInputs == "" {
+					http.Error(w, `{"error":"incomplete delegation bridge context"}`, http.StatusForbidden)
+					return
+				}
+				expected := providers.SignBridgeContext(
+					gatewayToken,
+					agentIDStr,
+					userID,
+					channel,
+					chatID,
+					peerKind,
+					workspace,
+					tenantIDStr,
+					localKey,
+					sessionKey,
+					delegationID,
+					delegationInputs,
+				)
+				ok = subtle.ConstantTimeCompare([]byte(sig), []byte(expected)) == 1
+				tenantVerified = ok
+			} else {
+				ok, tenantVerified = providers.VerifyBridgeContext(
+					gatewayToken,
+					agentIDStr,
+					userID,
+					channel,
+					chatID,
+					peerKind,
+					workspace,
+					tenantIDStr,
+					sig,
+					localKey,
+					sessionKey,
+				)
+			}
 			if !ok {
 				slog.Warn("security.mcp_bridge: invalid bridge context signature",
 					"agent_id", agentIDStr, "user_id", userID)
@@ -447,6 +486,10 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 		// Only when agent context is present (HMAC-protected) to prevent unauthenticated path injection.
 		if workspace != "" && (agentIDStr != "" || userID != "") {
 			ctx = tools.WithToolWorkspace(ctx, workspace)
+		}
+		if delegationID != "" && delegationInputs != "" && (agentIDStr != "" || userID != "") {
+			ctx = tools.WithDelegationID(ctx, delegationID)
+			ctx = tools.WithDelegationArtifactInputs(ctx, delegationInputs)
 		}
 		// Routing context (localKey, sessionKey) is injected unconditionally like channel/chatID.
 		// These are used for message routing (forum topics), not security-sensitive operations.
@@ -514,9 +557,9 @@ func (s *Server) Start(ctx context.Context) error {
 	s.httpServer = &http.Server{
 		Addr:         addr,
 		Handler:      handler,
-		ReadTimeout:  3600 * time.Second,  // 1h: allow large uploads, long-running reads
-		WriteTimeout: 3600 * time.Second,  // 1h: allow streaming responses, slow clients
-		IdleTimeout:  30 * time.Second,    // 30s: close idle connections
+		ReadTimeout:  3600 * time.Second, // 1h: allow large uploads, long-running reads
+		WriteTimeout: 3600 * time.Second, // 1h: allow streaming responses, slow clients
+		IdleTimeout:  30 * time.Second,   // 30s: close idle connections
 	}
 
 	slog.Info("gateway starting", "addr", addr)

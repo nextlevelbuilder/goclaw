@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -78,7 +79,11 @@ func (t *CreateImageTool) resolveReferenceImages(ctx context.Context, args map[s
 			}
 			seenPaths[path] = true
 
-			ext := strings.ToLower(filepath.Ext(path))
+			resolved, err := resolveStructuredMediaPath(ctx, path, "reference image")
+			if err != nil {
+				return nil, err
+			}
+			ext := strings.ToLower(filepath.Ext(resolved))
 			mimeTypes := map[string]string{
 				".jpg": "image/jpeg", ".jpeg": "image/jpeg",
 				".png": "image/png", ".gif": "image/gif",
@@ -87,14 +92,6 @@ func (t *CreateImageTool) resolveReferenceImages(ctx context.Context, args map[s
 			mime, ok := mimeTypes[ext]
 			if !ok {
 				mime = "image/png"
-			}
-			workspace := ToolWorkspaceFromCtx(ctx)
-			resolved, err := resolvePathWithAllowed(path, workspace, effectiveRestrict(ctx, true), allowedWithTeamWorkspace(ctx, nil))
-			if err != nil {
-				return nil, fmt.Errorf("invalid reference image path: %w", err)
-			}
-			if err := checkDeniedPath(resolved, workspace, nil); err != nil {
-				return nil, err
 			}
 			data, err := os.ReadFile(resolved)
 			if err != nil {
@@ -136,18 +133,25 @@ func (t *CreateImageTool) resolveReferenceImages(ctx context.Context, args map[s
 			seenIDs[id] = true
 
 			images := MediaImagesFromCtx(ctx)
-			if len(images) == 0 {
-				return nil, fmt.Errorf("no images available in conversation context")
-			}
 			var img providers.ImageContent
-			if id == "latest" {
+			ref, refErr := resolveImageMediaRef(ctx, id)
+			if refErr == nil && ref.Path != "" {
+				fileImages, err := (&ReadImageTool{}).loadImageFromPath(ctx, ref.Path)
+				if err != nil {
+					return nil, fmt.Errorf("failed to resolve reference image media_id %q: %w", id, err)
+				}
+				img = fileImages[0]
+			} else if id == "latest" && len(images) > 0 {
 				img = images[len(images)-1]
 			} else {
-				var idx int
-				if _, err := fmt.Sscanf(id, "%d", &idx); err == nil && idx >= 0 && idx < len(images) {
+				idx, err := strconv.Atoi(id)
+				if err == nil && idx >= 0 && idx < len(images) {
 					img = images[idx]
 				} else {
-					img = images[len(images)-1]
+					if refErr != nil {
+						return nil, refErr
+					}
+					return nil, fmt.Errorf("image media_id %q has no accessible workspace path", id)
 				}
 			}
 			dataBytes, _ := base64.StdEncoding.DecodeString(img.Data)
@@ -226,9 +230,9 @@ func (t *CreateImageTool) Parameters() map[string]any {
 				"items": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
-						"path":        map[string]any{"type": "string", "description": "Workspace file path to a reference image."},
+						"path":        map[string]any{"type": "string", "description": "Logical workspace path to a reference image, such as .uploads/photo.jpg or delegation input inputs/photo.jpg. Never guess an absolute path."},
 						"url":         map[string]any{"type": "string", "description": "HTTP/HTTPS URL of a reference image."},
-						"id":          map[string]any{"type": "string", "description": "Media ID of a reference image from the chat."},
+						"id":          map[string]any{"type": "string", "description": "Exact image ID from a <media:image id=\"...\"> tag, or 'latest', for in-process tool execution. Claude CLI/MCP callers should use path."},
 						"strength":    map[string]any{"type": "number", "description": "Reference strength (0.0 to 1.0) specific to this image."},
 						"description": map[string]any{"type": "string", "description": "Description of the role or content of this reference image (e.g. 'Lâm', 'Quân')."},
 					},

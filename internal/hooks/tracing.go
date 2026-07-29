@@ -107,5 +107,5 @@ func EmitHookSpan(
 	if collector == nil {
 		return // tracing disabled — no collector attached
 	}
-	collector.EmitSpan(span)
+	collector.EmitSpan(tracing.RedactSpan(ctx, span))
 }

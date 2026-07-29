@@ -6,6 +6,9 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	orchestration "github.com/nextlevelbuilder/goclaw/internal/childrun"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
@@ -22,61 +25,225 @@ func (sm *SubagentManager) Spawn(
 	channel, chatID, peerKind string,
 	callback AsyncCallback,
 ) (string, error) {
-	cfg := sm.effectiveConfig(ctx)
-
-	// Apply edition ceilings (Lite edition enforces lower limits).
-	ed := edition.Current()
-	if ed.MaxSubagentConcurrent > 0 && cfg.MaxConcurrent > ed.MaxSubagentConcurrent {
-		cfg.MaxConcurrent = ed.MaxSubagentConcurrent
+	finishLifecycle, ok := sm.beginLifecycleOperation()
+	if !ok {
+		return "", fmt.Errorf("subagent manager is closed")
 	}
-	if ed.MaxSubagentDepth > 0 && cfg.MaxSpawnDepth > ed.MaxSubagentDepth {
-		cfg.MaxSpawnDepth = ed.MaxSubagentDepth
+	lifecycleTransferred := false
+	defer func() {
+		if !lifecycleTransferred {
+			finishLifecycle()
+		}
+	}()
+
+	if err := validateDelegationChildRunMode(ctx, "spawn", "async"); err != nil {
+		return "", err
 	}
-
-	sm.mu.Lock()
-
-	// Check depth limit
+	cfg := sm.effectiveSpawnConfig(ctx)
+	depth = subagentDepthFromContext(ctx, depth)
 	if depth >= cfg.MaxSpawnDepth {
-		sm.mu.Unlock()
 		return "", fmt.Errorf("spawn depth limit reached (%d/%d)", depth, cfg.MaxSpawnDepth)
 	}
 
-	// Check concurrent limit (scoped per tenant for isolation).
-	tenantID := store.TenantIDFromContext(ctx)
-	running := 0
-	for _, t := range sm.tasks {
-		if t.Status == TaskStatusRunning && t.OriginTenantID == tenantID {
-			running++
-		}
+	scope := subagentScopeFromContext(ctx)
+	if scope.RootAgentKey == "" {
+		scope.RootAgentKey = parentID
 	}
-	if running >= cfg.MaxConcurrent {
-		sm.mu.Unlock()
-		return "", fmt.Errorf("max concurrent subagents reached (%d/%d)", running, cfg.MaxConcurrent)
+	if scope.TenantID == uuid.Nil || scope.RootAgentID == uuid.Nil || scope.RootAgentKey == "" {
+		return "", fmt.Errorf("spawn requires tenant and root-agent context")
+	}
+	parentTaskID := subagentTaskIDFromContext(ctx)
+	admissionParentID := subagentAdmissionParentID(parentTaskID, scope)
+	subTask := newSubagentTask(ctx, scope, parentTaskID, depth, task, label, modelOverride, channel, chatID, peerKind, cfg)
+	admissionParentID, admissionDepth := childRunContinuationLineage(
+		ctx,
+		admissionParentID,
+		subTask.Depth,
+	)
+	// Detach from parent's cancellation chain so subagent survives after parent run completes.
+	// WithoutCancel preserves all context values (agent ID, workspace, trace info, etc.)
+	// but parent Done() no longer propagates. Manual cancel via taskCancel() still works.
+	detached := context.WithoutCancel(ctx)
+	taskCtx, taskCancel := context.WithCancel(detached)
+	subTask.cancelFunc = taskCancel
+
+	if sm.taskStore != nil {
+		subTask.dbID = store.GenNewID()
 	}
 
-	// Check per-parent children limit
-	childCount := 0
-	for _, t := range sm.tasks {
-		if t.ParentID == parentID {
-			childCount++
-		}
+	var ticket *orchestration.ChildRunTicket
+	var err error
+	var iterations int
+	ticket, err = sm.admission.Enqueue(taskCtx, orchestration.ChildRunConstraints{
+		TenantID:     scope.TenantID,
+		RootAgentID:  scope.RootAgentID,
+		RootLimit:    cfg.MaxConcurrent,
+		TaskID:       subTask.ID,
+		ParentTaskID: admissionParentID,
+		ParentFanout: cfg.MaxChildrenPerAgent,
+		Depth:        admissionDepth,
+	}, func(runCtx context.Context, lease *orchestration.ChildRunLease) {
+		sm.markTaskRunning(subTask)
+		iterations = sm.executeTask(withSubagentExecution(runCtx, scope, subTask.ID, subTask.Depth, lease), subTask)
+		lease.Release()
+		sm.persistStatus(runCtx, subTask, iterations)
+	})
+	if err != nil {
+		taskCancel()
+		return "", err
 	}
-	if childCount >= cfg.MaxChildrenPerAgent {
-		sm.mu.Unlock()
-		return "", fmt.Errorf("max children per agent reached (%d/%d)", childCount, cfg.MaxChildrenPerAgent)
+	subTask.admissionTicket = ticket
+
+	sm.acceptTask(taskCtx, subTask)
+	if err := ticket.Activate(); err != nil {
+		sm.rollbackRejectedTask(taskCtx, subTask, err)
+		taskCancel()
+		return "", err
+	}
+	announceCtx := context.WithoutCancel(taskCtx)
+	completion := func() {
+		defer finishLifecycle()
+		<-ticket.Done()
+		sm.finishTicketTask(announceCtx, subTask, ticket, iterations)
+		taskCancel()
+		sm.announceTask(announceCtx, subTask, callback, iterations)
+	}
+	lifecycleTransferred = true
+	go completion()
+
+	slog.Info("subagent queued", "id", subTask.ID, "parent_task", parentTaskID, "depth", subTask.Depth, "label", subTask.Label)
+
+	return fmt.Sprintf("Spawned subagent '%s' (id=%s, depth=%d) for task: %s",
+		subTask.Label, subTask.ID, subTask.Depth, truncate(task, 100)), nil
+}
+
+// RunSync executes a subagent task synchronously, blocking until completion.
+func (sm *SubagentManager) RunSync(
+	ctx context.Context,
+	parentID string,
+	depth int,
+	task, label, modelOverride string,
+	channel, chatID string,
+) (string, []bus.MediaFile, int, error) {
+	finishLifecycle, ok := sm.beginLifecycleOperation()
+	if !ok {
+		return "", nil, 0, fmt.Errorf("subagent manager is closed")
+	}
+	defer finishLifecycle()
+
+	cfg := sm.effectiveSpawnConfig(ctx)
+	depth = subagentDepthFromContext(ctx, depth)
+	if depth >= cfg.MaxSpawnDepth {
+		return "", nil, 0, fmt.Errorf("spawn depth limit reached (%d/%d)", depth, cfg.MaxSpawnDepth)
 	}
 
-	id := generateSubagentID()
+	scope := subagentScopeFromContext(ctx)
+	if scope.RootAgentKey == "" {
+		scope.RootAgentKey = parentID
+	}
+	if scope.TenantID == uuid.Nil || scope.RootAgentID == uuid.Nil || scope.RootAgentKey == "" {
+		return "", nil, 0, fmt.Errorf("spawn requires tenant and root-agent context")
+	}
+	parentTaskID := subagentTaskIDFromContext(ctx)
+	admissionParentID := subagentAdmissionParentID(parentTaskID, scope)
+	subTask := newSubagentTask(ctx, scope, parentTaskID, depth, task, label, modelOverride, channel, chatID, "", cfg)
+	admissionParentID, admissionDepth := childRunContinuationLineage(
+		ctx,
+		admissionParentID,
+		subTask.Depth,
+	)
+	if sm.taskStore != nil {
+		subTask.dbID = store.GenNewID()
+	}
+
+	taskCtx, taskCancel := context.WithCancel(ctx)
+	subTask.cancelFunc = taskCancel
+	constraints := orchestration.ChildRunConstraints{
+		TenantID:     scope.TenantID,
+		RootAgentID:  scope.RootAgentID,
+		RootLimit:    cfg.MaxConcurrent,
+		TaskID:       subTask.ID,
+		ParentTaskID: admissionParentID,
+		ParentFanout: cfg.MaxChildrenPerAgent,
+		Depth:        admissionDepth,
+	}
+	var iterations int
+	run := func(runCtx context.Context, lease *orchestration.ChildRunLease) {
+		sm.acceptTask(runCtx, subTask)
+		sm.markTaskRunning(subTask)
+		iterations = sm.executeTask(withSubagentExecution(runCtx, scope, subTask.ID, subTask.Depth, lease), subTask)
+		lease.Release()
+		sm.persistStatus(runCtx, subTask, iterations)
+	}
+	slog.Info("subagent sync queued", "id", subTask.ID, "parent_task", parentTaskID, "depth", subTask.Depth, "label", subTask.Label)
+	if parentLease := childRunLeaseFromContext(ctx); parentLease != nil {
+		sm.setTaskWaiting(parentTaskID, true)
+		err := parentLease.Continue(taskCtx, constraints, run)
+		sm.setTaskWaiting(parentTaskID, false)
+		if err != nil {
+			if sm.taskAccepted(subTask.ID) && !isTerminalTaskStatus(subTask.Status) {
+				sm.markTaskFailed(subTask, err)
+				sm.persistStatus(taskCtx, subTask, iterations)
+			}
+			taskCancel()
+			return "", nil, iterations, err
+		}
+	} else {
+		ticket, err := sm.admission.Enqueue(taskCtx, constraints, run)
+		if err != nil {
+			taskCancel()
+			return "", nil, 0, err
+		}
+		subTask.admissionTicket = ticket
+		sm.acceptTask(taskCtx, subTask)
+		if err := ticket.Activate(); err != nil {
+			sm.rollbackRejectedTask(taskCtx, subTask, err)
+			taskCancel()
+			return "", nil, 0, err
+		}
+		<-ticket.Done()
+		sm.finishTicketTask(taskCtx, subTask, ticket, iterations)
+	}
+	taskCancel()
+
+	if subTask.Status == TaskStatusFailed {
+		return subTask.Result, nil, iterations, fmt.Errorf("subagent failed: %s", subTask.Result)
+	}
+
+	media := append([]bus.MediaFile(nil), subTask.Media...)
+	return subTask.Result, media, iterations, nil
+}
+
+// effectiveSpawnConfig applies per-agent overrides and edition ceilings once so
+// async admission, sync admission, and pipeline batching use the same limits.
+func (sm *SubagentManager) effectiveSpawnConfig(ctx context.Context) SubagentConfig {
+	cfg := sm.effectiveConfig(ctx)
+	ed := edition.Current()
+	if ed.MaxSubagentDepth > 0 && cfg.MaxSpawnDepth > ed.MaxSubagentDepth {
+		cfg.MaxSpawnDepth = ed.MaxSubagentDepth
+	}
+	return cfg
+}
+
+func newSubagentTask(
+	ctx context.Context,
+	scope TaskScope,
+	parentTaskID string,
+	depth int,
+	task, label, modelOverride string,
+	channel, chatID, peerKind string,
+	cfg SubagentConfig,
+) *SubagentTask {
 	if label == "" {
 		label = truncate(task, 50)
 	}
-
-	subTask := &SubagentTask{
-		ID:                  id,
-		ParentID:            parentID,
+	return &SubagentTask{
+		ID:                  generateSubagentID(),
+		ParentID:            scope.RootAgentKey,
+		ParentTaskID:        parentTaskID,
 		Task:                task,
 		Label:               label,
-		Status:              "running",
+		Status:              TaskStatusQueued,
 		Depth:               depth + 1,
 		Model:               modelOverride,
 		OriginChannel:       channel,
@@ -87,8 +254,10 @@ func (sm *SubagentManager) Spawn(
 		OriginSenderID:      store.SenderIDFromContext(ctx),
 		OriginRole:          store.RoleFromContext(ctx),
 		OriginSessionKey:    ToolSessionKeyFromCtx(ctx),
-		OriginAgentID:       store.AgentIDFromContext(ctx),
-		OriginTenantID:      store.TenantIDFromContext(ctx),
+		OriginAgentID:       scope.RootAgentID,
+		OriginTenantID:      scope.TenantID,
+		RootAgentID:         scope.RootAgentID,
+		RootAgentKey:        scope.RootAgentKey,
 		OriginTraceID:       tracing.TraceIDFromContext(ctx),
 		OriginRootSpanID:    tracing.ParentSpanIDFromContext(ctx),
 		OriginContextWindow: store.AgentContextWindowFromContext(ctx),
@@ -96,106 +265,99 @@ func (sm *SubagentManager) Spawn(
 		CreatedAt:           time.Now().UnixMilli(),
 		spawnConfig:         cfg,
 	}
-	// Detach from parent's cancellation chain so subagent survives after parent run completes.
-	// WithoutCancel preserves all context values (agent ID, workspace, trace info, etc.)
-	// but parent Done() no longer propagates. Manual cancel via taskCancel() still works.
-	detached := context.WithoutCancel(ctx)
-	taskCtx, taskCancel := context.WithCancel(detached)
-	subTask.cancelFunc = taskCancel
-
-	// Assign DB UUID inside lock to avoid race with runTask goroutine.
-	if sm.taskStore != nil {
-		subTask.dbID = store.GenNewID()
-	}
-
-	sm.tasks[id] = subTask
-	sm.mu.Unlock()
-
-	slog.Info("subagent spawned", "id", id, "parent", parentID, "depth", subTask.Depth, "label", label)
-
-	// Persist to DB (fire-and-forget).
-	if sm.taskStore != nil {
-		go sm.persistCreate(taskCtx, subTask)
-	}
-
-	go sm.runTask(taskCtx, subTask, callback)
-
-	return fmt.Sprintf("Spawned subagent '%s' (id=%s, depth=%d) for task: %s",
-		label, id, subTask.Depth, truncate(task, 100)), nil
 }
 
-// RunSync executes a subagent task synchronously, blocking until completion.
-func (sm *SubagentManager) RunSync(
-	ctx context.Context,
-	parentID string,
-	depth int,
-	task, label, modelOverride string,
-	channel, chatID string,
-) (string, int, error) {
-	cfg := sm.effectiveConfig(ctx)
-
-	// Apply edition ceilings (same as Spawn).
-	ed := edition.Current()
-	if ed.MaxSubagentConcurrent > 0 && cfg.MaxConcurrent > ed.MaxSubagentConcurrent {
-		cfg.MaxConcurrent = ed.MaxSubagentConcurrent
-	}
-	if ed.MaxSubagentDepth > 0 && cfg.MaxSpawnDepth > ed.MaxSubagentDepth {
-		cfg.MaxSpawnDepth = ed.MaxSubagentDepth
-	}
-
+func (sm *SubagentManager) markTaskRunning(task *SubagentTask) {
 	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	if task.Status == TaskStatusCancelled {
+		return
+	}
+	task.Status = TaskStatusRunning
+}
 
-	if depth >= cfg.MaxSpawnDepth {
+func (sm *SubagentManager) setTaskWaiting(taskID string, waiting bool) {
+	if taskID == "" {
+		return
+	}
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	task := sm.tasks[taskID]
+	if task == nil || isTerminalTaskStatus(task.Status) {
+		return
+	}
+	if waiting {
+		task.Status = TaskStatusWaiting
+	} else {
+		task.Status = TaskStatusRunning
+	}
+}
+
+func (sm *SubagentManager) markTaskFailed(task *SubagentTask, err error) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	if !isTerminalTaskStatus(task.Status) {
+		task.Status = TaskStatusFailed
+		task.Result = err.Error()
+		task.CompletedAt = time.Now().UnixMilli()
+	}
+}
+
+func (sm *SubagentManager) acceptTask(ctx context.Context, task *SubagentTask) bool {
+	sm.mu.Lock()
+	if _, exists := sm.tasks[task.ID]; exists {
 		sm.mu.Unlock()
-		return "", 0, fmt.Errorf("spawn depth limit reached (%d/%d)", depth, cfg.MaxSpawnDepth)
+		return false
 	}
-
-	id := generateSubagentID()
-	if label == "" {
-		label = truncate(task, 50)
-	}
-
-	subTask := &SubagentTask{
-		ID:                  id,
-		ParentID:            parentID,
-		Task:                task,
-		Label:               label,
-		Status:              "running",
-		Depth:               depth + 1,
-		Model:               modelOverride,
-		OriginChannel:       channel,
-		OriginChatID:        chatID,
-		OriginLocalKey:      ToolLocalKeyFromCtx(ctx),
-		OriginUserID:        store.UserIDFromContext(ctx),
-		OriginSenderID:      store.SenderIDFromContext(ctx),
-		OriginRole:          store.RoleFromContext(ctx),
-		OriginSessionKey:    ToolSessionKeyFromCtx(ctx),
-		OriginAgentID:       store.AgentIDFromContext(ctx),
-		OriginTenantID:      store.TenantIDFromContext(ctx),
-		OriginTraceID:       tracing.TraceIDFromContext(ctx),
-		OriginRootSpanID:    tracing.ParentSpanIDFromContext(ctx),
-		OriginContextWindow: store.AgentContextWindowFromContext(ctx),
-		OriginMaxTokens:     store.AgentMaxTokensFromContext(ctx),
-		CreatedAt:           time.Now().UnixMilli(),
-		spawnConfig:         cfg,
-	}
-	if sm.taskStore != nil {
-		subTask.dbID = store.GenNewID()
-	}
-	sm.tasks[id] = subTask
+	sm.tasks[task.ID] = task
 	sm.mu.Unlock()
-
-	slog.Info("subagent sync started", "id", id, "parent", parentID, "depth", subTask.Depth, "label", label)
-
-	if sm.taskStore != nil {
-		sm.persistCreate(ctx, subTask)
+	if task.spawnConfig.ArchiveAfterMinutes > 0 {
+		sm.startArchiveSweeper()
 	}
+	sm.persistCreate(ctx, task)
+	return true
+}
 
-	iterations := sm.executeTask(ctx, subTask)
+func (sm *SubagentManager) taskAccepted(taskID string) bool {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	_, exists := sm.tasks[taskID]
+	return exists
+}
 
-	if subTask.Status == TaskStatusFailed {
-		return subTask.Result, iterations, fmt.Errorf("subagent failed: %s", subTask.Result)
+func (sm *SubagentManager) rollbackRejectedTask(ctx context.Context, task *SubagentTask, err error) {
+	sm.markTaskFailed(task, err)
+	sm.persistStatus(ctx, task, 0)
+	sm.mu.Lock()
+	if sm.tasks[task.ID] == task {
+		delete(sm.tasks, task.ID)
 	}
+	sm.mu.Unlock()
+}
 
-	return subTask.Result, iterations, nil
+func subagentAdmissionParentID(parentTaskID string, scope TaskScope) string {
+	if parentTaskID != "" {
+		return parentTaskID
+	}
+	return "root:" + scope.RootAgentID.String()
+}
+
+func (sm *SubagentManager) finishTicketTask(
+	ctx context.Context,
+	task *SubagentTask,
+	ticket *orchestration.ChildRunTicket,
+	iterations int,
+) {
+	sm.mu.RLock()
+	terminal := isTerminalTaskStatus(task.Status)
+	sm.mu.RUnlock()
+	if terminal {
+		return
+	}
+	err := ticket.Err()
+	if err == nil {
+		err = fmt.Errorf("child run ended without terminal task state")
+	}
+	sm.markTaskFailed(task, err)
+	sm.persistStatus(ctx, task, iterations)
 }

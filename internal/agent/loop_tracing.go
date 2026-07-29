@@ -152,7 +152,7 @@ func (l *Loop) emitLLMSpanStart(ctx context.Context, start time.Time, iteration 
 		}
 	}
 
-	collector.EmitSpan(span)
+	collector.EmitSpan(tracing.RedactSpan(ctx, span))
 	return spanID
 }
 
@@ -244,7 +244,7 @@ func (l *Loop) emitLLMSpanEnd(ctx context.Context, spanID uuid.UUID, start time.
 		updates["metadata"] = spanMetadata
 	}
 
-	collector.EmitSpanUpdate(spanID, traceID, updates)
+	collector.EmitSpanUpdate(spanID, traceID, tracing.RedactSpanUpdates(ctx, updates))
 }
 
 // ---------------------------------------------------------------------------
@@ -289,7 +289,7 @@ func (l *Loop) emitToolSpanStart(ctx context.Context, start time.Time, toolName,
 		span.TenantID = store.MasterTenantID
 	}
 
-	collector.EmitSpan(span)
+	collector.EmitSpan(tracing.RedactSpan(ctx, span))
 	return spanID
 }
 
@@ -353,7 +353,7 @@ func (l *Loop) emitToolSpanEnd(ctx context.Context, spanID uuid.UUID, start time
 		}
 	}
 
-	collector.EmitSpanUpdate(spanID, traceID, updates)
+	collector.EmitSpanUpdate(spanID, traceID, tracing.RedactSpanUpdates(ctx, updates))
 }
 
 // ---------------------------------------------------------------------------
@@ -401,7 +401,7 @@ func (l *Loop) emitAgentSpanStart(ctx context.Context, agentSpanID uuid.UUID, st
 		span.TenantID = store.MasterTenantID
 	}
 
-	collector.EmitSpan(span)
+	collector.EmitSpan(tracing.RedactSpan(ctx, span))
 }
 
 // emitAgentSpanEnd finalizes the running root agent span with results.
@@ -433,7 +433,7 @@ func (l *Loop) emitAgentSpanEnd(ctx context.Context, agentSpanID uuid.UUID, star
 		// with child spans that directly report model usage.
 	}
 
-	collector.EmitSpanUpdate(agentSpanID, traceID, updates)
+	collector.EmitSpanUpdate(agentSpanID, traceID, tracing.RedactSpanUpdates(ctx, updates))
 }
 
 // previewLimitForVerbose returns the preview character limit based on verbose mode.

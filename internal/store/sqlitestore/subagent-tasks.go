@@ -95,14 +95,20 @@ func scanTask(row interface{ Scan(...any) error }) (*store.SubagentTaskData, err
 	return &t, nil
 }
 
-// Get retrieves a single task by ID (tenant-scoped).
-func (s *SQLiteSubagentTaskStore) Get(ctx context.Context, id uuid.UUID) (*store.SubagentTaskData, error) {
+// Get retrieves a task owned by the tenant and immutable root-agent key.
+func (s *SQLiteSubagentTaskStore) Get(
+	ctx context.Context, rootAgentKey string, id uuid.UUID,
+) (*store.SubagentTaskData, error) {
 	tid, err := requireTenantID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	q := fmt.Sprintf(`SELECT %s FROM subagent_tasks WHERE id = ? AND tenant_id = ?`, subagentTaskSelectCols)
-	row := s.db.QueryRowContext(ctx, q, id, tid)
+	if rootAgentKey == "" {
+		return nil, store.ErrSubagentRootAgentKeyRequired
+	}
+	q := fmt.Sprintf(`SELECT %s FROM subagent_tasks
+		WHERE id = ? AND tenant_id = ? AND parent_agent_key = ?`, subagentTaskSelectCols)
+	row := s.db.QueryRowContext(ctx, q, id, tid, rootAgentKey)
 	t, err := scanTask(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -112,7 +118,7 @@ func (s *SQLiteSubagentTaskStore) Get(ctx context.Context, id uuid.UUID) (*store
 
 // UpdateStatus updates status, result, iterations, and token counts on completion/failure.
 func (s *SQLiteSubagentTaskStore) UpdateStatus(
-	ctx context.Context, id uuid.UUID,
+	ctx context.Context, rootAgentKey string, id uuid.UUID,
 	status string, result *string, iterations int,
 	inputTokens, outputTokens int64,
 ) error {
@@ -120,10 +126,13 @@ func (s *SQLiteSubagentTaskStore) UpdateStatus(
 	if err != nil {
 		return err
 	}
+	if rootAgentKey == "" {
+		return store.ErrSubagentRootAgentKeyRequired
+	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	var completedAt *string
-	if status != "running" {
+	if store.IsTerminalSubagentTaskStatus(status) {
 		v := now
 		completedAt = &v
 	}
@@ -132,10 +141,10 @@ func (s *SQLiteSubagentTaskStore) UpdateStatus(
 		status = ?, result = ?, iterations = ?,
 		input_tokens = ?, output_tokens = ?,
 		completed_at = ?, updated_at = ?
-		WHERE id = ? AND tenant_id = ?`
+		WHERE id = ? AND tenant_id = ? AND parent_agent_key = ?`
 	_, err = s.db.ExecContext(ctx, q,
 		status, result, iterations, inputTokens, outputTokens,
-		completedAt, now, id, tid,
+		completedAt, now, id, tid, rootAgentKey,
 	)
 	return err
 }
@@ -147,6 +156,9 @@ func (s *SQLiteSubagentTaskStore) ListByParent(
 	tid, err := requireTenantID(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if parentAgentKey == "" {
+		return nil, store.ErrSubagentRootAgentKeyRequired
 	}
 
 	var rows *sql.Rows
@@ -170,17 +182,20 @@ func (s *SQLiteSubagentTaskStore) ListByParent(
 
 // ListBySession returns tasks for a specific session key (tenant-scoped).
 func (s *SQLiteSubagentTaskStore) ListBySession(
-	ctx context.Context, sessionKey string,
+	ctx context.Context, rootAgentKey, sessionKey string,
 ) ([]store.SubagentTaskData, error) {
 	tid, err := requireTenantID(ctx)
 	if err != nil {
 		return nil, err
 	}
+	if rootAgentKey == "" {
+		return nil, store.ErrSubagentRootAgentKeyRequired
+	}
 
 	q := fmt.Sprintf(`SELECT %s FROM subagent_tasks
-		WHERE tenant_id = ? AND session_key = ?
+		WHERE tenant_id = ? AND parent_agent_key = ? AND session_key = ?
 		ORDER BY created_at DESC LIMIT 50`, subagentTaskSelectCols)
-	rows, err := s.db.QueryContext(ctx, q, tid, sessionKey)
+	rows, err := s.db.QueryContext(ctx, q, tid, rootAgentKey, sessionKey)
 	if err != nil {
 		return nil, err
 	}
@@ -188,14 +203,38 @@ func (s *SQLiteSubagentTaskStore) ListBySession(
 	return collectTasks(rows)
 }
 
-// Archive marks old completed/failed/cancelled tasks as archived.
-func (s *SQLiteSubagentTaskStore) Archive(ctx context.Context, olderThan time.Duration) (int64, error) {
+// Archive marks a bounded batch of old terminal tasks as archived.
+func (s *SQLiteSubagentTaskStore) Archive(
+	ctx context.Context, rootAgentKey string, olderThan time.Duration, limit int,
+) (int64, error) {
+	tid, err := requireTenantID(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if rootAgentKey == "" {
+		return 0, store.ErrSubagentRootAgentKeyRequired
+	}
+	if limit <= 0 {
+		return 0, nil
+	}
+
 	cutoff := time.Now().UTC().Add(-olderThan).Format(time.RFC3339Nano)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	q := `UPDATE subagent_tasks SET archived_at = ?, updated_at = ?
-		WHERE status IN ('completed', 'failed', 'cancelled')
-		AND archived_at IS NULL AND completed_at < ?`
-	res, err := s.db.ExecContext(ctx, q, now, now, cutoff)
+		WHERE tenant_id = ? AND parent_agent_key = ? AND id IN (
+			SELECT id
+			FROM subagent_tasks
+			WHERE tenant_id = ? AND parent_agent_key = ?
+				AND status IN ('completed', 'failed', 'cancelled')
+				AND archived_at IS NULL AND completed_at < ?
+			ORDER BY completed_at, id
+			LIMIT ?
+		)`
+	res, err := s.db.ExecContext(
+		ctx, q,
+		now, now, tid, rootAgentKey,
+		tid, rootAgentKey, cutoff, limit,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -204,10 +243,15 @@ func (s *SQLiteSubagentTaskStore) Archive(ctx context.Context, olderThan time.Du
 
 // UpdateMetadata merges metadata keys atomically using json_set().
 // Builds a single UPDATE statement to avoid read-merge-write race window.
-func (s *SQLiteSubagentTaskStore) UpdateMetadata(ctx context.Context, id uuid.UUID, metadata map[string]any) error {
+func (s *SQLiteSubagentTaskStore) UpdateMetadata(
+	ctx context.Context, rootAgentKey string, id uuid.UUID, metadata map[string]any,
+) error {
 	tid, err := requireTenantID(ctx)
 	if err != nil {
 		return err
+	}
+	if rootAgentKey == "" {
+		return store.ErrSubagentRootAgentKeyRequired
 	}
 	if len(metadata) == 0 {
 		return nil
@@ -228,9 +272,10 @@ func (s *SQLiteSubagentTaskStore) UpdateMetadata(ctx context.Context, id uuid.UU
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	setExpr := "json_set(metadata, " + strings.Join(parts, ", ") + ")"
-	args = append(args, now, id, tid)
+	args = append(args, now, id, tid, rootAgentKey)
 
-	q := fmt.Sprintf(`UPDATE subagent_tasks SET metadata = %s, updated_at = ? WHERE id = ? AND tenant_id = ?`, setExpr)
+	q := fmt.Sprintf(`UPDATE subagent_tasks SET metadata = %s, updated_at = ?
+		WHERE id = ? AND tenant_id = ? AND parent_agent_key = ?`, setExpr)
 	_, err = s.db.ExecContext(ctx, q, args...)
 	return err
 }

@@ -80,6 +80,9 @@ func (t *SendFileTool) Parameters() map[string]any {
 // Execute resolves and validates the path, checks for duplicate delivery, then
 // returns a Result with Media populated for downstream pipeline delivery.
 func (t *SendFileTool) Execute(ctx context.Context, args map[string]any) *Result {
+	if IsDelegationArtifactRun(ctx) {
+		return ErrorResult("delegation files are published only after the delegated run completes")
+	}
 	requests, err := parseSendFileRequests(args)
 	if err != nil {
 		return ErrorResult(err.Error())

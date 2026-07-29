@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
@@ -130,19 +132,30 @@ func (t *ReadDocumentTool) Execute(ctx context.Context, args map[string]any) *Re
 		return ErrorResult(err.Error())
 	}
 
-	slog.Info("read_document: resolved file", "path", docPath, "mime", docMime, "media_id", mediaID)
+	displayPath := tracing.RedactText(ctx, docPath)
+	if IsDelegationArtifactRun(ctx) {
+		logical := path.Clean(strings.ReplaceAll(strings.TrimSpace(docPathArg), "\\", "/"))
+		if logical == "inputs" || strings.HasPrefix(logical, "inputs/") {
+			displayPath = logical
+		}
+	}
+	slog.Info("read_document: resolved file", "path", displayPath, "mime", docMime, "media_id", mediaID)
 
 	if isArchiveDocumentPath(docPath) {
 		return NewResult(fmt.Sprintf(
 			"Archive file available at %s. read_document does not analyze archive containers directly. Use exec to inspect or extract it, for example: unzip -l %q or unzip -q %q -d <output-dir>, then use list_files/read_file on extracted files.",
-			docPath, docPath, docPath,
+			displayPath, displayPath, displayPath,
 		))
 	}
 
 	// Read document file.
 	data, err := os.ReadFile(docPath)
 	if err != nil {
-		return ErrorResult(fmt.Sprintf("Failed to read document file: %v", err))
+		return ErrorResult(fmt.Sprintf(
+			"Failed to read document file %s: %s",
+			displayPath,
+			tracing.RedactText(ctx, err.Error()),
+		))
 	}
 	slog.Info("read_document: file loaded", "size_bytes", len(data))
 	if len(data) > documentMaxBytes {
@@ -169,7 +182,11 @@ func (t *ReadDocumentTool) Execute(ctx context.Context, args map[string]any) *Re
 		// handing it to a subprocess. A rejection routes to vision rather than
 		// erroring, preserving today's behavior for MediaRef-derived paths.
 		if safePath, verr := t.validateExecPath(ctx, docPath); verr != nil {
-			slog.Warn("security.read_document_local_path_rejected", "path", docPath, "reason", verr.Error())
+			slog.Warn(
+				"security.read_document_local_path_rejected",
+				"path", displayPath,
+				"reason", tracing.RedactText(ctx, verr.Error()),
+			)
 		} else if text, err := t.localParser.Extract(ctx, safePath, docMime); err == nil {
 			slog.Info("read_document: local extraction hit", "mime", docMime, "bytes", len(text))
 			return NewResult(text) // no Provider/Model/Usage => no LLM spend
@@ -216,6 +233,9 @@ func (t *ReadDocumentTool) validateExecPath(ctx context.Context, path string) (s
 	}
 	if err := checkDeniedPath(resolved, workspace, nil); err != nil {
 		return "", err
+	}
+	if err := ValidateRegularFileForRead(resolved); err != nil {
+		return "", fmt.Errorf("document path is not a safe regular file: %w", err)
 	}
 	return resolved, nil
 }

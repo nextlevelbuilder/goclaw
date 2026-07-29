@@ -45,7 +45,7 @@ func (l *Loop) runViaPipeline(ctx context.Context, req RunRequest) (*RunResult, 
 	if err != nil {
 		return nil, err
 	}
-	return convertRunResult(pResult), nil
+	return redactDelegationRunResult(&req, convertRunResult(pResult)), nil
 }
 
 // buildPipelineDeps maps Loop fields + methods to PipelineDeps callbacks.
@@ -94,7 +94,7 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 		ResolveContextWindow: l.resolveEffectiveContextWindow,
 		EmitEvent: func(event any) {
 			if ae, ok := event.(AgentEvent); ok {
-				l.emit(ae)
+				l.emit(redactDelegationAgentEvent(req, ae))
 			}
 		},
 

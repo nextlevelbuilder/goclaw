@@ -394,6 +394,7 @@
     "description": "Mô tả",
     "descriptionPlaceholder": "Mô tả tùy chọn...",
     "maxConcurrent": "Tối đa đồng thời",
+    "maxConcurrentHint": "Chỉ là metadata tương thích; Agent Link dùng giới hạn an toàn toàn tiến trình và hàng đợi có giới hạn.",
     "status": "Trạng thái",
     "active": "Hoạt động",
     "disabled": "Tắt",

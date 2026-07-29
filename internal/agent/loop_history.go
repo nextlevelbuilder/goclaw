@@ -48,6 +48,14 @@ func (l *Loop) buildMessages(ctx context.Context, history []providers.Message, s
 			tools.UserChatLayer(tools.SanitizePathSegment(userID), shared),
 		)
 	}
+	if tools.IsDelegationArtifactRun(ctx) {
+		promptWorkspace = "."
+		const artifactGuidance = "Delegation workspace: write outputs using ordinary relative paths in the current workspace. Read staged inputs only through inputs/... . Files are returned to the caller only after runtime validation and publication."
+		if extraSystemPrompt != "" {
+			extraSystemPrompt += "\n\n"
+		}
+		extraSystemPrompt += artifactGuidance
+	}
 
 	// Resolve context files once — also detect BOOTSTRAP.md presence.
 	// lightContext: skip loading context files, only inject ExtraSystemPrompt (heartbeat checklist).

@@ -15,27 +15,36 @@ type SubagentRosterEntry struct {
 // including per-agent config limits for deterministic LLM context.
 type SubagentRoster struct {
 	Entries     []SubagentRosterEntry
-	Total       int // total tasks for this parent
+	Active      int // currently running tasks for this parent
+	Total       int // retained tasks for this parent
 	MaxPerAgent int // from spawnConfig.MaxChildrenPerAgent
 }
 
-// RosterForParent returns the full roster of tasks for a parent.
+// RosterForParent returns the full roster for one tenant/root-agent tree.
 // Sorted: completed/failed/cancelled first, then running (deterministic output).
-func (sm *SubagentManager) RosterForParent(parentID string) SubagentRoster {
+func (sm *SubagentManager) RosterForParent(scope TaskScope) SubagentRoster {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
 	var entries []SubagentRosterEntry
-	maxPerAgent := 0
+	active := 0
+	maxPerAgent := sm.config.MaxChildrenPerAgent
+	var latestCreatedAt int64
+	var latestID string
 	for _, t := range sm.tasks {
-		if t.ParentID != parentID {
+		if !taskMatchesScope(t, scope) {
 			continue
 		}
 		entries = append(entries, SubagentRosterEntry{
 			Label:  t.Label,
 			Status: t.Status,
 		})
-		if maxPerAgent == 0 {
+		if isActiveTaskStatus(t.Status) {
+			active++
+		}
+		if t.CreatedAt > latestCreatedAt || (t.CreatedAt == latestCreatedAt && t.ID > latestID) {
+			latestCreatedAt = t.CreatedAt
+			latestID = t.ID
 			maxPerAgent = t.spawnConfig.MaxChildrenPerAgent
 		}
 	}
@@ -56,6 +65,7 @@ func (sm *SubagentManager) RosterForParent(parentID string) SubagentRoster {
 
 	return SubagentRoster{
 		Entries:     entries,
+		Active:      active,
 		Total:       len(entries),
 		MaxPerAgent: maxPerAgent,
 	}

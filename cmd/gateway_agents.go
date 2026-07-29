@@ -11,6 +11,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/memory"
+	"github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -163,7 +164,7 @@ func buildEmbeddingProvider(
 	return nil
 }
 
-func setupSubagents(providerReg *providers.Registry, cfg *config.Config, msgBus *bus.MessageBus, toolsReg *tools.Registry, workspace string, sandboxMgr sandbox.Manager, secureCLIStore store.SecureCLIStore, usageCapSvc *usagecaps.Service) *tools.SubagentManager {
+func setupSubagents(providerReg *providers.Registry, cfg *config.Config, msgBus *bus.MessageBus, toolsReg *tools.Registry, workspace string, sandboxMgr sandbox.Manager, secureCLIStore store.SecureCLIStore, usageCapSvc *usagecaps.Service, admission *orchestration.ChildRunAdmission) *tools.SubagentManager {
 	names := providerReg.List(context.Background())
 	if len(names) == 0 {
 		return nil
@@ -211,7 +212,7 @@ func setupSubagents(providerReg *providers.Registry, cfg *config.Config, msgBus 
 		return reg
 	}
 
-	manager := tools.NewSubagentManager(provider, providerReg, agentCfg.Model, msgBus, toolsFactory, subCfg)
+	manager := tools.NewSubagentManagerWithAdmission(provider, providerReg, agentCfg.Model, msgBus, toolsFactory, subCfg, admission)
 	manager.SetUsageCapService(usageCapSvc)
 	manager.SetAgentBudget(agentCfg.ContextWindow, agentCfg.MaxTokens)
 	return manager

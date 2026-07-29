@@ -65,6 +65,9 @@ func (l *Loop) enrichInputMedia(ctx context.Context, req *RunRequest, messages [
 	var mediaRefs []providers.MediaRef
 	if len(req.Media) > 0 {
 		mediaRefs = l.persistMedia(req.SessionKey, req.Media, tools.ToolWorkspaceFromCtx(ctx))
+		if req.RunKind == "delegate" {
+			rehomeDelegatedMediaMessage(messages, req.Media, mediaRefs, tools.ToolWorkspaceFromCtx(ctx))
+		}
 
 		// Register persisted text uploads in vault (async, non-blocking).
 		if l.onTextUploaded != nil {
@@ -109,7 +112,13 @@ func (l *Loop) enrichInputMedia(ctx context.Context, req *RunRequest, messages [
 		ctx = l.loadHistoricalImagesForTool(ctx, mediaRefs, messages)
 	}
 
-	// 2b. Collect document MediaRefs (historical + current) for read_document tool.
+	// 2b. Collect image MediaRefs (historical + current) for exact media_id
+	// resolution by read_image and create_image.
+	if imageRefs := collectRefsByKind(messages, mediaRefs, "image"); len(imageRefs) > 0 {
+		ctx = tools.WithMediaImageRefs(ctx, imageRefs)
+	}
+
+	// 2c. Collect document MediaRefs (historical + current) for read_document tool.
 	if docRefs := collectRefsByKind(messages, mediaRefs, "document"); len(docRefs) > 0 {
 		ctx = tools.WithMediaDocRefs(ctx, docRefs)
 		// Enrich the last user message with persisted file paths so skills can access
@@ -117,38 +126,41 @@ func (l *Loop) enrichInputMedia(ctx context.Context, req *RunRequest, messages [
 		l.enrichDocumentPaths(messages, mediaRefs)
 	}
 
-	// 2c. Collect audio MediaRefs (historical + current) for read_audio tool.
+	// 2d. Collect audio MediaRefs (historical + current) for read_audio tool.
 	if audioRefs := collectRefsByKind(messages, mediaRefs, "audio"); len(audioRefs) > 0 {
 		ctx = tools.WithMediaAudioRefs(ctx, audioRefs)
 		l.enrichAudioIDs(messages, mediaRefs)
 	}
 
-	// 2d. Collect video MediaRefs (historical + current) for read_video tool.
+	// 2e. Collect video MediaRefs (historical + current) for read_video tool.
 	if videoRefs := collectRefsByKind(messages, mediaRefs, "video"); len(videoRefs) > 0 {
 		ctx = tools.WithMediaVideoRefs(ctx, videoRefs)
 		l.enrichVideoIDs(messages, mediaRefs)
 	}
 
-	// 2e. Enrich <media:image> tags with persisted media IDs so the LLM
+	// 2f. Enrich <media:image> tags with persisted media IDs so the LLM
 	// knows images were received and stored (consistent with audio/video enrichment).
-	l.enrichImageIDs(messages, mediaRefs)
+	l.enrichImageIDs(messages, mediaRefs, tools.ToolWorkspaceFromCtx(ctx))
 
-	// 2e-ii. In file-ref mode, enrich ALL user messages' image tags with file paths.
-	// This enables read_image(path=...) for both current and historical images.
-	if deferToReadImageTool {
-		l.enrichImagePaths(messages)
-	}
+	// 2f-ii. Enrich ALL user messages' image tags with logical file paths.
+	// This upgrades legacy absolute paths and keeps current and historical media
+	// references safe regardless of whether images are also attached inline.
+	l.enrichImagePaths(messages, tools.ToolWorkspaceFromCtx(ctx))
 
-	// 2f. Collect all media file paths for team workspace auto-collect.
+	// 2g. Collect all media file paths for team workspace auto-collect.
 	// When the leader calls team_tasks(create), these paths are copied to the
 	// team workspace so members can access attached files.
-	if len(mediaRefs) > 0 && l.mediaStore != nil {
+	if len(mediaRefs) > 0 {
 		var mediaPaths []string
 		for _, ref := range mediaRefs {
 			// Prefer workspace-local path (.uploads/) over canonical .media/ path.
 			if ref.Path != "" {
 				mediaPaths = append(mediaPaths, ref.Path)
-			} else if p, err := l.mediaStore.LoadPath(ref.ID); err == nil {
+			} else if l.mediaStore != nil {
+				p, err := l.mediaStore.LoadPath(ref.ID)
+				if err != nil {
+					continue
+				}
 				mediaPaths = append(mediaPaths, p)
 			}
 		}
@@ -165,4 +177,71 @@ func (l *Loop) enrichInputMedia(ctx context.Context, req *RunRequest, messages [
 	}
 
 	return ctx, messages, mediaRefs
+}
+
+// rehomeDelegatedMediaMessage replaces caller-owned attachment paths with the
+// delegatee-owned persisted copies and ensures every imported attachment has a
+// media tag. The normal enrichment pass then adds the new IDs and local paths.
+func rehomeDelegatedMediaMessage(
+	messages []providers.Message,
+	input []bus.MediaFile,
+	refs []providers.MediaRef,
+	workspace string,
+) {
+	if len(messages) == 0 || len(refs) == 0 {
+		return
+	}
+	lastUser := -1
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			lastUser = i
+			break
+		}
+	}
+	if lastUser < 0 {
+		return
+	}
+
+	content := messages[lastUser].Content
+	for i := 0; i < len(input) && i < len(refs); i++ {
+		if input[i].Path != "" && refs[i].Path != "" {
+			replacement := logicalWorkspaceMediaPath(workspace, refs[i].Path)
+			if replacement == "" {
+				replacement = filepath.Base(refs[i].Path)
+			}
+			content = strings.ReplaceAll(content, input[i].Path, replacement)
+		}
+	}
+
+	tagCounts := map[string]int{
+		"image":    strings.Count(content, "<media:image"),
+		"document": strings.Count(content, "<media:document"),
+		"audio":    strings.Count(content, "<media:audio") + strings.Count(content, "<media:voice"),
+		"video":    strings.Count(content, "<media:video"),
+	}
+	for _, ref := range refs {
+		tag := ""
+		switch ref.Kind {
+		case "image":
+			tag = "<media:image>"
+		case "document":
+			tag = "<media:document>"
+		case "audio":
+			tag = "<media:audio>"
+		case "video":
+			tag = "<media:video>"
+		}
+		if tag == "" {
+			continue
+		}
+		if tagCounts[ref.Kind] > 0 {
+			tagCounts[ref.Kind]--
+			continue
+		}
+		if content != "" && !strings.HasSuffix(content, "\n") {
+			content += "\n"
+		}
+		content += tag
+	}
+	messages[lastUser].Content = content
 }

@@ -16,10 +16,10 @@ type Edition struct {
 	MaxSubagentDepth      int            `json:"max_subagent_depth"`      // 0 = use config default
 	KGEnabled             bool           `json:"kg_enabled"`
 	RBACEnabled           bool           `json:"rbac_enabled"`
-	TeamFullMode          bool           `json:"team_full_mode"`          // false = lite task actions only
-	VectorSearch          bool           `json:"vector_search"`           // false = FTS5 only
-	SupportsPipNpm        bool           `json:"supports_pip_npm"`        // false for Lite desktop
-	SupportsApk           bool           `json:"supports_apk"`            // false for Lite desktop (no apk on macOS/Windows)
+	TeamFullMode          bool           `json:"team_full_mode"`   // false = lite task actions only
+	VectorSearch          bool           `json:"vector_search"`    // false = FTS5 only
+	SupportsPipNpm        bool           `json:"supports_pip_npm"` // false for Lite desktop
+	SupportsApk           bool           `json:"supports_apk"`     // false for Lite desktop (no apk on macOS/Windows)
 }
 
 // --- Presets ---
@@ -92,4 +92,14 @@ func (e Edition) ChannelLimit(channelType string) int {
 // (kind="message"). Standard edition allows channels; Lite does not.
 func (e Edition) AllowsChannels() bool {
 	return e.Name == "standard"
+}
+
+// ChildRunLimit returns the process-wide cap for executing self-spawn and
+// Agent Link child callbacks. It is separate from the per-agent
+// maxConcurrent setting and is intentionally not serialized.
+func (e Edition) ChildRunLimit() int {
+	if e.Name == Lite.Name {
+		return 2
+	}
+	return 32
 }

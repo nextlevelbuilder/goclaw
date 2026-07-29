@@ -340,6 +340,7 @@
       "title": "Subagents",
       "description": "Controls sub-agent spawning limits and behavior",
       "maxConcurrent": "Max Concurrent",
+      "maxConcurrentLiteHint": "Per-agent setting; Lite process safety cap: 2",
       "maxSpawnDepth": "Max Spawn Depth",
       "maxChildrenPerAgent": "Max Children Per Agent",
       "archiveAfter": "Archive After (minutes)",

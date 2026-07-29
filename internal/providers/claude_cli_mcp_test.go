@@ -1,6 +1,9 @@
 package providers
 
 import (
+	"context"
+	"encoding/json"
+	"os"
 	"testing"
 )
 
@@ -177,5 +180,68 @@ func TestVerifyBridgeContext_ExtraParamOrderMatters(t *testing.T) {
 	ok2, _ := VerifyBridgeContext(key, "agent1", "user1", "", "", "", "", "", sig, "sessionKey", "localKey")
 	if ok2 {
 		t.Error("expected ok=false for swapped extra param order")
+	}
+}
+
+func TestBridgeContextFromOptsCarriesDelegationArtifactContext(t *testing.T) {
+	got := bridgeContextFromOpts(map[string]any{
+		OptAgentID:          "agent-id",
+		OptWorkspace:        "/runtime/outputs",
+		OptDelegationID:     "delegation-id",
+		OptDelegationInputs: "/runtime/inputs",
+	})
+
+	if got.DelegationID != "delegation-id" || got.DelegationInputs != "/runtime/inputs" {
+		t.Fatalf("delegation bridge context = %#v", got)
+	}
+}
+
+func TestWriteMCPConfigSignsDelegationArtifactHeaders(t *testing.T) {
+	t.Setenv("GOCLAW_DATA_DIR", t.TempDir())
+	const (
+		token      = "gateway-token"
+		sessionKey = "session-key"
+	)
+	data := &MCPConfigData{GatewayAddr: "127.0.0.1:18790", GatewayToken: token}
+	bc := BridgeContext{
+		AgentID:          "agent-id",
+		Workspace:        "/runtime/outputs",
+		DelegationID:     "delegation-id",
+		DelegationInputs: "/runtime/inputs",
+	}
+	path := data.WriteMCPConfig(context.Background(), sessionKey, bc)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg struct {
+		MCPServers map[string]struct {
+			Headers map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	headers := cfg.MCPServers["goclaw-bridge"].Headers
+	if headers["X-Delegation-ID"] != bc.DelegationID ||
+		headers["X-Delegation-Inputs"] != bc.DelegationInputs {
+		t.Fatalf("delegation headers = %#v", headers)
+	}
+	wantSig := SignBridgeContext(
+		token,
+		bc.AgentID,
+		"",
+		"",
+		"",
+		"",
+		bc.Workspace,
+		"",
+		"",
+		sessionKey,
+		bc.DelegationID,
+		bc.DelegationInputs,
+	)
+	if headers["X-Bridge-Sig"] != wantSig {
+		t.Fatal("delegation headers were not covered by the exact bridge signature")
 	}
 }

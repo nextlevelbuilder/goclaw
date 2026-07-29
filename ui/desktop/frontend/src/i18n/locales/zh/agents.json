@@ -340,6 +340,7 @@
       "title": "子Agent",
       "description": "控制子Agent生成限制和行为",
       "maxConcurrent": "最大并发数",
+      "maxConcurrentLiteHint": "每个 Agent 的设置；Lite 进程安全上限：2",
       "maxSpawnDepth": "最大生成深度",
       "maxChildrenPerAgent": "每Agent最大子数",
       "archiveAfter": "归档时间（分钟）",
