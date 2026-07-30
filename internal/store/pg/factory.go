@@ -22,6 +22,7 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 	if skillsDir == "" {
 		skillsDir = config.ResolvedDataDirFromEnv() + "/skills-store"
 	}
+	subagentTasks := NewPGSubagentTaskStore(db)
 
 	pgStores := &store.Stores{
 		DB:                     db,
@@ -59,7 +60,8 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 		SkillTenantCfgs:        NewPGSkillTenantConfigStore(db),
 		SkillEvolution:         NewPGSkillEvolutionStore(db),
 		SystemConfigs:          NewPGSystemConfigStore(db),
-		SubagentTasks:          NewPGSubagentTaskStore(db),
+		SubagentTasks:          subagentTasks,
+		SubagentTaskRecovery:   subagentTasks,
 		Vault:                  NewPGVaultStore(db),
 		Episodic:               NewPGEpisodicStore(db),
 		EvolutionMetrics:       NewPGEvolutionMetricsStore(db),

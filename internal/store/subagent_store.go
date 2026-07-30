@@ -13,7 +13,11 @@ var (
 	ErrSubagentTaskNotFound        = errors.New("subagent task not found in owner scope")
 )
 
-const InterruptedSubagentTaskResult = "interrupted: gateway stopped before terminal completion was durably recorded"
+const (
+	InterruptedSubagentTaskResult = "interrupted: gateway stopped before terminal completion was durably recorded"
+	// SubagentTaskStatusMaxLength matches the durable PG and SQLite schema contract.
+	SubagentTaskStatusMaxLength = 20
+)
 
 // IsTerminalSubagentTaskStatus reports whether a status ends the task
 // lifecycle and therefore receives a completed_at timestamp.

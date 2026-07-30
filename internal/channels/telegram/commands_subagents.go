@@ -20,7 +20,7 @@ func subagentStatusIcon(status string) string {
 	switch status {
 	case "queued":
 		return "⏳"
-	case "running/waiting_child":
+	case "waiting_child":
 		return "↪️"
 	case "completed":
 		return "✅"

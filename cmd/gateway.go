@@ -101,12 +101,12 @@ type snapshotBucketRefresher interface {
 
 func recoverInterruptedSubagentTasks(
 	ctx context.Context,
-	recovery store.SubagentTaskRecoveryStore,
+	stores *store.Stores,
 	retryDelay time.Duration,
 ) (int64, error) {
 	recoveryCtx := store.WithTenantID(ctx, store.MasterTenantID)
 	for {
-		recovered, err := recovery.RecoverInterrupted(recoveryCtx)
+		recovered, err := stores.SubagentTaskRecovery.RecoverInterrupted(recoveryCtx)
 		if err == nil {
 			return recovered, nil
 		}
@@ -319,11 +319,11 @@ func runGateway() {
 	// Accepted async child runs are process-owned and cannot resume after a
 	// restart. Reconcile their durable rows before wiring tools or accepting
 	// traffic so completion lookups never remain queued/running forever.
-	if recovery, ok := pgStores.SubagentTasks.(store.SubagentTaskRecoveryStore); ok {
+	if pgStores.SubagentTaskRecovery != nil {
 		startupCtx, stopStartup := signal.NotifyContext(
 			context.Background(), syscall.SIGINT, syscall.SIGTERM,
 		)
-		n, err := recoverInterruptedSubagentTasks(startupCtx, recovery, time.Second)
+		n, err := recoverInterruptedSubagentTasks(startupCtx, pgStores, time.Second)
 		stopStartup()
 		if err != nil {
 			slog.Info("subagent_tasks.recover_interrupted_aborted", "err", err)

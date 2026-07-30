@@ -41,7 +41,7 @@ type SubagentConfig struct {
 const (
 	TaskStatusQueued    = "queued"
 	TaskStatusRunning   = "running"
-	TaskStatusWaiting   = "running/waiting_child"
+	TaskStatusWaiting   = string(orchestration.ChildRunWaitingChild)
 	TaskStatusCompleted = "completed"
 	TaskStatusFailed    = "failed"
 	TaskStatusCancelled = "cancelled"

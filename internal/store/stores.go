@@ -40,6 +40,7 @@ type Stores struct {
 	SkillEvolution        SkillEvolutionStore
 	SystemConfigs         SystemConfigStore
 	SubagentTasks         SubagentTaskStore
+	SubagentTaskRecovery  SubagentTaskRecoveryStore
 	Vault                 VaultStore
 	Episodic              EpisodicStore
 	EvolutionMetrics      EvolutionMetricsStore

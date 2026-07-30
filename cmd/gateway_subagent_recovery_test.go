@@ -38,8 +38,9 @@ func (s *scriptedSubagentTaskRecovery) callCount() int {
 
 func TestRecoverInterruptedSubagentTasksRetriesBeforeTraffic(t *testing.T) {
 	recovery := &scriptedSubagentTaskRecovery{failures: 2, recovered: 3}
+	stores := &store.Stores{SubagentTaskRecovery: recovery}
 	recovered, err := recoverInterruptedSubagentTasks(
-		context.Background(), recovery, time.Millisecond,
+		context.Background(), stores, time.Millisecond,
 	)
 	if err != nil {
 		t.Fatalf("recoverInterruptedSubagentTasks: %v", err)
@@ -53,7 +54,8 @@ func TestRecoverInterruptedSubagentTasksStopsOnShutdown(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	recovery := &scriptedSubagentTaskRecovery{failures: 1}
-	_, err := recoverInterruptedSubagentTasks(ctx, recovery, time.Hour)
+	stores := &store.Stores{SubagentTaskRecovery: recovery}
+	_, err := recoverInterruptedSubagentTasks(ctx, stores, time.Hour)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("recovery error = %v, want context.Canceled", err)
 	}

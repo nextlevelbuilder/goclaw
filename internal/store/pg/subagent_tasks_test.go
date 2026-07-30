@@ -271,6 +271,11 @@ func TestPGSubagentTaskStoreCompletedAtOnlyForTerminalStatus(t *testing.T) {
 
 func TestPGSubagentTaskStoreRecoverInterrupted(t *testing.T) {
 	db := hooksTestDB(t)
+	// Recovery is intentionally process-global. Reset its shared table so rows
+	// left by other store tests cannot affect the exact recovery count.
+	if _, err := db.Exec(`DELETE FROM subagent_tasks`); err != nil {
+		t.Fatalf("reset subagent tasks before global recovery: %v", err)
+	}
 	tenantA, rootAID := seedTenantAndAgent(t, db)
 	tenantB, rootBID := seedTenantAndAgent(t, db)
 	ctxA := tenantScopedCtx(tenantA)
@@ -287,7 +292,7 @@ func TestPGSubagentTaskStoreRecoverInterrupted(t *testing.T) {
 	}
 	runningID := createPGSubagentTask(t, taskStore, ctxA, rootAID, "root-a", "running", "running")
 	waitingID := createPGSubagentTask(
-		t, taskStore, ctxB, rootBID, "root-b", "waiting", "running/waiting_child",
+		t, taskStore, ctxB, rootBID, "root-b", "waiting", "waiting_child",
 	)
 	if err := taskStore.UpdateMetadata(ctxB, rootBID, waitingID, map[string]any{
 		"completion_kind": "delegate",

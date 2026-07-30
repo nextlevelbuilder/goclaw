@@ -406,7 +406,7 @@ func TestSQLiteSubagentTaskStoreRecoverInterrupted(t *testing.T) {
 	}
 	runningID := createSQLiteSubagentTask(t, taskStore, ctxA, rootAID, "root-a", "running", "running")
 	waitingID := createSQLiteSubagentTask(
-		t, taskStore, ctxB, rootBID, "root-b", "waiting", "running/waiting_child",
+		t, taskStore, ctxB, rootBID, "root-b", "waiting", "waiting_child",
 	)
 	if err := taskStore.UpdateMetadata(ctxB, rootBID, waitingID, map[string]any{
 		"completion_kind": "delegate",

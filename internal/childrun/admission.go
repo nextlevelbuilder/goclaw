@@ -26,7 +26,7 @@ const (
 	ChildRunNew          ChildRunState = "new"
 	ChildRunQueued       ChildRunState = "queued"
 	ChildRunRunning      ChildRunState = "running"
-	ChildRunWaitingChild ChildRunState = "running/waiting_child"
+	ChildRunWaitingChild ChildRunState = "waiting_child"
 	ChildRunCompleted    ChildRunState = "completed"
 	ChildRunFailed       ChildRunState = "failed"
 	ChildRunCancelled    ChildRunState = "cancelled"

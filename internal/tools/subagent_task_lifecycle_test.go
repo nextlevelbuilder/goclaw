@@ -45,6 +45,34 @@ func newRecordingSubagentTaskStore() *recordingSubagentTaskStore {
 	}
 }
 
+func TestSubagentTaskStatusesFitPersistentStore(t *testing.T) {
+	statuses := []string{
+		TaskStatusQueued,
+		TaskStatusRunning,
+		TaskStatusWaiting,
+		TaskStatusCompleted,
+		TaskStatusFailed,
+		TaskStatusCancelled,
+	}
+	for _, status := range statuses {
+		if len(status) > store.SubagentTaskStatusMaxLength {
+			t.Fatalf(
+				"subagent status %q is %d characters, exceeds persistent limit %d",
+				status,
+				len(status),
+				store.SubagentTaskStatusMaxLength,
+			)
+		}
+	}
+	if TaskStatusWaiting != string(orchestration.ChildRunWaitingChild) {
+		t.Fatalf(
+			"task waiting status %q differs from child-run state %q",
+			TaskStatusWaiting,
+			orchestration.ChildRunWaitingChild,
+		)
+	}
+}
+
 func (s *recordingSubagentTaskStore) Create(_ context.Context, task *store.SubagentTaskData) error {
 	if s.createErr != nil {
 		return s.createErr
