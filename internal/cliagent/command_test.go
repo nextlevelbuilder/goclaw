@@ -26,6 +26,10 @@ func TestCommand(t *testing.T) {
 			mode:     PermissionAuto,
 			want: []string{"claude", "-p", "fix the build",
 				"--output-format", "stream-json", "--verbose", "--include-partial-messages",
+				// AskUserQuestion renders a picker the CLI cannot show headlessly, and
+				// this transport cannot return a structured choice — so it is disallowed
+				// and the model asks in prose instead.
+				"--disallowedTools", "AskUserQuestion",
 				"--permission-mode", "bypassPermissions"},
 		},
 		{
@@ -35,6 +39,10 @@ func TestCommand(t *testing.T) {
 			mode:     PermissionManual,
 			want: []string{"claude", "-p", "fix the build",
 				"--output-format", "stream-json", "--verbose", "--include-partial-messages",
+				// AskUserQuestion renders a picker the CLI cannot show headlessly, and
+				// this transport cannot return a structured choice — so it is disallowed
+				// and the model asks in prose instead.
+				"--disallowedTools", "AskUserQuestion",
 				"--permission-mode", "default"},
 		},
 		{

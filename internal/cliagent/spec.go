@@ -151,7 +151,10 @@ func Defaults() map[string]Spec {
 			Provider:        ProviderClaudeCode,
 			Binary:          "claude",
 			TaskArgs:        []string{"-p", TaskPlaceholder},
-			ExtraArgs:       []string{"--output-format", "stream-json", "--verbose", "--include-partial-messages"},
+			// AskUserQuestion is disallowed here too: a one-shot delegated run has no
+			// human to answer, so reaching for it burns the turn on a question nobody
+			// can hear. Better that the model states its assumption and proceeds.
+			ExtraArgs:       []string{"--output-format", "stream-json", "--verbose", "--include-partial-messages", "--disallowedTools", "AskUserQuestion"},
 			CredEnv:         []string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"},
 			Env:             sandboxBaseEnv(),
 			Output:          OutputClaudeStreamJSON,
@@ -187,6 +190,17 @@ func Defaults() map[string]Spec {
 			// It is listed here (not in ManualApproveArgs) so a session that starts
 			// in auto mode can still be switched to an asking mode later without
 			// restarting the process.
+			//   --disallowedTools AskUserQuestion
+			//
+			// AskUserQuestion renders a multiple-choice picker in the CLI's own TUI.
+			// Headless there is no TUI, so the CLI punts it to the harness like any
+			// other tool — which turned "Claude wants to ask you something" into an
+			// approval card showing raw JSON, and approving it led nowhere because
+			// this transport cannot return a structured CHOICE, only a message.
+			//
+			// Disallowing it makes the model ask in prose instead, which is what a
+			// chat is for: the user simply replies in the next turn. This is also why
+			// a local `claude` never prompts for it — it answers the question itself.
 			InteractiveArgs: []string{
 				"-p",
 				"--input-format", "stream-json",
@@ -194,6 +208,7 @@ func Defaults() map[string]Spec {
 				"--verbose",
 				"--include-partial-messages",
 				"--permission-prompt-tool", "stdio",
+				"--disallowedTools", "AskUserQuestion",
 			},
 		},
 

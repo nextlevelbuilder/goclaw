@@ -61,6 +61,10 @@ func TestClaudeCodeDefaultMatchesToday(t *testing.T) {
 	want := []string{
 		"claude", "-p", "port the repo",
 		"--output-format", "stream-json", "--verbose", "--include-partial-messages",
+		// AskUserQuestion renders a picker the CLI cannot show headlessly, and
+		// this transport cannot return a structured choice — so it is disallowed
+		// and the model asks in prose instead.
+		"--disallowedTools", "AskUserQuestion",
 		"--permission-mode", "bypassPermissions",
 	}
 	if !reflect.DeepEqual(argv, want) {

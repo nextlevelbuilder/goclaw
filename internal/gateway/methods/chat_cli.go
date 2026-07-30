@@ -676,6 +676,23 @@ type cliRelay struct {
 	alwaysAllow map[string]bool
 }
 
+// cliUnanswerableTool reports whether a tool's ask can never be satisfied through
+// a chat, and what to tell the model instead.
+//
+// Kept to tools whose ONLY problem is the missing UI channel — never used to wave
+// through something consequential. A tool that merely lacks a nice card still goes
+// to the user.
+func cliUnanswerableTool(toolName string) (string, bool) {
+	// Compare on the BARE name: callers may pass either the CLI's own name or the
+	// "cli:"-prefixed form used for approval records. cliApprovalToolName ADDS the
+	// prefix, so it is the wrong tool for normalising here.
+	switch strings.TrimPrefix(strings.TrimSpace(toolName), "cli:") {
+	case "AskUserQuestion":
+		return "This conversation cannot display a multiple-choice picker, so that tool is unavailable. Ask the question in plain text as part of your reply and the user will answer in their next message.", true
+	}
+	return "", false
+}
+
 // cliAlwaysAllowKey is the signature an "approve always" decision is remembered
 // under.
 //
@@ -936,6 +953,23 @@ func (r *cliRelay) permission(ctx context.Context, pr clisession.PermissionReque
 		slog.Debug("cli chat: permission ask in auto mode, allowed without prompting",
 			"sessionKey", r.sessionKey, "tool", pr.ToolName)
 		return clisession.PermissionDecision{Allow: true}
+	}
+
+	// Some tools cannot be answered over this transport no matter what the user
+	// clicks, so putting them in front of a human is a dead end. Handle them here
+	// instead of raising a prompt.
+	//
+	// AskUserQuestion is the case that showed up in practice: it renders a
+	// multiple-choice picker in the CLI's own TUI, and headless the CLI punts it to
+	// the harness like any other tool. Approving it cannot work — the reply channel
+	// carries messages, not a structured CHOICE — so the honest answer is to refuse
+	// it and tell the model to ask in prose, which the user can simply reply to. The
+	// spec also passes --disallowedTools AskUserQuestion so it should never get
+	// here; this is the safety net for a build that ignores the flag.
+	if reason, unanswerable := cliUnanswerableTool(pr.ToolName); unanswerable {
+		slog.Debug("cli chat: refusing a tool this transport cannot answer",
+			"sessionKey", r.sessionKey, "tool", pr.ToolName)
+		return clisession.PermissionDecision{DenyReason: reason}
 	}
 
 	// Already answered "always" for this action in this conversation? Then asking

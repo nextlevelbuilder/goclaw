@@ -2,6 +2,7 @@ package methods
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/nextlevelbuilder/goclaw/internal/clisession"
@@ -101,5 +102,31 @@ func TestAlwaysAllowIsScopedToTheConversation(t *testing.T) {
 	})
 	if a.allowedAlways(other) {
 		t.Error("always-allow bled onto a different command in the same conversation")
+	}
+}
+
+// A tool whose ask can never be satisfied over this transport must not reach the
+// user: clicking Approve on it cannot work, so the prompt is a dead end.
+func TestUnanswerableToolsAreRefusedWithGuidance(t *testing.T) {
+	reason, unanswerable := cliUnanswerableTool("cli:AskUserQuestion")
+	if !unanswerable {
+		t.Fatal("AskUserQuestion should be refused: this transport carries messages, not a structured choice")
+	}
+	// The refusal has to tell the model what to do INSTEAD, or the turn just stops.
+	if !strings.Contains(strings.ToLower(reason), "plain text") {
+		t.Errorf("refusal does not redirect the model to prose: %q", reason)
+	}
+
+	// The bare name must work too — the prefix is added by cliApprovalToolName.
+	if _, ok := cliUnanswerableTool("AskUserQuestion"); !ok {
+		t.Error("the unprefixed tool name was not recognised")
+	}
+
+	// Everything consequential still goes to the user. This list is the guard
+	// against the helper quietly growing into a bypass.
+	for _, tool := range []string{"Bash", "Edit", "Write", "WebFetch", "Task", "NotebookEdit", "Read"} {
+		if _, ok := cliUnanswerableTool(tool); ok {
+			t.Errorf("%s must still be answered by the user, not handled internally", tool)
+		}
 	}
 }
