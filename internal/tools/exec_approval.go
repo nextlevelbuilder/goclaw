@@ -357,7 +357,8 @@ func (m *ExecApprovalManager) Resolve(id string, decision ApprovalDecision) erro
 	return nil
 }
 
-// ListPending returns all pending approval requests.
+// ListPending returns all pending approval requests, UNSCOPED. It is for
+// in-process/admin use only. Do NOT serve it to a client: see ListPendingFor.
 func (m *ExecApprovalManager) ListPending() []*PendingApproval {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -367,6 +368,54 @@ func (m *ExecApprovalManager) ListPending() []*PendingApproval {
 		result = append(result, pa)
 	}
 	return result
+}
+
+// visibleTo reports whether a caller may see and answer this approval. An
+// approval belongs to the user who triggered it; approvals raised with no user
+// (cron, system exec) are visible to any caller in the same tenant, since
+// otherwise nobody could ever answer them. Tenant must always match, and a
+// zero-tenant caller can only see zero-tenant approvals — fail closed rather
+// than letting an unauthenticated context match everything.
+func (pa *PendingApproval) visibleTo(tenantID uuid.UUID, userID string) bool {
+	if pa.tenantID != tenantID {
+		return false
+	}
+	return pa.UserID == "" || pa.UserID == userID
+}
+
+// ListPendingFor returns only the approvals the caller may see. This is what a
+// client-facing handler must use: the unscoped list would disclose OTHER users'
+// pending actions, including the Detail describing exactly what is about to run.
+func (m *ExecApprovalManager) ListPendingFor(tenantID uuid.UUID, userID string) []*PendingApproval {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	result := make([]*PendingApproval, 0, len(m.pending))
+	for _, pa := range m.pending {
+		if pa.visibleTo(tenantID, userID) {
+			result = append(result, pa)
+		}
+	}
+	return result
+}
+
+// ResolveFor answers an approval only if the caller owns it.
+//
+// Approval ids are short and sequential ("exec-3"), so an id is not a secret and
+// must never be the only thing standing between a caller and someone else's
+// pending action. Without this check any operator-scoped user — in ANY tenant —
+// could authorise code execution inside another user's session by guessing an id.
+// A non-visible id reports the same "not found" as a missing one, so this cannot
+// be used to probe which ids exist.
+func (m *ExecApprovalManager) ResolveFor(id string, decision ApprovalDecision, tenantID uuid.UUID, userID string) error {
+	m.mu.Lock()
+	pa, ok := m.pending[id]
+	m.mu.Unlock()
+
+	if !ok || !pa.visibleTo(tenantID, userID) {
+		return fmt.Errorf("approval %q not found or already resolved", id)
+	}
+	return m.Resolve(id, decision)
 }
 
 // matchesAllowlist checks if a command matches any allowlist pattern or dynamic always-allow.

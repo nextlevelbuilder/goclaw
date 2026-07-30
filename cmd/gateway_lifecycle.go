@@ -14,6 +14,7 @@ import (
 	whatsappcloud "github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp_cloud"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
+	"github.com/nextlevelbuilder/goclaw/internal/gateway/methods"
 	"github.com/nextlevelbuilder/goclaw/internal/heartbeat"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
@@ -25,12 +26,16 @@ import (
 
 // lifecycleDeps bundles the extra parameters needed by runLifecycle that are not in gatewayDeps.
 type lifecycleDeps struct {
-	sched             *scheduler.Scheduler
-	heartbeatTicker   *heartbeat.Ticker
-	quotaChecker      *channels.QuotaChecker
-	webFetchTool      *tools.WebFetchTool
-	ttsTool           *tools.TtsTool
-	sandboxMgr        sandbox.Manager
+	sched           *scheduler.Scheduler
+	heartbeatTicker *heartbeat.Ticker
+	quotaChecker    *channels.QuotaChecker
+	webFetchTool    *tools.WebFetchTool
+	ttsTool         *tools.TtsTool
+	sandboxMgr      sandbox.Manager
+	// cliChat owns the live interactive-CLI sessions. Shut down BEFORE the
+	// sandbox containers are released, so each CLI process is closed cleanly
+	// instead of having its container pulled out from under it.
+	cliChat           *methods.CLIChat
 	postTurn          tools.PostTurnProcessor
 	subagentMgr       *tools.SubagentManager
 	consumerTeamStore store.TeamStore
@@ -172,6 +177,12 @@ func (d *gatewayDeps) runLifecycle(
 		// Stop permission cache sweep goroutines so they don't leak past shutdown.
 		if d.permCache != nil {
 			d.permCache.Close()
+		}
+
+		// Close interactive CLI sessions (and their processes) before the
+		// containers they run in are released.
+		if deps.cliChat != nil {
+			deps.cliChat.Shutdown()
 		}
 
 		// Stop sandbox pruning + release containers

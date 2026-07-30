@@ -3,11 +3,13 @@ package sandbox
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"maps"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -165,64 +167,72 @@ func newDockerSandbox(ctx context.Context, name string, cfg Config, workspace st
 	}, nil
 }
 
-// Exec runs a command inside the container.
-// Optional ExecOption (e.g. WithEnv) injects per-call env vars via docker exec -e.
-func (s *DockerSandbox) Exec(ctx context.Context, command []string, workDir string, opts ...ExecOption) (*ExecResult, error) {
+// touch marks the container as recently used so background pruning does not
+// reclaim it out from under an active caller.
+func (s *DockerSandbox) touch() {
 	s.mu.Lock()
 	s.lastUsed = time.Now()
 	s.mu.Unlock()
+}
 
-	timeout := time.Duration(s.config.TimeoutSec) * time.Second
-	if timeout <= 0 {
-		timeout = 5 * time.Minute
+// maxOutputBytes resolves the per-exec output capture cap, applying the 1MB
+// default when unset.
+func (s *DockerSandbox) maxOutputBytes() int {
+	return normalizeMaxOutput(s.config.MaxOutputBytes)
+}
+
+// normalizeMaxOutput applies the default output capture cap (1MB) when max is
+// unset. Shared by Exec and ExecInteractive so both truncate identically.
+func normalizeMaxOutput(max int) int {
+	if max <= 0 {
+		return 1 << 20 // 1MB default
 	}
+	return max
+}
 
-	execCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	o := ApplyExecOpts(opts)
-
-	args := []string{"exec"}
-	// Inject env vars as -e flags before containerID (credentialed exec)
-	for k, v := range o.Env {
-		args = append(args, "-e", k+"="+v)
+// buildDockerExecArgs builds the argv (after the "docker" binary) for running
+// command inside containerID. It is the single source of truth for exec argv
+// shape, shared by Exec and ExecInteractive so the two can never drift apart:
+// they differ ONLY by the "-i" flag, which keeps stdin open for the interactive
+// case.
+//
+// Env vars are emitted as -e flags before the container ID (credentialed exec);
+// keys are sorted so the argv is deterministic (a Go map has no stable order,
+// which would otherwise make the command line unreproducible and untestable).
+func buildDockerExecArgs(containerID string, command []string, workDir string, env map[string]string, interactive bool) []string {
+	args := make([]string, 0, 4+2*len(env)+len(command))
+	args = append(args, "exec")
+	if interactive {
+		// -i keeps the container process's stdin attached to ours, so the caller
+		// can keep writing to it for the life of the session.
+		args = append(args, "-i")
+	}
+	for _, k := range slices.Sorted(maps.Keys(env)) {
+		args = append(args, "-e", k+"="+env[k])
 	}
 	if workDir != "" {
 		args = append(args, "-w", workDir)
 	}
-	args = append(args, s.containerID)
+	args = append(args, containerID)
 	args = append(args, command...)
+	return args
+}
 
-	cmd := exec.CommandContext(execCtx, "docker", args...)
-
-	// Limit output capture to prevent OOM from large command output
-	maxOut := s.config.MaxOutputBytes
-	if maxOut <= 0 {
-		maxOut = 1 << 20 // 1MB default
+// teeLines wires output capture for one stream: everything lands in buf (capped),
+// and when cb is non-nil each complete line is handed to cb as it arrives. The
+// returned lineWriter (nil when cb is nil) must be flushed once the stream is
+// finished so a final unterminated line is not lost.
+func teeLines(buf *limitedBuffer, cb func(string)) (io.Writer, *lineWriter) {
+	if cb == nil {
+		return buf, nil
 	}
-	stdout := &limitedBuffer{max: maxOut}
-	stderr := &limitedBuffer{max: maxOut}
-	if o.StdoutLine != nil {
-		// Tee stdout to a line splitter so the caller sees each line live while
-		// the full output is still captured for the result.
-		lw := &lineWriter{cb: o.StdoutLine}
-		cmd.Stdout = io.MultiWriter(stdout, lw)
-		defer lw.flush()
-	} else {
-		cmd.Stdout = stdout
-	}
-	cmd.Stderr = stderr
+	lw := &lineWriter{cb: cb}
+	return io.MultiWriter(buf, lw), lw
+}
 
-	err := cmd.Run()
-	exitCode := 0
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
-			return nil, fmt.Errorf("docker exec: %w", err)
-		}
-	}
-
+// execResultFrom assembles an ExecResult from the captured buffers, appending the
+// truncation marker Exec has always used.
+func execResultFrom(exitCode int, stdout, stderr *limitedBuffer) *ExecResult {
 	result := &ExecResult{
 		ExitCode: exitCode,
 		Stdout:   stdout.String(),
@@ -234,7 +244,53 @@ func (s *DockerSandbox) Exec(ctx context.Context, command []string, workDir stri
 	if stderr.truncated {
 		result.Stderr += "\n...[output truncated]"
 	}
-	return result, nil
+	return result
+}
+
+// Exec runs a command inside the container.
+// Optional ExecOption (e.g. WithEnv) injects per-call env vars via docker exec -e.
+func (s *DockerSandbox) Exec(ctx context.Context, command []string, workDir string, opts ...ExecOption) (*ExecResult, error) {
+	s.touch()
+
+	timeout := time.Duration(s.config.TimeoutSec) * time.Second
+	if timeout <= 0 {
+		timeout = 5 * time.Minute
+	}
+
+	execCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	o := ApplyExecOpts(opts)
+
+	args := buildDockerExecArgs(s.containerID, command, workDir, o.Env, false)
+	cmd := exec.CommandContext(execCtx, "docker", args...)
+
+	// Limit output capture to prevent OOM from large command output
+	stdout := &limitedBuffer{max: s.maxOutputBytes()}
+	stderr := &limitedBuffer{max: s.maxOutputBytes()}
+	stdoutW, outLW := teeLines(stdout, o.StdoutLine)
+	stderrW, errLW := teeLines(stderr, o.StderrLine)
+	cmd.Stdout = stdoutW
+	cmd.Stderr = stderrW
+	if outLW != nil {
+		defer outLW.flush()
+	}
+	if errLW != nil {
+		defer errLW.flush()
+	}
+
+	err := cmd.Run()
+	exitCode := 0
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			exitCode = exitErr.ExitCode()
+		} else {
+			return nil, fmt.Errorf("docker exec: %w", err)
+		}
+	}
+
+	return execResultFrom(exitCode, stdout, stderr), nil
 }
 
 // Destroy removes the container.
@@ -479,6 +535,10 @@ func sanitizeKey(key string) string {
 // lineWriter splits a byte stream into lines and invokes cb once per complete
 // line as bytes arrive. Any partial trailing line is held until the next Write
 // or a final flush(). Used to stream a long exec's stdout to the caller live.
+//
+// A trailing CR is stripped so CRLF-terminated output (a CLI running under a
+// Windows-ish or pty-ish stream) yields the same line as LF-terminated output.
+// It is NOT safe for concurrent use — install one lineWriter per stream.
 type lineWriter struct {
 	cb  func(string)
 	buf []byte
@@ -491,7 +551,7 @@ func (w *lineWriter) Write(p []byte) (int, error) {
 		if i < 0 {
 			break
 		}
-		line := string(w.buf[:i])
+		line := string(bytes.TrimSuffix(w.buf[:i], []byte{'\r'}))
 		w.buf = w.buf[i+1:]
 		if w.cb != nil {
 			w.cb(line)
@@ -502,9 +562,9 @@ func (w *lineWriter) Write(p []byte) (int, error) {
 
 func (w *lineWriter) flush() {
 	if len(w.buf) > 0 && w.cb != nil {
-		w.cb(string(w.buf))
-		w.buf = nil
+		w.cb(string(bytes.TrimSuffix(w.buf, []byte{'\r'})))
 	}
+	w.buf = nil
 }
 
 type limitedBuffer struct {

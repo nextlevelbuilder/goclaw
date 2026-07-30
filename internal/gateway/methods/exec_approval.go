@@ -35,7 +35,9 @@ func (m *ExecApprovalMethods) handleList(_ context.Context, client *gateway.Clie
 		}))
 		return
 	}
-	pending := m.manager.ListPending()
+	// SCOPED: the unscoped list would disclose other users' pending actions,
+	// including the Detail that describes exactly what is about to run.
+	pending := m.manager.ListPendingFor(client.TenantID(), client.UserID())
 
 	// One wire shape for both the list response and the exec.approval.requested
 	// event (tools.PendingApproval.Wire), so the UI renders a pending action the
@@ -76,7 +78,9 @@ func (m *ExecApprovalMethods) handleApprove(ctx context.Context, client *gateway
 		decision = tools.ApprovalAllowAlways
 	}
 
-	if err := m.manager.Resolve(params.ID, decision); err != nil {
+	// Ownership-checked: ids are short and sequential, so an id alone must never
+	// let a caller authorise execution inside someone else's session.
+	if err := m.manager.ResolveFor(params.ID, decision, client.TenantID(), client.UserID()); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, err.Error()))
 		return
 	}
@@ -107,7 +111,7 @@ func (m *ExecApprovalMethods) handleDeny(ctx context.Context, client *gateway.Cl
 		return
 	}
 
-	if err := m.manager.Resolve(params.ID, tools.ApprovalDeny); err != nil {
+	if err := m.manager.ResolveFor(params.ID, tools.ApprovalDeny, client.TenantID(), client.UserID()); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, err.Error()))
 		return
 	}

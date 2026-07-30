@@ -155,6 +155,15 @@ const (
 	MethodConnectionsCredentialSet    = "connections.credential.set"
 	MethodConnectionsCredentialDelete = "connections.credential.delete"
 
+	// MethodConnectionsChatOpen opens an interactive conversation with a
+	// connected coding CLI: it validates that the connection is visible,
+	// enabled and able to hold a conversation at all, then returns the
+	// `sessionKey` the client sends chat.send to. Nothing is started here —
+	// the first chat.send is what launches the CLI process. Requires
+	// operator+ like the other connections.* actions (it can start a
+	// process and spend the user's CLI credential).
+	MethodConnectionsChatOpen = "connections.chat.open"
+
 	MethodUsageGet     = "usage.get"
 	MethodUsageSummary = "usage.summary"
 

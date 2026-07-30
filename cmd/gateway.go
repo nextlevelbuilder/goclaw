@@ -27,6 +27,7 @@ import (
 	whatsappcloud "github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp_cloud"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo"
 	zalopersonal "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal"
+	"github.com/nextlevelbuilder/goclaw/internal/clisession"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/consolidation"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
@@ -403,9 +404,33 @@ func runGateway() {
 		server.SetTenantBackupHandler(httpapi.NewTenantBackupHandler(pgStores.DB, cfg, pgStores.Tenants, Version, permPE.IsOwner))
 	}
 
+	// Interactive CLI chat: one clisession.Manager for the whole process (it owns
+	// the live CLI processes and their idle reaper), wired into chat.send and
+	// connections.chat.open. Only built when both halves it needs are present —
+	// the connection catalogue and a sandbox to run a CLI in — so a deployment
+	// without them reports "not available" instead of starting a reaper goroutine
+	// for a feature that can never run. Shutdown is called from runLifecycle.
+	var cliChat *methods.CLIChat
+	if pgStores.CLIConnections != nil && sandboxMgr != nil {
+		cliChat = methods.NewCLIChat(methods.CLIChatDeps{
+			Manager:             clisession.NewManager(clisession.ManagerOpts{}),
+			Connections:         pgStores.CLIConnections,
+			Sandbox:             sandboxMgr,
+			Workspace:           workspace,
+			Approvals:           execApprovalMgr,
+			Sessions:            pgStores.Sessions,
+			EventBus:            msgBus,
+			Runs:                agentRouter,
+			AnthropicKey:        cfg.Providers.Anthropic.APIKey,
+			AnthropicOAuthToken: cfg.Providers.Anthropic.OAuthToken,
+			GitHubToken:         os.Getenv("GOCLAW_GITHUB_TOKEN"),
+		})
+		slog.Info("interactive CLI chat wired", "approvals", execApprovalMgr != nil)
+	}
+
 	// Register all RPC methods
 	server.SetLogTee(logTee)
-	pairingMethods, heartbeatMethods, chatMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants, pgStores.SkillTenantCfgs, audioMgr, pgStores.Reminders, pgStores.SubagentTasks, pgStores.CLIConnections)
+	pairingMethods, heartbeatMethods, chatMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants, pgStores.SkillTenantCfgs, audioMgr, pgStores.Reminders, pgStores.SubagentTasks, pgStores.CLIConnections, cliChat)
 	// Wire tool registry so chat.toolResult can route client-tool responses.
 	chatMethods.SetToolRegistry(toolsReg)
 	// Wire media store so chat.send can normalize client-supplied media
@@ -640,6 +665,7 @@ func runGateway() {
 		webFetchTool:      webFetchTool,
 		ttsTool:           ttsTool,
 		sandboxMgr:        sandboxMgr,
+		cliChat:           cliChat,
 		postTurn:          postTurn,
 		subagentMgr:       subagentMgr,
 		consumerTeamStore: consumerTeamStore,

@@ -25,6 +25,18 @@
 //	agent:default:telegram:group:-100123456:topic:99
 //	agent:default:subagent:my-task
 //	agent:default:cron:reminder-job-id
+//
+// There is ONE session form that is deliberately NOT an agent session:
+//
+//	CLI chat:    cli:{connectionID}:{conversationID}
+//
+// It is a conversation with a connected coding CLI (see internal/clisession),
+// which has no agent behind it at all — no loop, no provider, no system prompt.
+// The "cli:" head is what makes that unmistakable: ParseSessionKey requires
+// parts[0] == "agent", so it returns ("", "") for a CLI key and every predicate
+// built on it (IsWSSession, IsSubagentSession, IsCronSession, IsTeamSession,
+// IsHeartbeatSession) is therefore false. A CLI key can never be mistaken for
+// an agent's, and an agent key can never be mistaken for a CLI one.
 package sessions
 
 import (
@@ -178,6 +190,50 @@ func BuildWSSessionKey(agentID, conversationID string) string {
 func IsWSSession(key string) bool {
 	_, rest := ParseSessionKey(key)
 	return strings.HasPrefix(rest, "ws:") || strings.HasPrefix(rest, "ws-")
+}
+
+// CLISessionPrefix heads every interactive-CLI session key. It is NOT "agent:"
+// on purpose — see the package doc.
+const CLISessionPrefix = "cli:"
+
+// BuildCLISessionKey builds the session key for one conversation with a
+// connected coding CLI (internal/clisession).
+//
+//	cli:{connectionID}:{conversationID}
+//
+// connectionID is the tenant catalogue row id (store.CLIConnection.ID), so the
+// key alone says which CLI to talk to on a resumed conversation — there is no
+// agent to parse it out of. conversationID is a fresh UUID per chat, which is
+// what separates two simultaneous conversations with the SAME connection.
+//
+// The tenant/user are deliberately NOT in the key: the session row carries
+// user_id and every read path is tenant-scoped, exactly as for a ws: session.
+func BuildCLISessionKey(connectionID, conversationID string) string {
+	return fmt.Sprintf("%s%s:%s", CLISessionPrefix, connectionID, conversationID)
+}
+
+// ParseCLISessionKey extracts the connection and conversation ids from a CLI
+// session key. ok is false for anything else, INCLUDING a key that starts with
+// "cli:" but has an empty id — a caller must never open a session against an
+// empty connection id.
+func ParseCLISessionKey(key string) (connectionID, conversationID string, ok bool) {
+	parts := strings.SplitN(key, ":", 3)
+	if len(parts) < 3 || parts[0] != "cli" || parts[1] == "" || parts[2] == "" {
+		return "", "", false
+	}
+	return parts[1], parts[2], true
+}
+
+// IsCLISession reports whether a session key CLAIMS to be an interactive-CLI
+// conversation.
+//
+// It is deliberately a prefix test rather than a full parse: it is the routing
+// predicate, and a malformed "cli:…" key must be answered by the CLI handler
+// (which explains what is wrong) instead of silently falling through to the
+// agent path and starting an agent run in a CLI-looking session. ParseCLISessionKey
+// is the strict check that handler then applies.
+func IsCLISession(key string) bool {
+	return strings.HasPrefix(key, CLISessionPrefix)
 }
 
 // PeerKindFromGroup returns PeerGroup if isGroup is true, PeerDirect otherwise.

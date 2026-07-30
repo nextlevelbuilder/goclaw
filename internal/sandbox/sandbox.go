@@ -169,6 +169,11 @@ type ExecOpts struct {
 	// (e.g. a delegated Claude Code run) back to the user in real time. The full
 	// stdout is still buffered and returned in ExecResult.
 	StdoutLine func(line string)
+	// StderrLine is the stderr counterpart of StdoutLine. It matters most for
+	// ExecInteractive, where a CLI's diagnostics arrive interleaved with its
+	// protocol output on stdout and there is no "end of run" at which to inspect
+	// them. The full stderr is still buffered and returned in ExecResult.
+	StderrLine func(line string)
 }
 
 // WithEnv injects additional environment variables into the sandbox exec call.
@@ -183,6 +188,12 @@ func WithStdoutLine(cb func(line string)) ExecOption {
 	return func(o *ExecOpts) { o.StdoutLine = cb }
 }
 
+// WithStderrLine streams each complete stderr line to cb as it is produced,
+// while still buffering the full output for the returned ExecResult.
+func WithStderrLine(cb func(line string)) ExecOption {
+	return func(o *ExecOpts) { o.StderrLine = cb }
+}
+
 // ApplyExecOpts resolves variadic ExecOption into ExecOpts.
 func ApplyExecOpts(opts []ExecOption) ExecOpts {
 	var o ExecOpts
@@ -192,11 +203,62 @@ func ApplyExecOpts(opts []ExecOption) ExecOpts {
 	return o
 }
 
+// InteractiveSession is a live handle on a long-running process started by
+// Sandbox.ExecInteractive: stdin stays open for writing while stdout/stderr are
+// line-streamed to the callbacks supplied via WithStdoutLine/WithStderrLine.
+//
+// It exists so goclaw can hold a bidirectional conversation with a coding CLI
+// (`claude --input-format stream-json --output-format stream-json`): user turns
+// and permission answers go IN via WriteLine, events and permission requests
+// come OUT as streamed lines.
+//
+// A session is safe for concurrent use: WriteLine may be called from a different
+// goroutine than the one reading lines or waiting on Done.
+type InteractiveSession interface {
+	// WriteLine sends one line to the process's stdin, appending a trailing
+	// newline if s does not already end with one. It returns ErrSessionClosed if
+	// the session was closed or the process has already exited — it never panics
+	// on a closed pipe.
+	WriteLine(s string) error
+
+	// Wait blocks until the process exits and returns its result (exit code plus
+	// the full captured stdout/stderr, subject to Config.MaxOutputBytes). It may
+	// be called more than once and from several goroutines; every caller gets the
+	// same result. A non-zero exit status is NOT an error — it is reported via
+	// ExecResult.ExitCode, matching Exec. The error is non-nil only when the
+	// process could not be run/reaped, or when the caller's ctx was cancelled out
+	// from under a live session (a Close() is the normal end of a session and
+	// reports no error).
+	Wait() (*ExecResult, error)
+
+	// Close terminates the process and releases resources. It is idempotent and
+	// safe to call concurrently with Wait.
+	Close() error
+
+	// Done is closed once the process has exited, so callers can select on it
+	// alongside their own context.
+	Done() <-chan struct{}
+
+	// ExitCode reports the process's exit status. It is only valid after Done is
+	// closed; before that it returns 0.
+	ExitCode() int
+}
+
 // Sandbox is the interface for sandboxed code execution.
 type Sandbox interface {
 	// Exec runs a command inside the sandbox and returns the result.
 	// Optional ExecOption (e.g. WithEnv) configures per-call behavior.
 	Exec(ctx context.Context, command []string, workDir string, opts ...ExecOption) (*ExecResult, error)
+
+	// ExecInteractive starts a long-lived process with a writable stdin and
+	// line-streamed stdout/stderr. It returns once the process has STARTED
+	// (not when it exits) — the caller then drives it through the returned
+	// InteractiveSession and must Close() it to release the process.
+	//
+	// Unlike Exec, Config.TimeoutSec is NOT applied: an interactive session is
+	// long-lived by nature. The supplied ctx is the only deadline — cancelling it
+	// kills the process.
+	ExecInteractive(ctx context.Context, command []string, workDir string, opts ...ExecOption) (InteractiveSession, error)
 
 	// Destroy removes the sandbox container and cleans up resources.
 	Destroy(ctx context.Context) error

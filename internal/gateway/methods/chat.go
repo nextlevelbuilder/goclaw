@@ -12,12 +12,12 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
-	"github.com/nextlevelbuilder/goclaw/internal/config"
-	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
-	mediastore "github.com/nextlevelbuilder/goclaw/internal/media"
+	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	mediastore "github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sessions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -42,6 +42,11 @@ type ChatMethods struct {
 	// Nil on single-instance/FSBackend deploys — boundary still strips
 	// signed-URL wrappers, just skips the S3 fetch step.
 	mediaStore *mediastore.Store
+	// cliChat serves chat.send for an interactive-CLI conversation
+	// (session keys headed "cli:"). Nil on a deployment without it —
+	// such a session key then gets a clear "not available" error
+	// instead of being run as an agent turn. See chat_cli.go.
+	cliChat *CLIChat
 	// subagentMgr is consulted by handleActiveSessions to enrich the
 	// reload-snapshot with in-memory state for any subagents still
 	// streaming under each active run. Nil-safe; when unset the
@@ -328,6 +333,23 @@ func (m *ChatMethods) handleSend(ctx context.Context, client *gateway.Client, re
 	var params chatSendParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidJSON)))
+		return
+	}
+
+	// EARLY BRANCH — interactive CLI conversation.
+	//
+	// A "cli:" session key is a conversation with a connected coding CLI, not an
+	// agent: there is no agent to resolve, no loop to run and no provider to
+	// call. Routing here — before the agent is resolved and before ANY of the
+	// work below (run registration, message persistence, team-dispatch
+	// injection, the run goroutine) — is what keeps the normal path unchanged:
+	// routeForSessionKey is a pure function of the session key, so for every
+	// existing session it returns routeAgent and execution falls straight
+	// through as it did before this branch existed.
+	//
+	// Nothing below this point may be moved above it.
+	if routeForSessionKey(params.SessionKey) == routeCLI {
+		m.dispatchCLISend(ctx, client, req, params)
 		return
 	}
 
@@ -1015,7 +1037,7 @@ func (m *ChatMethods) handleToolResult(ctx context.Context, client *gateway.Clie
 
 	routed := m.tools.RouteClientToolResult(params.ToolCallID, result)
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
-		"ok":      routed,
-		"stale":   !routed,
+		"ok":    routed,
+		"stale": !routed,
 	}))
 }

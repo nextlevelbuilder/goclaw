@@ -108,6 +108,81 @@ func (s Spec) Command(task string, mode PermissionMode) ([]string, error) {
 // caller can offer the choice honestly (or explain why it can't).
 func (s Spec) SupportsManualApproval() bool { return len(s.ManualApproveArgs) > 0 }
 
+// ErrInteractiveUnsupported is returned by InteractiveCommand when a streaming
+// session is requested from a provider whose Spec has no InteractiveArgs.
+//
+// Like ErrManualApprovalUnsupported this must be SURFACED, never worked around:
+// silently falling back to a one-shot run would turn "hold a conversation with
+// this CLI" into "send it one message and throw the session away", and the user
+// would only find out when their second message vanished.
+var ErrInteractiveUnsupported = errors.New("interactive session not supported")
+
+// SupportsInteractive reports whether this Spec can run as a long-lived
+// bidirectional session (see internal/clisession), so a caller can offer the
+// choice honestly instead of discovering it at start-up.
+func (s Spec) SupportsInteractive() bool { return len(s.InteractiveArgs) > 0 }
+
+// InteractiveCommand renders the argv for a long-lived streaming session:
+// binary, InteractiveArgs, then the permission-mode args.
+//
+// It takes no task — messages arrive on stdin over the life of the process —
+// and it does NOT append ExtraArgs, because InteractiveArgs already carries the
+// streaming equivalent of them (see Spec.InteractiveArgs). The mode args come
+// last for the same reason as in Command: a per-connection override of the
+// invocation can never displace them.
+func (s Spec) InteractiveCommand(mode PermissionMode) ([]string, error) {
+	who := s.Provider
+	if who == "" {
+		who = s.Binary
+	}
+	if who == "" {
+		who = "(unset)"
+	}
+
+	if !s.SupportsInteractive() {
+		return nil, fmt.Errorf("%w for %q: this CLI has no known streaming/stdin protocol, so it can only be given one task at a time — delegate a single task to it instead, or set %q on the connection if this CLI does accept a message stream on stdin",
+			ErrInteractiveUnsupported, who, "interactive_args")
+	}
+	if strings.TrimSpace(s.Binary) == "" {
+		return nil, fmt.Errorf("cli provider %q: no binary to run — the connection config must set %q", who, "binary")
+	}
+	// A stray {{task}} would be passed through verbatim as an argv element and the
+	// CLI would treat it as a prompt, quietly starting a session that is already
+	// answering something nobody asked. Reject it with the reason.
+	for _, a := range s.InteractiveArgs {
+		if strings.Contains(a, TaskPlaceholder) {
+			return nil, fmt.Errorf("cli provider %q: %q must not contain %s — in a streaming session the task arrives on stdin, not in argv",
+				who, "interactive_args", TaskPlaceholder)
+		}
+	}
+	switch s.Output {
+	case OutputClaudeStreamJSON, OutputJSONL, OutputText:
+	default:
+		return nil, fmt.Errorf("cli provider %q: unsupported %q %q — use one of %s, %s, %s",
+			who, "output", string(s.Output), OutputClaudeStreamJSON, OutputJSONL, OutputText)
+	}
+
+	var modeArgs []string
+	switch mode {
+	case PermissionAuto:
+		modeArgs = s.AutoApproveArgs
+	case PermissionManual:
+		if len(s.ManualApproveArgs) == 0 {
+			return nil, fmt.Errorf("%w for %q: this CLI has no ask-before-acting flag, so it can only run in auto mode — run it with %q, or set %q on the connection if the CLI does support one",
+				ErrManualApprovalUnsupported, who, PermissionAuto, "manual_approve_args")
+		}
+		modeArgs = s.ManualApproveArgs
+	default:
+		return nil, fmt.Errorf("unknown permission mode %q for %q — use %q or %q", string(mode), who, PermissionAuto, PermissionManual)
+	}
+
+	argv := make([]string, 0, 1+len(s.InteractiveArgs)+len(modeArgs))
+	argv = append(argv, s.Binary)
+	argv = append(argv, s.InteractiveArgs...)
+	argv = append(argv, modeArgs...)
+	return argv, nil
+}
+
 // ApplyCredential places a connection's secret into env.
 //
 // inject is the credential store's delivery descriptor

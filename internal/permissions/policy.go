@@ -226,6 +226,11 @@ func isWriteMethod(method string) bool {
 		protocol.MethodConnectionsUpdate,
 		protocol.MethodConnectionsDelete,
 		"connections.credential.",
+		// Opening a CLI conversation is a write in the sense that matters: the
+		// first message starts a process in the sandbox on the user's own CLI
+		// credential. Listed individually for the same reason as the mutations
+		// above — a bare "connections." prefix would also gate connections.list.
+		protocol.MethodConnectionsChatOpen,
 	}
 	for _, prefix := range writePrefixes {
 		if strings.HasPrefix(method, prefix) {

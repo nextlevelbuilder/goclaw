@@ -14,12 +14,16 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
-func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore store.SessionStore, cronStore store.CronStore, pairingStore store.PairingStore, cfg *config.Config, cfgPath, workspace, dataDir string, msgBus *bus.MessageBus, execApprovalMgr *tools.ExecApprovalManager, agentStore store.AgentStore, skillStore store.SkillStore, configSecretsStore store.ConfigSecretsStore, teamStore store.TeamStore, contextFileInterceptor *tools.ContextFileInterceptor, logTee *gateway.LogTee, heartbeatStore store.HeartbeatStore, configPermStore store.ConfigPermissionStore, sysConfigStore store.SystemConfigStore, tenantStore store.TenantStore, skillTenantCfgStore store.SkillTenantConfigStore, audioMgr *audio.Manager, reminderStore store.ReminderStore, subagentTaskStore store.SubagentTaskStore, cliConnStore store.CLIConnectionStore) (*methods.PairingMethods, *methods.HeartbeatMethods, *methods.ChatMethods) {
+func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore store.SessionStore, cronStore store.CronStore, pairingStore store.PairingStore, cfg *config.Config, cfgPath, workspace, dataDir string, msgBus *bus.MessageBus, execApprovalMgr *tools.ExecApprovalManager, agentStore store.AgentStore, skillStore store.SkillStore, configSecretsStore store.ConfigSecretsStore, teamStore store.TeamStore, contextFileInterceptor *tools.ContextFileInterceptor, logTee *gateway.LogTee, heartbeatStore store.HeartbeatStore, configPermStore store.ConfigPermissionStore, sysConfigStore store.SystemConfigStore, tenantStore store.TenantStore, skillTenantCfgStore store.SkillTenantConfigStore, audioMgr *audio.Manager, reminderStore store.ReminderStore, subagentTaskStore store.SubagentTaskStore, cliConnStore store.CLIConnectionStore, cliChat *methods.CLIChat) (*methods.PairingMethods, *methods.HeartbeatMethods, *methods.ChatMethods) {
 	router := server.Router()
 
 	// Phase 1: Core methods
 	chatMethods := methods.NewChatMethods(agents, sessStore, cfg, server.RateLimiter(), msgBus)
 	chatMethods.SetAudioManager(audioMgr) // Wire TTS auto-apply for WS responses
+	// Interactive CLI chat: chat.send early-branches to this for a "cli:" session
+	// key. Nil on a deployment without a sandbox / connection catalogue, in which
+	// case such a key gets a clear "not available" error.
+	chatMethods.SetCLIChat(cliChat)
 	chatMethods.Register(router)
 	methods.NewAgentsMethods(agents, cfg, cfgPath, workspace, agentStore, contextFileInterceptor, msgBus).Register(router)
 	sessionsMethods := methods.NewSessionsMethods(sessStore, agents, msgBus, cfg)
@@ -84,7 +88,12 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 	// Phase 2: Tenant-level CLI connections (migration 000082). Always
 	// registered — connections.list returns an empty list and the writes report
 	// "not available" when the store is nil.
-	methods.NewConnectionsMethods(cliConnStore, msgBus).Register(router)
+	connectionsMethods := methods.NewConnectionsMethods(cliConnStore, msgBus)
+	// connections.chat.open reports whether an interactive conversation can
+	// actually be served on this deployment, rather than handing back a session
+	// key that chat.send would then refuse.
+	connectionsMethods.SetCLIChat(cliChat)
+	connectionsMethods.Register(router)
 
 	// Phase 2: Send (outbound message routing)
 	methods.NewSendMethods(msgBus).Register(router)

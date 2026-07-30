@@ -10,9 +10,11 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/cliagent"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
+	"github.com/nextlevelbuilder/goclaw/internal/sessions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -31,6 +33,8 @@ import (
 type ConnectionsMethods struct {
 	conns    store.CLIConnectionStore
 	eventBus bus.EventPublisher
+	// cliChat serves connections.chat.open's availability check. Nil-safe.
+	cliChat *CLIChat
 }
 
 func NewConnectionsMethods(conns store.CLIConnectionStore, eventBus bus.EventPublisher) *ConnectionsMethods {
@@ -44,6 +48,88 @@ func (m *ConnectionsMethods) Register(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodConnectionsDelete, m.handleDelete)
 	router.Register(protocol.MethodConnectionsCredentialSet, m.handleCredentialSet)
 	router.Register(protocol.MethodConnectionsCredentialDelete, m.handleCredentialDelete)
+	router.Register(protocol.MethodConnectionsChatOpen, m.handleChatOpen)
+}
+
+// SetCLIChat wires the interactive-CLI layer so connections.chat.open can report
+// honestly whether this deployment can serve a conversation at all. Nil-safe:
+// without it the method still validates the connection, then says the feature is
+// unavailable rather than handing back a session key that could never work.
+func (m *ConnectionsMethods) SetCLIChat(c *CLIChat) { m.cliChat = c }
+
+// handleChatOpen opens an interactive conversation with a connected coding CLI.
+//
+// It mints nothing but a session key — the CLI process starts on the first
+// chat.send. What it DOES do is refuse, up front and with the reason, every case
+// that could not work: a connection the caller's tenant cannot see, a disabled
+// one, one whose provider cannot be run at all, and one whose provider has no
+// interactive mode. That last check is the point of the method: silently opening
+// a session against a CLI with no stdin protocol would swallow every message the
+// user then sent.
+func (m *ConnectionsMethods) handleChatOpen(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	if !m.available(ctx, client, req.ID) {
+		return
+	}
+	locale := store.LocaleFromContext(ctx)
+	var params struct {
+		ConnectionID string `json:"connectionId"`
+	}
+	if req.Params != nil {
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, err.Error())))
+			return
+		}
+	}
+	id, err := uuid.Parse(strings.TrimSpace(params.ConnectionID))
+	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidID, "connectionId")))
+		return
+	}
+	// Tenant-scoped: another tenant's row is indistinguishable from absent.
+	conn := m.resolve(ctx, client, req.ID, id)
+	if conn == nil {
+		return
+	}
+	if !conn.Enabled {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest,
+			i18n.T(locale, i18n.MsgInvalidRequest, conn.Name+" is disabled — enable it under Connections first")))
+		return
+	}
+
+	// Resolve the invocation and report the provider's interactive support
+	// honestly, naming the provider so the message is actionable.
+	spec, err := cliagent.Resolve(conn.Provider, conn.Config)
+	if err != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest,
+			i18n.T(locale, i18n.MsgInvalidRequest, conn.Name+" cannot be run: "+err.Error())))
+		return
+	}
+	if !spec.SupportsInteractive() {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest,
+			i18n.T(locale, i18n.MsgInvalidRequest, cliNoInteractiveDetail(conn.Name, conn.Provider))))
+		return
+	}
+
+	// Last: whether this deployment can actually serve the conversation. Checked
+	// after the connection-specific validation so the caller always gets the most
+	// specific reason.
+	if m.cliChat == nil || !m.cliChat.Ready() {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest,
+			i18n.T(locale, i18n.MsgInvalidRequest, "interactive CLI chat is not available on this deployment (it needs the connection catalogue and a sandbox)")))
+		return
+	}
+
+	sessionKey := sessions.BuildCLISessionKey(conn.ID.String(), uuid.NewString())
+	slog.Info("connections.chat.open", "connection", conn.ID, "provider", conn.Provider,
+		"permission_mode", string(cliagent.PermissionModeFromConfig(conn.Config)), "user_id", client.UserID())
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+		"sessionKey":   sessionKey,
+		"connectionId": conn.ID.String(),
+		"provider":     cliagent.CanonicalProvider(conn.Provider),
+		// The mode the conversation will run in, so the UI can say whether the
+		// user will be asked to approve each action or not.
+		"permissionMode": string(cliagent.PermissionModeFromConfig(conn.Config)),
+	}))
 }
 
 // connectionParams is the union of every mutation's params. Params are camelCase

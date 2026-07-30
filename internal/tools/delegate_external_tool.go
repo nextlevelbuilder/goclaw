@@ -296,6 +296,32 @@ const maxSandboxKeyLen = 50
 // keeps a readable prefix so a container name is still recognisable when
 // debugging on the host.
 func buildSandboxKey(ctx context.Context, connID, worker string) string {
+	return sandboxKeyWithPrefix(ctx, "ext", connID, worker)
+}
+
+// InteractiveSandboxKey composes the container identity for an INTERACTIVE
+// connected-CLI session (internal/clisession, driven from chat.send).
+//
+// It shares buildSandboxKey's discipline — and must, because the 50-char budget
+// documented on maxSandboxKeyLen is a SILENT truncation, not an error — but uses
+// a different prefix on purpose: a chat session pins a long-lived process in its
+// container, so it must never land in the same container as a one-shot
+// delegation (which would have that process killed under it when the delegation
+// container is recycled, and would share one CLI's authenticated HOME with the
+// other's runs).
+//
+// There is no worker component: a conversation is inherently serial, and the
+// container is already per tenant+user+connection, which is exactly the sharing
+// boundary a warm CLI session may have (two conversations by the same user with
+// the same connection reuse one container, each with its own process).
+func InteractiveSandboxKey(ctx context.Context, connID string) string {
+	return sandboxKeyWithPrefix(ctx, "cli", connID, "")
+}
+
+// sandboxKeyWithPrefix is the shared composer behind buildSandboxKey and
+// InteractiveSandboxKey. Keeping it in one place is what stops the two callers'
+// keying rules — and their length budget — from drifting apart.
+func sandboxKeyWithPrefix(ctx context.Context, prefix, connID, worker string) string {
 	scope := "t0-u0"
 	tenant := store.TenantIDFromContext(ctx)
 	user := strings.TrimSpace(store.UserIDFromContext(ctx))
@@ -309,7 +335,7 @@ func buildSandboxKey(ctx context.Context, connID, worker string) string {
 		conn = conn[:8]
 	}
 
-	key := "ext:" + scope + ":" + conn
+	key := prefix + ":" + scope + ":" + conn
 	if w := strings.TrimSpace(worker); w != "" {
 		ws := sanitizeWorker(w)
 		if len(ws) > 16 {

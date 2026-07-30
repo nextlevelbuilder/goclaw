@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -17,6 +18,12 @@ func (f *fakeSandbox) Exec(_ context.Context, _ []string, _ string, _ ...sandbox
 }
 func (f *fakeSandbox) Destroy(context.Context) error { return nil }
 func (f *fakeSandbox) ID() string                    { return "fake-container" }
+
+// ExecInteractive is unused by the deny-policy tests (no interactive dispatch on
+// the exec path), so it fails loudly rather than pretending to hold a session.
+func (f *fakeSandbox) ExecInteractive(context.Context, []string, string, ...sandbox.ExecOption) (sandbox.InteractiveSession, error) {
+	return nil, errors.New("fakeSandbox: ExecInteractive not supported")
+}
 
 // fakeManager always hands back the same fakeSandbox.
 type fakeManager struct{ sb *fakeSandbox }

@@ -72,6 +72,16 @@ type Spec struct {
 	// callers must surface that honestly rather than silently running auto.
 	AutoApproveArgs   []string
 	ManualApproveArgs []string
+
+	// InteractiveArgs is the argv for a LONG-LIVED streaming session (see
+	// internal/clisession): the process stays alive and user turns arrive on
+	// stdin, so unlike TaskArgs it carries NO TaskPlaceholder. It REPLACES
+	// TaskArgs+ExtraArgs rather than adding to them, because the streaming and
+	// one-shot invocations differ in more than the prompt (input format, and the
+	// flag that routes permission prompts back to us).
+	//
+	// Empty means this provider has no interactive mode — see SupportsInteractive.
+	InteractiveArgs []string
 }
 
 // providerAliases maps the spellings seen in the wild (and in the legacy
@@ -146,11 +156,45 @@ func Defaults() map[string]Spec {
 			Env:             sandboxBaseEnv(),
 			Output:          OutputClaudeStreamJSON,
 			AutoApproveArgs: []string{"--permission-mode", "bypassPermissions"},
-			// `default` is the CLI's ask-before-acting mode. Headless runs have no
-			// interactive channel, so this yields refusals rather than prompts until
-			// an approval transport exists — kept non-empty because the flag is real
-			// and overridable, e.g. to acceptEdits/plan.
+			// `default` is the CLI's ask-before-acting mode. A one-shot headless run
+			// has no channel to ask on, so there it yields refusals rather than
+			// prompts; an INTERACTIVE session (InteractiveArgs below) does have one,
+			// and this is the mode that makes the CLI use it. Overridable, e.g. to
+			// acceptEdits/plan.
 			ManualApproveArgs: []string{"--permission-mode", "default"},
+
+			// Streaming session invocation. VERIFIED END-TO-END against the real
+			// binary (2.1.220, arm64 native) on 2026-07-29 — see
+			// internal/clisession/protocol.go for the wire shapes this produces.
+			//
+			//   -p                          headless; required by --input-format=stream-json
+			//   --input-format stream-json  user turns arrive as JSON lines on stdin
+			//   --output-format stream-json events + control requests as JSON lines on stdout
+			//   --verbose                   required by --output-format=stream-json under -p
+			//   --include-partial-messages  token deltas, for word-by-word narration
+			//   --permission-prompt-tool stdio
+			//
+			// The last flag is LOAD-BEARING and non-obvious. The CLI only routes a
+			// permission ask to the stdio control protocol (a `can_use_tool`
+			// control_request we answer with a control_response) when the permission
+			// prompt tool is the literal sentinel "stdio"; the value is otherwise
+			// treated as an MCP tool name. The bundled Agent SDK does exactly this
+			// when its own canUseTool callback is set. WITHOUT it, an ask does not
+			// reach us at all — it is auto-denied inside the CLI and the model just
+			// sees an is_error tool_result ("… requires approval"). Both halves of
+			// that were confirmed by running the binary with and without the flag.
+			//
+			// It is listed here (not in ManualApproveArgs) so a session that starts
+			// in auto mode can still be switched to an asking mode later without
+			// restarting the process.
+			InteractiveArgs: []string{
+				"-p",
+				"--input-format", "stream-json",
+				"--output-format", "stream-json",
+				"--verbose",
+				"--include-partial-messages",
+				"--permission-prompt-tool", "stdio",
+			},
 		},
 
 		// codex — UNVERIFIED DEFAULTS. `codex exec` is the non-interactive mode and
@@ -160,6 +204,9 @@ func Defaults() map[string]Spec {
 		// is correct here because we already run inside our locked-down container.
 		// ManualApproveArgs is intentionally EMPTY: non-interactive exec cannot
 		// prompt, so manual mode must fail loudly instead of silently auto-approving.
+		// InteractiveArgs is EMPTY for the same reason — `codex exec` has no
+		// bidirectional stdio protocol we have verified, and guessing one would
+		// produce a session that looks alive and silently drops every user turn.
 		// Override any of this via the connection config.
 		ProviderCodex: {
 			Provider:          ProviderCodex,
@@ -173,7 +220,10 @@ func Defaults() map[string]Spec {
 			ManualApproveArgs: nil,
 		},
 
-		// aider — UNVERIFIED DEFAULTS. `--message` runs one non-interactive turn and
+		// aider — UNVERIFIED DEFAULTS. No InteractiveArgs: aider's REPL is a TUI,
+		// not a line protocol, so a streaming session would need a terminal
+		// emulator rather than this package's JSON transport. `--message` runs one
+		// non-interactive turn and
 		// `--yes-always` auto-confirms; `--no-pretty` disables the TUI redraw so
 		// stdout is line-oriented. Aider prints prose, not JSON, hence OutputText.
 		// No manual-approval flag exists for a one-shot --message run.
@@ -189,7 +239,8 @@ func Defaults() map[string]Spec {
 			ManualApproveArgs: nil,
 		},
 
-		// gemini_cli — UNVERIFIED DEFAULTS. `-p` runs a single non-interactive
+		// gemini_cli — UNVERIFIED DEFAULTS. No InteractiveArgs: same reasoning as
+		// aider — its interactive mode is a TUI. `-p` runs a single non-interactive
 		// prompt and `--yolo` auto-approves tool calls. Output is prose today; if a
 		// JSON stream mode is available on the installed version, set
 		// {"extra_args":[...],"output":"jsonl"} on the connection.
@@ -244,6 +295,7 @@ type specOverride struct {
 	Output            *string             `json:"output"`
 	AutoApproveArgs   *[]string           `json:"auto_approve_args"`
 	ManualApproveArgs *[]string           `json:"manual_approve_args"`
+	InteractiveArgs   *[]string           `json:"interactive_args"`
 }
 
 // Resolve builds the Spec for a connection: the provider's built-in default with
@@ -305,6 +357,9 @@ func (s *Spec) apply(ov specOverride) {
 	}
 	if ov.ManualApproveArgs != nil {
 		s.ManualApproveArgs = cloneStrings(*ov.ManualApproveArgs)
+	}
+	if ov.InteractiveArgs != nil {
+		s.InteractiveArgs = cloneStrings(*ov.InteractiveArgs)
 	}
 	if ov.Output != nil {
 		s.Output = OutputFormat(strings.ToLower(strings.TrimSpace(*ov.Output)))
