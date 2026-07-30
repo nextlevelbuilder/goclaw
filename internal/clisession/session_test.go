@@ -333,10 +333,16 @@ func TestSession_CanUseToolAllow(t *testing.T) {
 	if message != "" {
 		t.Errorf("an allow must carry no message, got %q", message)
 	}
-	// No rewrite was requested, so updatedInput must be absent rather than null or
-	// empty — the CLI validates it and turns a malformed one into a denial.
-	if _, ok := resp.Response.Response["updatedInput"]; ok {
-		t.Errorf("updatedInput present on a plain allow: %v", resp.Response.Response)
+	// No rewrite was requested, so the ORIGINAL input is echoed. updatedInput is
+	// REQUIRED on the allow branch of the control-protocol schema: omitting it made
+	// the CLI report "Tool permission request failed" to the model while the user
+	// saw their Approve succeed. "Run it as proposed" means echoing the input.
+	gotInput, ok := resp.Response.Response["updatedInput"]
+	if !ok {
+		t.Fatalf("updatedInput absent on an allow — the CLI will reject this: %v", resp.Response.Response)
+	}
+	if !jsonEqual(t, string(gotInput), `{"command":"ls -la"}`) {
+		t.Errorf("updatedInput = %s, want the original input echoed", gotInput)
 	}
 }
 
@@ -398,14 +404,15 @@ func TestSession_CanUseToolUpdatedInput(t *testing.T) {
 	}{
 		{name: "object is carried through", updated: `{"command":"ls docs"}`, wantRaw: `{"command":"ls docs"}`},
 		{name: "nested object is carried through", updated: `{"edits":[{"path":"a.go"}],"n":2}`, wantRaw: `{"edits":[{"path":"a.go"}],"n":2}`},
-		// Anything the CLI would reject against the tool's schema is DROPPED rather
-		// than sent, because a malformed rewrite turns the approver's "yes" into a
-		// denial inside the CLI.
-		{name: "nil is dropped", updated: ""},
-		{name: "empty object is dropped", updated: `{}`},
-		{name: "array is dropped", updated: `["ls"]`},
-		{name: "string is dropped", updated: `"ls"`},
-		{name: "malformed is dropped", updated: `{"command":`},
+		// Anything the CLI would reject against the tool's schema falls back to the
+		// ORIGINAL input rather than being sent: a malformed rewrite turns the
+		// approver's "yes" into a denial inside the CLI, and omitting the field
+		// entirely fails the schema, which is the same failure by another route.
+		{name: "nil falls back", updated: "", wantRaw: `{"command":"ls -R /"}`},
+		{name: "empty object falls back", updated: `{}`, wantRaw: `{"command":"ls -R /"}`},
+		{name: "array falls back", updated: `["ls"]`, wantRaw: `{"command":"ls -R /"}`},
+		{name: "string falls back", updated: `"ls"`, wantRaw: `{"command":"ls -R /"}`},
+		{name: "malformed falls back", updated: `{"command":`, wantRaw: `{"command":"ls -R /"}`},
 	}
 
 	for _, tc := range cases {
@@ -428,10 +435,6 @@ func TestSession_CanUseToolUpdatedInput(t *testing.T) {
 			}
 			got, ok := resp.Response.Response["updatedInput"]
 			switch {
-			case tc.wantRaw == "":
-				if ok {
-					t.Errorf("updatedInput = %s, want it dropped", got)
-				}
 			case !ok:
 				t.Errorf("updatedInput missing, want %s", tc.wantRaw)
 			default:

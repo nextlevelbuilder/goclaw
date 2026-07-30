@@ -195,14 +195,29 @@ type controlResponseBody struct {
 
 // permissionResult is the can_use_tool handler's verdict.
 //
-// CONFIRMED, from the binary's schema and both branches exercised live:
+// READ FROM THE SHIPPED BINARY (2.1.197, the version in the sandbox image). The
+// control-protocol schema is `$rn = union([S1m, E1m])`:
 //
-//	{"behavior":"allow","updatedInput":{…}?,"updatedPermissions":[…]?}
-//	{"behavior":"deny","message":"…","interrupt":true?}
+//	S1m: {behavior:"allow", updatedInput:record(string,unknown),  ← REQUIRED
+//	      updatedPermissions?, toolUseID?, decisionClassification?}
+//	E1m: {behavior:"deny",  message:string,                        ← REQUIRED
+//	      interrupt?, toolUseID?, decisionClassification?}
 //
-// `message` is REQUIRED by the schema on the deny branch (unlike the hook-shaped
-// variant elsewhere in the CLI, where it is optional) — newDenyResponse therefore
-// always fills it.
+// `updatedInput` being REQUIRED on the allow branch is the trap. There is a
+// second, hook-shaped schema in the same binary where it IS optional, and an
+// earlier version of this file was written against that one — so every allow we
+// sent omitted the field, failed validation, and the CLI turned it into
+// "Tool permission request failed: …", which reached the model as a permissions
+// error while the user saw their Approve click succeed. newAllowResponse
+// therefore ALWAYS sends updatedInput, echoing the tool's original input when the
+// approver did not rewrite it (which is what the CLI's own internal handlers do:
+// `checkPermissions: e => ({behavior:"allow", updatedInput:e})`).
+//
+// `decisionClassification` ("user_temporary"|"user_permanent"|"user_reject") is
+// deliberately NOT sent. It is optional and the CLI infers conservatively without
+// it; sending "user_permanent" for an approve-always would ask the CLI to persist
+// a rule INSIDE the sandbox, which is the same overreach `updatedPermissions`
+// is refused for below.
 //
 // `updatedPermissions` is deliberately NOT modelled: it would let the CLI
 // persist an always-allow rule inside the sandbox, which is a policy decision
@@ -211,23 +226,37 @@ type controlResponseBody struct {
 // means.
 type permissionResult struct {
 	Behavior string `json:"behavior"`
-	// UpdatedInput lets the approver hand back a MODIFIED tool input, which the
-	// CLI then runs instead of the original. Verified live: a Bash command
-	// replaced here is the one that actually executes.
+	// UpdatedInput is the input the CLI will actually run. Required by the schema
+	// on the allow branch, so it carries NO omitempty — an absent field fails
+	// validation and the tool call dies with a permissions error. It also lets the
+	// approver hand back a MODIFIED input: a Bash command replaced here is the one
+	// that executes.
 	UpdatedInput json.RawMessage `json:"updatedInput,omitempty"`
 	// Message is the reason shown to the model as the tool's error result.
 	Message string `json:"message,omitempty"`
 }
 
 // newAllowResponse builds the control_response for an approved tool call.
-// updatedInput may be nil (run the tool as the CLI proposed it).
-func newAllowResponse(requestID string, updatedInput json.RawMessage) controlResponse {
+//
+// updatedInput is the approver's rewrite and may be nil, in which case the tool's
+// ORIGINAL input is echoed back — the field is required, and echoing is how "run
+// it as proposed" is expressed. A malformed rewrite is ignored in favour of the
+// original rather than sent: the CLI validates it against the tool's schema and
+// would turn a bad one into a denial, the opposite of what the approver decided.
+//
+// Returns ok=false when neither input is a JSON object, because the only ways to
+// respond then are both wrong: omitting the field fails validation, and sending
+// {} would run the tool with NO arguments — a silent misfire the user would read
+// as "it approved and did something else". The caller denies instead.
+func newAllowResponse(requestID string, updatedInput, originalInput json.RawMessage) (controlResponse, bool) {
 	res := &permissionResult{Behavior: behaviorAllow}
-	// An empty or non-object rewrite is dropped rather than sent: the CLI
-	// validates updatedInput against the tool's schema and would turn a malformed
-	// one into a DENIAL, which is the opposite of what the approver just decided.
-	if isJSONObject(updatedInput) {
+	switch {
+	case isJSONObject(updatedInput):
 		res.UpdatedInput = updatedInput
+	case isJSONObject(originalInput):
+		res.UpdatedInput = originalInput
+	default:
+		return controlResponse{}, false
 	}
 	return controlResponse{
 		Type: typeControlResponse,
@@ -236,7 +265,7 @@ func newAllowResponse(requestID string, updatedInput json.RawMessage) controlRes
 			RequestID: requestID,
 			Response:  res,
 		},
-	}
+	}, true
 }
 
 // newDenyResponse builds the control_response for a refused tool call. reason is

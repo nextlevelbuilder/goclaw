@@ -429,7 +429,19 @@ func (s *Session) dispatchControl(req *controlRequest) {
 		// skipping the write would leave a live CLI hanging.
 		switch {
 		case decision.Allow:
-			s.reply(newAllowResponse(req.RequestID, decision.UpdatedInput))
+			// The allow branch REQUIRES updatedInput, so the tool's original input is
+			// echoed when the approver did not rewrite it. If neither is usable we
+			// must not fake one — running a tool with empty arguments after the user
+			// pressed Approve is a worse outcome than an honest refusal.
+			resp, ok := newAllowResponse(req.RequestID, decision.UpdatedInput, pr.Input)
+			if !ok {
+				slog.Warn("security.clisession_allow_without_input",
+					"key", s.key, "tool", pr.ToolName, "input", truncate(string(pr.Input), 200))
+				s.reply(newDenyResponse(req.RequestID,
+					"The approval could not be completed because this tool call arrived without a usable input object. Try the action again."))
+				break
+			}
+			s.reply(resp)
 		default:
 			s.reply(newDenyResponse(req.RequestID, decision.DenyReason))
 		}

@@ -2,6 +2,7 @@ package clisession
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -159,8 +160,12 @@ func TestOutboundFrameShapes(t *testing.T) {
 		}
 	})
 
-	t.Run("allow", func(t *testing.T) {
-		line, err := encodeLine(newAllowResponse("r1", json.RawMessage(`{"command":"ls"}`)))
+	t.Run("allow with a rewrite", func(t *testing.T) {
+		resp, ok := newAllowResponse("r1", json.RawMessage(`{"command":"ls"}`), json.RawMessage(`{"command":"rm -rf /"}`))
+		if !ok {
+			t.Fatal("a valid rewrite was rejected")
+		}
+		line, err := encodeLine(resp)
 		if err != nil {
 			t.Fatalf("encodeLine: %v", err)
 		}
@@ -170,14 +175,51 @@ func TestOutboundFrameShapes(t *testing.T) {
 		}
 	})
 
-	t.Run("allow without a rewrite", func(t *testing.T) {
-		line, err := encodeLine(newAllowResponse("r1", nil))
+	// This case previously asserted a response with NO updatedInput — locking in
+	// the bug. The control-protocol schema (S1m) makes updatedInput REQUIRED on the
+	// allow branch, so omitting it fails validation and the CLI reports
+	// "Tool permission request failed" to the model while the user sees their
+	// Approve succeed. "Run it as proposed" is expressed by ECHOING the input.
+	t.Run("allow without a rewrite echoes the original input", func(t *testing.T) {
+		resp, ok := newAllowResponse("r1", nil, json.RawMessage(`{"command":"ls"}`))
+		if !ok {
+			t.Fatal("an allow with a valid original input was rejected")
+		}
+		line, err := encodeLine(resp)
 		if err != nil {
 			t.Fatalf("encodeLine: %v", err)
 		}
-		want := `{"type":"control_response","response":{"subtype":"success","request_id":"r1","response":{"behavior":"allow"}}}`
+		want := `{"type":"control_response","response":{"subtype":"success","request_id":"r1","response":{"behavior":"allow","updatedInput":{"command":"ls"}}}}`
 		if line != want {
 			t.Errorf("\n got %s\nwant %s", line, want)
+		}
+	})
+
+	// A malformed rewrite falls back to the original rather than being sent: the
+	// CLI validates the rewrite against the tool's schema and would turn a bad one
+	// into a denial, the opposite of what the approver decided.
+	t.Run("malformed rewrite falls back to the original", func(t *testing.T) {
+		for _, bad := range []string{``, `null`, `[]`, `"str"`, `7`, `not json`} {
+			resp, ok := newAllowResponse("r1", json.RawMessage(bad), json.RawMessage(`{"command":"ls"}`))
+			if !ok {
+				t.Fatalf("rewrite %q should have fallen back, not failed", bad)
+			}
+			line, _ := encodeLine(resp)
+			if !strings.Contains(line, `"updatedInput":{"command":"ls"}`) {
+				t.Errorf("rewrite %q did not fall back to the original: %s", bad, line)
+			}
+		}
+	})
+
+	// With no usable input at all, both possible answers are wrong — omitting the
+	// field fails validation, and {} would run the tool with NO arguments, which
+	// the user would read as "it approved and then did something else". The caller
+	// must deny instead.
+	t.Run("allow is refused when there is no usable input", func(t *testing.T) {
+		for _, bad := range []string{``, `null`, `[]`, `"str"`} {
+			if _, ok := newAllowResponse("r1", nil, json.RawMessage(bad)); ok {
+				t.Errorf("original input %q should not have produced an allow", bad)
+			}
 		}
 	})
 
@@ -208,7 +250,7 @@ func TestOutboundFrameShapes(t *testing.T) {
 func TestOutboundFramesAreSingleLines(t *testing.T) {
 	frames := []any{
 		newUserMessage("multi\nline\nmessage"),
-		newAllowResponse("r", json.RawMessage(`{"cmd":"echo a\nb"}`)),
+		mustAllow(t, "r", json.RawMessage(`{"cmd":"echo a\nb"}`)),
 		newDenyResponse("r", "reason\nwith a newline"),
 		newErrorResponse("r", "err\nor"),
 	}
@@ -227,4 +269,14 @@ func TestOutboundFramesAreSingleLines(t *testing.T) {
 			t.Errorf("frame %d is not valid JSON: %s", i, line)
 		}
 	}
+}
+
+// mustAllow builds an allow response for tests that only care about encoding.
+func mustAllow(t *testing.T, requestID string, input json.RawMessage) controlResponse {
+	t.Helper()
+	resp, ok := newAllowResponse(requestID, nil, input)
+	if !ok {
+		t.Fatalf("newAllowResponse rejected input %s", input)
+	}
+	return resp
 }
