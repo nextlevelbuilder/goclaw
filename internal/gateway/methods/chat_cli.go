@@ -661,6 +661,73 @@ type cliRelay struct {
 	userID   string
 	tenantID uuid.UUID
 	cur      *cliTurn
+
+	// alwaysAllow remembers "approve always" decisions for the life of THIS
+	// conversation, keyed by cliAlwaysAllowKey.
+	//
+	// It lives here rather than in the approval broker on purpose. The broker's
+	// always-allow memory is keyed on an exec command and feeds the AGENT's exec
+	// allowlist, so routing a CLI decision through it would let approving one
+	// `git push` inside a chat silently widen what the agent's own exec tool may
+	// run unattended, in every session, for everyone in the tenant. Session-scoped
+	// and process-local is also what the CLIs themselves do ("don't ask again in
+	// this session") — a decision made in one conversation should not quietly
+	// govern the next one.
+	alwaysAllow map[string]bool
+}
+
+// cliAlwaysAllowKey is the signature an "approve always" decision is remembered
+// under.
+//
+// For a command-bearing action the key is the EXACT command, not its binary. A
+// binary-level key is what the exec tool uses, but it is far too wide here: an
+// always-allow on `echo hello` would also cover `echo $(curl … | sh)`, and on
+// `git push` it would cover `git push --force` to any remote. Exact-match means
+// the button reads as "this again, without asking", which is what a user clicking
+// it on a repeated build or test command actually wants.
+//
+// Tools with no command (Edit, Write, WebFetch, …) are keyed by tool name, so
+// "always" means "this kind of action, in this conversation" — the equivalent of
+// the CLIs' own accept-edits mode.
+func cliAlwaysAllowKey(pr clisession.PermissionRequest) string {
+	tool := cliApprovalToolName(pr.ToolName)
+	if cmd := strings.TrimSpace(cliCommandFromInput(pr.Input)); cmd != "" {
+		return tool + "\x00cmd:" + cmd
+	}
+	return tool + "\x00tool"
+}
+
+// cliCommandFromInput pulls the shell command out of a tool input, if it has one.
+func cliCommandFromInput(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var m map[string]any
+	if json.Unmarshal(raw, &m) != nil {
+		return ""
+	}
+	if cmd, ok := m["command"].(string); ok {
+		return cmd
+	}
+	return ""
+}
+
+// allowedAlways reports whether this conversation has already been told not to
+// ask about this action again.
+func (r *cliRelay) allowedAlways(key string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.alwaysAllow[key]
+}
+
+// rememberAlways records an "approve always" decision for this conversation.
+func (r *cliRelay) rememberAlways(key string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.alwaysAllow == nil {
+		r.alwaysAllow = make(map[string]bool)
+	}
+	r.alwaysAllow[key] = true
 }
 
 // configure refreshes the identity/mode this relay speaks for. Called on every
@@ -871,6 +938,15 @@ func (r *cliRelay) permission(ctx context.Context, pr clisession.PermissionReque
 		return clisession.PermissionDecision{Allow: true}
 	}
 
+	// Already answered "always" for this action in this conversation? Then asking
+	// again is the bug the button exists to prevent.
+	alwaysKey := cliAlwaysAllowKey(pr)
+	if r.allowedAlways(alwaysKey) {
+		slog.Debug("cli chat: auto-allowed by an earlier approve-always",
+			"sessionKey", r.sessionKey, "tool", pr.ToolName)
+		return clisession.PermissionDecision{Allow: true}
+	}
+
 	broker := r.chat.deps.Approvals
 	if broker == nil {
 		// Send refuses a manual-mode conversation when the broker is missing, so
@@ -935,9 +1011,15 @@ func (r *cliRelay) permission(ctx context.Context, pr clisession.PermissionReque
 			}
 			return clisession.PermissionDecision{DenyReason: "The user declined this action. Do not retry it — continue without it or ask what they would prefer."}
 		default:
-			// allow-once and allow-always both permit THIS action. The broker's
-			// always-allow memory is keyed on an exec command, which this path
-			// deliberately does not set, so "always" grants once here.
+			// allow-once and allow-always both permit THIS action; "always" also
+			// silences the same action for the rest of this conversation. Recorded
+			// on the relay, NOT via the broker's allowlist — see cliRelay.alwaysAllow
+			// for why that distinction matters.
+			if a.outcome.Decision == tools.ApprovalAllowAlways {
+				r.rememberAlways(alwaysKey)
+				slog.Info("cli chat: approve-always recorded for this conversation",
+					"sessionKey", r.sessionKey, "tool", pr.ToolName)
+			}
 			return clisession.PermissionDecision{Allow: true}
 		}
 	}
