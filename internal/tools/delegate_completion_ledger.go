@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -12,6 +13,8 @@ import (
 )
 
 const delegateCompletionTargetKey = "target_agent_key"
+
+const delegateRunningPersistenceTimeout = 250 * time.Millisecond
 
 func (t *DelegateTool) createDelegateCompletion(ctx context.Context, req DelegateRequest) error {
 	if t.taskStore == nil {
@@ -105,6 +108,44 @@ func (t *DelegateTool) updateDelegateCompletion(
 		return err
 	}
 	return nil
+}
+
+// updateDelegateRunning is observability-only: execution may proceed even when
+// this transition cannot be persisted. Keep it to one short attempt outside
+// the admission callback so a database outage cannot monopolize a child-run
+// permit.
+func (t *DelegateTool) updateDelegateRunning(req DelegateRequest) error {
+	if t.taskStore == nil {
+		return nil
+	}
+	delegationID := parseUUIDOrNil(req.DelegationID)
+	tenantID := parseUUIDOrNil(req.TenantID)
+	if delegationID == uuid.Nil || tenantID == uuid.Nil || req.FromAgentID == uuid.Nil {
+		return fmt.Errorf("delegation completion requires valid tenant, source agent, and delegation ID")
+	}
+	dbCtx, cancel := context.WithTimeout(
+		store.WithTenantID(context.Background(), tenantID),
+		delegateRunningPersistenceTimeout,
+	)
+	defer cancel()
+	err := t.taskStore.UpdateStatus(
+		dbCtx,
+		req.FromAgentID,
+		delegationID,
+		TaskStatusRunning,
+		nil,
+		0,
+		0,
+		0,
+	)
+	if err != nil {
+		slog.Warn("delegate.async.running_persist_failed",
+			"delegation_id", req.DelegationID,
+			"from_agent_id", req.FromAgentID,
+			"error", err,
+		)
+	}
+	return err
 }
 
 func (t *DelegateTool) updateDelegateCompletionMedia(

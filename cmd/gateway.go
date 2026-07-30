@@ -99,6 +99,29 @@ type snapshotBucketRefresher interface {
 	RefreshBuckets(context.Context, []time.Time) (int, error)
 }
 
+func recoverInterruptedSubagentTasks(
+	ctx context.Context,
+	recovery store.SubagentTaskRecoveryStore,
+	retryDelay time.Duration,
+) (int64, error) {
+	recoveryCtx := store.WithTenantID(ctx, store.MasterTenantID)
+	for {
+		recovered, err := recovery.RecoverInterrupted(recoveryCtx)
+		if err == nil {
+			return recovered, nil
+		}
+		slog.Warn("subagent_tasks.recover_interrupted_retrying", "err", err)
+
+		timer := time.NewTimer(retryDelay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return 0, ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
 func backfillTraceCostsAfterPricingSync(ctx context.Context, stores *store.Stores, snapshots snapshotBucketRefresher) {
 	if stores == nil {
 		return
@@ -290,6 +313,24 @@ func runGateway() {
 			slog.Warn("agents.reset_stuck_summoning_failed", "err", err)
 		} else if n > 0 {
 			slog.Info("agents.reset_stuck_summoning", "count", n)
+		}
+	}
+
+	// Accepted async child runs are process-owned and cannot resume after a
+	// restart. Reconcile their durable rows before wiring tools or accepting
+	// traffic so completion lookups never remain queued/running forever.
+	if recovery, ok := pgStores.SubagentTasks.(store.SubagentTaskRecoveryStore); ok {
+		startupCtx, stopStartup := signal.NotifyContext(
+			context.Background(), syscall.SIGINT, syscall.SIGTERM,
+		)
+		n, err := recoverInterruptedSubagentTasks(startupCtx, recovery, time.Second)
+		stopStartup()
+		if err != nil {
+			slog.Info("subagent_tasks.recover_interrupted_aborted", "err", err)
+			return
+		}
+		if n > 0 {
+			slog.Info("subagent_tasks.recover_interrupted", "count", n)
 		}
 	}
 

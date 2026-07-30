@@ -459,9 +459,10 @@ func (t *DelegateTool) executeAsyncMode(ctx context.Context, job *delegateArtifa
 	announceCtx := context.WithoutCancel(ctx)
 	var dr DelegateResult
 	var runErr error
+	runStarted := make(chan struct{})
 	ticket, err := t.admission.Enqueue(bgCtx, delegateAdmissionConstraints(ctx, req), func(runCtx context.Context, lease *orchestration.ChildRunLease) {
 		defer job.closeCallerRoot()
-		_ = t.updateDelegateCompletion(req, TaskStatusRunning, nil)
+		close(runStarted)
 		runCtx = withDelegatedAgentExecution(runCtx, lease)
 		dr, runErr = t.runArtifactExchange(runCtx, job)
 		lease.Release()
@@ -486,11 +487,25 @@ func (t *DelegateTool) executeAsyncMode(ctx context.Context, job *delegateArtifa
 		return ErrorResult(err.Error())
 	}
 
-	// Completion side effects run only after the admission callback has
-	// returned, which proves its execution permit has been released. A blocked
-	// message bus or event consumer must never consume child-run capacity.
+	// Nonterminal observability persistence runs outside the admitted callback.
+	// Terminal persistence and announcements wait for the callback to return,
+	// which proves its execution permit has been released.
 	go func() {
 		defer finishCompletion()
+		started := false
+		select {
+		case <-runStarted:
+			started = true
+		case <-ticket.Done():
+			select {
+			case <-runStarted:
+				started = true
+			default:
+			}
+		}
+		if started {
+			_ = t.updateDelegateRunning(req)
+		}
 		<-ticket.Done()
 		job.closeCallerRoot()
 		cancel()

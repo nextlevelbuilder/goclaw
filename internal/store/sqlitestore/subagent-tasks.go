@@ -22,6 +22,8 @@ type SQLiteSubagentTaskStore struct {
 	db *sql.DB
 }
 
+var _ store.SubagentTaskRecoveryStore = (*SQLiteSubagentTaskStore)(nil)
+
 // NewSQLiteSubagentTaskStore creates a new SQLiteSubagentTaskStore.
 func NewSQLiteSubagentTaskStore(db *sql.DB) *SQLiteSubagentTaskStore {
 	return &SQLiteSubagentTaskStore{db: db}
@@ -304,6 +306,23 @@ func (s *SQLiteSubagentTaskStore) UpdateMetadata(
 		return store.ErrSubagentTaskNotFound
 	}
 	return nil
+}
+
+// RecoverInterrupted marks child runs that cannot survive a process restart as
+// failed. This cross-tenant update runs before the gateway accepts new work.
+func (s *SQLiteSubagentTaskStore) RecoverInterrupted(ctx context.Context) (int64, error) {
+	if !store.IsMasterScope(ctx) {
+		return 0, fmt.Errorf("recover interrupted subagent tasks requires master scope")
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	q := `UPDATE subagent_tasks SET
+		status = 'failed', result = ?, completed_at = ?, updated_at = ?
+		WHERE status NOT IN ('completed', 'failed', 'cancelled')`
+	res, err := s.db.ExecContext(ctx, q, store.InterruptedSubagentTaskResult, now, now)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 func collectTasks(rows *sql.Rows) ([]store.SubagentTaskData, error) {

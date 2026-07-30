@@ -470,7 +470,7 @@ link permission checks, and bounded child-run admission.
 | Per-root limit | One root agent's self-spawn tree | Agent `subagents.maxConcurrent`, default 20 |
 | Process safety cap | All self-spawn and Agent Link callbacks | Standard 32 / Lite 2, with at most 128 independent pending chains |
 | Nested lifetime | Agent Link artifact run | Async descendants are rejected; sync descendants complete before publication |
-| Durable async result | Source/root agent UUID within one tenant | Terminal text and logical media paths use deadline-bounded persistence retries before announcement and remain explicitly retrievable by completion UUID after a successful write |
+| Durable async result | Source/root agent UUID within one tenant | Terminal text and logical media paths use deadline-bounded persistence retries before announcement; single-process startup retries pre-traffic recovery that marks previous-process non-terminal rows failed, and successful terminal writes remain explicitly retrievable by completion UUID |
 
 `agent_links.max_concurrent` is retained as compatibility metadata and is not
 currently enforced by runtime admission.

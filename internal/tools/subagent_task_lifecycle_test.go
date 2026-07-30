@@ -31,6 +31,7 @@ type recordingSubagentTaskStore struct {
 	createRelease chan struct{}
 	createErr     error
 	updateErr     error
+	updateHook    func(context.Context, string) error
 	updateStarted chan struct{}
 	updateRelease chan struct{}
 	updateOnce    sync.Once
@@ -71,7 +72,7 @@ func (s *recordingSubagentTaskStore) Get(_ context.Context, rootAgentID, id uuid
 }
 
 func (s *recordingSubagentTaskStore) UpdateStatus(
-	_ context.Context,
+	ctx context.Context,
 	rootAgentID uuid.UUID,
 	id uuid.UUID,
 	status string,
@@ -88,6 +89,11 @@ func (s *recordingSubagentTaskStore) UpdateStatus(
 		id:          id,
 		status:      status,
 		result:      value,
+	}
+	if s.updateHook != nil {
+		if err := s.updateHook(ctx, status); err != nil {
+			return err
+		}
 	}
 	if s.updateErr != nil {
 		return s.updateErr

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -265,6 +266,98 @@ func TestPGSubagentTaskStoreCompletedAtOnlyForTerminalStatus(t *testing.T) {
 				t.Fatalf("status %q completed_at = %v, terminal=%v", tt.status, got.CompletedAt, tt.terminal)
 			}
 		})
+	}
+}
+
+func TestPGSubagentTaskStoreRecoverInterrupted(t *testing.T) {
+	db := hooksTestDB(t)
+	tenantA, rootAID := seedTenantAndAgent(t, db)
+	tenantB, rootBID := seedTenantAndAgent(t, db)
+	ctxA := tenantScopedCtx(tenantA)
+	ctxB := tenantScopedCtx(tenantB)
+	taskStore := NewPGSubagentTaskStore(db)
+
+	queuedID := createPGSubagentTask(t, taskStore, ctxA, rootAID, "root-a", "queued", "queued")
+	if _, err := db.Exec(
+		`UPDATE subagent_tasks SET completed_at = $1 WHERE id = $2`,
+		time.Now().UTC().Add(-time.Hour),
+		queuedID,
+	); err != nil {
+		t.Fatalf("seed malformed queued completed_at: %v", err)
+	}
+	runningID := createPGSubagentTask(t, taskStore, ctxA, rootAID, "root-a", "running", "running")
+	waitingID := createPGSubagentTask(
+		t, taskStore, ctxB, rootBID, "root-b", "waiting", "running/waiting_child",
+	)
+	if err := taskStore.UpdateMetadata(ctxB, rootBID, waitingID, map[string]any{
+		"completion_kind": "delegate",
+		"completion_media": []map[string]any{{
+			"path":      ".delegations/completed-before-crash/report.pdf",
+			"mime_type": "application/pdf",
+		}},
+	}); err != nil {
+		t.Fatalf("record published artifact metadata: %v", err)
+	}
+	completedID := createPGSubagentTask(t, taskStore, ctxB, rootBID, "root-b", "completed", "queued")
+	completedResult := "already completed"
+	if err := taskStore.UpdateStatus(
+		ctxB, rootBID, completedID, "completed", &completedResult, 1, 2, 3,
+	); err != nil {
+		t.Fatalf("complete terminal task: %v", err)
+	}
+
+	if _, err := taskStore.RecoverInterrupted(ctxA); err == nil {
+		t.Fatal("RecoverInterrupted accepted tenant-scoped context")
+	}
+	recoveryCtx := store.WithTenantID(context.Background(), store.MasterTenantID)
+	recovered, err := taskStore.RecoverInterrupted(recoveryCtx)
+	if err != nil {
+		t.Fatalf("RecoverInterrupted: %v", err)
+	}
+	if recovered != 3 {
+		t.Fatalf("RecoverInterrupted recovered %d tasks, want 3", recovered)
+	}
+
+	for _, item := range []struct {
+		ctx  context.Context
+		root uuid.UUID
+		id   uuid.UUID
+	}{
+		{ctx: ctxA, root: rootAID, id: queuedID},
+		{ctx: ctxA, root: rootAID, id: runningID},
+		{ctx: ctxB, root: rootBID, id: waitingID},
+	} {
+		got, getErr := taskStore.Get(item.ctx, item.root, item.id)
+		if getErr != nil {
+			t.Fatalf("Get recovered task %s: %v", item.id, getErr)
+		}
+		if got.Status != "failed" || got.CompletedAt == nil || got.Result == nil ||
+			!strings.Contains(*got.Result, "gateway stopped") {
+			t.Fatalf("recovered task %s = %#v", item.id, got)
+		}
+		if item.id == waitingID {
+			if got.Metadata["completion_kind"] != "delegate" ||
+				got.Metadata["completion_media"] == nil {
+				t.Fatalf("published artifact metadata was lost: %#v", got.Metadata)
+			}
+		}
+	}
+
+	completed, err := taskStore.Get(ctxB, rootBID, completedID)
+	if err != nil {
+		t.Fatalf("Get completed task: %v", err)
+	}
+	if completed.Status != "completed" || completed.Result == nil ||
+		*completed.Result != completedResult {
+		t.Fatalf("completed task changed during recovery: %#v", completed)
+	}
+
+	recovered, err = taskStore.RecoverInterrupted(recoveryCtx)
+	if err != nil {
+		t.Fatalf("RecoverInterrupted second pass: %v", err)
+	}
+	if recovered != 0 {
+		t.Fatalf("RecoverInterrupted second pass recovered %d tasks, want 0", recovered)
 	}
 }
 

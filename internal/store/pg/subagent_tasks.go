@@ -18,6 +18,8 @@ type PGSubagentTaskStore struct {
 	db *sql.DB
 }
 
+var _ store.SubagentTaskRecoveryStore = (*PGSubagentTaskStore)(nil)
+
 // NewPGSubagentTaskStore creates a new PostgreSQL-backed subagent task store.
 func NewPGSubagentTaskStore(db *sql.DB) *PGSubagentTaskStore {
 	return &PGSubagentTaskStore{db: db}
@@ -270,6 +272,22 @@ func (s *PGSubagentTaskStore) UpdateMetadata(
 		return store.ErrSubagentTaskNotFound
 	}
 	return nil
+}
+
+// RecoverInterrupted marks child runs that cannot survive a process restart as
+// failed. This cross-tenant update runs before the gateway accepts new work.
+func (s *PGSubagentTaskStore) RecoverInterrupted(ctx context.Context) (int64, error) {
+	if !store.IsMasterScope(ctx) {
+		return 0, fmt.Errorf("recover interrupted subagent tasks requires master scope")
+	}
+	q := `UPDATE subagent_tasks SET
+		status = 'failed', result = $1, completed_at = NOW(), updated_at = NOW()
+		WHERE status NOT IN ('completed', 'failed', 'cancelled')`
+	res, err := s.db.ExecContext(ctx, q, store.InterruptedSubagentTaskResult)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 // collectTasks scans rows into a slice.

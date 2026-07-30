@@ -6,12 +6,14 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	orchestration "github.com/nextlevelbuilder/goclaw/internal/childrun"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -44,7 +46,7 @@ func TestSpawnAsyncReturnsDurableCompletionAndGetSurvivesManagerStateLoss(t *tes
 	if err != nil || receipt.TaskID == "" {
 		t.Fatalf("receipt = %#v, parse error = %v", receipt, err)
 	}
-	waitForLifecycleStatus(t, taskStore, TaskStatusCompleted)
+	manager.Close()
 
 	// A restarted manager has no in-memory tasks but can still retrieve the row.
 	restarted := NewSubagentManager(nil, nil, "", nil, nil, SubagentConfig{})
@@ -66,7 +68,6 @@ func TestSpawnAsyncReturnsDurableCompletionAndGetSurvivesManagerStateLoss(t *tes
 		t.Fatalf("other root retrieved completion: %#v", result)
 	}
 
-	manager.Close()
 	restarted.Close()
 }
 
@@ -168,13 +169,13 @@ func TestDelegateAsyncDurableGetIsSourceAgentScoped(t *testing.T) {
 	if _, err := uuid.Parse(receipt.DelegationID); err != nil {
 		t.Fatalf("delegation id = %q: %v", receipt.DelegationID, err)
 	}
-	waitForLifecycleStatus(t, taskStore, TaskStatusCompleted)
+	tool.Close()
 	select {
 	case metadata := <-taskStore.metadata:
 		if metadata[asyncCompletionDeliveryKey] != asyncCompletionDeliveryMissed {
 			t.Fatalf("noninteractive delegate announcement metadata = %#v, want undelivered", metadata)
 		}
-	case <-time.After(time.Second):
+	default:
 		t.Fatal("noninteractive delegate did not record get-only fallback")
 	}
 	delegationID := uuid.MustParse(receipt.DelegationID)
@@ -215,6 +216,100 @@ func TestDelegateAsyncDurableGetIsSourceAgentScoped(t *testing.T) {
 	}
 }
 
+func TestDelegateAsyncRunningPersistenceDoesNotRetainAdmissionPermit(t *testing.T) {
+	taskStore := newRecordingSubagentTaskStore()
+	var runningAttempts atomic.Int32
+	runningDeadline := make(chan time.Duration, 1)
+	persistenceStarted := make(chan struct{}, 1)
+	persistenceRelease := make(chan struct{})
+	defer func() {
+		select {
+		case <-persistenceRelease:
+		default:
+			close(persistenceRelease)
+		}
+	}()
+	taskStore.updateHook = func(ctx context.Context, status string) error {
+		if status != TaskStatusRunning {
+			return nil
+		}
+		if runningAttempts.Add(1) != 1 {
+			return nil
+		}
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			t.Fatal("running persistence has no deadline")
+		}
+		runningDeadline <- time.Until(deadline)
+		persistenceStarted <- struct{}{}
+		<-persistenceRelease
+		return errors.New("transient running persistence failure")
+	}
+
+	admission := orchestration.NewChildRunAdmission(1, 4)
+	runStarted := make(chan string, 2)
+	tool := NewDelegateToolWithAdmission(noopAgentLink{}, noopAgentCRUD{}, nil, func(_ context.Context, req DelegateRequest) (DelegateResult, error) {
+		runStarted <- req.Task
+		return DelegateResult{Content: "done"}, nil
+	}, admission)
+	tool.SetWorkspace(t.TempDir())
+	t.Cleanup(tool.Close)
+	tool.SetTaskStore(taskStore)
+
+	first := tool.Execute(makeDelegateCtx(t), map[string]any{
+		"agent_key": "child-agent",
+		"task":      "first",
+		"mode":      "async",
+	})
+	if first == nil || first.IsError {
+		t.Fatalf("first delegate result = %#v", first)
+	}
+	select {
+	case task := <-runStarted:
+		if task != "first" {
+			t.Fatalf("first started task = %q", task)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("first delegate run did not start")
+	}
+	select {
+	case <-persistenceStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("running persistence did not start")
+	}
+
+	second := tool.Execute(makeDelegateCtx(t), map[string]any{
+		"agent_key": "child-agent",
+		"task":      "second",
+		"mode":      "async",
+	})
+	if second == nil || second.IsError {
+		t.Fatalf("second delegate result = %#v", second)
+	}
+	select {
+	case task := <-runStarted:
+		if task != "second" {
+			t.Fatalf("second started task = %q", task)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("running-status persistence retained the only admission permit")
+	}
+	close(persistenceRelease)
+	tool.Close()
+
+	select {
+	case remaining := <-runningDeadline:
+		if remaining <= 0 || remaining > 500*time.Millisecond {
+			t.Fatalf("running persistence deadline = %s, want at most 500ms", remaining)
+		}
+	default:
+		t.Fatal("running persistence was not attempted")
+	}
+	if attempts := runningAttempts.Load(); attempts != 2 {
+		t.Fatalf("running persistence attempts = %d, want one per accepted delegation", attempts)
+	}
+}
+
 func TestCompletionMediaDescriptorsNeverPersistHostPaths(t *testing.T) {
 	workspace := t.TempDir()
 	inside := filepath.Join(workspace, ".uploads", "report.pdf")
@@ -238,24 +333,5 @@ func TestCompletionMediaDescriptorsNeverPersistHostPaths(t *testing.T) {
 		"path": outside,
 	}}); len(payload) != 0 {
 		t.Fatalf("absolute persisted media was returned: %#v", payload)
-	}
-}
-
-func waitForLifecycleStatus(
-	t *testing.T,
-	taskStore *recordingSubagentTaskStore,
-	want string,
-) {
-	t.Helper()
-	deadline := time.After(time.Second)
-	for {
-		select {
-		case update := <-taskStore.updates:
-			if update.status == want {
-				return
-			}
-		case <-deadline:
-			t.Fatalf("timed out waiting for lifecycle status %q", want)
-		}
 	}
 }

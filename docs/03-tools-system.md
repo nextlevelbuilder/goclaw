@@ -659,10 +659,13 @@ cannot satisfy the lookup.
 Terminal persistence uses per-attempt database deadlines and a longer bounded
 retry window than announcement delivery. If the database remains unavailable
 for the entire window, GoClaw does not falsely mark the announcement as
-delivered; a live announcement is still attempted. A process crash during that
-database outage can leave the accepted row stale because no second durable
-database exists. Graceful gateway shutdown drains this completion lifecycle
-before provider and database teardown.
+delivered; a live announcement is still attempted. On the next startup that
+can reach the database, every non-terminal completion row left by the previous
+process is marked `failed` with an interruption reason, so it cannot remain
+`queued` or `running` forever. The single-process gateway retries this
+reconciliation before accepting traffic when the database is temporarily
+unavailable. Graceful gateway shutdown drains this completion lifecycle before
+provider and database teardown.
 
 Self-spawn and Agent Link callbacks also share a process safety cap (Standard:
 32; Lite: 2) and a bounded pending queue of 128. Inside an Agent Link artifact

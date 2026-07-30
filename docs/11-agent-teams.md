@@ -642,9 +642,14 @@ agent access to the result. Delegation completion rows are excluded from
 Terminal database writes use per-attempt deadlines plus an extended bounded
 retry window. If the database remains unavailable for that whole window, the
 live announcement is still attempted but is not recorded as durably delivered;
-a crash during the same outage can leave the accepted row stale. Graceful
-gateway shutdown waits for accepted completion persistence before tearing down
-runtime dependencies.
+a crash during the same outage may prevent the terminal result from being
+recorded. On the next startup that can reach the database, every non-terminal
+completion row from the previous process is marked `failed` with an interruption
+reason instead of remaining `queued` or `running` forever. The gateway retries
+that reconciliation before accepting traffic if the database is temporarily
+unavailable. The current runtime assumes one active gateway process. Graceful
+shutdown waits for accepted completion persistence before tearing down runtime
+dependencies.
 
 ### Trace Linking
 

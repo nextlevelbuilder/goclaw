@@ -13,6 +13,8 @@ var (
 	ErrSubagentTaskNotFound        = errors.New("subagent task not found in owner scope")
 )
 
+const InterruptedSubagentTaskResult = "interrupted: gateway stopped before terminal completion was durably recorded"
+
 // IsTerminalSubagentTaskStatus reports whether a status ends the task
 // lifecycle and therefore receives a completed_at timestamp.
 func IsTerminalSubagentTaskStatus(status string) bool {
@@ -76,4 +78,15 @@ type SubagentTaskStore interface {
 
 	// UpdateMetadata merges metadata on an existing task.
 	UpdateMetadata(ctx context.Context, rootAgentID, id uuid.UUID, metadata map[string]any) error
+}
+
+// SubagentTaskRecoveryStore exposes the startup-only, cross-tenant maintenance
+// operation separately from tenant/root-scoped task CRUD.
+type SubagentTaskRecoveryStore interface {
+	// RecoverInterrupted marks every non-terminal task from the previous
+	// process as failed. It is a cross-tenant startup operation and must run
+	// before the gateway accepts new child runs. The current gateway
+	// architecture is single-process; multi-replica deployments would need
+	// coordinated ownership before invoking this recovery.
+	RecoverInterrupted(ctx context.Context) (int64, error)
 }
