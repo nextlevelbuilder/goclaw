@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/cliagent"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -44,9 +45,17 @@ type connectionView struct {
 	CreatedBy string          `json:"created_by,omitempty"`
 	CreatedAt time.Time       `json:"created_at"`
 	UpdatedAt time.Time       `json:"updated_at"`
+	// Resolved server-side from the adapter spec (defaults + this connection's
+	// config). Clients must not re-derive these from the provider name —
+	// interactive_args/manual_approve_args are config-overridable, so a
+	// provider-name check hides capabilities a connection really has.
+	SupportsInteractive    bool `json:"supports_interactive"`
+	SupportsManualApproval bool `json:"supports_manual_approval"`
+	SupportsOAuthLogin     bool `json:"supports_oauth_login"`
 }
 
 func toConnectionView(c store.CLIConnection) connectionView {
+	spec, specErr := cliagent.Resolve(c.Provider, c.Config)
 	v := connectionView{
 		ID:        c.ID.String(),
 		Global:    c.TenantID == nil,
@@ -61,6 +70,11 @@ func toConnectionView(c store.CLIConnection) connectionView {
 		CreatedAt: c.CreatedAt,
 		UpdatedAt: c.UpdatedAt,
 	}
+	if specErr == nil {
+		v.SupportsInteractive = spec.SupportsInteractive()
+		v.SupportsManualApproval = spec.SupportsManualApproval()
+	}
+	v.SupportsOAuthLogin = injectForConnectionCfg(c.Provider, "oauth", c.Config) != ""
 	if c.TenantID != nil {
 		v.TenantID = c.TenantID.String()
 	}

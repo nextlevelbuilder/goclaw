@@ -167,9 +167,21 @@ type connectionInfo struct {
 	UpdatedAt      int64           `json:"updatedAt"`
 	HasCredential  bool            `json:"hasCredential"`
 	CredentialType string          `json:"credentialType,omitempty"`
+	// Capabilities are RESOLVED SERVER-SIDE from the adapter spec (defaults plus
+	// this connection's config overrides). The UI must not re-derive them from the
+	// provider name: interactive_args and manual_approve_args are config-
+	// overridable, so a provider-name check silently hides a capability the
+	// connection actually has — which is exactly what happened when the Chat
+	// action was gated on provider == "claude_code".
+	SupportsInteractive    bool `json:"supportsInteractive"`
+	SupportsManualApproval bool `json:"supportsManualApproval"`
+	SupportsOAuthLogin     bool `json:"supportsOAuthLogin"`
 }
 
 func toConnectionInfo(c store.CLIConnection) connectionInfo {
+	// Unresolvable spec (e.g. a generic connection with no binary configured) →
+	// no capabilities, rather than failing the whole listing.
+	spec, specErr := cliagent.Resolve(c.Provider, c.Config)
 	info := connectionInfo{
 		ID:        c.ID.String(),
 		Global:    c.TenantID == nil,
@@ -184,6 +196,14 @@ func toConnectionInfo(c store.CLIConnection) connectionInfo {
 		CreatedAt: c.CreatedAt.UnixMilli(),
 		UpdatedAt: c.UpdatedAt.UnixMilli(),
 	}
+	if specErr == nil {
+		info.SupportsInteractive = spec.SupportsInteractive()
+		info.SupportsManualApproval = spec.SupportsManualApproval()
+	}
+	// OAuth is genuinely provider-shaped (only Claude Code has a subscription
+	// login flow), and the credential mapping is already the single source of
+	// truth for it.
+	info.SupportsOAuthLogin = httpapi.CredentialInjectFor(c.Provider, "oauth", c.Config) != ""
 	if c.TenantID != nil {
 		info.TenantID = c.TenantID.String()
 	}
