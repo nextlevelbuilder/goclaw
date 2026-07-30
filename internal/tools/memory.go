@@ -49,7 +49,7 @@ func (t *MemorySearchTool) SetHasKG(has bool) {
 func (t *MemorySearchTool) Name() string { return "memory_search" }
 
 func (t *MemorySearchTool) Description() string {
-	return "Mandatory recall step: search memory documents and episodic memory before answering questions about prior work, decisions, dates, people, preferences, or todos; returns top snippets with path + lines. For recency/date questions such as today, yesterday, last 24h, this week, \"hom nay\", \"hom qua\", or \"24h gan nhat\": do NOT put date words or guessed topics into query. Use query=\"*\" with createdAfter/createdBefore for calendar windows, or query=\"*\" with timeRange for relative windows; then run a second semantic search only if the user asks for a narrower topic. If response has disabled=true, memory retrieval is unavailable and should be surfaced to the user. IMPORTANT: Always query in the SAME language as the stored memory content. If the user speaks Vietnamese, search in Vietnamese. If memory was written in English, search in English. Matching the language dramatically improves search accuracy. If no relevant results found or confidence is low, tell the user you checked but found nothing — do not fabricate or guess memories."
+	return "Mandatory recall step: search memory documents and episodic memory before answering questions about prior work, decisions, dates, people, preferences, or todos; returns top snippets with path + lines. Episodic results are L0 previews; use memory_expand with the episodic ID for full content. For recency/date questions such as today, yesterday, last 24h, this week, \"hom nay\", \"hom qua\", or \"24h gan nhat\": do NOT put date words or guessed topics into query. Use query=\"*\" with createdAfter/createdBefore for calendar windows, or query=\"*\" with timeRange for relative windows; then run a second semantic search only if the user asks for a narrower topic. If response has disabled=true, memory retrieval is unavailable and should be surfaced to the user. IMPORTANT: Always query in the SAME language as the stored memory content. If the user speaks Vietnamese, search in Vietnamese. If memory was written in English, search in English. Matching the language dramatically improves search accuracy. If no relevant results found or confidence is low, tell the user you checked but found nothing — do not fabricate or guess memories."
 }
 
 func (t *MemorySearchTool) Parameters() map[string]any {
@@ -67,11 +67,6 @@ func (t *MemorySearchTool) Parameters() map[string]any {
 			"minScore": map[string]any{
 				"type":        "number",
 				"description": "Minimum relevance score threshold (0-1)",
-			},
-			"depth": map[string]any{
-				"type":        "string",
-				"description": "Result depth: l0 (abstracts only), l1 (overview), l2 (full content). Default: l1. Only affects episodic memories.",
-				"enum":        []string{"l0", "l1", "l2"},
 			},
 			"timeRange": map[string]any{
 				"type":        "string",

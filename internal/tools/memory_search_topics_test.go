@@ -70,6 +70,20 @@ func TestMemorySearchDescriptionGuidesRecencyFilters(t *testing.T) {
 	}
 }
 
+func TestMemorySearchSchemaDoesNotAdvertiseUnsupportedDepth(t *testing.T) {
+	tool := NewMemorySearchTool()
+	props, ok := tool.Parameters()["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("memory_search parameters missing properties")
+	}
+	if _, exists := props["depth"]; exists {
+		t.Fatal("memory_search advertises depth, but Execute does not implement it")
+	}
+	if !strings.Contains(tool.Description(), "memory_expand") {
+		t.Fatal("memory_search description must direct callers to memory_expand for full episodic content")
+	}
+}
+
 func (f *memorySearchFakeEpisodicStore) Search(_ context.Context, query string, _ string, _ string, opts store.EpisodicSearchOptions) ([]store.EpisodicSearchResult, error) {
 	f.query = query
 	f.opts = opts
