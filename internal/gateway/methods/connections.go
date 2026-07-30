@@ -460,7 +460,7 @@ func (m *ConnectionsMethods) handleCredentialSet(ctx context.Context, client *ga
 	}
 	// Same provider → env-var table as the HTTP layer, so the sandbox injection
 	// contract cannot drift between transports.
-	inject := httpapi.CredentialInjectFor(conn.Provider, credType)
+	inject := httpapi.CredentialInjectFor(conn.Provider, credType, conn.Config)
 	if inject == "" {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest,
 			i18n.T(locale, i18n.MsgInvalidRequest, "this connection does not support a "+credType+" credential")))

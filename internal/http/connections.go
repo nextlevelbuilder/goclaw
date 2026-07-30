@@ -338,7 +338,7 @@ func (h *AgentsHandler) handleSetCLIConnectionCredential(w http.ResponseWriter, 
 	}
 	// Same provider → env-var mapping the per-agent path uses, so the sandbox
 	// injection contract stays identical for both catalogues.
-	inject := injectForConnection(conn.Provider, credType)
+	inject := injectForConnectionCfg(conn.Provider, credType, conn.Config)
 	if inject == "" {
 		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, "this connection does not support a "+credType+" credential")
 		return
@@ -445,8 +445,8 @@ func (h *AgentsHandler) handleListCLIConnectionCredentials(w http.ResponseWriter
 // descriptor ("env:VAR" / "file:PATH"), or "" when the combination is
 // unsupported. Exported so the WS method layer derives the SAME descriptor as
 // these handlers instead of keeping a second copy of the table.
-func CredentialInjectFor(provider, credType string) string {
-	return injectForConnection(provider, credType)
+func CredentialInjectFor(provider, credType string, cfg json.RawMessage) string {
+	return injectForConnectionCfg(provider, credType, cfg)
 }
 
 // derefStr returns the pointed-to string, or "" for nil.
