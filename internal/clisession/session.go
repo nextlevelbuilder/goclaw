@@ -93,6 +93,12 @@ type SessionOpts struct {
 	// reading goroutine, IN ORDER, and must not block for long — a slow consumer
 	// stalls the stream. Optional.
 	OnEvent func(cliagent.Event)
+	// OnNotice receives a message the CLI wants the USER to see about a tool call
+	// it refused — including a refusal caused by the CLI rejecting our own
+	// permission response, which otherwise looks like an approval that silently
+	// did nothing.
+	OnNotice func(string)
+
 	// OnStderr receives each stderr line. Diagnostics matter here: a CLI that
 	// refuses to start, or loses its credential mid-session, says so on stderr
 	// and nowhere else. Optional.
@@ -122,6 +128,7 @@ type Session struct {
 
 	onEvent  func(cliagent.Event)
 	onStderr func(string)
+	onNotice func(string)
 	perm     PermissionFunc
 
 	// ctx/cancel bound the session. cancel is called by Close and unblocks any
@@ -167,6 +174,7 @@ func newSession(ctx context.Context, key string, opts SessionOpts) (*Session, er
 		parser:   cliagent.NewParser(opts.Spec.Output),
 		onEvent:  opts.OnEvent,
 		onStderr: opts.OnStderr,
+		onNotice: opts.OnNotice,
 		perm:     opts.Permission,
 		ctx:      sctx,
 		cancel:   cancel,
@@ -221,6 +229,10 @@ func (s *Session) Send(ctx context.Context, text string) error {
 	if err != nil {
 		return fmt.Errorf("clisession: could not encode user message: %w", err)
 	}
+	// Logged verbatim (bounded) because the response SHAPE is the thing most likely
+	// to be wrong against a CLI version we have not tested: without this, a
+	// rejected response is indistinguishable from one that was never sent.
+	slog.Debug("clisession: control response", "key", s.key, "line", truncate(line, 500))
 	if err := s.proc.WriteLine(line); err != nil {
 		return fmt.Errorf("clisession: %w", err)
 	}
@@ -299,8 +311,46 @@ func (s *Session) handleStdout(line string) {
 		for _, ev := range s.parser.ParseLine(line) {
 			s.emit(ev)
 		}
+	default:
+		// Neither a control frame nor narration. Mostly protocol-internal noise —
+		// but this is also where the CLI reports that it REJECTED our permission
+		// response, as a system/permission_denied frame carrying the reason. That
+		// used to be dropped in silence, which is the worst possible place to be
+		// quiet: the user sees an approval succeed, the model is told the tool
+		// failed, and nothing anywhere says why. Logged, and surfaced to the
+		// consumer so it can be shown in the transcript.
+		s.noteUnhandled(line)
 	}
-	// Neither: an unparseable or protocol-internal line. Skipped, session intact.
+}
+
+// noteUnhandled logs a stdout line the session did not act on. Kept cheap: only
+// the frame's type/subtype is parsed, and only a permission refusal is promoted
+// above debug.
+func (s *Session) noteUnhandled(line string) {
+	var head struct {
+		Type    string `json:"type"`
+		Subtype string `json:"subtype"`
+		Message string `json:"message"`
+		Tool    string `json:"tool_name"`
+		Reason  string `json:"decision_reason_type"`
+	}
+	if json.Unmarshal([]byte(line), &head) != nil {
+		slog.Debug("clisession: unparseable stdout line", "key", s.key, "line", truncate(line, 300))
+		return
+	}
+	if head.Type == "system" && head.Subtype == "permission_denied" {
+		// The CLI refused the call despite our answer — either the user denied, or
+		// (the case that cost real debugging time) it did not accept our response.
+		slog.Info("clisession: CLI reported a permission denial",
+			"key", s.key, "tool", head.Tool, "reason_type", head.Reason,
+			"message", truncate(head.Message, 400))
+		if s.onNotice != nil && strings.TrimSpace(head.Message) != "" {
+			s.onNotice(head.Message)
+		}
+		return
+	}
+	slog.Debug("clisession: unhandled stdout frame",
+		"key", s.key, "type", head.Type, "subtype", head.Subtype, "line", truncate(line, 300))
 }
 
 // handleStderr forwards a diagnostic line.
@@ -407,6 +457,10 @@ func (s *Session) reply(resp controlResponse) {
 		slog.Warn("clisession: could not encode control response", "key", s.key, "error", err)
 		return
 	}
+	// Logged verbatim (bounded) because the response SHAPE is the thing most likely
+	// to be wrong against a CLI version we have not tested: without this, a
+	// rejected response is indistinguishable from one that was never sent.
+	slog.Debug("clisession: control response", "key", s.key, "line", truncate(line, 500))
 	if err := s.proc.WriteLine(line); err != nil {
 		if errors.Is(err, sandbox.ErrSessionClosed) {
 			slog.Debug("clisession: control response dropped, session closed", "key", s.key)
@@ -414,4 +468,12 @@ func (s *Session) reply(resp controlResponse) {
 		}
 		slog.Warn("clisession: could not send control response", "key", s.key, "error", err)
 	}
+}
+
+// truncate shortens s for a log field, marking that it was cut.
+func truncate(s string, max int) string {
+	if max <= 0 || len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
 }

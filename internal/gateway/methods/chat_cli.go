@@ -318,6 +318,7 @@ func (c *CLIChat) Send(ctx context.Context, client *gateway.Client, req *protoco
 		Mode:       mode,
 		Env:        env,
 		OnEvent:    relay.onEvent,
+		OnNotice:   relay.onNotice,
 		OnStderr:   relay.onStderr,
 		Permission: relay.permission,
 	})
@@ -849,6 +850,23 @@ func (r *cliRelay) onEvent(ev cliagent.Event) {
 // to the client: stderr is where a CLI prints credential and start-up failures,
 // and forwarding it verbatim into a chat bubble risks echoing something the user
 // should not see.
+// onNotice surfaces a refusal the CLI reported about a tool call. The user has
+// usually just pressed Approve, so a silent failure reads as "the button did
+// nothing" — say what the CLI said instead.
+func (r *cliRelay) onNotice(message string) {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return
+	}
+	slog.Info("cli chat: CLI refused a tool call", "sessionKey", r.sessionKey, "message", cliTruncate(message, 300))
+	// Rendered as an assistant chunk rather than a run failure: the turn is still
+	// alive and the model will usually keep going, so failing the run here would
+	// blank a transcript that is about to receive more text.
+	r.emit(r.turn(), protocol.ChatEventChunk, map[string]string{
+		"content": "\n\n_" + cliTruncate(message, 600) + "_\n\n",
+	})
+}
+
 func (r *cliRelay) onStderr(line string) {
 	line = strings.TrimSpace(line)
 	if line == "" {

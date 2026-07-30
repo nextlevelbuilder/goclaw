@@ -974,3 +974,38 @@ func jsonEqual(t *testing.T, a, b string) bool {
 	y, _ := json.Marshal(bv)
 	return string(x) == string(y)
 }
+
+// A permission refusal reported by the CLI must not vanish. This is the frame
+// that made an approved action look like the button did nothing: the user
+// approves, the CLI rejects the answer, and the only record of why was a stdout
+// frame the session dropped in silence.
+func TestPermissionDenialFrameIsSurfaced(t *testing.T) {
+	var notices []string
+	s := &Session{key: "test", onNotice: func(m string) { notices = append(notices, m) }}
+
+	s.noteUnhandled(`{"type":"system","subtype":"permission_denied","tool_name":"Bash",` +
+		`"decision_reason_type":"permissionPromptTool",` +
+		`"message":"Tool permission request failed: bad response"}`)
+
+	if len(notices) != 1 {
+		t.Fatalf("expected the refusal to be surfaced once, got %d: %v", len(notices), notices)
+	}
+	if !strings.Contains(notices[0], "Tool permission request failed") {
+		t.Errorf("the CLI's own reason was lost: %q", notices[0])
+	}
+
+	// Ordinary frames stay quiet — this hook must not turn into a firehose in the
+	// transcript.
+	before := len(notices)
+	for _, line := range []string{
+		`{"type":"system","subtype":"init","tools":["Bash"]}`,
+		`{"type":"result","subtype":"success"}`,
+		`not json at all`,
+		`{"type":"system","subtype":"permission_denied"}`, // no message → nothing to say
+	} {
+		s.noteUnhandled(line)
+	}
+	if len(notices) != before {
+		t.Errorf("a routine frame produced a user-visible notice: %v", notices[before:])
+	}
+}
