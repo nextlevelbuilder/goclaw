@@ -899,14 +899,14 @@ func (r *cliRelay) permission(ctx context.Context, pr clisession.PermissionReque
 	// approvals. So wait on the SESSION's context too: when the session ends we
 	// stop waiting immediately and refuse, instead of pinning Close for minutes.
 	type answer struct {
-		decision tools.ApprovalDecision
-		err      error
+		outcome tools.ApprovalOutcome
+		err     error
 	}
 	timeout := r.chat.approvalTimeout()
 	ch := make(chan answer, 1)
 	go func() {
-		d, err := broker.RequestApproval(areq, timeout)
-		ch <- answer{d, err}
+		o, err := broker.RequestApprovalOutcome(areq, timeout)
+		ch <- answer{o, err}
 	}()
 
 	select {
@@ -922,7 +922,17 @@ func (r *cliRelay) permission(ctx context.Context, pr clisession.PermissionReque
 			return clisession.PermissionDecision{
 				DenyReason: fmt.Sprintf("Nobody approved this within %s, so it was NOT run (an unanswered request is refused, never assumed). Ask the user to confirm before trying again.", timeout),
 			}
-		case a.decision == tools.ApprovalDeny:
+		case a.outcome.Decision == tools.ApprovalDeny:
+			// A redirect ("don't push, open a PR instead") is far more useful to the
+			// model than a bare refusal, so the user's own words replace the generic
+			// sentence when they gave any. Prefixed rather than passed raw: the model
+			// sees this as a tool result, and unattributed text there reads like an
+			// instruction from the system instead of a human overruling it.
+			if reason := strings.TrimSpace(a.outcome.Reason); reason != "" {
+				return clisession.PermissionDecision{
+					DenyReason: cliTruncate("The user declined this action and said: "+reason, 2000),
+				}
+			}
 			return clisession.PermissionDecision{DenyReason: "The user declined this action. Do not retry it — continue without it or ask what they would prefer."}
 		default:
 			// allow-once and allow-always both permit THIS action. The broker's

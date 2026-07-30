@@ -99,8 +99,13 @@ func (m *ExecApprovalMethods) handleDeny(ctx context.Context, client *gateway.Cl
 		return
 	}
 
+	// Reason mirrors the coding CLIs' own "No, and tell it what to do instead":
+	// the text is handed to the model as the refused tool's result, so a denial can
+	// redirect the work rather than just stopping it. Optional — a bare deny still
+	// sends the generic refusal.
 	var params struct {
-		ID string `json:"id"`
+		ID     string `json:"id"`
+		Reason string `json:"reason"`
 	}
 	if req.Params != nil {
 		json.Unmarshal(req.Params, &params)
@@ -111,7 +116,7 @@ func (m *ExecApprovalMethods) handleDeny(ctx context.Context, client *gateway.Cl
 		return
 	}
 
-	if err := m.manager.ResolveFor(params.ID, tools.ApprovalDeny, client.TenantID(), client.UserID()); err != nil {
+	if err := m.manager.ResolveForWithReason(params.ID, tools.ApprovalDeny, params.Reason, client.TenantID(), client.UserID()); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, err.Error()))
 		return
 	}

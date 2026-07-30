@@ -92,6 +92,20 @@ const (
 	ApprovalDeny        ApprovalDecision = "deny"
 )
 
+// ApprovalOutcome is a resolved decision plus, when the user denied, whatever
+// they said to do instead.
+//
+// Reason exists because a bare "no" is a worse answer than a redirected one: the
+// coding CLIs put the user's words in front of the model as the tool result, so
+// "don't push, open a PR" keeps the turn going where a plain refusal makes the
+// model guess. Only ever populated for a deny — an allow needs no justification,
+// and carrying free text on the allow path would invite treating it as an
+// instruction nobody audited.
+type ApprovalOutcome struct {
+	Decision ApprovalDecision
+	Reason   string
+}
+
 // ToolNameExec is the ToolName used for approvals raised by the exec tool.
 // Kept explicit so a payload always says which tool is asking, even for the
 // original exec path whose requests predate the generalisation.
@@ -143,7 +157,7 @@ type PendingApproval struct {
 	CreatedAt  time.Time `json:"createdAt"`
 
 	tenantID uuid.UUID // event scope only — never serialised to clients
-	resultCh chan ApprovalDecision
+	resultCh chan ApprovalOutcome
 }
 
 // Wire renders the approval for the wire: the exec.approval.requested/resolved
@@ -261,12 +275,21 @@ func (m *ExecApprovalManager) CheckCommand(command string) string {
 	return "allow"
 }
 
-// RequestApproval creates a pending approval and blocks until resolved or timeout.
+// RequestApproval creates a pending approval and blocks until resolved or
+// timeout, reporting only the decision. Callers that can act on a denial reason
+// (the CLI relay, which hands it to the model) want RequestApprovalOutcome.
+func (m *ExecApprovalManager) RequestApproval(req ApprovalRequest, timeout time.Duration) (ApprovalDecision, error) {
+	outcome, err := m.RequestApprovalOutcome(req, timeout)
+	return outcome.Decision, err
+}
+
+// RequestApprovalOutcome creates a pending approval and blocks until resolved or
+// timeout.
 //
 // It publishes exec.approval.requested on entry and exec.approval.resolved on
 // exit (including on timeout), so a connected dashboard shows the prompt live
 // instead of only after a manual reload.
-func (m *ExecApprovalManager) RequestApproval(req ApprovalRequest, timeout time.Duration) (ApprovalDecision, error) {
+func (m *ExecApprovalManager) RequestApprovalOutcome(req ApprovalRequest, timeout time.Duration) (ApprovalOutcome, error) {
 	if req.ToolName == "" {
 		req.ToolName = ToolNameExec
 	}
@@ -287,7 +310,7 @@ func (m *ExecApprovalManager) RequestApproval(req ApprovalRequest, timeout time.
 		UserID:     req.UserID,
 		CreatedAt:  time.Now(),
 		tenantID:   req.TenantID,
-		resultCh:   make(chan ApprovalDecision, 1),
+		resultCh:   make(chan ApprovalOutcome, 1),
 	}
 	m.pending[id] = pa
 	m.mu.Unlock()
@@ -297,7 +320,8 @@ func (m *ExecApprovalManager) RequestApproval(req ApprovalRequest, timeout time.
 
 	// Wait for resolution or timeout
 	select {
-	case decision := <-pa.resultCh:
+	case outcome := <-pa.resultCh:
+		decision := outcome.Decision
 		m.mu.Lock()
 		delete(m.pending, id)
 		m.mu.Unlock()
@@ -314,7 +338,7 @@ func (m *ExecApprovalManager) RequestApproval(req ApprovalRequest, timeout time.
 			}
 		}
 
-		return decision, nil
+		return outcome, nil
 
 	case <-time.After(timeout):
 		m.mu.Lock()
@@ -326,7 +350,7 @@ func (m *ExecApprovalManager) RequestApproval(req ApprovalRequest, timeout time.
 			"decision": string(ApprovalDeny),
 			"reason":   "timeout",
 		})
-		return ApprovalDeny, fmt.Errorf("approval timed out after %s", timeout)
+		return ApprovalOutcome{Decision: ApprovalDeny}, fmt.Errorf("approval timed out after %s", timeout)
 	}
 }
 
@@ -342,6 +366,16 @@ func (m *ExecApprovalManager) RequestExecApproval(ctx context.Context, command, 
 
 // Resolve resolves a pending approval request.
 func (m *ExecApprovalManager) Resolve(id string, decision ApprovalDecision) error {
+	return m.ResolveWithReason(id, decision, "")
+}
+
+// ResolveWithReason resolves a pending approval, carrying the user's words back
+// to whoever asked. reason is only meaningful on a deny (see ApprovalOutcome).
+//
+// The reason is NOT published on the resolved event: that event fans out to every
+// client the approval is visible to, and a denial reason is a message aimed at
+// the agent, not a broadcast. It reaches the model through resultCh alone.
+func (m *ExecApprovalManager) ResolveWithReason(id string, decision ApprovalDecision, reason string) error {
 	m.mu.Lock()
 	pa, ok := m.pending[id]
 	m.mu.Unlock()
@@ -350,9 +384,13 @@ func (m *ExecApprovalManager) Resolve(id string, decision ApprovalDecision) erro
 		return fmt.Errorf("approval %q not found or already resolved", id)
 	}
 
+	if decision != ApprovalDeny {
+		reason = ""
+	}
+
 	// resultCh is buffered (cap 1) so this never blocks the caller; the waiting
 	// RequestApproval goroutine removes the pending entry once it reads.
-	pa.resultCh <- decision
+	pa.resultCh <- ApprovalOutcome{Decision: decision, Reason: reason}
 	m.publish(protocol.EventExecApprovalRes, pa, map[string]any{"decision": string(decision)})
 	return nil
 }
@@ -408,6 +446,11 @@ func (m *ExecApprovalManager) ListPendingFor(tenantID uuid.UUID, userID string) 
 // A non-visible id reports the same "not found" as a missing one, so this cannot
 // be used to probe which ids exist.
 func (m *ExecApprovalManager) ResolveFor(id string, decision ApprovalDecision, tenantID uuid.UUID, userID string) error {
+	return m.ResolveForWithReason(id, decision, "", tenantID, userID)
+}
+
+// ResolveForWithReason is ResolveFor carrying the user's redirect for a denial.
+func (m *ExecApprovalManager) ResolveForWithReason(id string, decision ApprovalDecision, reason string, tenantID uuid.UUID, userID string) error {
 	m.mu.Lock()
 	pa, ok := m.pending[id]
 	m.mu.Unlock()
@@ -415,7 +458,7 @@ func (m *ExecApprovalManager) ResolveFor(id string, decision ApprovalDecision, t
 	if !ok || !pa.visibleTo(tenantID, userID) {
 		return fmt.Errorf("approval %q not found or already resolved", id)
 	}
-	return m.Resolve(id, decision)
+	return m.ResolveWithReason(id, decision, reason)
 }
 
 // matchesAllowlist checks if a command matches any allowlist pattern or dynamic always-allow.
