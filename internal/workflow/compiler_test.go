@@ -218,9 +218,26 @@ func (f *fakeWFStore) SetCompileResult(_ context.Context, _, id uuid.UUID, compi
 func (f *fakeWFStore) ListEnabled(context.Context) ([]*store.Workflow, error) { return f.enabled, nil }
 
 func armedWorkflow() *store.Workflow {
+	creator := "creator-1"
 	return &store.Workflow{
 		ID: uuid.New(), TenantID: uuid.New(), Name: "Digest",
-		Enabled: true, Graph: json.RawMessage(validGraph),
+		Enabled: true, Graph: json.RawMessage(validGraph), CreatedBy: &creator,
+	}
+}
+
+// A workflow with no recorded creator still arms — the run will fail visibly at
+// the provider, which beats inventing an actor to authenticate as.
+func TestMissingCreatorStillArmsWithNoActor(t *testing.T) {
+	cron := &fakeCron{}
+	c := NewCompiler(newFakeWFStore(), cron)
+	w := armedWorkflow()
+	w.CreatedBy = nil
+
+	if err := c.Apply(context.Background(), w); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if len(cron.added) != 1 || cron.added[0].UserID != "" {
+		t.Errorf("expected one job with an empty actor, got %+v", cron.added)
 	}
 }
 
@@ -240,10 +257,11 @@ func TestApplyArmsAndRecordsJobIDs(t *testing.T) {
 	if job.AgentID != "11111111-1111-4111-8111-111111111111" || job.Payload.Message != "summarise competitors" {
 		t.Errorf("job does not match the graph: %+v", job)
 	}
-	// A workflow's runs belong to the workspace, not to whoever pressed Arm —
-	// otherwise that person leaving orphans the schedule.
-	if job.UserID != "" {
-		t.Errorf("job was attributed to a user: %q", job.UserID)
+	// The run must carry an ACTOR. Without one the LLM provider rejects the call
+	// (400 "Service-token auth requires X-Actor-User-ID…"), so the schedule fires
+	// and the agent cannot think — observed on staging.
+	if job.UserID != "creator-1" {
+		t.Errorf("job actor = %q, want the workflow's creator", job.UserID)
 	}
 	if !strings.Contains(job.Name, "Digest") {
 		t.Errorf("job name %q does not name its workflow", job.Name)

@@ -89,10 +89,21 @@ func (c *Compiler) Apply(ctx context.Context, w *store.Workflow) error {
 			s.Prompt,
 			s.Deliver, s.DeliverChan, s.DeliverTo,
 			s.AgentID,
-			// No user id: a workflow's runs belong to the workspace, not to whoever
-			// last pressed Arm. Attributing them to that person would make their
-			// departure silently orphan the schedule.
-			"",
+			// The workflow's creator, as the ACTOR for the run.
+			//
+			// This originally passed "" on the reasoning that a workflow belongs to
+			// the workspace rather than to whoever armed it. That conflated two
+			// different things, and staging showed the cost: the run reached the LLM
+			// provider with actor_user="" and was rejected —
+			//   400 "Service-token auth requires X-Actor-User-ID and X-Actor-Org-ID"
+			// so the schedule fired perfectly and then could not think.
+			//
+			// Ownership and attribution are separate. The SCHEDULE is tenant-owned —
+			// it survives the creator leaving, because the workflow row and its cron
+			// job are keyed on the tenant, not on this field. Attribution decides who
+			// the call authenticates as and whose usage it counts against, and for a
+			// scheduled agent run that is properly the person who set it up.
+			creator(w),
 		)
 		// A nil job with a nil error is a store contract violation, not an
 		// impossibility — PGCronStore.AddJob did exactly that when its read-back
@@ -203,6 +214,17 @@ func (c *Compiler) ReconcileAll(ctx context.Context) {
 	if len(rows) > 0 {
 		slog.Info("workflow.reconcile.done", "workflows", len(rows), "armed", armed, "failed", failed)
 	}
+}
+
+// creator returns the user a workflow's runs act as. Empty when unknown, which
+// is honest: a workflow created before this field was recorded has no one to
+// attribute to, and inventing an actor would be worse than the run failing
+// visibly at the provider.
+func creator(w *store.Workflow) string {
+	if w.CreatedBy == nil {
+		return ""
+	}
+	return strings.TrimSpace(*w.CreatedBy)
 }
 
 // jobName labels the cron job so someone reading the cron list can tell where it
