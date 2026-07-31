@@ -152,6 +152,13 @@ func (m *AgentsMethods) handleList(ctx context.Context, client *gateway.Client, 
 				// Manage modal's Clone button pre-fills the create form from
 				// this field — must round-trip or clones lose the prompt.
 				"system_prompt": a.SystemPrompt,
+				// Per-agent tool policy (ToolPolicySpec: profile/allow/deny/alsoAllow).
+				// agents.update already ACCEPTS this field, so without it in the list
+				// payload a client could only overwrite the policy blind — it had no
+				// way to read what was already there. The canvas needs it to show which
+				// capabilities an agent has been granted, and a read-modify-write of a
+				// policy you cannot read is how allow lists get silently clobbered.
+				"tools_config": a.ToolsConfig,
 			})
 		}
 		client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
