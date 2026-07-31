@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -11,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/workflow"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -21,10 +23,15 @@ import (
 // and the store's isolation only helps if the caller cannot choose the scope.
 type WorkflowsMethods struct {
 	workflows store.WorkflowStore
+	// compiler turns an armed graph into cron jobs. Nil-safe: without it the CRUD
+	// surface still works and workflows simply never arm, which is the honest
+	// behaviour for a deployment with no scheduler rather than pretending to save
+	// something that will fire.
+	compiler *workflow.Compiler
 }
 
-func NewWorkflowsMethods(workflows store.WorkflowStore) *WorkflowsMethods {
-	return &WorkflowsMethods{workflows: workflows}
+func NewWorkflowsMethods(workflows store.WorkflowStore, compiler *workflow.Compiler) *WorkflowsMethods {
+	return &WorkflowsMethods{workflows: workflows, compiler: compiler}
 }
 
 func (m *WorkflowsMethods) Register(router *gateway.MethodRouter) {
@@ -260,6 +267,11 @@ func (m *WorkflowsMethods) handleUpdate(ctx context.Context, client *gateway.Cli
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToUpdate, "workflow", "internal error")))
 		return
 	}
+	// Recompile after every save, not only when armed. Editing an ARMED workflow
+	// must change what fires — otherwise the graph on screen and the schedule
+	// running disagree, silently. For a disarmed one this is a cheap no-op that
+	// also cleans up anything a previous arm left behind.
+	m.recompile(ctx, existing)
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"workflow": toWorkflowInfo(existing)}))
 }
 
@@ -305,6 +317,11 @@ func (m *WorkflowsMethods) handleSetEnabled(ctx context.Context, client *gateway
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToUpdate, "workflow", "internal error")))
 		return
 	}
+	// Arm (or disarm) NOW rather than leaving it to the next reconcile: a user who
+	// presses Arm and sees success must not have to wait for a restart before
+	// anything fires. Apply writes any compile error onto `existing`, so the
+	// response below carries the reason a graph refused to arm.
+	m.recompile(ctx, existing)
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"workflow": toWorkflowInfo(existing)}))
 }
 
@@ -317,6 +334,19 @@ func (m *WorkflowsMethods) handleDelete(ctx context.Context, client *gateway.Cli
 	id, ok := m.parseID(ctx, client, req)
 	if !ok {
 		return
+	}
+	// Retract BEFORE deleting: the row carries the only record of which cron jobs
+	// this workflow created, so deleting first would strand them with nothing left
+	// to explain where they came from.
+	if m.compiler != nil && m.compiler.Available() {
+		if existing, err := m.workflows.Get(ctx, tenant, id); err == nil && existing != nil {
+			m.compiler.Retract(ctx, existing)
+		} else if err != nil {
+			// Refuse rather than delete blind — an orphaned schedule that fires
+			// forever is worse than a delete the user has to retry.
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToDelete, "workflow", "internal error")))
+			return
+		}
 	}
 	if err := m.workflows.Delete(ctx, tenant, id); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToDelete, "workflow", "internal error")))
@@ -339,6 +369,19 @@ func (m *WorkflowsMethods) parseID(ctx context.Context, client *gateway.Client, 
 		return uuid.Nil, false
 	}
 	return id, true
+}
+
+// recompile applies the compiler, tolerating its absence. A compile FAILURE is
+// not an error for the caller: it is recorded on the row and returned in the
+// response as compileError, because "your schedule is invalid" is feedback about
+// the graph, not a failed request.
+func (m *WorkflowsMethods) recompile(ctx context.Context, w *store.Workflow) {
+	if m.compiler == nil || !m.compiler.Available() {
+		return
+	}
+	if err := m.compiler.Apply(ctx, w); err != nil {
+		slog.Error("workflows.compile_apply_failed", "workflow", w.ID, "error", err)
+	}
 }
 
 // validateGraph checks the little the API can check. Structural validity is the

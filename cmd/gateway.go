@@ -46,6 +46,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/internal/vault"
+	"github.com/nextlevelbuilder/goclaw/internal/workflow"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -430,7 +431,12 @@ func runGateway() {
 
 	// Register all RPC methods
 	server.SetLogTee(logTee)
-	pairingMethods, heartbeatMethods, chatMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants, pgStores.SkillTenantCfgs, audioMgr, pgStores.Reminders, pgStores.SubagentTasks, pgStores.CLIConnections, pgStores.Workflows, cliChat)
+	// The compiler turns armed workflow graphs into cron jobs. Built here so it
+	// shares the same cron store the scheduler runs from — a compiler writing to a
+	// different store would create jobs nothing ever fires.
+	workflowCompiler := workflow.NewCompiler(pgStores.Workflows, pgStores.Cron)
+
+	pairingMethods, heartbeatMethods, chatMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants, pgStores.SkillTenantCfgs, audioMgr, pgStores.Reminders, pgStores.SubagentTasks, pgStores.CLIConnections, pgStores.Workflows, workflowCompiler, cliChat)
 	// Wire tool registry so chat.toolResult can route client-tool responses.
 	chatMethods.SetToolRegistry(toolsReg)
 	// Wire media store so chat.send can normalize client-supplied media
@@ -607,6 +613,14 @@ func runGateway() {
 
 	// Start cron + heartbeat ticker, wire wake functions and adaptive throttle.
 	heartbeatTicker := startCronAndHeartbeat(pgStores, server, sched, msgBus, providerRegistry, channelMgr, cfg, heartbeatTool, heartbeatMethods)
+
+	// Rebuild schedules for armed workflows. AFTER startCronAndHeartbeat, because
+	// the compiler writes through the cron store the scheduler has just taken
+	// ownership of; reconciling first would add jobs to a store that is then
+	// re-read from disk. Runs in the background so a slow or failing reconcile
+	// cannot delay the gateway accepting connections — an unreconciled workflow is
+	// a missed schedule, a gateway that will not start is an outage.
+	go workflowCompiler.ReconcileAll(context.Background())
 
 	// Subscribe to agent events for channel streaming/reaction forwarding.
 	deps.wireChannelStreamingSubscriber()
