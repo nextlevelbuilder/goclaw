@@ -80,11 +80,17 @@ func (c *Compiler) Apply(ctx context.Context, w *store.Workflow) error {
 			// departure silently orphan the schedule.
 			"",
 		)
+		// A nil job with a nil error is a store contract violation, not an
+		// impossibility — PGCronStore.AddJob did exactly that when its read-back
+		// missed. Treated as a failure rather than dereferenced, because the
+		// alternative is a nil panic that takes the gateway down while arming.
+		if err == nil && job == nil {
+			err = fmt.Errorf("the scheduler accepted the job but returned nothing")
+		}
 		if err != nil {
 			// Partial failure: roll back the jobs already created for THIS apply, so
 			// an armed workflow is all-or-nothing. Half a workflow firing is worse
 			// than none of it, because the half that runs looks like success.
-			created.CronJobIDs = append(created.CronJobIDs, "")
 			c.removeJobs(ctx, created.CronJobIDs)
 			return c.failed(ctx, w, fmt.Errorf("could not schedule step %d: %w", i+1, err))
 		}

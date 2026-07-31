@@ -79,7 +79,17 @@ func (s *PGCronStore) AddJob(ctx context.Context, name string, schedule store.Cr
 
 	s.cacheLoaded = false // invalidate cache
 
-	job, _ := s.GetJob(ctx, id.String())
+	// Read back so the caller gets the row as stored (next_run_at, defaults).
+	//
+	// A miss here used to return (nil, nil), which violates the contract every
+	// caller writes against — `if err != nil` then dereference — and nil-panics
+	// them instead. It happens for real: GetJob is tenant-scoped, so an insert
+	// made in one scope and read in another finds nothing. Report it as the error
+	// it is.
+	job, ok := s.GetJob(ctx, id.String())
+	if !ok || job == nil {
+		return nil, fmt.Errorf("create cron job: job %s was inserted but could not be read back", id)
+	}
 	return job, nil
 }
 

@@ -31,7 +31,7 @@ func graphOf(t *testing.T, body string) *Graph {
 const validGraph = `{
   "nodes":[
     {"id":"t1","type":"trigger","data":{"kind":"cron","expr":"0 8 * * 1","tz":"UTC"}},
-    {"id":"a1","type":"agent","data":{"agentId":"researcher","prompt":"summarise competitors"}}
+    {"id":"a1","type":"agent","data":{"agentId":"11111111-1111-4111-8111-111111111111","prompt":"summarise competitors"}}
   ],
   "edges":[{"id":"e1","source":"t1","target":"a1"}]
 }`
@@ -48,7 +48,7 @@ func TestPlanHappyPath(t *testing.T) {
 	if s.Kind != "cron" || s.Expr != "0 8 * * 1" || s.TZ != "UTC" {
 		t.Errorf("schedule not carried: %+v", s)
 	}
-	if s.AgentID != "researcher" || s.Prompt != "summarise competitors" {
+	if s.AgentID != "11111111-1111-4111-8111-111111111111" || s.Prompt != "summarise competitors" {
 		t.Errorf("agent settings not carried: %+v", s)
 	}
 }
@@ -56,7 +56,7 @@ func TestPlanHappyPath(t *testing.T) {
 func TestPlanRefusals(t *testing.T) {
 	cases := map[string]struct{ graph, wantMsg string }{
 		"no trigger at all": {
-			`{"nodes":[{"id":"a1","type":"agent","data":{"agentId":"x","prompt":"y"}}],"edges":[]}`,
+			`{"nodes":[{"id":"a1","type":"agent","data":{"agentId":"55555555-5555-4555-8555-555555555555","prompt":"y"}}],"edges":[]}`,
 			"nothing to run",
 		},
 		"trigger not connected": {
@@ -77,19 +77,19 @@ func TestPlanRefusals(t *testing.T) {
 		},
 		"no prompt": {
 			`{"nodes":[{"id":"t1","type":"trigger","data":{"kind":"cron","expr":"* * * * *"}},
-			           {"id":"a1","type":"agent","data":{"agentId":"r"}}],
+			           {"id":"a1","type":"agent","data":{"agentId":"22222222-2222-4222-8222-222222222222"}}],
 			  "edges":[{"id":"e","source":"t1","target":"a1"}]}`,
 			"what the agent should do",
 		},
 		"trigger type missing": {
 			`{"nodes":[{"id":"t1","type":"trigger","data":{}},
-			           {"id":"a1","type":"agent","data":{"agentId":"r","prompt":"p"}}],
+			           {"id":"a1","type":"agent","data":{"agentId":"22222222-2222-4222-8222-222222222222","prompt":"p"}}],
 			  "edges":[{"id":"e","source":"t1","target":"a1"}]}`,
 			"choose a trigger type",
 		},
 		"cron with no expression": {
 			`{"nodes":[{"id":"t1","type":"trigger","data":{"kind":"cron"}},
-			           {"id":"a1","type":"agent","data":{"agentId":"r","prompt":"p"}}],
+			           {"id":"a1","type":"agent","data":{"agentId":"22222222-2222-4222-8222-222222222222","prompt":"p"}}],
 			  "edges":[{"id":"e","source":"t1","target":"a1"}]}`,
 			"set a schedule",
 		},
@@ -98,11 +98,20 @@ func TestPlanRefusals(t *testing.T) {
 			  "edges":[{"id":"e","source":"t1","target":"ghost"}]}`,
 			"not in the graph",
 		},
+		// The cron store parses the agent id as a UUID and silently drops anything
+		// else, so a graph carrying an agent_key would arm and then run with NO
+		// agent attached. Refused here instead.
+		"agent identified by key, not id": {
+			`{"nodes":[{"id":"t1","type":"trigger","data":{"kind":"cron","expr":"* * * * *"}},
+			           {"id":"a1","type":"agent","data":{"agentId":"researcher","prompt":"p"}}],
+			  "edges":[{"id":"e","source":"t1","target":"a1"}]}`,
+			"by its id, not its name",
+		},
 		// Named so a channel trigger drawn before the compiler supports it fails at
 		// arm time rather than arming something that never fires.
 		"unsupported trigger kind": {
 			`{"nodes":[{"id":"t1","type":"trigger","data":{"kind":"channel"}},
-			           {"id":"a1","type":"agent","data":{"agentId":"r","prompt":"p"}}],
+			           {"id":"a1","type":"agent","data":{"agentId":"22222222-2222-4222-8222-222222222222","prompt":"p"}}],
 			  "edges":[{"id":"e","source":"t1","target":"a1"}]}`,
 			"cannot be scheduled yet",
 		},
@@ -127,7 +136,7 @@ func TestPlanRejectsSubMinuteRepeat(t *testing.T) {
 	mk := func(ms int64) string {
 		b, _ := json.Marshal(ms)
 		return `{"nodes":[{"id":"t1","type":"trigger","data":{"kind":"every","everyMs":` + string(b) + `}},
-		          {"id":"a1","type":"agent","data":{"agentId":"r","prompt":"p"}}],
+		          {"id":"a1","type":"agent","data":{"agentId":"22222222-2222-4222-8222-222222222222","prompt":"p"}}],
 		  "edges":[{"id":"e","source":"t1","target":"a1"}]}`
 	}
 	if _, err := graphOf(t, mk(tooOften)).Plan(); err == nil {
@@ -144,7 +153,7 @@ func TestPlanIgnoresNonTriggerEdges(t *testing.T) {
 	g := graphOf(t, `{
 	  "nodes":[
 	    {"id":"t1","type":"trigger","data":{"kind":"cron","expr":"* * * * *"}},
-	    {"id":"a1","type":"agent","data":{"agentId":"r","prompt":"p"}},
+	    {"id":"a1","type":"agent","data":{"agentId":"22222222-2222-4222-8222-222222222222","prompt":"p"}},
 	    {"id":"c1","type":"capability","data":{}}
 	  ],
 	  "edges":[
@@ -228,7 +237,7 @@ func TestApplyArmsAndRecordsJobIDs(t *testing.T) {
 		t.Fatalf("created %d jobs, want 1", len(cron.added))
 	}
 	job := cron.added[0]
-	if job.AgentID != "researcher" || job.Payload.Message != "summarise competitors" {
+	if job.AgentID != "11111111-1111-4111-8111-111111111111" || job.Payload.Message != "summarise competitors" {
 		t.Errorf("job does not match the graph: %+v", job)
 	}
 	// A workflow's runs belong to the workspace, not to whoever pressed Arm —
@@ -316,9 +325,9 @@ func TestPartialFailureRollsBack(t *testing.T) {
 	twoSteps := `{
 	  "nodes":[
 	    {"id":"t1","type":"trigger","data":{"kind":"cron","expr":"* * * * *"}},
-	    {"id":"a1","type":"agent","data":{"agentId":"r1","prompt":"p1"}},
+	    {"id":"a1","type":"agent","data":{"agentId":"33333333-3333-4333-8333-333333333333","prompt":"p1"}},
 	    {"id":"t2","type":"trigger","data":{"kind":"cron","expr":"* * * * *"}},
-	    {"id":"a2","type":"agent","data":{"agentId":"r2","prompt":"p2"}}
+	    {"id":"a2","type":"agent","data":{"agentId":"44444444-4444-4444-8444-444444444444","prompt":"p2"}}
 	  ],
 	  "edges":[{"id":"e1","source":"t1","target":"a1"},{"id":"e2","source":"t2","target":"a2"}]}`
 	w := &store.Workflow{ID: uuid.New(), TenantID: uuid.New(), Name: "Two", Enabled: true,

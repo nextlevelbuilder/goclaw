@@ -13,6 +13,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Graph is the canvas document. Field names match what @xyflow/react serialises,
@@ -179,6 +181,16 @@ func (g *Graph) Plan() ([]Step, error) {
 func (s Step) validate() error {
 	if s.AgentID == "" {
 		return ValidationError{NodeID: s.AgentNodeID, Msg: "choose which agent should run"}
+	}
+	// The agent id must be the row UUID, not the agent_key.
+	//
+	// This is enforced here because the cron store PARSES it as a UUID and
+	// silently drops anything else (see PGCronStore.AddJob) — a graph carrying a
+	// key would arm successfully and then run with no agent attached, i.e. the
+	// wrong agent, with nothing anywhere saying so. Caught by the real-store
+	// integration test; the fake accepted the key happily.
+	if _, err := uuid.Parse(s.AgentID); err != nil {
+		return ValidationError{NodeID: s.AgentNodeID, Msg: "the agent must be identified by its id, not its name"}
 	}
 	if s.Prompt == "" {
 		// A cron job with an empty message would start a run with nothing to do.
