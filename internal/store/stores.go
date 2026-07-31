@@ -18,6 +18,7 @@ type Stores struct {
 	ConfigSecrets             ConfigSecretsStore
 	ConnectedAgentCredentials ConnectedAgentCredentialStore
 	CLIConnections            CLIConnectionStore
+	Workflows                 WorkflowStore
 	AgentLinks                AgentLinkStore
 	Teams                     TeamStore
 	BuiltinTools              BuiltinToolStore

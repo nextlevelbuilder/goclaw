@@ -44,6 +44,7 @@ func NewSQLiteStores(cfg store.StoreConfig) (*store.Stores, error) {
 		ConfigSecrets:             NewSQLiteConfigSecretsStore(db, cfg.EncryptionKey),
 		ConnectedAgentCredentials: NewSQLiteConnectedAgentCredentialStore(),
 		CLIConnections:            NewSQLiteCLIConnectionStore(db, cfg.EncryptionKey),
+		Workflows:                 NewSQLiteWorkflowStore(db),
 		BuiltinTools:              NewSQLiteBuiltinToolStore(db),
 		Heartbeats:                NewSQLiteHeartbeatStore(db),
 		Tenants:                   NewSQLiteTenantStore(db),

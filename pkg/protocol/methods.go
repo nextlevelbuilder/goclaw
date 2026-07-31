@@ -148,6 +148,16 @@ const (
 	// (viewer+); the rest are writes and require operator+ — see
 	// permissions.isWriteMethod. credential.* writes a per-USER BYOK secret and
 	// never returns one.
+	// Workflows: an authored trigger→agent graph (migration 000083). Arming is a
+	// separate method from update so "save my edits" and "start firing this" are
+	// distinct acts on the wire, not one boolean buried in a patch.
+	MethodWorkflowsList       = "workflows.list"
+	MethodWorkflowsGet        = "workflows.get"
+	MethodWorkflowsCreate     = "workflows.create"
+	MethodWorkflowsUpdate     = "workflows.update"
+	MethodWorkflowsDelete     = "workflows.delete"
+	MethodWorkflowsSetEnabled = "workflows.setEnabled"
+
 	MethodConnectionsList             = "connections.list"
 	MethodConnectionsCreate           = "connections.create"
 	MethodConnectionsUpdate           = "connections.update"

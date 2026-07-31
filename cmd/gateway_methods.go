@@ -14,7 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
-func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore store.SessionStore, cronStore store.CronStore, pairingStore store.PairingStore, cfg *config.Config, cfgPath, workspace, dataDir string, msgBus *bus.MessageBus, execApprovalMgr *tools.ExecApprovalManager, agentStore store.AgentStore, skillStore store.SkillStore, configSecretsStore store.ConfigSecretsStore, teamStore store.TeamStore, contextFileInterceptor *tools.ContextFileInterceptor, logTee *gateway.LogTee, heartbeatStore store.HeartbeatStore, configPermStore store.ConfigPermissionStore, sysConfigStore store.SystemConfigStore, tenantStore store.TenantStore, skillTenantCfgStore store.SkillTenantConfigStore, audioMgr *audio.Manager, reminderStore store.ReminderStore, subagentTaskStore store.SubagentTaskStore, cliConnStore store.CLIConnectionStore, cliChat *methods.CLIChat) (*methods.PairingMethods, *methods.HeartbeatMethods, *methods.ChatMethods) {
+func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore store.SessionStore, cronStore store.CronStore, pairingStore store.PairingStore, cfg *config.Config, cfgPath, workspace, dataDir string, msgBus *bus.MessageBus, execApprovalMgr *tools.ExecApprovalManager, agentStore store.AgentStore, skillStore store.SkillStore, configSecretsStore store.ConfigSecretsStore, teamStore store.TeamStore, contextFileInterceptor *tools.ContextFileInterceptor, logTee *gateway.LogTee, heartbeatStore store.HeartbeatStore, configPermStore store.ConfigPermissionStore, sysConfigStore store.SystemConfigStore, tenantStore store.TenantStore, skillTenantCfgStore store.SkillTenantConfigStore, audioMgr *audio.Manager, reminderStore store.ReminderStore, subagentTaskStore store.SubagentTaskStore, cliConnStore store.CLIConnectionStore, workflowStore store.WorkflowStore, cliChat *methods.CLIChat) (*methods.PairingMethods, *methods.HeartbeatMethods, *methods.ChatMethods) {
 	router := server.Router()
 
 	// Phase 1: Core methods
@@ -94,6 +94,11 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 	// key that chat.send would then refuse.
 	connectionsMethods.SetCLIChat(cliChat)
 	connectionsMethods.Register(router)
+
+	// Phase 2: Authored workflows (migration 000083). Always registered — the
+	// handlers report "not available on this deployment" when the store is nil,
+	// which is what a build without the migration applied looks like.
+	methods.NewWorkflowsMethods(workflowStore).Register(router)
 
 	// Phase 2: Send (outbound message routing)
 	methods.NewSendMethods(msgBus).Register(router)
