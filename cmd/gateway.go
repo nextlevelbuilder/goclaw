@@ -884,6 +884,14 @@ func runGateway() {
 			}
 		}
 	}
+	// Wire MCP server store on mcp_credential_manager tool.
+	if pgStores != nil && pgStores.MCP != nil {
+		if t, ok := toolsReg.Get("mcp_credential_manager"); ok {
+			if ms, ok := t.(tools.MCPServerStoreAware); ok {
+				ms.SetMCPServerStore(pgStores.MCP)
+			}
+		}
+	}
 
 	// Load channel instances from DB.
 	var instanceLoader *channels.InstanceLoader

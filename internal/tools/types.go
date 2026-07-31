@@ -152,6 +152,11 @@ type ChannelTenantCheckerAware interface {
 	SetChannelTenantChecker(ChannelTenantChecker)
 }
 
+// MCPServerStoreAware tools can receive an MCPServerStore for credential management.
+type MCPServerStoreAware interface {
+	SetMCPServerStore(store.MCPServerStore)
+}
+
 // ChannelAware is optionally implemented by tools that only work on specific channel types.
 // Tools implementing this are filtered out when the current channel type doesn't match.
 type ChannelAware interface {

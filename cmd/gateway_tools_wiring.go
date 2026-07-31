@@ -73,7 +73,9 @@ func wireExtraTools(
 	// create_forum_topic is kept as a backward-compatible wrapper for topic.create.
 	toolsReg.Register(tools.NewCreateForumTopicTool(nil))
 	toolsReg.Register(tools.NewTelegramManagerTool())
-	slog.Info("session + message + send_file + telegram_manager tools registered")
+	// MCP credential manager tool (view and manage per-user MCP credentials)
+	toolsReg.Register(tools.NewMCPCredentialManagerTool())
+	slog.Info("session + message + send_file + telegram_manager + mcp_credential_manager tools registered")
 
 	// Register legacy tool aliases (backward-compat names from policy.go).
 	for alias, canonical := range tools.LegacyToolAliases() {
