@@ -38,9 +38,13 @@ func TestArmCreatesRealCronJob(t *testing.T) {
 	if err := db.Ping(); err != nil {
 		t.Skipf("no database: %v", err)
 	}
-	// The cron store scopes inserts AND reads by the tenant in context, so the
-	// test must run in one — without it AddJob inserts a row it then cannot read
-	// back, which is how the (nil, nil) contract violation surfaced.
+	// DELIBERATELY a bare context, with NO tenant — this is what ReconcileAll
+	// passes in production. An earlier version of this test set the tenant itself
+	// and therefore passed while the real caller was broken: the cron store's
+	// insert falls back to the master tenant when the context has none, while its
+	// read does not, so the job was written somewhere it could never be read back
+	// from. Compiler.Apply now derives the tenant from the workflow row, and this
+	// test only proves that if it does not help it along.
 	ctx := context.Background()
 
 	var tenant uuid.UUID
@@ -51,7 +55,10 @@ func TestArmCreatesRealCronJob(t *testing.T) {
 		t.Fatalf("create tenant: %v", err)
 	}
 
-	ctx = store.WithTenantID(ctx, tenant)
+	// Verification queries below read the cron store directly, which is
+	// tenant-scoped, so they need an explicit scope. The COMPILER is still handed
+	// the bare ctx above — the point of this test is that it does not need help.
+	scoped := store.WithTenantID(ctx, tenant)
 
 	// A real agent row: cron_jobs.agent_id has an FK, so the compiler's UUID is
 	// not enough — the agent must exist. Worth having in the test because that FK
@@ -107,11 +114,11 @@ func TestArmCreatesRealCronJob(t *testing.T) {
 
 	// The job must be REAL — readable back out of the cron store the scheduler
 	// uses, with the schedule and prompt from the graph.
-	job, found := cronStore.GetJob(ctx, rec.CronJobIDs[0])
+	job, found := cronStore.GetJob(scoped, rec.CronJobIDs[0])
 	if !found {
 		t.Fatalf("cron job %s was recorded but does not exist", rec.CronJobIDs[0])
 	}
-	t.Cleanup(func() { _ = cronStore.RemoveJob(ctx, job.ID) })
+	t.Cleanup(func() { _ = cronStore.RemoveJob(scoped, job.ID) })
 
 	if job.Schedule.Expr != "0 8 * * 1" {
 		t.Errorf("schedule = %q, want the graph's expression", job.Schedule.Expr)
@@ -133,7 +140,7 @@ func TestArmCreatesRealCronJob(t *testing.T) {
 
 	// The compile record must round-trip through the DB, not just live in memory:
 	// the reconciler reads it from there after a restart.
-	reloaded, err := wfStore.Get(ctx, tenant, w.ID)
+	reloaded, err := wfStore.Get(scoped, tenant, w.ID)
 	if err != nil || reloaded == nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -150,7 +157,7 @@ func TestArmCreatesRealCronJob(t *testing.T) {
 	if err := c.Apply(ctx, reloaded); err != nil {
 		t.Fatalf("disarm: %v", err)
 	}
-	if _, stillThere := cronStore.GetJob(ctx, job.ID); stillThere {
+	if _, stillThere := cronStore.GetJob(scoped, job.ID); stillThere {
 		t.Error("the cron job survived disarming — it would keep firing")
 	}
 }

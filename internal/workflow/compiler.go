@@ -48,6 +48,20 @@ func (c *Compiler) Apply(ctx context.Context, w *store.Workflow) error {
 		return fmt.Errorf("workflow compilation is not available on this deployment")
 	}
 
+	// Scope every cron operation to the WORKFLOW's tenant.
+	//
+	// Load-bearing, and not obvious. The cron store is tenant-scoped from context,
+	// and the two halves disagree when it is absent: inserts fall back to the
+	// MASTER tenant (tenantIDForInsert) while reads do not (scanJob filters on the
+	// raw context value). ReconcileAll runs on context.Background(), so without
+	// this every workflow's job was written into the master tenant and then could
+	// not be read back — observed on staging as "inserted but could not be read
+	// back", with the row left behind as an orphan.
+	//
+	// Deriving the tenant from the row rather than the caller also means a job
+	// always belongs to the workflow that created it, whichever path armed it.
+	ctx = store.WithTenantID(ctx, w.TenantID)
+
 	c.retract(ctx, w)
 
 	if !w.Enabled {
