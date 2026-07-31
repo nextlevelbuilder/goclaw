@@ -31,38 +31,38 @@ func testDB(t *testing.T) *sql.DB {
 	if err := db.Ping(); err != nil {
 		t.Skipf("no database: %v", err)
 	}
-
-	// Minimal fixtures: the real schema has a large dependency graph, and this
-	// table only needs tenants to exist for the FK.
-	ctx := context.Background()
-	for _, stmt := range []string{
-		`CREATE EXTENSION IF NOT EXISTS pgcrypto`,
-		`CREATE TABLE IF NOT EXISTS tenants (id UUID PRIMARY KEY DEFAULT gen_random_uuid())`,
-		`DROP TABLE IF EXISTS workflows`,
-	} {
-		if _, err := db.ExecContext(ctx, stmt); err != nil {
-			t.Fatalf("fixture %q: %v", stmt, err)
-		}
-	}
-	// Apply the migration under test verbatim, so a mistake in the .sql file is
-	// caught here rather than on deploy.
-	sqlBytes, err := os.ReadFile("../../../migrations/000083_workflows.up.sql")
-	if err != nil {
-		t.Fatalf("read migration: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, string(sqlBytes)); err != nil {
-		t.Fatalf("apply migration: %v", err)
-	}
 	t.Cleanup(func() { _ = db.Close() })
+
+	// Use the schema as MIGRATED — do not create or drop anything.
+	//
+	// An earlier version of this file created its own minimal `tenants` table and
+	// dropped/recreated `workflows`. That passed locally, where those were the only
+	// tables, and failed in CI, where the real ones already exist: the migrated
+	// tenants.id has no default and name/slug are NOT NULL. Worse, the DROP would
+	// have destroyed a real table in a shared test database.
+	var exists bool
+	if err := db.QueryRow(`SELECT to_regclass('public.workflows') IS NOT NULL`).Scan(&exists); err != nil || !exists {
+		t.Skip("workflows table not present — run migrations against TEST_DATABASE_URL")
+	}
 	return db
 }
 
+// newTenant inserts a tenant using the REAL table's contract: explicit id, and
+// the NOT NULL name/slug. Slug is randomised because it is unique and these tests
+// run repeatedly against the same database.
 func newTenant(t *testing.T, db *sql.DB) uuid.UUID {
 	t.Helper()
 	var id uuid.UUID
-	if err := db.QueryRow(`INSERT INTO tenants DEFAULT VALUES RETURNING id`).Scan(&id); err != nil {
+	err := db.QueryRow(
+		`INSERT INTO tenants (id, name, slug)
+		 VALUES (gen_random_uuid(), 'wf-test', 'wf-test-' || substr(gen_random_uuid()::text, 1, 12))
+		 RETURNING id`).Scan(&id)
+	if err != nil {
 		t.Fatalf("create tenant: %v", err)
 	}
+	// Tenants cascade to workflows, so removing the tenant cleans up the rows these
+	// tests create without needing to track each one.
+	t.Cleanup(func() { _, _ = db.Exec(`DELETE FROM tenants WHERE id = $1`, id) })
 	return id
 }
 
