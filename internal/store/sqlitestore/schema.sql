@@ -1747,3 +1747,26 @@ CREATE TABLE IF NOT EXISTS cli_connection_credentials (
 );
 CREATE INDEX IF NOT EXISTS idx_cli_connection_credentials_tenant
     ON cli_connection_credentials (tenant_id);
+
+-- Workflows (mirrors PG migration 000083). Lite is single-tenant, so tenant_id
+-- is present but effectively unused — kept so the schema shape matches PG and a
+-- query written against one works against the other.
+CREATE TABLE IF NOT EXISTS workflows (
+    id            TEXT PRIMARY KEY,
+    tenant_id     TEXT,
+    name          TEXT NOT NULL,
+    description   TEXT,
+    enabled       INTEGER NOT NULL DEFAULT 0,
+    graph         TEXT NOT NULL DEFAULT '{}',
+    compiled      TEXT NOT NULL DEFAULT '{}',
+    compile_error TEXT,
+    created_by    TEXT,
+    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+-- Matches the PG unique index; SQLite has no expression index on lower() in
+-- older versions, so the store lower-cases on write instead (see workflows.go).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_workflows_tenant_name
+    ON workflows (tenant_id, name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_workflows_tenant_updated
+    ON workflows (tenant_id, updated_at DESC);

@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 28
+const SchemaVersion = 29
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -564,6 +564,28 @@ CREATE TABLE IF NOT EXISTS cli_connection_credentials (
 );
 CREATE INDEX IF NOT EXISTS idx_cli_connection_credentials_tenant
     ON cli_connection_credentials (tenant_id);`,
+	// Version 28 → 29: workflows (mirrors PG migration 000083). A saved,
+	// triggerable graph. Starts empty on every existing DB — there is nothing to
+	// backfill, since before this release no workflow could be authored at all.
+	28: `
+CREATE TABLE IF NOT EXISTS workflows (
+    id            TEXT PRIMARY KEY,
+    tenant_id     TEXT,
+    name          TEXT NOT NULL,
+    description   TEXT,
+    enabled       INTEGER NOT NULL DEFAULT 0,
+    graph         TEXT NOT NULL DEFAULT '{}',
+    compiled      TEXT NOT NULL DEFAULT '{}',
+    compile_error TEXT,
+    created_by    TEXT,
+    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_workflows_tenant_name
+    ON workflows (tenant_id, name COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_workflows_tenant_updated
+    ON workflows (tenant_id, updated_at DESC);
+`,
 }
 
 // addHooksTables is the SQLite incremental migration for schema v19 → v20.
