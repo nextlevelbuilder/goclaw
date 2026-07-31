@@ -122,6 +122,9 @@ func (m *Manager) connectServer(ctx context.Context, name, transportType, comman
 
 	if len(registeredNames) > 0 {
 		m.registry.RegisterToolGroup("mcp:"+name, registeredNames)
+		// Per-toolkit groups make a single toolkit addressable in a tool policy;
+		// the server-wide group above cannot express "just Google Slides".
+		m.registerToolkitGroups(name, registeredNames)
 		m.updateMCPGroup()
 	}
 
@@ -192,6 +195,9 @@ func (m *Manager) connectViaPool(ctx context.Context, tenantID uuid.UUID, name, 
 
 	if len(registeredNames) > 0 {
 		m.registry.RegisterToolGroup("mcp:"+name, registeredNames)
+		// Per-toolkit groups make a single toolkit addressable in a tool policy;
+		// the server-wide group above cannot express "just Google Slides".
+		m.registerToolkitGroups(name, registeredNames)
 		m.updateMCPGroup()
 	}
 

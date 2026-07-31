@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -58,6 +59,91 @@ func (m *Manager) updateMCPGroup() {
 	}
 }
 
+// registerToolkitGroups registers one tool group per TOOLKIT within a single MCP
+// server, derived from the tool names themselves.
+//
+// Why this exists: a tool policy entry is matched by EXACT name (see
+// Registry.ExpandToolGroups) — there are no wildcards — and the only symbolic
+// form is `group:<name>`. Before this, the finest grain available was
+// `group:mcp:<server>`, i.e. ALL of a bridge's tools at once. For the Composio
+// bridge that is every toolkit together, so "let this agent use Google Slides"
+// was not expressible: a caller had to enumerate the exact tool slugs, which
+// means duplicating a list that lives on the other side of the bridge and drifts
+// (GOOGLESLIDES_PRESENTATIONS_CREATE, advertised by Composio's REST catalogue,
+// does not exist in the raw one).
+//
+// Composio names its tools TOOLKIT_ACTION, so the toolkit boundary is already in
+// the name and no bridge-side change is needed. Groups are named
+// `mcp:<server>:<toolkit>` (lower-cased), e.g. `group:mcp:composio:googleslides`.
+//
+// Deliberately conservative about what counts as a prefix:
+//   - the segment before the first underscore, and only if the name is entirely
+//     upper-case/digits/underscores. A server using lower_snake_case tool names
+//     would otherwise get a meaningless group per first word.
+//   - a prefix with only ONE tool still gets a group: absence would be a silent
+//     gap for callers that expect every toolkit to be addressable.
+func (m *Manager) registerToolkitGroups(server string, toolNames []string) {
+	byToolkit := make(map[string][]string)
+	for _, full := range toolNames {
+		tk, ok := toolkitPrefix(full)
+		if !ok {
+			continue
+		}
+		byToolkit[tk] = append(byToolkit[tk], full)
+	}
+	for tk, names := range byToolkit {
+		m.registry.RegisterToolGroup("mcp:"+server+":"+tk, names)
+	}
+	if len(byToolkit) > 0 {
+		slog.Debug("mcp.toolkit_groups.registered", "server", server, "toolkits", len(byToolkit))
+	}
+}
+
+// toolkitPrefix extracts the TOOLKIT part of a TOOLKIT_ACTION tool name.
+//
+// The bridge may prefix tool names for namespacing, so the check runs on the
+// name as registered. Returns false for anything that is not a SHOUTING_SNAKE
+// name with at least one underscore, so non-Composio servers are left alone.
+func toolkitPrefix(name string) (string, bool) {
+	i := strings.IndexByte(name, '_')
+	if i <= 0 || i == len(name)-1 {
+		return "", false
+	}
+	for j := 0; j < len(name); j++ {
+		c := name[j]
+		if (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' {
+			continue
+		}
+		return "", false
+	}
+	return strings.ToLower(name[:i]), true
+}
+
+// unregisterToolkitGroups drops the per-toolkit groups for one server, so a
+// disconnected bridge does not leave grants pointing at groups that no longer
+// resolve.
+func (m *Manager) unregisterToolkitGroups(server string, toolNames []string) {
+	seen := make(map[string]bool)
+	for _, full := range toolNames {
+		if tk, ok := toolkitPrefix(full); ok && !seen[tk] {
+			seen[tk] = true
+			m.registry.UnregisterToolGroup("mcp:" + server + ":" + tk)
+		}
+	}
+}
+
+// toolNamesForServer returns the tool names registered for one server, whether it
+// is pool-backed or standalone. Caller must hold m.mu.
+func (m *Manager) toolNamesForServer(name string) []string {
+	if names, ok := m.poolToolNames[name]; ok {
+		return names
+	}
+	if ss := m.servers[name]; ss != nil {
+		return ss.toolNames
+	}
+	return nil
+}
+
 // unregisterAllTools removes all MCP tools from the registry.
 func (m *Manager) unregisterAllTools() {
 	m.mu.Lock()
@@ -88,6 +174,11 @@ func (m *Manager) unregisterAllTools() {
 			}
 		}
 		m.registry.UnregisterToolGroup("mcp:" + name)
+		// Drop the per-toolkit groups too. Leaving them behind would let a policy
+		// entry keep resolving to tools that are no longer registered.
+		if names := m.toolNamesForServer(name); len(names) > 0 {
+			m.unregisterToolkitGroups(name, names)
+		}
 		slog.Debug("mcp.server.unregistered", "server", name)
 	}
 
