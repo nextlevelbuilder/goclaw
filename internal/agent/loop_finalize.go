@@ -67,16 +67,13 @@ func (l *Loop) finalizeRun(
 	}
 
 	// 7. Fallback only when there is no other deliverable output. Media-only
-	// runs must remain media-only instead of gaining a visible "..." caption.
+	// runs must remain media-only instead of gaining a visible caption. Use a
+	// meaningful localized message instead of the old meaningless "...".
 	hasDeliverableOutput := len(rs.mediaResults) > 0 ||
 		len(req.ForwardMedia) > 0 ||
 		req.ContentSuffix != ""
 	if rs.finalContent == "" && !hasDeliverableOutput {
-		if len(rs.asyncToolCalls) > 0 {
-			rs.finalContent = "..."
-		} else {
-			rs.finalContent = "..."
-		}
+		rs.finalContent = i18n.T(store.LocaleFromContext(ctx), i18n.MsgEmptyReplyFallback)
 	}
 
 	// Append content suffix (e.g. image markdown for WS) before saving to session.

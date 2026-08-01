@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
+	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -42,9 +43,16 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 	// Must run BEFORE session flush so the agent message is persisted even if suppressed.
 	isSilent := s.deps.IsSilentReply != nil && s.deps.IsSilentReply(state.Observe.FinalContent)
 
-	// 2b. Fallback for empty content (matching v2: channels need non-empty content to deliver).
-	if state.Observe.FinalContent == "" && !isSilent {
-		state.Observe.FinalContent = "..."
+	// 2b. Fallback for empty content (matching v2: channels need non-empty content
+	// to deliver). Media-only runs stay media-only — no text caption (matching v2
+	// hasDeliverableOutput). The placeholder is a meaningful localized message, not
+	// a bare "..." — ThinkStage already nudges the model for empty text responses,
+	// so this only fires when the model truly produced nothing.
+	hasDeliverableOutput := len(state.Tool.MediaResults) > 0 ||
+		len(state.Input.ForwardMedia) > 0 ||
+		state.Input.ContentSuffix != ""
+	if state.Observe.FinalContent == "" && !isSilent && !hasDeliverableOutput {
+		state.Observe.FinalContent = i18n.T(store.LocaleFromContext(ctx), i18n.MsgEmptyReplyFallback)
 	}
 
 	// 2c. Append content suffix (e.g. image markdown for WS) with dedup.

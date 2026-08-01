@@ -13,6 +13,16 @@ import (
 
 const maxTruncRetries = 3
 
+// maxEmptyReplyRetries bounds how many times ThinkStage nudges the model after an
+// empty final response (no text, no tool calls) before falling back to a
+// placeholder. Small bound: a model that keeps returning empty is unlikely to
+// answer on repeated nudges, and each nudge consumes an iteration.
+const maxEmptyReplyRetries = 2
+
+// emptyReplyHint nudges the model to produce a visible answer when its final
+// response came back empty. English-only (LLM consumption, matches truncation hints).
+const emptyReplyHint = "[System] Your response was empty. Give the user your final answer now."
+
 // ThinkStage runs per iteration. Calls LLM, handles truncation retries,
 // accumulates usage, returns BreakLoop when response has no tool calls.
 type ThinkStage struct {
@@ -173,6 +183,21 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 	// message with sanitization + MediaRefs, so skip AppendPending here to avoid
 	// a duplicate. Matches v2 behavior where loop breaks before appending.
 	if len(resp.ToolCalls) == 0 {
+		// Empty final answer: the model finished with no visible text. When there
+		// are no deliverables to carry the reply, nudge the model (bounded) so the
+		// user gets a real answer instead of a "..." placeholder. Media-only runs
+		// stay as-is — finalize delivers the media without a text caption. Only
+		// nudge when another iteration remains; on the last iteration a nudge
+		// would never be answered and would pollute persisted history.
+		maxIter := s.deps.Config.MaxIterations
+		if strings.TrimSpace(resp.Content) == "" &&
+			!s.hasDeliverableOutput(state) &&
+			state.Think.EmptyReplyRetries < maxEmptyReplyRetries &&
+			state.Iteration+1 < maxIter {
+			state.Think.EmptyReplyRetries++
+			state.Messages.AppendPending(providers.Message{Role: "user", Content: emptyReplyHint, Transient: true})
+			return nil // Continue to next iteration for a real answer
+		}
 		s.result = BreakLoop
 		return nil
 	}
@@ -380,6 +405,18 @@ func isRequestBudgetExceededErr(err error) bool {
 		return budgetErr.ContextBudgetExceeded()
 	}
 	return false
+}
+
+// hasDeliverableOutput reports whether the run already produced non-text output
+// (media results, forwarded media, or a content suffix) that can carry the reply
+// without a text message. Mirrors v2 finalizeRun's hasDeliverableOutput.
+func (s *ThinkStage) hasDeliverableOutput(state *RunState) bool {
+	if state.Input == nil {
+		return false
+	}
+	return len(state.Tool.MediaResults) > 0 ||
+		len(state.Input.ForwardMedia) > 0 ||
+		state.Input.ContentSuffix != ""
 }
 
 // reduceForBudgetExceeded runs one pass of the reduction chain

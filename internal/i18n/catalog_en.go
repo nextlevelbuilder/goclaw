@@ -233,6 +233,7 @@ func init() {
 		MsgSkillNudgePostscript: "This task involved several steps. Want me to save the process as a reusable skill? Reply **\"save as skill\"** or **\"skip\"**.",
 		MsgSkillNudge70Pct:      "[System] You are at 70% of your iteration budget. Consider whether any patterns from this session would make a good skill.",
 		MsgSkillNudge90Pct:      "[System] You are at 90% of your iteration budget. If this session involved reusable patterns, consider saving them as a skill before completing.",
+		MsgEmptyReplyFallback:   "⚠️ Agent couldn't generate a response. Note: some tool actions may have already been executed — please verify before retrying",
 
 		MsgInvalidRole: "invalid role: allowed values are owner, admin, operator, member, viewer",
 

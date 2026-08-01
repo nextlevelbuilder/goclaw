@@ -36,10 +36,11 @@ type ThinkState struct {
 	// prompt sent to the model — the session's current context. Consumed by
 	// FinalizeStage → UpdateMetadata → SetLastPromptTokens for the sessions
 	// context-usage display and compaction calibration.
-	LastUsage       providers.Usage
-	TruncRetries    int  // consecutive truncation retries (max 3)
-	OverflowRetries int  // context overflow compact+retry attempts (max 1)
-	StreamingActive bool // true during active stream
+	LastUsage         providers.Usage
+	TruncRetries      int  // consecutive truncation retries (max 3)
+	OverflowRetries   int  // context overflow compact+retry attempts (max 1)
+	EmptyReplyRetries int  // consecutive empty final-reply nudges (max maxEmptyReplyRetries)
+	StreamingActive   bool // true during active stream
 
 	// Tools is populated by ContextStage (iteration=0) for overhead calculation.
 	// It holds the best-effort tool list at run start and is used exclusively by
