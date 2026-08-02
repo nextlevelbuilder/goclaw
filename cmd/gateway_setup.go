@@ -621,6 +621,24 @@ func setupSkillsSystem(
 					}
 				}
 			}
+
+			// Register on-disk managed skills (skills-store) that are missing from
+			// the database. A skill placed directly into the tenant's skills-store
+			// without a skills row is invisible to agents (skill visibility is
+			// DB-driven), which manifests as goclaw not detecting a skill the user
+			// typed triggers for. Reconcile closes that gap idempotently.
+			if reconcileStore, ok := pgStores.Skills.(skills.ManagedSkillStore); ok {
+				reconciler := skills.NewReconciler(reconcileStore)
+				if n, err := reconciler.Reconcile(
+					context.Background(),
+					store.MasterTenantID,
+					storeDirs[0],
+				); err != nil {
+					slog.Warn("skills-store reconcile failed", "error", err)
+				} else if n > 0 {
+					slog.Info("skills-store reconcile complete", "registered", n)
+				}
+			}
 		}
 	}
 

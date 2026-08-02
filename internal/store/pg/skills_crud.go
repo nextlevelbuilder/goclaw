@@ -222,6 +222,20 @@ func (s *PGSkillStore) GetNextVersion(ctx context.Context, slug string) int {
 	return maxVersion + 1
 }
 
+// SkillExists reports whether a skills row exists for the slug in the current
+// tenant, regardless of status (active/archived/deleted) or enabled flag.
+// Used to reconcile on-disk managed skills without resurrecting deleted skills
+// or racing the upsert's version bump.
+func (s *PGSkillStore) SkillExists(ctx context.Context, slug string) (bool, error) {
+	tid := tenantIDForInsert(ctx)
+	var exists bool
+	err := s.db.QueryRowContext(ctx,
+		"SELECT EXISTS(SELECT 1 FROM skills WHERE slug = $1 AND tenant_id = $2)",
+		slug, tid,
+	).Scan(&exists)
+	return exists, err
+}
+
 // GetSkillHashBySlug returns the file_hash and version of the latest non-deleted skill
 // version for the given slug, scoped to the current tenant.
 // Returns ok=false when no matching row exists.
