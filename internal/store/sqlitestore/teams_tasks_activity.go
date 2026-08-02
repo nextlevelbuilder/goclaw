@@ -111,16 +111,45 @@ func scanTaskCommentRows(rows *sql.Rows) ([]store.TeamTaskCommentData, error) {
 // ============================================================
 
 func (s *SQLiteTeamStore) RecordTaskEvent(ctx context.Context, event *store.TeamTaskEventData) error {
+	_, err := s.ClaimTaskEvent(ctx, event)
+	return err
+}
+
+func (s *SQLiteTeamStore) ClaimTaskEvent(ctx context.Context, event *store.TeamTaskEventData) (store.TaskEventClaimResult, error) {
 	if event.ID == uuid.Nil {
 		event.ID = store.GenNewID()
 	}
 	event.CreatedAt = time.Now()
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO team_task_events (id, task_id, event_type, actor_type, actor_id, data, created_at, tenant_id)
+	tenantID := tenantIDForInsert(ctx)
+	result, err := s.db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO team_task_events (id, task_id, event_type, actor_type, actor_id, data, created_at, tenant_id)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		event.ID, event.TaskID, event.EventType, event.ActorType, event.ActorID, event.Data, event.CreatedAt, tenantIDForInsert(ctx),
+		event.ID, event.TaskID, event.EventType, event.ActorType, event.ActorID, event.Data, event.CreatedAt, tenantID,
 	)
-	return err
+	if err != nil {
+		return "", err
+	}
+	if affected, _ := result.RowsAffected(); affected == 1 {
+		return store.TaskEventClaimed, nil
+	}
+	var existingTenant, existingTask uuid.UUID
+	var existingType string
+	if err := s.db.QueryRowContext(ctx, `SELECT tenant_id, task_id, event_type FROM team_task_events WHERE id=?`, event.ID).Scan(&existingTenant, &existingTask, &existingType); err != nil {
+		return "", err
+	}
+	if existingTenant == tenantID && existingTask == event.TaskID && existingType == event.EventType {
+		return store.TaskEventDuplicate, nil
+	}
+	return store.TaskEventConflict, nil
+}
+
+func (s *SQLiteTeamStore) GetTaskEventIdentity(ctx context.Context, eventID uuid.UUID) (uuid.UUID, uuid.UUID, string, error) {
+	var tenantID, taskID uuid.UUID
+	var eventType string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT tenant_id, task_id, event_type FROM team_task_events WHERE id=?`, eventID,
+	).Scan(&tenantID, &taskID, &eventType)
+	return tenantID, taskID, eventType, err
 }
 
 func (s *SQLiteTeamStore) ListTaskEvents(ctx context.Context, taskID uuid.UUID) ([]store.TeamTaskEventData, error) {
@@ -147,6 +176,7 @@ func (s *SQLiteTeamStore) ListTeamEvents(ctx context.Context, teamID uuid.UUID, 
 		 FROM team_task_events e
 		 JOIN team_tasks t ON t.id = e.task_id
 		 WHERE t.team_id = ? AND t.tenant_id = ?
+		   AND (t.workflow_kind IS NULL OR t.workflow_kind = 'work')
 		 ORDER BY e.created_at DESC
 		 LIMIT ? OFFSET ?`,
 		teamID, tid, limit, offset)
@@ -364,7 +394,7 @@ func (s *SQLiteTeamStore) RecoverAllStaleTasks(ctx context.Context) ([]store.Rec
 		`UPDATE team_tasks SET status = ?, locked_at = NULL, lock_expires_at = NULL,
 		     followup_at = NULL, followup_count = 0, followup_message = NULL,
 		     followup_channel = NULL, followup_chat_id = NULL, updated_at = ?
-		 WHERE status = ? AND lock_expires_at IS NOT NULL AND lock_expires_at < ?
+		 WHERE status = ? AND workflow_id IS NULL AND lock_expires_at IS NOT NULL AND lock_expires_at < ?
 		   AND team_id IN (
 		     SELECT id FROM agent_teams WHERE status = 'active'
 		   )`,
@@ -382,7 +412,7 @@ func (s *SQLiteTeamStore) ForceRecoverAllTasks(ctx context.Context) ([]store.Rec
 		`UPDATE team_tasks SET status = ?, locked_at = NULL, lock_expires_at = NULL,
 		     followup_at = NULL, followup_count = 0, followup_message = NULL,
 		     followup_channel = NULL, followup_chat_id = NULL, updated_at = ?
-		 WHERE status = ?
+		 WHERE status = ? AND workflow_id IS NULL
 		   AND team_id IN (
 		     SELECT id FROM agent_teams WHERE status = 'active'
 		   )`,
@@ -420,7 +450,7 @@ func (s *SQLiteTeamStore) MarkAllStaleTasks(ctx context.Context, olderThan time.
 	now := time.Now()
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE team_tasks SET status = ?, updated_at = ?
-		 WHERE status = ? AND updated_at < ?
+		 WHERE status = ? AND workflow_id IS NULL AND updated_at < ?
 		   AND team_id IN (
 		     SELECT id FROM agent_teams WHERE status = 'active'
 		   )`,
@@ -436,7 +466,7 @@ func (s *SQLiteTeamStore) MarkInReviewStaleTasks(ctx context.Context, olderThan 
 	now := time.Now()
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE team_tasks SET status = ?, updated_at = ?
-		 WHERE status = ? AND updated_at < ?
+		 WHERE status = ? AND workflow_id IS NULL AND updated_at < ?
 		   AND team_id IN (
 		     SELECT id FROM agent_teams WHERE status = 'active'
 		   )`,
@@ -458,6 +488,7 @@ func (s *SQLiteTeamStore) FixOrphanedBlockedTasks(ctx context.Context) ([]store.
 		 FROM team_tasks t
 		 JOIN agent_teams tm ON tm.id = t.team_id AND tm.status = 'active'
 		 WHERE t.status = 'blocked'
+		   AND t.workflow_id IS NULL
 		   AND t.blocked_by IS NOT NULL AND t.blocked_by != '[]'
 		   AND NOT EXISTS (
 		     SELECT 1 FROM json_each(t.blocked_by) AS je
@@ -491,7 +522,7 @@ func (s *SQLiteTeamStore) queryRecoveredTasks(ctx context.Context, status string
 		`SELECT t.id, t.team_id, t.tenant_id, t.task_number, t.subject,
 		        COALESCE(t.channel, ''), COALESCE(t.chat_id, '')
 		 FROM team_tasks t
-		 WHERE t.status = ?
+		 WHERE t.status = ? AND t.workflow_id IS NULL
 		   AND t.updated_at >= ?
 		   AND t.team_id IN (
 		     SELECT id FROM agent_teams WHERE status = 'active'

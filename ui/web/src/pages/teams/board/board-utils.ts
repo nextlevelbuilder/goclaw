@@ -32,7 +32,7 @@ export function groupTasksBy(
     let groupKey: string;
     switch (key) {
       case "status":
-        groupKey = task.status;
+        groupKey = task.status === "dispatching" ? "in_progress" : task.status;
         break;
       case "owner":
         groupKey = task.owner_agent_key || "unassigned";

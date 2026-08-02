@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,8 @@ export interface FeatureSwitchItem {
   infoWhenOn?: string;
   /** Accent classes for the info box (border + bg + text + dark variants) */
   infoClass?: string;
+  /** Optional compact content rendered under the switch row when enabled. */
+  extraWhenOn?: ReactNode;
 }
 
 interface FeatureSwitchGroupProps {
@@ -91,6 +94,12 @@ export function FeatureSwitchGroup({
               <div className="mt-3 flex items-start gap-2 rounded-md border border-muted bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
                 <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>{item.disabledHint}</span>
+              </div>
+            )}
+
+            {item.checked && !item.disabled && item.extraWhenOn && (
+              <div className="mt-3 pl-7">
+                {item.extraWhenOn}
               </div>
             )}
 

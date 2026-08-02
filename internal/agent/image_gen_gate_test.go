@@ -235,3 +235,29 @@ func hasFunctionTool(defs []providers.ToolDefinition, name string) bool {
 	}
 	return false
 }
+
+func TestBuildFilteredTools_BlockedToolsHideTeamTasks(t *testing.T) {
+	exec := &filteringExecutor{
+		defs: []providers.ToolDefinition{
+			{Type: "function", Function: &providers.ToolFunctionSchema{Name: "team_tasks"}},
+			{Type: "function", Function: &providers.ToolFunctionSchema{Name: "write_file"}},
+		},
+	}
+	l := &Loop{
+		provider:             &stubProvider{},
+		allowImageGeneration: false,
+		tools:                exec,
+	}
+
+	defs, allowed, _ := l.buildFilteredTools(&RunRequest{BlockedTools: []string{"team_tasks"}}, false, 1, 10, nil, nil)
+
+	if hasFunctionTool(defs, "team_tasks") {
+		t.Fatal("team_tasks must be hidden when the run blocks it")
+	}
+	if !hasFunctionTool(defs, "write_file") {
+		t.Fatal("unblocked tools must remain visible")
+	}
+	if allowed != nil && allowed["team_tasks"] {
+		t.Fatal("team_tasks must be removed from allowed tool execution map")
+	}
+}

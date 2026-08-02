@@ -44,6 +44,11 @@ type Lane struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
+	// mu serializes wg.Add against Stop's wg.Wait. The ordered single-pump
+	// admission path (queue.go) calls Submit concurrently with Stop during
+	// shutdown; without this guard wg.Add could race a zero-counter wg.Wait.
+	mu      sync.Mutex
+	stopped bool
 }
 
 // NewLane creates a lane with the given concurrency limit.
@@ -87,8 +92,18 @@ func (l *Lane) Submit(ctx context.Context, fn func()) error {
 			return context.Canceled
 		}
 
+		// Register the worker under the lock so wg.Add is ordered against Stop's
+		// wg.Wait. If Stop already fired, return the token and bail: the run will
+		// unwind via the cancelled runCtx like any other shutdown-time admission.
+		l.mu.Lock()
+		if l.stopped {
+			l.mu.Unlock()
+			l.sem <- token
+			return context.Canceled
+		}
 		l.active.Add(1)
 		l.wg.Add(1)
+		l.mu.Unlock()
 
 		go func() {
 			defer func() {
@@ -106,6 +121,12 @@ func (l *Lane) Submit(ctx context.Context, fn func()) error {
 // Stop drains the lane and waits for active work to complete.
 func (l *Lane) Stop() {
 	l.cancel()
+	// Mark stopped under the lock so no Submit can register a new worker after
+	// this point; wg.Wait then observes a stable counter (mandatory ordering
+	// against Submit's wg.Add for the ordered single-pump admission path).
+	l.mu.Lock()
+	l.stopped = true
+	l.mu.Unlock()
 	l.wg.Wait()
 }
 

@@ -110,6 +110,83 @@ func TestCreate(t *testing.T) {
 		}
 	})
 
+	t.Run("RequestOwnerConstraintBlocksWrongAssigneeBeforeCreate", func(t *testing.T) {
+		mb, tool, _, _, ctx := newTestTeamSetup()
+		ptd := NewPendingTeamDispatch()
+		ptd.MarkListed()
+		ctx = WithPendingTeamDispatch(ctx, ptd)
+		ctx = WithTeamWorkOwnerConstraint(ctx, TeamWorkOwnerConstraint{OwnerKey: "member2-agent"})
+
+		result := tool.Execute(ctx, map[string]any{
+			"action":    "create",
+			"subject":   "Need specialist help",
+			"task_type": "request",
+			"assignee":  "member-agent",
+		})
+		if !result.IsError {
+			t.Fatal("expected wrong constrained owner to be rejected")
+		}
+		if !strings.Contains(result.ForLLM, `requires assignee "member2-agent"; got "member-agent"`) {
+			t.Fatalf("unexpected error: %s", result.ForLLM)
+		}
+		mb.taskStore.mu.Lock()
+		created := len(mb.taskStore.tasks)
+		mb.taskStore.mu.Unlock()
+		if created != 0 {
+			t.Fatalf("wrong owner must not create a task, got %d tasks", created)
+		}
+		if drained := ptd.Drain(); len(drained) != 0 {
+			t.Fatalf("wrong owner must not enqueue dispatch, got %+v", drained)
+		}
+	})
+
+	t.Run("RequestOwnerConstraintAllowsExpectedAssignee", func(t *testing.T) {
+		mb, tool, _, _, ctx := newTestTeamSetup()
+		ptd := NewPendingTeamDispatch()
+		ptd.MarkListed()
+		ctx = WithPendingTeamDispatch(ctx, ptd)
+		ctx = WithTeamWorkOwnerConstraint(ctx, TeamWorkOwnerConstraint{OwnerKey: "member2-agent"})
+
+		result := tool.Execute(ctx, map[string]any{
+			"action":    "create",
+			"subject":   "Need specialist help",
+			"task_type": "request",
+			"assignee":  "member2-agent",
+		})
+		if result.IsError {
+			t.Fatalf("unexpected error: %s", result.ForLLM)
+		}
+		mb.taskStore.mu.Lock()
+		created := len(mb.taskStore.tasks)
+		mb.taskStore.mu.Unlock()
+		if created != 1 {
+			t.Fatalf("expected expected-assignee request to create exactly one task, got %d", created)
+		}
+	})
+
+	t.Run("GeneralOwnerConstraintBlocksWrongAssigneeBeforeCreate", func(t *testing.T) {
+		mb, tool, _, _, ctx := newTestTeamSetup()
+		ptd := NewPendingTeamDispatch()
+		ptd.MarkListed()
+		ctx = WithPendingTeamDispatch(ctx, ptd)
+		ctx = WithTeamWorkOwnerConstraint(ctx, TeamWorkOwnerConstraint{OwnerID: testMember2ID, OwnerKey: "member2-agent"})
+
+		result := tool.Execute(ctx, map[string]any{
+			"action":   "create",
+			"subject":  "General specialist task",
+			"assignee": "member-agent",
+		})
+		if !result.IsError || !strings.Contains(result.ForLLM, `requires assignee "member2-agent"`) {
+			t.Fatalf("wrong general owner result = %+v", result)
+		}
+		mb.taskStore.mu.Lock()
+		created := len(mb.taskStore.tasks)
+		mb.taskStore.mu.Unlock()
+		if created != 0 {
+			t.Fatalf("wrong general owner created %d tasks", created)
+		}
+	})
+
 	t.Run("MemberRequestDisabled", func(t *testing.T) {
 		mb, tool, _, memberID, ctx := newTestTeamSetup()
 		// Settings empty = member_request disabled

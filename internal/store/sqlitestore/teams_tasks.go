@@ -27,11 +27,15 @@ const maxListTasksRows = 30
 const taskSelectCols = `t.id, t.team_id, t.tenant_id, t.subject, t.description, t.status, t.owner_agent_id, t.blocked_by, t.priority, t.result, t.user_id, t.channel,
 		 t.task_type, t.task_number, COALESCE(t.identifier,''), t.created_by_agent_id, COALESCE(t.assignee_user_id,''), t.parent_id,
 		 COALESCE(t.chat_id,''), t.metadata, t.locked_at, t.lock_expires_at, COALESCE(t.progress_percent,0), COALESCE(t.progress_step,''),
+		 t.workflow_id, COALESCE(t.workflow_step_id,''), COALESCE(t.workflow_kind,''), t.workflow_terminal, t.dispatch_token, t.dispatch_lease_until,
 		 t.followup_at, COALESCE(t.followup_count,0), COALESCE(t.followup_max,0), COALESCE(t.followup_message,''), COALESCE(t.followup_channel,''), COALESCE(t.followup_chat_id,''),
 		 COALESCE(t.comment_count,0), COALESCE(t.attachment_count,0),
 		 t.created_at, t.updated_at,
 		 COALESCE(a.agent_key, '') AS owner_agent_key,
-		 COALESCE(ca.agent_key, '') AS created_by_agent_key`
+		 COALESCE(ca.agent_key, '') AS created_by_agent_key,
+		 COALESCE(t.plan_revision,1), COALESCE(t.dispatch_count,0), COALESCE(t.blocker_reason,''),
+		 COALESCE(t.recovery_count,0), COALESCE(t.escalation_status,'pending'),
+		 COALESCE(t.escalation_attempt_count,0), t.escalation_next_at, COALESCE(t.escalation_last_error,'')`
 
 // taskJoinClause is the shared JOIN clause for task queries.
 const taskJoinClause = `FROM team_tasks t
@@ -78,6 +82,10 @@ func (s *SQLiteTeamStore) ListTaskScopes(ctx context.Context, teamID uuid.UUID) 
 // ============================================================
 
 func (s *SQLiteTeamStore) CreateTask(ctx context.Context, task *store.TeamTaskData) error {
+	if expectedOwnerID := store.ExpectedTaskOwnerIDFromContext(ctx); expectedOwnerID != uuid.Nil &&
+		(task.OwnerAgentID == nil || *task.OwnerAgentID != expectedOwnerID) {
+		return fmt.Errorf("task owner does not match canonical owner constraint")
+	}
 	if task.ID == uuid.Nil {
 		task.ID = store.GenNewID()
 	}
@@ -109,7 +117,7 @@ func (s *SQLiteTeamStore) CreateTask(ctx context.Context, task *store.TeamTaskDa
 	hex := strings.ReplaceAll(task.ID.String(), "-", "")
 	task.Identifier = fmt.Sprintf("T-%03d-%s", taskNumber, hex[len(hex)-4:])
 
-	var metaJSON []byte
+	metaJSON := []byte(`{}`)
 	if len(task.Metadata) > 0 {
 		metaJSON, _ = json.Marshal(task.Metadata)
 	}
@@ -118,8 +126,10 @@ func (s *SQLiteTeamStore) CreateTask(ctx context.Context, task *store.TeamTaskDa
 
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO team_tasks (id, team_id, subject, description, status, owner_agent_id, blocked_by, priority, result, user_id, channel,
-		 task_type, task_number, identifier, created_by_agent_id, parent_id, chat_id, metadata, locked_at, lock_expires_at, created_at, updated_at, tenant_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 task_type, task_number, identifier, created_by_agent_id, parent_id, chat_id, metadata, locked_at, lock_expires_at,
+		 workflow_id, workflow_step_id, workflow_kind, workflow_terminal, dispatch_token, dispatch_lease_until,
+		 created_at, updated_at, tenant_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.ID, task.TeamID, task.Subject, task.Description,
 		task.Status, task.OwnerAgentID, blockedByJSON,
 		task.Priority, task.Result,
@@ -129,6 +139,8 @@ func (s *SQLiteTeamStore) CreateTask(ctx context.Context, task *store.TeamTaskDa
 		nilStr(task.ChatID),
 		metaJSON,
 		task.LockedAt, task.LockExpiresAt,
+		task.WorkflowID, nilStr(task.WorkflowStepID), nilStr(task.WorkflowKind), task.WorkflowTerminal,
+		task.DispatchToken, task.DispatchLeaseUntil,
 		now, now, tenantIDForInsert(ctx),
 	)
 	if err != nil {
@@ -152,6 +164,11 @@ var allowedTaskUpdateCols = map[string]bool{
 func (s *SQLiteTeamStore) UpdateTask(ctx context.Context, taskID uuid.UUID, updates map[string]any) error {
 	if len(updates) == 0 {
 		return nil
+	}
+	if task, err := s.GetTask(ctx, taskID); err != nil {
+		return err
+	} else if task.WorkflowID != nil {
+		return fmt.Errorf("workflow tasks are immutable")
 	}
 	for col := range updates {
 		if !allowedTaskUpdateCols[col] {
@@ -366,7 +383,7 @@ func (s *SQLiteTeamStore) DeleteTask(ctx context.Context, taskID, teamID uuid.UU
 	defer tx.Rollback() //nolint:errcheck
 
 	res, err := tx.ExecContext(ctx,
-		`DELETE FROM team_tasks WHERE id = ? AND team_id = ? AND status IN ('completed','failed','cancelled')`+tenantWhere,
+		`DELETE FROM team_tasks WHERE id = ? AND team_id = ? AND workflow_id IS NULL AND status IN ('completed','failed','cancelled')`+tenantWhere,
 		args...)
 	if err != nil {
 		return err
@@ -411,7 +428,7 @@ func (s *SQLiteTeamStore) DeleteTasks(ctx context.Context, taskIDs []uuid.UUID, 
 		args = append(args, tid)
 	}
 
-	cond := `id IN (` + placeholders + `) AND team_id = ? AND status IN ('completed','failed','cancelled')` + tenantWhere
+	cond := `id IN (` + placeholders + `) AND team_id = ? AND workflow_id IS NULL AND status IN ('completed','failed','cancelled')` + tenantWhere
 
 	// Fetch IDs to delete first.
 	selectRows, err := s.db.QueryContext(ctx, `SELECT id FROM team_tasks WHERE `+cond, args...)
@@ -482,7 +499,7 @@ func (s *SQLiteTeamStore) ListActiveTasksByChatID(ctx context.Context, chatID st
 		`SELECT `+taskSelectCols+`
 		 `+taskJoinClause+`
 		 WHERE COALESCE(t.chat_id,'') = ?
-		   AND t.status IN ('pending','in_progress','blocked','in_review')`+tenantWhere+`
+		   AND t.status IN ('pending','dispatching','in_progress','blocked','in_review')`+tenantWhere+`
 		 ORDER BY t.task_number ASC
 		 LIMIT 50`, args...)
 	if err != nil {
@@ -505,9 +522,12 @@ func scanTaskRowsJoined(rows *sql.Rows) ([]store.TeamTaskData, error) {
 		var blockedByJSON []byte
 		var assigneeUserID, chatID, progressStep, identifier string
 		var metadataJSON []byte
-		var lockedAt, lockExpiresAt, followupAt nullSqliteTime
+		var lockedAt, lockExpiresAt, followupAt, dispatchLeaseUntil nullSqliteTime
+		var workflowID, dispatchToken *uuid.UUID
+		var workflowStepID, workflowKind string
 		var followupCount, followupMax int
 		var followupMessage, followupChannel, followupChatID string
+		var escalationNextAt nullSqliteTime
 		createdAt, updatedAt := scanTimePair()
 		if err := rows.Scan(
 			&d.ID, &d.TeamID, &d.TenantID, &d.Subject, &desc, &d.Status,
@@ -515,13 +535,20 @@ func scanTaskRowsJoined(rows *sql.Rows) ([]store.TeamTaskData, error) {
 			&userID, &channel,
 			&d.TaskType, &d.TaskNumber, &identifier, &createdByAgentID, &assigneeUserID, &parentID,
 			&chatID, &metadataJSON, &lockedAt, &lockExpiresAt, &d.ProgressPercent, &progressStep,
+			&workflowID, &workflowStepID, &workflowKind, &d.WorkflowTerminal, &dispatchToken, &dispatchLeaseUntil,
 			&followupAt, &followupCount, &followupMax, &followupMessage, &followupChannel, &followupChatID,
 			&d.CommentCount, &d.AttachmentCount,
 			createdAt, updatedAt,
 			&d.OwnerAgentKey,
 			&d.CreatedByAgentKey,
+			&d.PlanRevision, &d.DispatchCount, &d.BlockerReason,
+			&d.RecoveryCount, &d.EscalationStatus,
+			&d.EscalationAttemptCount, &escalationNextAt, &d.EscalationLastError,
 		); err != nil {
 			return nil, err
+		}
+		if escalationNextAt.Valid {
+			d.EscalationNextAt = &escalationNextAt.Time
 		}
 		d.CreatedAt = createdAt.Time
 		d.UpdatedAt = updatedAt.Time
@@ -559,6 +586,13 @@ func scanTaskRowsJoined(rows *sql.Rows) ([]store.TeamTaskData, error) {
 			d.LockExpiresAt = &lockExpiresAt.Time
 		}
 		d.ProgressStep = progressStep
+		d.WorkflowID = workflowID
+		d.WorkflowStepID = workflowStepID
+		d.WorkflowKind = workflowKind
+		d.DispatchToken = dispatchToken
+		if dispatchLeaseUntil.Valid {
+			d.DispatchLeaseUntil = &dispatchLeaseUntil.Time
+		}
 		if followupAt.Valid {
 			d.FollowupAt = &followupAt.Time
 		}
@@ -567,6 +601,9 @@ func scanTaskRowsJoined(rows *sql.Rows) ([]store.TeamTaskData, error) {
 		d.FollowupMessage = followupMessage
 		d.FollowupChannel = followupChannel
 		d.FollowupChatID = followupChatID
+		// Mirror the durable dispatch_count column back into the metadata blob so
+		// backward-compatible consumers observe the authoritative value (000098).
+		d.MirrorDispatchCountToMetadata()
 		tasks = append(tasks, d)
 	}
 	return tasks, rows.Err()

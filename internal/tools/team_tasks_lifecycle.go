@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -46,6 +48,31 @@ func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any
 	result, _ := args["result"].(string)
 	if result == "" {
 		return ErrorResult("result is required for complete action")
+	}
+	currentTask, _ := t.manager.Store().GetTask(ctx, taskID)
+	if currentTask != nil && currentTask.WorkflowID != nil && currentTask.WorkflowKind == store.TeamWorkflowTaskKindWork {
+		workflowStore, ok := t.manager.Store().(store.TeamWorkflowStore)
+		if !ok {
+			return ErrorResult("team workflow store is unavailable")
+		}
+		// Complete is fenced on the accepted attempt injected at run start. A
+		// superseded attempt (recovery/replan minted a newer token) gets a typed
+		// Stale outcome here and mutates nothing, so a stale worker can never
+		// complete a step the current attempt owns. Post-turn settlement then sees
+		// AlreadyApplied for this same attempt and skips duplicate work.
+		attempt, ok := store.WorkflowTaskAttemptFromContext(ctx)
+		if !ok {
+			return ErrorResult("workflow attempt identity missing from run context")
+		}
+		transition, err := workflowStore.CompleteWorkflowTaskAttempt(ctx, attempt, result)
+		if err != nil {
+			return ErrorResult("failed to complete workflow step: " + err.Error())
+		}
+		if transition.Stale() {
+			return ErrorResult("this workflow step was superseded by recovery/replan and can no longer be completed")
+		}
+		recordTaskAction(ctx, func(f *TaskActionFlags) { f.Completed = true })
+		return NewResult(fmt.Sprintf("Workflow step %s completed.", currentTask.WorkflowStepID))
 	}
 
 	// Auto-claim if the task is still pending (saves an extra tool call).
@@ -128,6 +155,14 @@ func (t *TeamTasksTool) executeCancel(ctx context.Context, args map[string]any) 
 	if reason == "" {
 		reason = "Cancelled by agent"
 	}
+	// Workflow work steps have no independent "cancel one step" semantics: a DAG step
+	// cancelled in isolation breaks its dependents, and the previous SettleWorkflowTask
+	// path silently failed the WHOLE workflow (status→failing, siblings cancelled) — the
+	// exact mechanical-failure pattern the coordinator recovery flow replaces. Route the
+	// coordinator to the typed workflow-level actions instead of a generic cancel.
+	if task, getErr := t.manager.Store().GetTask(ctx, taskID); getErr == nil && task.WorkflowID != nil && task.WorkflowKind == store.TeamWorkflowTaskKindWork {
+		return ErrorResult("workflow work steps cannot be cancelled individually; use cancel_workflow to abandon the workflow or fail_workflow to declare a terminal failure")
+	}
 
 	// CancelTask: guards against completed tasks, unblocks dependents, transitions blocked→pending.
 	if err := t.manager.Store().CancelTask(ctx, taskID, team.ID, reason); err != nil {
@@ -160,6 +195,9 @@ func (t *TeamTasksTool) executeReview(ctx context.Context, args map[string]any) 
 	}
 	if task.TeamID != team.ID {
 		return ErrorResult("task does not belong to your team")
+	}
+	if task.WorkflowID != nil && task.WorkflowKind == store.TeamWorkflowTaskKindWork {
+		return ErrorResult("workflow work steps use complete or blocker; they do not enter generic review")
 	}
 	if task.OwnerAgentID == nil || *task.OwnerAgentID != agentID {
 		return ErrorResult("only the task owner can submit for review")
@@ -207,6 +245,49 @@ func (t *TeamTasksTool) executeApprove(ctx context.Context, args map[string]any)
 	}
 	if task.TeamID != team.ID {
 		return ErrorResult("task does not belong to your team")
+	}
+	if task.WorkflowID != nil && task.WorkflowKind == store.TeamWorkflowTaskKindAudit {
+		if agentID != team.LeadAgentID || task.OwnerAgentID == nil || *task.OwnerAgentID != agentID {
+			return ErrorResult("only the canonical team lead can approve this workflow request")
+		}
+		workflowStore, ok := t.manager.Store().(store.TeamWorkflowStore)
+		if !ok {
+			return ErrorResult("team workflow store is unavailable")
+		}
+		workflow, err := workflowStore.GetWorkflow(ctx, *task.WorkflowID)
+		if err != nil || workflow.CoordinatorAgentID != agentID {
+			return ErrorResult("pending workflow request is not available")
+		}
+		dispatcher, ok := t.manager.(PostTurnProcessor)
+		if !ok || dispatcher.RevalidateWorkflow(ctx, workflow) != nil {
+			return ErrorResult("workflow plan is no longer executable; re-plan is required")
+		}
+		tasks, err := BuildWorkflowTasksFromStoredPlan(workflow)
+		if err != nil {
+			return ErrorResult("invalid pending workflow: " + err.Error())
+		}
+		InheritWorkflowTaskContext(tasks, task)
+		members, err := t.manager.CachedListMembers(ctx, team.ID, agentID)
+		if err != nil {
+			return ErrorResult("failed to revalidate workflow roster: " + err.Error())
+		}
+		memberIDs := make(map[uuid.UUID]struct{}, len(members))
+		for _, member := range members {
+			memberIDs[member.AgentID] = struct{}{}
+		}
+		for _, workflowTask := range tasks {
+			if workflowTask.OwnerAgentID == nil {
+				return ErrorResult("workflow step has no canonical owner")
+			}
+			if _, exists := memberIDs[*workflowTask.OwnerAgentID]; !exists {
+				return ErrorResult("workflow roster changed; re-plan is required")
+			}
+		}
+		if err := workflowStore.ApprovePendingWorkflowRequest(ctx, workflow.ID, task.ID, store.WorkflowApprovalActor{AgentID: &agentID}, tasks); err != nil {
+			return ErrorResult("failed to approve workflow request: " + err.Error())
+		}
+		queueWorkflowRoots(ctx, team.ID, tasks)
+		return NewResult(fmt.Sprintf("Workflow request approved (workflow_id=%s).", workflow.ID))
 	}
 
 	// Atomic transition: in_review -> completed

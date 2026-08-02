@@ -39,7 +39,10 @@ func (l *Loop) makeExecuteToolCall(req *RunRequest, bridgeRS *runState) func(ctx
 	emitRun := makeToolEmitRun(l, req)
 	return func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall) ([]providers.Message, error) {
 		tc = l.normalizeToolCall(tc)
-		registryName := l.canonicalToolName(l.resolveToolCallName(tc.Name))
+		registryName := l.canonicalToolCallName(tc.Name)
+		if (state.TeamWorkDisabled || req.RunKind == RunKindWorkflowFinalize) && l.isSelfFallbackDeniedTool(registryName) {
+			return []providers.Message{{Role: "tool", Content: selfFallbackToolBlockedMessage, ToolCallID: tc.ID, IsError: true}}, nil
+		}
 		argsJSON, _ := json.Marshal(tc.Arguments)
 		slog.Info("tool call", "agent", l.id, "tool", tc.Name, "args_len", len(argsJSON))
 
@@ -121,7 +124,11 @@ func (l *Loop) makeExecuteToolRaw(req *RunRequest) func(ctx context.Context, tc 
 	emitRun := makeToolEmitRun(l, req)
 	return func(ctx context.Context, tc providers.ToolCall) (providers.Message, any, error) {
 		tc = l.normalizeToolCall(tc)
-		registryName := l.canonicalToolName(l.resolveToolCallName(tc.Name))
+		registryName := l.canonicalToolCallName(tc.Name)
+		if (tools.TeamWorkDisabledFromCtx(ctx) || req.RunKind == RunKindWorkflowFinalize) && l.isSelfFallbackDeniedTool(registryName) {
+			result := tools.ErrorResult(selfFallbackToolBlockedMessage)
+			return providers.Message{Role: "tool", Content: result.ForLLM, ToolCallID: tc.ID, IsError: true}, &toolRawResult{result: result, toolName: registryName, rawName: tc.Name}, nil
+		}
 		argsJSON, _ := json.Marshal(tc.Arguments)
 		slog.Info("tool call", "agent", l.id, "tool", tc.Name, "args_len", len(argsJSON))
 
@@ -257,6 +264,8 @@ func (l *Loop) makeCheckReadOnly(req *RunRequest, bridgeRS *runState) func(state
 // syncBridgeToState copies side effects from bridgeRS to pipeline RunState.
 func syncBridgeToState(bridgeRS *runState, state *pipeline.RunState, action toolResultAction) {
 	state.Tool.LoopKilled = bridgeRS.loopKilled
+	state.Tool.StopAfterTool = bridgeRS.stopAfterTool
+	state.Tool.SuppressUserOutput = bridgeRS.suppressUserOutput
 	state.Tool.AsyncToolCalls = bridgeRS.asyncToolCalls
 	state.Tool.Deliverables = bridgeRS.deliverables
 	state.Evolution.BootstrapWrite = bridgeRS.bootstrapWriteDetected
@@ -276,7 +285,7 @@ func syncBridgeToState(bridgeRS *runState, state *pipeline.RunState, action tool
 			})
 		}
 	}
-	if state.Tool.LoopKilled && action == toolResultBreak {
+	if action == toolResultBreak && bridgeRS.finalContent != "" {
 		state.Observe.FinalContent = bridgeRS.finalContent
 	}
 }

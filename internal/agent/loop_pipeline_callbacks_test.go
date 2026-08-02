@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -47,12 +48,12 @@ func (p *requestCaptureProvider) ChatStream(_ context.Context, req providers.Cha
 func (p *requestCaptureProvider) DefaultModel() string { return "test-model" }
 func (p *requestCaptureProvider) Name() string         { return "test-provider" }
 
-type recordingSessionStore struct {
+type pipelineRecordingSessionStore struct {
 	*nopSessionStore
 	added []providers.Message
 }
 
-func (s *recordingSessionStore) AddMessage(_ context.Context, _ string, msg providers.Message) {
+func (s *pipelineRecordingSessionStore) AddMessage(_ context.Context, _ string, msg providers.Message) {
 	s.added = append(s.added, msg)
 }
 
@@ -110,6 +111,83 @@ func TestMakeCallLLMEmitsRetryingOnTransientProviderError(t *testing.T) {
 		t.Fatalf("retrying payload = %+v, want attempt=1 maxAttempts=2", retrying[0].Payload)
 	}
 }
+
+type enforcementErrorThenFallbackProvider struct {
+	requests     []providers.ChatRequest
+	hasDeadlines []bool
+}
+
+func (p *enforcementErrorThenFallbackProvider) Chat(ctx context.Context, req providers.ChatRequest) (*providers.ChatResponse, error) {
+	_, hasDeadline := ctx.Deadline()
+	p.requests = append(p.requests, req)
+	p.hasDeadlines = append(p.hasDeadlines, hasDeadline)
+	if len(p.requests) == 1 {
+		return nil, errors.New("enforcement provider failed")
+	}
+	return &providers.ChatResponse{Content: "direct answer", FinishReason: "stop"}, nil
+}
+
+func (p *enforcementErrorThenFallbackProvider) ChatStream(ctx context.Context, req providers.ChatRequest, _ func(providers.StreamChunk)) (*providers.ChatResponse, error) {
+	return p.Chat(ctx, req)
+}
+
+func (p *enforcementErrorThenFallbackProvider) DefaultModel() string { return "test-model" }
+func (p *enforcementErrorThenFallbackProvider) Name() string         { return "test-provider" }
+
+// enforcementTransientErrorProvider fails the first enforcement call with a
+// transient error, then honours the directive on the retry.
+type enforcementTransientErrorProvider struct {
+	firstErr     error
+	requests     []providers.ChatRequest
+	hasDeadlines []bool
+	deadlineIn   []time.Duration
+}
+
+func (p *enforcementTransientErrorProvider) Chat(ctx context.Context, req providers.ChatRequest) (*providers.ChatResponse, error) {
+	deadline, hasDeadline := ctx.Deadline()
+	p.requests = append(p.requests, req)
+	p.hasDeadlines = append(p.hasDeadlines, hasDeadline)
+	if hasDeadline {
+		p.deadlineIn = append(p.deadlineIn, time.Until(deadline))
+	} else {
+		p.deadlineIn = append(p.deadlineIn, 0)
+	}
+	if len(p.requests) == 1 {
+		return nil, p.firstErr
+	}
+	return &providers.ChatResponse{
+		FinishReason: "tool_calls",
+		ToolCalls: []providers.ToolCall{
+			{ID: "c1", Name: "team_tasks", Arguments: map[string]any{"action": "search", "query": "launch"}},
+		},
+	}, nil
+}
+
+func (p *enforcementTransientErrorProvider) ChatStream(ctx context.Context, req providers.ChatRequest, _ func(providers.StreamChunk)) (*providers.ChatResponse, error) {
+	return p.Chat(ctx, req)
+}
+
+func (p *enforcementTransientErrorProvider) DefaultModel() string { return "test-model" }
+func (p *enforcementTransientErrorProvider) Name() string         { return "test-provider" }
+
+type enforcementRetryThenFallbackProvider struct {
+	requests []providers.ChatRequest
+}
+
+func (p *enforcementRetryThenFallbackProvider) Chat(_ context.Context, req providers.ChatRequest) (*providers.ChatResponse, error) {
+	p.requests = append(p.requests, req)
+	if len(p.requests) < 3 {
+		return &providers.ChatResponse{Content: "text-only", FinishReason: "stop"}, nil
+	}
+	return &providers.ChatResponse{Content: "direct answer", FinishReason: "stop"}, nil
+}
+
+func (p *enforcementRetryThenFallbackProvider) ChatStream(ctx context.Context, req providers.ChatRequest, _ func(providers.StreamChunk)) (*providers.ChatResponse, error) {
+	return p.Chat(ctx, req)
+}
+
+func (p *enforcementRetryThenFallbackProvider) DefaultModel() string { return "test-model" }
+func (p *enforcementRetryThenFallbackProvider) Name() string         { return "test-provider" }
 
 func TestMakeCallLLM_StreamsFinalThinkingWhenNoThinkingChunkArrives(t *testing.T) {
 	col := &eventCollector{}
@@ -169,7 +247,7 @@ func TestEnrichedInputMediaPersistsForNextTurn(t *testing.T) {
 		t.Fatal(err)
 	}
 	workspace := t.TempDir()
-	sessions := &recordingSessionStore{nopSessionStore: &nopSessionStore{}}
+	sessions := &pipelineRecordingSessionStore{nopSessionStore: &nopSessionStore{}}
 	loop := &Loop{sessions: sessions}
 	req := &RunRequest{
 		SessionKey: "session-media",
@@ -209,6 +287,116 @@ func TestEnrichedInputMediaPersistsForNextTurn(t *testing.T) {
 	if len(nextTurnRefs) != 1 || nextTurnRefs[0].ID != persisted.MediaRefs[0].ID {
 		t.Fatalf("next-turn refs = %#v, want persisted exact ID", nextTurnRefs)
 	}
+}
+
+func TestMakeCallLLM_EnforcementErrorFallsBackWithParentContextAndProfessionalTools(t *testing.T) {
+	provider := &enforcementErrorThenFallbackProvider{}
+	loop := &Loop{id: "test-agent"}
+	req := &RunRequest{
+		RunID:      "run-1",
+		SessionKey: "sess-1",
+		Channel:    "ws",
+		TeamWorkDirective: &TeamWorkDirective{
+			Mode:            "team",
+			OriginalMessage: "research this",
+			RequiredTool:    "team_tasks",
+			TeamRole:        "lead",
+		},
+	}
+	state := &pipeline.RunState{Provider: provider, Model: "test-model"}
+	chatReq := providers.ChatRequest{
+		Messages: []providers.Message{
+			{Role: "system", Content: "base prompt\n\n## TEAM WORK ROUTING LOCK\ninternal lock"},
+			{Role: "user", Content: "research this"},
+		},
+		Tools: []providers.ToolDefinition{
+			{Function: &providers.ToolFunctionSchema{Name: "team_tasks"}},
+			{Function: &providers.ToolFunctionSchema{Name: "web_search"}},
+		},
+	}
+
+	resp, err := loop.makeCallLLM(req, func(AgentEvent) {})(context.Background(), state, chatReq)
+	if err != nil {
+		t.Fatalf("makeCallLLM returned fallback error: %v", err)
+	}
+	if resp == nil || resp.Content != "direct answer" {
+		t.Fatalf("fallback response = %+v, want direct answer", resp)
+	}
+	if len(provider.requests) != 2 {
+		t.Fatalf("provider calls = %d, want enforcement + self fallback", len(provider.requests))
+	}
+	if !provider.hasDeadlines[0] || provider.hasDeadlines[1] {
+		t.Fatalf("call deadlines = %v, want child deadline then live parent context", provider.hasDeadlines)
+	}
+	if len(provider.requests[0].Tools) != 1 || provider.requests[0].Tools[0].Function.Name != "team_tasks" {
+		t.Fatalf("enforcement tools = %+v, want only team_tasks", provider.requests[0].Tools)
+	}
+	if got := provider.requests[0].Options[providers.OptAllowedToolNames]; !allowedToolNamesEqual(got, []string{"team_tasks"}) {
+		t.Fatalf("enforcement allowed tool names = %#v, want [team_tasks]", got)
+	}
+	if len(provider.requests[1].Tools) != 1 || provider.requests[1].Tools[0].Function.Name != "web_search" {
+		t.Fatalf("fallback tools = %+v, want professional tools with orchestration removed", provider.requests[1].Tools)
+	}
+	if got := provider.requests[1].Options[providers.OptAllowedToolNames]; !allowedToolNamesEqual(got, []string{"web_search"}) {
+		t.Fatalf("fallback allowed tool names = %#v, want [web_search]", got)
+	}
+	for _, msg := range provider.requests[1].Messages {
+		if strings.Contains(msg.Content, "TEAM WORK ROUTING LOCK") {
+			t.Fatalf("fallback retained routing lock: %q", msg.Content)
+		}
+	}
+}
+
+func TestMakeCallLLM_EnforcementRetryRefreshesAllowedToolNames(t *testing.T) {
+	provider := &enforcementRetryThenFallbackProvider{}
+	loop := &Loop{id: "test-agent"}
+	req := &RunRequest{
+		RunID:      "run-retry",
+		SessionKey: "sess-retry",
+		Channel:    "ws",
+		TeamWorkDirective: &TeamWorkDirective{
+			Mode:            "team",
+			OriginalMessage: "research this",
+			RequiredTool:    "team_tasks",
+			TeamRole:        "lead",
+		},
+	}
+	state := &pipeline.RunState{Provider: provider, Model: "test-model"}
+	chatReq := providers.ChatRequest{
+		Messages: []providers.Message{{Role: "user", Content: "research this"}},
+		Tools: []providers.ToolDefinition{
+			{Function: &providers.ToolFunctionSchema{Name: "team_tasks"}},
+			{Function: &providers.ToolFunctionSchema{Name: "web_search"}},
+		},
+	}
+
+	if _, err := loop.makeCallLLM(req, func(AgentEvent) {})(context.Background(), state, chatReq); err != nil {
+		t.Fatalf("makeCallLLM returned error: %v", err)
+	}
+	if len(provider.requests) != 3 {
+		t.Fatalf("provider calls = %d, want initial + retry + fallback", len(provider.requests))
+	}
+	for i, request := range provider.requests[:2] {
+		if got := request.Options[providers.OptAllowedToolNames]; !allowedToolNamesEqual(got, []string{"team_tasks"}) {
+			t.Fatalf("directive request %d allowed tool names = %#v, want [team_tasks]", i, got)
+		}
+	}
+	if got := provider.requests[2].Options[providers.OptAllowedToolNames]; !allowedToolNamesEqual(got, []string{"web_search"}) {
+		t.Fatalf("fallback allowed tool names = %#v, want [web_search]", got)
+	}
+}
+
+func allowedToolNamesEqual(got any, want []string) bool {
+	names, ok := got.([]string)
+	if !ok || len(names) != len(want) {
+		return false
+	}
+	for i := range want {
+		if names[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestPromptCacheOptionsHelpers(t *testing.T) {
@@ -338,5 +526,130 @@ func TestImageGenToolDef_FunctionNonNil(t *testing.T) {
 	}
 	if imageGenToolDef.Function.Name != "image_generation" {
 		t.Errorf("sentinel Function.Name = %q, want image_generation", imageGenToolDef.Function.Name)
+	}
+}
+
+// A transient provider failure on an enforcement call must NOT cost the run its
+// validated plan. Live regression: a khanh-developer multi_role turn whose gate
+// had approved a 3-step plan lost it when the second enforcement call hit the
+// hard-coded 30s deadline — the run silently demoted to a solo answer and no
+// team_workflows row was ever created.
+func TestMakeCallLLM_EnforcementTransientErrorRetriesBeforeFailingClosed(t *testing.T) {
+	provider := &enforcementTransientErrorProvider{firstErr: context.DeadlineExceeded}
+	loop := &Loop{id: "test-agent"}
+	req := &RunRequest{
+		RunID:      "run-transient",
+		SessionKey: "sess-transient",
+		Channel:    "ws",
+		TeamWorkDirective: &TeamWorkDirective{
+			Mode:            "team",
+			OriginalMessage: "plan the launch",
+			RequiredTool:    "team_tasks",
+			TeamRole:        "lead",
+		},
+	}
+	state := &pipeline.RunState{Provider: provider, Model: "test-model"}
+	chatReq := providers.ChatRequest{
+		Messages: []providers.Message{{Role: "user", Content: "plan the launch"}},
+		Tools: []providers.ToolDefinition{
+			{Function: &providers.ToolFunctionSchema{Name: "team_tasks"}},
+			{Function: &providers.ToolFunctionSchema{Name: "web_search"}},
+		},
+	}
+
+	resp, err := loop.makeCallLLM(req, func(AgentEvent) {})(context.Background(), state, chatReq)
+	if err != nil {
+		t.Fatalf("makeCallLLM returned error: %v", err)
+	}
+	if len(provider.requests) != 2 {
+		t.Fatalf("provider calls = %d, want failed enforcement + one retry", len(provider.requests))
+	}
+	if state.TeamWorkDisabled {
+		t.Fatal("a retry that satisfied the directive must not disable team work")
+	}
+	if resp == nil || len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "team_tasks" {
+		t.Fatalf("response = %+v, want the team_tasks search call from the retry", resp)
+	}
+	// The retry must still be enforcement-shaped: team_tasks only.
+	if len(provider.requests[1].Tools) != 1 || provider.requests[1].Tools[0].Function.Name != "team_tasks" {
+		t.Fatalf("retry tools = %+v, want only team_tasks", provider.requests[1].Tools)
+	}
+}
+
+// A deterministic failure must NOT be retried — it fails identically the second
+// time and only delays the user's answer.
+func TestMakeCallLLM_EnforcementDeterministicErrorFailsClosedWithoutRetry(t *testing.T) {
+	provider := &enforcementTransientErrorProvider{
+		firstErr: &providers.HTTPError{Status: 401, Body: "invalid api key"},
+	}
+	loop := &Loop{id: "test-agent"}
+	req := &RunRequest{
+		RunID:      "run-auth",
+		SessionKey: "sess-auth",
+		Channel:    "ws",
+		TeamWorkDirective: &TeamWorkDirective{
+			Mode:            "team",
+			OriginalMessage: "plan the launch",
+			RequiredTool:    "team_tasks",
+			TeamRole:        "lead",
+		},
+	}
+	state := &pipeline.RunState{Provider: provider, Model: "test-model"}
+	chatReq := providers.ChatRequest{
+		Messages: []providers.Message{{Role: "user", Content: "plan the launch"}},
+		Tools: []providers.ToolDefinition{
+			{Function: &providers.ToolFunctionSchema{Name: "team_tasks"}},
+			{Function: &providers.ToolFunctionSchema{Name: "web_search"}},
+		},
+	}
+
+	if _, err := loop.makeCallLLM(req, func(AgentEvent) {})(context.Background(), state, chatReq); err != nil {
+		t.Fatalf("makeCallLLM returned error: %v", err)
+	}
+	if len(provider.requests) != 2 {
+		t.Fatalf("provider calls = %d, want failed enforcement + self fallback (no enforcement retry)", len(provider.requests))
+	}
+	if !state.TeamWorkDisabled {
+		t.Fatal("a deterministic enforcement failure must fail closed to a self run")
+	}
+	// Call 2 is the SELF FALLBACK, not an enforcement retry: professional tools
+	// with orchestration removed.
+	if len(provider.requests[1].Tools) != 1 || provider.requests[1].Tools[0].Function.Name != "web_search" {
+		t.Fatalf("second call tools = %+v, want the self fallback's professional tools", provider.requests[1].Tools)
+	}
+}
+
+// The configured Team Work budget must bound the enforcement call, replacing the
+// hard-coded default.
+func TestMakeCallLLM_EnforcementUsesConfiguredTimeout(t *testing.T) {
+	provider := &enforcementTransientErrorProvider{firstErr: context.DeadlineExceeded}
+	loop := &Loop{id: "test-agent"}
+	req := &RunRequest{
+		RunID:      "run-budget",
+		SessionKey: "sess-budget",
+		Channel:    "ws",
+		TeamWorkDirective: &TeamWorkDirective{
+			Mode:               "team",
+			OriginalMessage:    "plan the launch",
+			RequiredTool:       "team_tasks",
+			TeamRole:           "lead",
+			EnforcementTimeout: 120 * time.Second,
+		},
+	}
+	state := &pipeline.RunState{Provider: provider, Model: "test-model"}
+	chatReq := providers.ChatRequest{
+		Messages: []providers.Message{{Role: "user", Content: "plan the launch"}},
+		Tools:    []providers.ToolDefinition{{Function: &providers.ToolFunctionSchema{Name: "team_tasks"}}},
+	}
+
+	if _, err := loop.makeCallLLM(req, func(AgentEvent) {})(context.Background(), state, chatReq); err != nil {
+		t.Fatalf("makeCallLLM returned error: %v", err)
+	}
+	if len(provider.deadlineIn) == 0 || !provider.hasDeadlines[0] {
+		t.Fatalf("enforcement call had no deadline: %v", provider.hasDeadlines)
+	}
+	// Well past the 30s default, comfortably under the configured 120s.
+	if provider.deadlineIn[0] <= 100*time.Second {
+		t.Fatalf("enforcement deadline = %v, want the configured ~120s budget", provider.deadlineIn[0])
 	}
 }

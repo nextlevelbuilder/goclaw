@@ -77,6 +77,7 @@ type SubagentTask struct {
 	RootAgentID       uuid.UUID       `json:"-"`
 	RootAgentKey      string          `json:"-"`
 	ParentTaskID      string          `json:"parentTaskId,omitempty"`
+	TeamID            string          `json:"-"` // dispatching team for scoped UI events
 	OriginTraceID     uuid.UUID       `json:"-"` // parent trace for announce linking
 	OriginRootSpanID  uuid.UUID       `json:"-"` // parent agent's root span ID
 	// Capture caller-specific budgets because one process manager serves many agents.

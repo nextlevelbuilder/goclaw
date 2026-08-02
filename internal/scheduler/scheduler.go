@@ -15,6 +15,13 @@ import (
 // ScheduleOpts provides per-request overrides for the scheduler.
 type ScheduleOpts struct {
 	MaxConcurrent int // per-session override (0 = use config default)
+
+	// PreExecute is a scheduler-owned, per-request pre-execution hook fired at
+	// dequeue (after lane acquisition + cancellation recheck, before runFn). Nil
+	// for protected internal runs. Carried here — an explicit scheduler option —
+	// rather than on agent.RunRequest, because only the scheduler invokes it and
+	// only at dequeue (user guidance #1/#3).
+	PreExecute PreExecuteHook
 }
 
 // Scheduler is the top-level coordinator that manages lanes and session queues.
@@ -66,7 +73,7 @@ func (s *Scheduler) Schedule(ctx context.Context, lane string, req agent.RunRequ
 		return ch
 	}
 	sq := s.getOrCreateSession(req.SessionKey, lane)
-	return sq.Enqueue(ctx, req)
+	return sq.Enqueue(ctx, req, nil)
 }
 
 // ScheduleWithOpts submits a run request with per-session overrides.
@@ -81,7 +88,7 @@ func (s *Scheduler) ScheduleWithOpts(ctx context.Context, lane string, req agent
 	if opts.MaxConcurrent > 0 {
 		sq.SetMaxConcurrent(opts.MaxConcurrent)
 	}
-	return sq.Enqueue(ctx, req)
+	return sq.Enqueue(ctx, req, opts.PreExecute)
 }
 
 // getOrCreateSession returns or creates a session queue for the given key.

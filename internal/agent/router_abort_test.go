@@ -52,6 +52,30 @@ func registerRun(r *Router, runID, sessionKey string) (context.CancelFunc, chan 
 	return cancel, val.(*ActiveRun).Done
 }
 
+func TestWorkflowFinalizeRunRejectsInjectionAndExposesCompletion(t *testing.T) {
+	r := NewRouter()
+	_, cancel := context.WithCancel(context.Background())
+	r.RegisterRunWithKind(context.Background(), "run-finalize", "session-finalize", "agent-1", RunKindWorkflowFinalize, cancel)
+
+	active, ok := r.SessionActiveRun("session-finalize")
+	if !ok || active.RunID != "run-finalize" || active.RunKind != RunKindWorkflowFinalize {
+		t.Fatalf("active=%+v ok=%v", active, ok)
+	}
+	if r.InjectMessage("session-finalize", InjectedMessage{Content: "new user request"}) {
+		t.Fatal("workflow finalizer must reject mid-run user injection")
+	}
+
+	r.UnregisterRun("run-finalize")
+	select {
+	case <-active.Done:
+	case <-time.After(time.Second):
+		t.Fatal("workflow finalizer completion was not signalled")
+	}
+	if _, ok := r.SessionActiveRun("session-finalize"); ok {
+		t.Fatal("completed workflow finalizer still owns the session index")
+	}
+}
+
 // ---- tests ----
 
 // TestAbortRun_Stopped verifies graceful stop: goroutine calls UnregisterRun
@@ -305,8 +329,173 @@ func TestSetRunTraceID(t *testing.T) {
 	if !ok {
 		t.Fatal("run should still be in activeRuns")
 	}
-	if val.(*ActiveRun).TraceID != tid {
-		t.Fatalf("expected traceID %s, got %s", tid, val.(*ActiveRun).TraceID)
+	if got := val.(*ActiveRun).getTraceID(); got != tid {
+		t.Fatalf("expected traceID %s, got %s", tid, got)
+	}
+}
+
+// TestAbortRun_ForcedReleasesDone verifies the Phase 7 review 7A-C2 fix: when a
+// run is genuinely stuck (never calls UnregisterRun), forced abort must still
+// release Done and clear the session index so a FIFO worker (or any deferred
+// waiter) blocked on Done cannot hang forever. We assert BOTH that the caller
+// sees Forced=true AND that a goroutine waiting on Done observes it close within
+// the grace window — the behavior the old code lacked.
+func TestAbortRun_ForcedReleasesDone(t *testing.T) {
+	tc := &mockTraceCollector{}
+	r := newRouterWithCollector(tc)
+
+	runID := "run-stuck"
+	sessionKey := "session-stuck"
+	_, done := registerRun(r, runID, sessionKey)
+	r.SetRunTraceID(runID, uuid.New())
+
+	// A waiter modelling the chatRunQueue worker: it only proceeds once Done
+	// closes. If forced abort fails to release Done this never fires.
+	waiterUnblocked := make(chan struct{})
+	go func() {
+		<-done
+		close(waiterUnblocked)
+	}()
+
+	// The run goroutine deliberately never calls UnregisterRun.
+	res := r.AbortRun(runID, sessionKey)
+	if !res.Forced {
+		t.Fatalf("expected Forced=true for a stuck run, got %+v", res)
+	}
+
+	select {
+	case <-waiterUnblocked:
+		// Done was released by the forced-abort path — the worker can proceed.
+	case <-time.After(time.Second):
+		t.Fatal("forced abort did not release Done; a FIFO waiter would hang forever")
+	}
+
+	// Session index must be cleared so the session is no longer reported busy.
+	if r.IsSessionBusy(sessionKey) {
+		t.Fatal("forced abort must clear the session index (session still busy)")
+	}
+	// The run entry must be gone so a later Resolve/status does not resurrect it.
+	if _, ok := r.activeRuns.Load(runID); ok {
+		t.Fatal("forced abort must remove the run from activeRuns")
+	}
+}
+
+// TestAbortRun_ForcedThenLateUnregisterNoPanic verifies that after a forced
+// abort has already unregistered a stuck run (7A-C2), the real goroutine
+// eventually calling UnregisterRun is a safe idempotent no-op (no double-close
+// panic, no resurrection).
+func TestAbortRun_ForcedThenLateUnregisterNoPanic(t *testing.T) {
+	r := NewRouter()
+	runID := "run-forced-late"
+	sessionKey := "session-forced-late"
+	_, done := registerRun(r, runID, sessionKey)
+
+	res := r.AbortRun(runID, sessionKey)
+	if !res.Forced {
+		t.Fatalf("expected Forced=true, got %+v", res)
+	}
+	// Late unregister from the goroutine that finally noticed cancellation.
+	r.UnregisterRun(runID) // must not panic
+	select {
+	case <-done:
+	default:
+		t.Fatal("Done should already be closed after forced abort")
+	}
+}
+
+// TestAbortRun_ForcedInvokesOnForcedAbortOnce verifies the Phase 7 closure item 2
+// callback contract at the router seam: a run registered via
+// RegisterRunWithOptions with a non-nil onForcedAbort that is genuinely stuck
+// (never UnregisterRun) has its callback invoked exactly once by the forced-abort
+// branch, and Done is released so a FIFO waiter advances. This is the settle-turn
+// hook WS wires to send the cancelled RPC + terminal at the force boundary.
+func TestAbortRun_ForcedInvokesOnForcedAbortOnce(t *testing.T) {
+	r := NewRouter()
+	runID := "run-forced-cb"
+	sessionKey := "session-forced-cb"
+
+	var cbCalls atomic.Int32
+	_, cancel := context.WithCancel(context.Background())
+	_, _ = r.RegisterRunWithOptions(context.Background(), runID, sessionKey, "agent-1", "", cancel, func() {
+		cbCalls.Add(1)
+	})
+	val, _ := r.activeRuns.Load(runID)
+	done := val.(*ActiveRun).Done
+
+	// The run goroutine deliberately never calls UnregisterRun → forced branch.
+	res := r.AbortRun(runID, sessionKey)
+	if !res.Forced {
+		t.Fatalf("expected Forced=true for a stuck run, got %+v", res)
+	}
+	if got := cbCalls.Load(); got != 1 {
+		t.Fatalf("onForcedAbort invoked %d times, want exactly 1", got)
+	}
+	// Done must be released so a FIFO worker waiting on it can proceed.
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("forced abort did not release Done after invoking onForcedAbort")
+	}
+}
+
+// TestAbortRun_ForcedCallbackNotInvokedTwiceUnderConcurrentAbort verifies that
+// forceOnce bounds the callback to at-most-once even when many AbortRun calls
+// race the same stuck run (Phase 7 closure item 2). Only one caller wins the CAS
+// and reaches the forced branch, but the guard must hold regardless.
+func TestAbortRun_ForcedCallbackNotInvokedTwiceUnderConcurrentAbort(t *testing.T) {
+	r := NewRouter()
+	runID := "run-forced-concurrent-cb"
+	sessionKey := "session-forced-concurrent-cb"
+
+	var cbCalls atomic.Int32
+	_, cancel := context.WithCancel(context.Background())
+	_, _ = r.RegisterRunWithOptions(context.Background(), runID, sessionKey, "agent-1", "", cancel, func() {
+		cbCalls.Add(1)
+	})
+
+	// Goroutine never unregisters → the winning caller forces after the grace window.
+	const n = 32
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for range n {
+		go func() {
+			defer wg.Done()
+			r.AbortRun(runID, sessionKey)
+		}()
+	}
+	wg.Wait()
+
+	if got := cbCalls.Load(); got != 1 {
+		t.Fatalf("onForcedAbort invoked %d times under concurrent abort, want exactly 1", got)
+	}
+}
+
+// TestAbortRun_StoppedDoesNotInvokeOnForcedAbort verifies the callback is scoped
+// to the forced branch only: a run that exits within the grace window is Stopped,
+// and its onForcedAbort must never fire (Phase 7 closure item 2 — the WS RPC/turn
+// settles through the run goroutine's own normal path, not the force hook).
+func TestAbortRun_StoppedDoesNotInvokeOnForcedAbort(t *testing.T) {
+	r := NewRouter()
+	runID := "run-stopped-cb"
+	sessionKey := "session-stopped-cb"
+
+	var cbCalls atomic.Int32
+	_, cancel := context.WithCancel(context.Background())
+	_, _ = r.RegisterRunWithOptions(context.Background(), runID, sessionKey, "agent-1", "", cancel, func() {
+		cbCalls.Add(1)
+	})
+
+	go func() {
+		time.Sleep(30 * time.Millisecond)
+		r.UnregisterRun(runID)
+	}()
+
+	res := r.AbortRun(runID, sessionKey)
+	if !res.Stopped {
+		t.Fatalf("expected Stopped=true, got %+v", res)
+	}
+	if got := cbCalls.Load(); got != 0 {
+		t.Fatalf("onForcedAbort invoked %d times on a graceful stop, want 0", got)
 	}
 }
 

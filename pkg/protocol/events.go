@@ -38,19 +38,25 @@ const (
 	EventDelegationAnnounce    = "delegation.announce"
 
 	// Team task lifecycle events.
-	EventTeamTaskClaimed         = "team.task.claimed"
-	EventTeamTaskCancelled       = "team.task.cancelled"
-	EventTeamTaskFailed          = "team.task.failed"
-	EventTeamTaskReviewed        = "team.task.reviewed"
-	EventTeamTaskApproved        = "team.task.approved"
-	EventTeamTaskRejected        = "team.task.rejected"
-	EventTeamTaskProgress        = "team.task.progress"
-	EventTeamTaskCommented       = "team.task.commented"
-	EventTeamTaskAssigned        = "team.task.assigned"
-	EventTeamTaskDispatched      = "team.task.dispatched"
-	EventTeamTaskUpdated         = "team.task.updated"
-	EventTeamTaskDeleted         = "team.task.deleted"
-	EventTeamTaskStale           = "team.task.stale"
+	EventTeamTaskClaimed    = "team.task.claimed"
+	EventTeamTaskCancelled  = "team.task.cancelled"
+	EventTeamTaskFailed     = "team.task.failed"
+	EventTeamTaskReviewed   = "team.task.reviewed"
+	EventTeamTaskApproved   = "team.task.approved"
+	EventTeamTaskRejected   = "team.task.rejected"
+	EventTeamTaskProgress   = "team.task.progress"
+	EventTeamTaskCommented  = "team.task.commented"
+	EventTeamTaskAssigned   = "team.task.assigned"
+	EventTeamTaskDispatched = "team.task.dispatched"
+	EventTeamTaskUpdated    = "team.task.updated"
+	EventTeamTaskDeleted    = "team.task.deleted"
+	EventTeamTaskStale      = "team.task.stale"
+	// EventTeamTaskBlocked is the authoritative refetch hint for a workflow-work
+	// task that transitioned in_progress→blocked. Unlike EventTeamTaskFailed it
+	// does NOT imply the workflow failed: the coordinator resolves the blocker via
+	// recovery (retry/replan/cancel/fail), so clients must refetch task+workflow
+	// state rather than treat the step as terminally dead.
+	EventTeamTaskBlocked         = "team.task.blocked"
 	EventTeamTaskAttachmentAdded = "team.task.attachment_added"
 
 	// Emitted when leader starts processing completed team task results (before announce run).
@@ -62,6 +68,9 @@ const (
 	EventTeamDeleted       = "team.deleted"
 	EventTeamMemberAdded   = "team.member.added"
 	EventTeamMemberRemoved = "team.member.removed"
+
+	// Token-free workflow invalidation hint. Clients refetch authoritative detail.
+	EventTeamWorkflowUpdated = "team.workflow.updated"
 
 	// Workspace events (team file changes).
 	EventWorkspaceFileChanged = "workspace.file.changed"
@@ -96,6 +105,15 @@ const (
 
 	// Session lifecycle events.
 	EventSessionUpdated = "session.updated"
+
+	// EventChatTurn carries the logical turn lifecycle for a WS chat.send (Phase 7
+	// Decision 4). It is keyed by a stable turnId assigned before enqueue, so a
+	// turn that is queued behind an active run or being classified — states that
+	// exist BEFORE any runId — still has an observable lifecycle. Exactly one
+	// terminal state (completed/cancelled/failed) is emitted per turn. These are
+	// status/refetch hints only: the assistant result continues to flow through
+	// the normal run/history path and is NEVER duplicated into this event.
+	EventChatTurn = "chat.turn"
 
 	// Zalo Personal QR login events (client-scoped, not broadcast).
 	EventZaloPersonalQRCode = "zalo.personal.qr.code"
@@ -151,4 +169,17 @@ const (
 	ChatEventChunk    = "chunk"
 	ChatEventMessage  = "message"
 	ChatEventThinking = "thinking"
+)
+
+// Chat turn lifecycle states (in EventChatTurn payload.state), Phase 7 Decision
+// 4. A turn moves queued → running → exactly one terminal (completed | cancelled
+// | failed). The primary (non-queued) turn skips `queued` and starts at
+// `running`. `running` carries the runId once the run registers, linking the
+// stable turnId to the router run.
+const (
+	ChatTurnQueued    = "queued"
+	ChatTurnRunning   = "running"
+	ChatTurnCompleted = "completed"
+	ChatTurnCancelled = "cancelled"
+	ChatTurnFailed    = "failed"
 )

@@ -1,6 +1,9 @@
 // Team service — wraps WS teams.* calls
 import { getWsClient } from '../lib/ws'
-import type { TeamData, TeamMemberData, TeamTaskData, TeamTaskAttachment } from '../types/team'
+import type {
+  TeamData, TeamMemberData, TeamTaskData, TeamTaskAttachment,
+  TeamWorkflowDetailResponse, TeamWorkflowActionRequest, TeamWorkflowActionResponse,
+} from '../types/team'
 
 export interface TeamCreateParams {
   name: string
@@ -69,12 +72,22 @@ export const teamService = {
     return getWsClient().call('teams.tasks.get-light', { teamId, taskId }) as Promise<{ task: TeamTaskData }>
   },
 
-  createTask(teamId: string, params: TaskCreateParams): Promise<TeamTaskData> {
-    return getWsClient().call('teams.tasks.create', { teamId, ...params }) as Promise<TeamTaskData>
+  async createTask(teamId: string, params: TaskCreateParams): Promise<TeamTaskData> {
+    const response = await getWsClient().call('teams.tasks.create', { teamId, ...params }) as { task: TeamTaskData }
+    return response.task
   },
 
-  assignTask(teamId: string, taskId: string, agentKey: string): Promise<TeamTaskData> {
-    return getWsClient().call('teams.tasks.assign', { teamId, taskId, agentId: agentKey }) as Promise<TeamTaskData>
+  async assignTask(teamId: string, taskId: string, agentKey: string): Promise<TeamTaskData> {
+    const response = await getWsClient().call('teams.tasks.assign', { teamId, taskId, agentId: agentKey }) as { task: TeamTaskData }
+    return response.task
+  },
+
+  getWorkflow(teamId: string, workflowId: string): Promise<TeamWorkflowDetailResponse> {
+    return getWsClient().call('teams.workflows.get', { teamId, workflowId }) as Promise<TeamWorkflowDetailResponse>
+  },
+
+  applyWorkflowAction(params: TeamWorkflowActionRequest): Promise<TeamWorkflowActionResponse> {
+    return getWsClient().call('teams.workflows.action', params as unknown as Record<string, unknown>) as Promise<TeamWorkflowActionResponse>
   },
 
   deleteTask(teamId: string, taskId: string): Promise<unknown> {

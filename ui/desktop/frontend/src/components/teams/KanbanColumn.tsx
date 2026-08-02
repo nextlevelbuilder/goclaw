@@ -1,16 +1,8 @@
 import { AnimatePresence, LayoutGroup } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import type { TaskStatus, TeamTaskData, TeamMemberData } from '../../types/team'
 import { STATUS_COLORS } from '../../types/team'
 import { KanbanCard } from './KanbanCard'
-
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  pending: 'Pending',
-  blocked: 'Blocked',
-  in_progress: 'In Progress',
-  completed: 'Completed',
-  failed: 'Failed',
-  cancelled: 'Cancelled',
-}
 
 interface KanbanColumnProps {
   status: TaskStatus
@@ -20,6 +12,7 @@ interface KanbanColumnProps {
 }
 
 export function KanbanColumn({ status, tasks, members, onTaskClick }: KanbanColumnProps) {
+  const { t } = useTranslation('teams')
   const memberMap = new Map(members.map((m) => [m.agent_id, m]))
 
   return (
@@ -27,7 +20,7 @@ export function KanbanColumn({ status, tasks, members, onTaskClick }: KanbanColu
       {/* Column header */}
       <div className="flex items-center gap-2 px-3 py-2.5">
         <div className={`w-2.5 h-2.5 rounded-full ${STATUS_COLORS[status]}`} />
-        <span className="text-xs font-medium text-text-primary capitalize">{STATUS_LABELS[status]}</span>
+        <span className="text-xs font-medium text-text-primary capitalize">{t(`taskStatus.${status}`)}</span>
         <span className="ml-auto text-[10px] text-text-muted bg-surface-tertiary px-1.5 py-0.5 rounded-full">
           {tasks.length}
         </span>
@@ -37,7 +30,7 @@ export function KanbanColumn({ status, tasks, members, onTaskClick }: KanbanColu
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto overscroll-contain px-2 pb-2">
         {tasks.length === 0 ? (
           <div className="py-3 text-center text-[10px] text-text-muted opacity-50">
-            No tasks
+            {t('noTasks')}
           </div>
         ) : (
           <LayoutGroup>

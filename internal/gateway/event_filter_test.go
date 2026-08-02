@@ -124,6 +124,17 @@ func TestClientCanReceiveEvent_TenantMismatch_Blocked(t *testing.T) {
 	}
 }
 
+func TestClientCanReceiveEvent_CrossTenantTaskDeleteBlockedForOwner(t *testing.T) {
+	owner := makeClient(permissions.RoleOwner, "owner", otherTenant)
+	evt := bus.Event{
+		EventID: uuid.New(), Name: protocol.EventTeamTaskDeleted, TenantID: masterTenant,
+		Payload: protocol.TeamTaskEventPayload{TeamID: "team-secret", TaskID: "task-secret"},
+	}
+	if clientCanReceiveEvent(owner, evt) {
+		t.Fatal("owner from another tenant received a task delete event")
+	}
+}
+
 func TestClientCanReceiveEvent_UnscopedEvent_OnlyOwnerReceives(t *testing.T) {
 	// Event with no tenant — only owner-role clients should get it.
 	ownerClient := makeClient(permissions.RoleOwner, "owner", masterTenant)
@@ -177,6 +188,38 @@ func TestClientCanReceiveEvent_TeamEvent_FilteredByTeamID(t *testing.T) {
 	}
 	if clientCanReceiveEvent(c, evtOtherTeam) {
 		t.Error("user should NOT receive events for teams they don't belong to")
+	}
+}
+
+func TestClientCanReceiveEvent_TeamAndDelegationEventsWithoutTeamIDBlocked(t *testing.T) {
+	c := makeClient(permissions.RoleOperator, "user", masterTenant)
+	c.SetTeamAccess([]string{"team-1"})
+
+	for _, name := range []string{protocol.EventTeamLeaderProcessing, protocol.EventDelegationProgress} {
+		if clientCanReceiveEvent(c, makeEvent(name, masterTenant, map[string]any{"agentId": "agent-1"})) {
+			t.Errorf("%s without team ID should fail closed", name)
+		}
+	}
+}
+
+func TestClientCanReceiveEvent_WorkflowUpdateFilteredByTenantAndTeam(t *testing.T) {
+	c := makeClient(permissions.RoleOperator, "user", masterTenant)
+	c.SetTeamAccess([]string{"team-1"})
+	payload := protocol.TeamWorkflowUpdatedPayload{
+		TenantID: masterTenant.String(), TeamID: "team-1", WorkflowID: "workflow-1",
+		Action: "retry_blocked", Status: "running", PlanRevision: 2, Outcome: "applied",
+	}
+
+	if !clientCanReceiveEvent(c, makeEvent(protocol.EventTeamWorkflowUpdated, masterTenant, payload)) {
+		t.Fatal("user should receive workflow updates for an accessible team")
+	}
+	payload.TeamID = "team-2"
+	if clientCanReceiveEvent(c, makeEvent(protocol.EventTeamWorkflowUpdated, masterTenant, payload)) {
+		t.Fatal("user received workflow update for an inaccessible team")
+	}
+	payload.TeamID = "team-1"
+	if clientCanReceiveEvent(c, makeEvent(protocol.EventTeamWorkflowUpdated, otherTenant, payload)) {
+		t.Fatal("user received workflow update from another tenant")
 	}
 }
 

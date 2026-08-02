@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,8 +37,10 @@ type Client struct {
 	pairedSenderID string // senderID used for browser pairing auth (for revocation lookup)
 	pairedChannel  string // channel used for pairing auth (e.g., "browser")
 
-	// Team access cache for event filtering (lazily populated).
-	teamIDs map[string]bool
+	// Team access snapshot for event filtering. It is replaced atomically after
+	// connect and on access invalidation; event delivery never queries storage.
+	teamAccessMu sync.RWMutex
+	teamIDs      map[string]bool
 
 	tenantID   uuid.UUID // resolved tenant; always concrete after connect
 	tenantName string    // resolved tenant display name (set during connect)
@@ -240,25 +243,27 @@ func (c *Client) HasScope(scope permissions.Scope) bool {
 	return slices.Contains(c.scopes, scope)
 }
 
-// hasTeamAccess checks if the client has access to a team (for event filtering).
-// Returns true for admin role. For others, checks the lazily-populated teamIDs cache.
-// TODO: populate teamIDs from team_user_grants on connect or first team event.
+// hasTeamAccess checks the client-local, tenant-bound team access snapshot.
+// It must stay storage-free because it runs in the event fan-out hot path.
 func (c *Client) hasTeamAccess(teamID string) bool {
 	if permissions.HasMinRole(c.role, permissions.RoleAdmin) {
 		return true
 	}
-	if c.teamIDs == nil {
-		return false
-	}
+	c.teamAccessMu.RLock()
+	defer c.teamAccessMu.RUnlock()
 	return c.teamIDs[teamID]
 }
 
-// SetTeamAccess sets the team access cache for this client.
+// SetTeamAccess replaces the client-local team access snapshot. The input is
+// copied so callers cannot mutate the snapshot after publishing it.
 func (c *Client) SetTeamAccess(teamIDs []string) {
-	c.teamIDs = make(map[string]bool, len(teamIDs))
+	snapshot := make(map[string]bool, len(teamIDs))
 	for _, id := range teamIDs {
-		c.teamIDs[id] = true
+		snapshot[id] = true
 	}
+	c.teamAccessMu.Lock()
+	c.teamIDs = snapshot
+	c.teamAccessMu.Unlock()
 }
 
 // Close shuts down the client connection.

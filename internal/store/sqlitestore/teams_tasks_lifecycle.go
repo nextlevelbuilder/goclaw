@@ -43,7 +43,7 @@ func (s *SQLiteTeamStore) AssignTask(ctx context.Context, taskID, agentID, teamI
 	tid := tenantIDForInsert(ctx)
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE team_tasks SET status = ?, owner_agent_id = ?, locked_at = ?, lock_expires_at = ?, updated_at = ?
-		 WHERE id = ? AND team_id = ? AND status = ? AND tenant_id = ?`,
+		 WHERE id = ? AND team_id = ? AND status = ? AND tenant_id = ? AND workflow_id IS NULL`,
 		store.TeamTaskStatusInProgress, agentID, now, lockExpires, now,
 		taskID, teamID, store.TeamTaskStatusPending, tid,
 	)

@@ -243,6 +243,9 @@ func processNormalMessage(
 	// Build outbound metadata for reply-to + thread routing BEFORE RegisterRun
 	// so block.reply handler can use it for routing intermediate messages.
 	outMeta := channels.CopyFinalRoutingMeta(msg.Metadata)
+	if locale := msg.Metadata["locale"]; locale != "" {
+		outMeta["locale"] = locale
+	}
 	if isGroup {
 		if mid := msg.Metadata["message_id"]; mid != "" {
 			outMeta["reply_to_message_id"] = mid
@@ -413,24 +416,14 @@ func processNormalMessage(
 				}
 				return
 			case agent.IntentSteer:
-				// Steer: inject into running loop to redirect/add to current task.
-				injected := deps.Agents.InjectMessage(sessionKey, agent.InjectedMessage{
-					Content: msg.Content,
-					UserID:  userID,
-				})
-				if injected {
-					slog.Info("inbound: injected steer message",
-						"session", sessionKey)
-					deps.MsgBus.PublishOutbound(bus.OutboundMessage{
-						Channel:  msg.Channel,
-						ChatID:   msg.ChatID,
-						Content:  i18n.T(locale, i18n.MsgInjectedAck),
-						Metadata: outMeta,
-					})
-					return
-				}
-				// Fallback: injection failed (channel full) → fall through to scheduler queue
-				slog.Info("inbound: steer injection failed, queueing as normal",
+				// Plan §1.3.6/§7: no implicit steering. An ordinary busy
+				// follow-up — even one the classifier reads as a steer — is an
+				// independent queued turn, NOT a mid-run injection. Fall through
+				// to the scheduler queue exactly like IntentNewTask so it is
+				// classified once, at dequeue, against the latest history. (If a
+				// typed steer-active-run API is ever needed it will be an explicit
+				// contract, not this implicit classifier branch.)
+				slog.Info("inbound: steer queued behind active run",
 					"session", sessionKey)
 			case agent.IntentNewTask:
 				// New unrelated request: fall through to scheduler queue
@@ -442,22 +435,18 @@ func processNormalMessage(
 
 	inboundMessage := msg.Content
 
-	// Inject tenant context from channel instance so all store queries are tenant-scoped.
-	if msg.TenantID != uuid.Nil {
-		ctx = store.WithTenantID(ctx, msg.TenantID)
-	}
-
-	gate := applyTeamWorkGateForInbound(ctx, deps, msg, sessionKey, agentID, peerKind, agentLoop.UUID(), skillFilter, agentLoop.Provider(), agentLoop.Model())
-	inboundMessage = gate.Message
-
-	// Inject post-turn dispatch tracker so team task creates are deferred.
+	// Post-turn dispatch tracker: created BEFORE enqueue so the dequeue-time gate
+	// (PreRun) and the post-turn drain goroutine (further below) share one instance.
+	// Team task creates during the run register into this tracker via the context
+	// PreRun injects, and are drained here after the run completes.
 	ptd := tools.NewPendingTeamDispatch()
-	schedCtx := tools.WithPendingTeamDispatch(ctx, ptd)
 
-	// Propagate run_kind from metadata (e.g. "notification" for team task status relays).
-	if rk := msg.Metadata["run_kind"]; rk != "" {
-		schedCtx = tools.WithRunKind(schedCtx, rk)
-	}
+	// DEQUEUE-TIME TEAM WORK GATE (Phase 7 review 7A-H1 + Phase 6 audit-before-run).
+	// The scheduler invokes this hook at the moment the run actually starts — after
+	// any preceding run for this serial session has completed and immediately before
+	// loop.Run — so classification reads the latest history and its durable audit is
+	// still written before the run begins. See buildInboundPreRun.
+	preRun := buildInboundPreRun(deps, msg, sessionKey, agentID, peerKind, agentLoop, skillFilter, runID, ptd, outMeta)
 
 	// Resolve effective sender: prefer MetaOriginSenderID when the on-wire
 	// SenderID is an internal/synthetic one (e.g. "notification:progress",
@@ -482,8 +471,12 @@ func processNormalMessage(
 	// upstream dispatch set MetaOriginRole.
 	effectiveRole := msg.Metadata[tools.MetaOriginRole]
 
-	// Schedule through main lane (per-session concurrency controlled by maxConcurrent)
-	outCh := deps.Sched.ScheduleWithOpts(schedCtx, "main", agent.RunRequest{
+	// Schedule through main lane (per-session concurrency controlled by maxConcurrent).
+	// Enqueue under ctx (not a gate-augmented context): the Team Work gate runs at
+	// dequeue via PreRun, so TeamWorkDirective/DisableTeamWork/BlockedTools and the
+	// per-turn context values are set there against the latest history (7A-H1), not
+	// here. Message is msg.Content; PreRun re-affirms it (the gate never rewrites it).
+	outCh := deps.Sched.ScheduleWithOpts(ctx, "main", agent.RunRequest{
 		SessionKey:   sessionKey,
 		Message:      inboundMessage,
 		Media:        reqMedia,
@@ -509,10 +502,11 @@ func processNormalMessage(
 		ToolAllow:                  msg.ToolAllow,
 		TelegramManagerPermissions: msg.TelegramManagerPermissions,
 		ExtraSystemPrompt:          extraPrompt,
-		TeamWorkDirective:          gate.Directive,
 		SkillFilter:                skillFilter,
+		RoutingMetadata:            outMeta,
 	}, scheduler.ScheduleOpts{
 		MaxConcurrent: maxConcurrent,
+		PreExecute:    preRun,
 	})
 
 	// Handle result asynchronously to not block the flush callback.
@@ -540,10 +534,38 @@ func processNormalMessage(
 		}
 
 		if outcome.Err != nil {
+			// Outer-delivery fence (Phase 7 closure item 1): a run that lost session
+			// ownership (force-aborted or superseded by a replacement on this session)
+			// returns ErrRunOwnershipLost. Its inner guards already suppressed the
+			// history/session commit and run.completed; the replacement/current owner is
+			// responsible for user delivery. Suppress here — publish NO stale content,
+			// NO technical error, and NO empty outbound from this stale run. The
+			// UnregisterRun cleanup above still ran. Must precede the context.Canceled
+			// and generic error branches so nothing from the old run reaches the user.
+			if errors.Is(outcome.Err, agent.ErrRunOwnershipLost) {
+				slog.Info("inbound: suppressed stale run result", "channel", channel, "session", session, "run", rID)
+				return
+			}
 			// Don't send error for cancelled runs (/stop command) —
 			// publish empty outbound to clean up thinking/typing indicators.
 			if errors.Is(outcome.Err, context.Canceled) {
 				slog.Info("inbound: run cancelled", "channel", channel, "session", session)
+				deps.MsgBus.PublishOutbound(bus.OutboundMessage{
+					Channel:  channel,
+					ChatID:   chatID,
+					Content:  "",
+					Metadata: meta,
+					TenantID: tenantID,
+					AgentID:  agentUUID,
+				})
+				return
+			}
+			// Non-executable coordinated request (Correction A fail-closed): the
+			// PreRun hook already published the user-facing config error. Publish an
+			// empty outbound ONLY to clean up thinking/typing indicators — do not
+			// republish error text, and do not log the abort as a run failure.
+			if errors.Is(outcome.Err, errInboundConfigDelivered) {
+				slog.Info("inbound: non-executable team work config error delivered; cleaning up indicators", "channel", channel, "session", session)
 				deps.MsgBus.PublishOutbound(bus.OutboundMessage{
 					Channel:  channel,
 					ChatID:   chatID,
@@ -660,6 +682,100 @@ func processNormalMessage(
 			go autoSetFollowup(ctx, deps.TeamStore, deps.AgentStore, agentKey, channel, chatID, replyContent)
 		}
 	}(agentID, msg.Channel, msg.ChatID, sessionKey, runID, peerKind, inboundMessage, outMeta, blockReply, chatBehavior, channelStream, ptd, msg.TenantID, agentLoop.UUID(), agentLoop.OtherConfig())
+}
+
+// errInboundConfigDelivered is returned by the inbound PreRun hook when a
+// non-executable coordinated request is rejected (Correction A fail-closed). The
+// hook has already published the user-facing configuration error outbound, so the
+// consumer result goroutine recognizes this sentinel and publishes an empty
+// outbound ONLY to clean up thinking/typing indicators — it must NOT republish the
+// error text (which the generic-error branch would suppress on public channels
+// anyway) and must not log the abort as a run failure.
+var errInboundConfigDelivered = errors.New("inbound: non-executable team work config error delivered")
+
+// buildInboundPreRun returns the scheduler PreRun hook that runs the inbound Team
+// Work gate at dequeue (Phase 7 review 7A-H1). The scheduler invokes it at the
+// moment the run starts — after any preceding run for this serial session has
+// completed and immediately before loop.Run — so two invariants hold together:
+//
+//  1. Latest history (7A-H1): a busy follow-up is classified against the history
+//     the preceding run just wrote, not the history captured at enqueue.
+//  2. Audit-before-run (Phase 6): applyTeamWorkGateForInbound writes the durable
+//     classification audit synchronously, and because PreRun precedes loop.Run the
+//     run still cannot begin before its audit persists.
+//
+// The hook rebuilds every per-turn value from the gate outcome and binds it to
+// THIS run: it mutates the dequeued *agent.RunRequest in place
+// (Message/TeamWorkDirective/DisableTeamWork/BlockedTools) and returns a context
+// carrying the shared pending-dispatch tracker, the plan or owner constraint, the
+// audit ID, and run_kind. Rebinding at dequeue (rather than threading these onto
+// the enqueue context) is required for correctness on the busy path: the scheduler
+// runs a queued follow-up under the session's first-enqueue context, so a value
+// injected at enqueue would bind to the wrong turn. ptd is created before enqueue
+// and shared with the post-turn drain goroutine.
+func buildInboundPreRun(
+	deps *ConsumerDeps,
+	msg bus.InboundMessage,
+	sessionKey, agentID, peerKind string,
+	agentLoop agent.Agent,
+	skillFilter []string,
+	runID string,
+	ptd *tools.PendingTeamDispatch,
+	outMeta map[string]string,
+) scheduler.PreExecuteHook {
+	return func(runCtx context.Context, req *agent.RunRequest) (context.Context, error) {
+		gate := applyTeamWorkGateForInbound(runCtx, deps, msg, sessionKey, agentID, peerKind, agentLoop.UUID(), skillFilter, agentLoop.Provider(), agentLoop.Model(), runID)
+		req.Message = gate.Message
+		req.TeamWorkDirective = gate.Directive
+		req.DisableTeamWork = gate.DisableTeamWork
+		req.BlockedTools = gate.BlockedTools
+
+		execCtx := tools.WithPendingTeamDispatch(runCtx, ptd)
+		// A coordinator directive carries the canonical lead as BestTeamOwner but
+		// must not receive the single-owner constraint: the lead authors a
+		// multi-task DAG (team_tasks create_dag) that fans out to many assignees.
+		if gate.Directive != nil && strings.TrimSpace(gate.Directive.BestTeamOwner) != "" && gate.Directive.Mode != agent.TeamWorkDirectiveModeCoordinator {
+			execCtx = tools.WithTeamWorkOwnerConstraint(execCtx, tools.TeamWorkOwnerConstraint{
+				OwnerID:  gate.Directive.BestTeamOwnerID,
+				OwnerKey: strings.TrimSpace(gate.Directive.BestTeamOwner),
+			})
+		}
+		if gate.AuditID != uuid.Nil {
+			execCtx = tools.WithTeamWorkClassificationAuditID(execCtx, gate.AuditID)
+		}
+		if gate.Directive != nil && gate.Directive.Mode == agent.TeamWorkDirectiveModeCoordinator && gate.Directive.ReviewRequired {
+			execCtx = tools.WithTeamWorkReviewRequired(execCtx, true)
+		}
+		// Propagate run_kind from metadata (e.g. "notification" for team task status relays).
+		if rk := msg.Metadata["run_kind"]; rk != "" {
+			execCtx = tools.WithRunKind(execCtx, rk)
+		}
+		// Non-executable coordinated request (Correction A fail-closed): a valid
+		// explicit multi-task team request that the team cannot run must NOT be
+		// executed as self. Deliver the user-facing configuration error now — the
+		// inbound generic-error branch suppresses error text on public channels, so
+		// a bare hook error would leave the user with silence — then abort the run
+		// with a sentinel the consumer recognizes as already-delivered.
+		if gate.NonExecutable {
+			locale := i18n.Normalize(msg.Metadata["locale"])
+			slog.Info("inbound: non-executable team work; delivering config error and aborting run",
+				"agent", agentID, "session", sessionKey, "run", runID,
+				"config_error_code", gate.ConfigErrorCode)
+			deps.MsgBus.PublishOutbound(bus.OutboundMessage{
+				Channel:  msg.Channel,
+				ChatID:   msg.ChatID,
+				Content:  i18n.T(locale, i18n.MsgTeamNotExecutable),
+				Metadata: outMeta,
+				TenantID: msg.TenantID,
+				AgentID:  agentLoop.UUID(),
+			})
+			return execCtx, errInboundConfigDelivered
+		}
+		// Otherwise the inbound gate never aborts the run: a degraded/failed
+		// classification fails safe to direct/self (DisableTeamWork + nil directive
+		// + blocked orchestration tools) rather than refusing the turn.
+		return execCtx, nil
+	}
 }
 
 func buildDeliveryRuntime(ctx context.Context, deps *ConsumerDeps, agentLoop agent.Agent, behavior channels.ResolvedChatBehavior, msg bus.InboundMessage, userID, peerKind, channelType, agentKey string) channels.DeliveryRuntime {

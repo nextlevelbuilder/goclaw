@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -19,6 +20,42 @@ const (
 	// MaxFilesPerScope is the exported form of maxFilesPerScope for HTTP handlers.
 	MaxFilesPerScope = maxFilesPerScope
 )
+
+// scopeQuotaWindow is the age window the file quota applies over. The quota
+// exists to stop a looping agent from flooding a shared workspace, and a burst
+// like that happens within minutes — counting a scope's ENTIRE history instead
+// punished teams for working a long time: a real team workspace here reached
+// 103 files accumulated since April and write_file started failing with
+// "workspace file limit reached (103/100)" during ordinary work, while 48 files
+// in subdirectories were never counted at all. Counting only recent writes keeps
+// the burst protection (100 new files in 7 days is far past any real pace) and
+// removes the permanent ceiling.
+const scopeQuotaWindow = 7 * 24 * time.Hour
+
+// CountRecentScopeFiles returns how many files at the top level of dir were
+// modified within scopeQuotaWindow. Directories are skipped, matching the
+// original quota's shape. An unreadable entry is counted as recent: failing
+// closed on a stat error is safer than letting an unbounded loop through, and a
+// caller that cannot read the directory at all gets 0 and proceeds, which is the
+// pre-existing fail-open behaviour for a missing scope dir.
+func CountRecentScopeFiles(dir string) int {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	cutoff := time.Now().Add(-scopeQuotaWindow)
+	count := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		info, infoErr := entry.Info()
+		if infoErr != nil || !info.ModTime().Before(cutoff) {
+			count++
+		}
+	}
+	return count
+}
 
 // WorkspaceDir returns the disk directory for a team workspace scope.
 // - chatID="" → team root: {baseDir}/teams/{teamID}/         (shared mode)

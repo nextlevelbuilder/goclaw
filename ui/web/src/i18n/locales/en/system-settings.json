@@ -35,8 +35,11 @@
     "intentClassifyInfo": "This only applies while a session is busy; it does not decide whether a request needs team workflow.",
     "teamWorkClassify": "Team Work Classification",
     "teamWorkClassifyHint": "Classify new requests as direct handling or team/delegate workflow.",
-    "teamWorkClassifyInfo": "When a request exceeds the current agent's scope or should be split, the system uses embeddings as evidence and asks the model to decide between direct handling and team/delegate workflow. The system also checks lead/member permissions; members can only create help requests when the team has enabled member requests and auto-dispatch.",
-    "teamWorkClassifyEmbeddingRequired": "Configure embeddings before enabling Team Work Classification."
+    "teamWorkClassifyInfo": "When a request exceeds the current agent scope or should be split, a single LLM routing call chooses direct handling or team/delegate workflow. No embedding provider is required. Leave Provider/Model as Agent default to use the current agent; provider-only uses that provider default model.",
+    "teamWorkClassifyProvider": "Provider",
+    "teamWorkClassifyModel": "Model",
+    "teamWorkClassifyProviderPlaceholder": "Agent default",
+    "teamWorkClassifyModelPlaceholder": "Agent default"
   },
   "kg": {
     "title": "Knowledge Graph",

@@ -128,7 +128,10 @@ func TestHooksB2_MemoryBombBoundedByTimeout(t *testing.T) {
 	// Either timeout (script exceeded its budget) or allow (bomb completed
 	// fast enough — unlikely but acceptable). What MUST hold: process alive
 	// + bounded wall time.
-	if elapsed > 2500*time.Millisecond {
+	// The race detector can add several seconds of teardown latency after the
+	// watchdog fires. Keep this wall guard bounded without treating
+	// race-instrumented cleanup as a watchdog failure.
+	if elapsed > 5*time.Second {
 		t.Fatalf("watchdog did not interrupt in bounded time: %v (dec=%v)", elapsed, dec)
 	}
 }

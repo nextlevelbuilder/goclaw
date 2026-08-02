@@ -4,8 +4,11 @@ package sqlitestore
 
 import (
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 // TestEnsureSchema_FreshDB verifies schema.sql + all migrations apply cleanly on a fresh DB.
@@ -112,6 +115,233 @@ func TestEnsureSchema_IdempotentRerun(t *testing.T) {
 	if err := EnsureSchema(db); err != nil {
 		t.Fatalf("second EnsureSchema (idempotent) failed: %v", err)
 	}
+}
+
+func TestEnsureSchema_RejectsSchemaAheadVersion(t *testing.T) {
+	db := openTestDB(t)
+	if err := EnsureSchema(db); err != nil {
+		t.Fatalf("initial EnsureSchema: %v", err)
+	}
+
+	ahead := SchemaVersion + 1
+	if _, err := db.Exec(`UPDATE schema_version SET version = ?`, ahead); err != nil {
+		t.Fatalf("set schema-ahead version: %v", err)
+	}
+
+	err := EnsureSchema(db)
+	if err == nil {
+		t.Fatal("EnsureSchema accepted a database schema newer than this binary")
+	}
+	want := fmt.Sprintf(
+		"sqlite: database schema version %d is newer than supported version %d",
+		ahead, SchemaVersion,
+	)
+	if err.Error() != want {
+		t.Fatalf("EnsureSchema error = %q, want %q", err, want)
+	}
+}
+
+func TestSQLiteWorkflowMigrationsTrueV59AndV60Predecessors(t *testing.T) {
+	db := openTestDB(t)
+	if err := EnsureSchema(db); err != nil {
+		t.Fatalf("EnsureSchema: %v", err)
+	}
+	rebuildWorkflowTablesAsV59(t, db)
+
+	for _, column := range []string{"workflow_id", "workflow_step_id", "workflow_kind", "notification_policy", "plan_revision"} {
+		exists, err := sqliteColumnExists(db, "team_tasks", column)
+		if err != nil {
+			t.Fatalf("inspect v59 predecessor team_tasks.%s: %v", column, err)
+		}
+		if exists {
+			t.Fatalf("v59 predecessor unexpectedly contains team_tasks.%s", column)
+		}
+	}
+	for _, table := range []string{"team_workflows", "team_work_classification_audits"} {
+		var count int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&count); err != nil {
+			t.Fatalf("inspect v59 predecessor table %s: %v", table, err)
+		}
+		if count != 0 {
+			t.Fatalf("v59 predecessor unexpectedly contains %s", table)
+		}
+	}
+
+	tenantID, leadID, workerID, teamID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	genericTaskID := uuid.New()
+	if _, err := db.Exec(`INSERT INTO tenants(id,name,slug,status,settings) VALUES(?,?,?,'active','{}')`, tenantID, "Tenant", "tenant-"+tenantID.String()); err != nil {
+		t.Fatal(err)
+	}
+	for id, key := range map[uuid.UUID]string{leadID: "lead", workerID: "worker"} {
+		if _, err := db.Exec(`INSERT INTO agents(id,agent_key,owner_id,provider,model,tenant_id) VALUES(?,?,?,'openai','test',?)`, id, key, "owner", tenantID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO agent_teams(id,name,lead_agent_id,status,settings,created_by,tenant_id) VALUES(?,?,?,'active','{}','owner',?)`, teamID, "Team", leadID, tenantID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO team_tasks(
+		id,team_id,subject,description,status,owner_agent_id,priority,metadata,task_type,tenant_id
+	) VALUES(?,?,?,'legacy task must survive','pending',?,7,'{"keep":"v59"}','general',?)`,
+		genericTaskID, teamID, "Generic v59 task", workerID, tenantID); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := applySQLiteMigration(db, 60, migrations[60], false); err != nil {
+		t.Fatalf("apply true v59 to v60 migration (step key 60): %v", err)
+	}
+	assertSQLiteSchemaVersion(t, db, 61)
+	var subject, description, metadata string
+	var priority int
+	if err := db.QueryRow(`SELECT subject,description,priority,metadata FROM team_tasks WHERE id=?`, genericTaskID).Scan(&subject, &description, &priority, &metadata); err != nil {
+		t.Fatalf("read task after v59 to v60: %v", err)
+	}
+	if subject != "Generic v59 task" || description != "legacy task must survive" || priority != 7 || metadata != `{"keep":"v59"}` {
+		t.Fatalf("v59 task changed: subject=%q description=%q priority=%d metadata=%q", subject, description, priority, metadata)
+	}
+	for _, column := range []string{"workflow_id", "workflow_step_id", "workflow_kind", "workflow_terminal", "dispatch_token", "dispatch_lease_until"} {
+		exists, err := sqliteColumnExists(db, "team_tasks", column)
+		if err != nil || !exists {
+			t.Fatalf("v60 missing team_tasks.%s: exists=%v err=%v", column, exists, err)
+		}
+	}
+
+	workflowID, workTaskID, auditTaskID := uuid.New(), uuid.New(), uuid.New()
+	planHash := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	if _, err := db.Exec(`INSERT INTO team_workflows(
+		id,team_id,tenant_id,status,canonical_plan,schema_version,plan_hash,
+		coordinator_agent_id,coordinator_agent_key,origin_agent_id,origin_agent_key,
+		origin_run_id,origin_session_key,origin_channel,origin_chat_id,origin_routing,
+		expansion_token,finalize_token,failure_summary,result_summary,delivery_status
+	) VALUES(?,?,?,'running','{"steps":["keep"]}',1,?,?,?,?,?,'run-v60','session-v60','ws','chat-v60','{"thread":"keep"}',
+		'expand-v60','finalize-v60','failure-v60','result-v60','enqueuing')`,
+		workflowID, teamID, tenantID, planHash, leadID, "lead", leadID, "lead"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO team_tasks(
+		id,team_id,subject,status,owner_agent_id,metadata,task_type,workflow_id,workflow_step_id,workflow_kind,workflow_terminal,dispatch_token,tenant_id
+	) VALUES(?,?,?,'in_progress',?,'{"keep":"work"}','general',?,'step-1','work',1,'dispatch-v60',?)`,
+		workTaskID, teamID, "Workflow work", workerID, workflowID, tenantID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO team_tasks(
+		id,team_id,subject,status,owner_agent_id,metadata,task_type,workflow_id,workflow_kind,tenant_id
+	) VALUES(?,?,?,'pending',?,'{"keep":"audit"}','general',?,'audit',?)`,
+		auditTaskID, teamID, "Workflow audit", leadID, workflowID, tenantID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE team_workflows SET audit_task_id=?,terminal_task_id=? WHERE id=?`, auditTaskID, workTaskID, workflowID); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := applySQLiteMigration(db, 61, migrations[61], false); err != nil {
+		t.Fatalf("apply v61 notification policy migration: %v", err)
+	}
+	assertSQLiteSchemaVersion(t, db, 62)
+	for taskID, want := range map[uuid.UUID]string{
+		workTaskID:    "workflow_internal",
+		auditTaskID:   "workflow_internal",
+		genericTaskID: "default",
+	} {
+		var got string
+		if err := db.QueryRow(`SELECT notification_policy FROM team_tasks WHERE id=?`, taskID).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Fatalf("task %s policy = %q, want %q", taskID, got, want)
+		}
+	}
+	var linkedWork, linkedAudit string
+	if err := db.QueryRow(`SELECT terminal_task_id,audit_task_id FROM team_workflows WHERE id=?`, workflowID).Scan(&linkedWork, &linkedAudit); err != nil {
+		t.Fatalf("read workflow links after v60 to v61: %v", err)
+	}
+	if linkedWork != workTaskID.String() || linkedAudit != auditTaskID.String() {
+		t.Fatalf("workflow links changed: terminal=%q audit=%q", linkedWork, linkedAudit)
+	}
+	if _, err := db.Exec(`UPDATE team_tasks SET notification_policy='invalid' WHERE id=?`, genericTaskID); err == nil {
+		t.Fatal("notification policy CHECK accepted an invalid value")
+	}
+	assertSQLiteForeignKeysClean(t, db)
+}
+
+func assertSQLiteSchemaVersion(t *testing.T, db *sql.DB, want int) {
+	t.Helper()
+	var got int
+	if err := db.QueryRow(`SELECT version FROM schema_version`).Scan(&got); err != nil {
+		t.Fatalf("read schema version: %v", err)
+	}
+	if got != want {
+		t.Fatalf("schema version = %d, want %d", got, want)
+	}
+}
+
+func rebuildWorkflowTablesAsV59(t *testing.T, db *sql.DB) {
+	t.Helper()
+	// Keep fixture DDL and the connection-local FK pragma on one connection.
+	db.SetMaxOpenConns(1)
+	mustExec(t, db, `PRAGMA foreign_keys=OFF`)
+	mustExec(t, db, `DROP TRIGGER IF EXISTS trg_team_tasks_workflow_insert`)
+	mustExec(t, db, `DROP TRIGGER IF EXISTS trg_team_tasks_workflow_update`)
+	mustExec(t, db, `DROP TABLE team_tasks`)
+	mustExec(t, db, `DROP TABLE team_workflows`)
+	mustExec(t, db, `DROP TABLE team_work_classification_audits`)
+
+	mustExec(t, db, `CREATE TABLE team_tasks (
+		id TEXT NOT NULL PRIMARY KEY,
+		team_id TEXT NOT NULL REFERENCES agent_teams(id) ON DELETE CASCADE,
+		subject VARCHAR(500) NOT NULL,
+		description TEXT,
+		status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','dispatching','in_progress','completed','blocked','failed','in_review','cancelled','stale')),
+		owner_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+		blocked_by TEXT NOT NULL DEFAULT '[]',
+		priority INT NOT NULL DEFAULT 0,
+		result TEXT,
+		metadata TEXT NOT NULL DEFAULT '{}',
+		user_id VARCHAR(255),
+		channel VARCHAR(50),
+		task_type VARCHAR(30) NOT NULL DEFAULT 'general',
+		task_number INT NOT NULL DEFAULT 0,
+		identifier VARCHAR(20),
+		created_by_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+		assignee_user_id VARCHAR(255),
+		parent_id TEXT REFERENCES team_tasks(id) ON DELETE SET NULL,
+		chat_id VARCHAR(255) DEFAULT '',
+		locked_at TEXT,
+		lock_expires_at TEXT,
+		progress_percent INT DEFAULT 0 CHECK (progress_percent BETWEEN 0 AND 100),
+		progress_step TEXT,
+		followup_at TEXT,
+		followup_count INT NOT NULL DEFAULT 0,
+		followup_max INT NOT NULL DEFAULT 0,
+		followup_message TEXT,
+		followup_channel VARCHAR(60),
+		followup_chat_id VARCHAR(255),
+		confidence_score REAL,
+		comment_count INT NOT NULL DEFAULT 0,
+		attachment_count INT NOT NULL DEFAULT 0,
+		custom_scope TEXT,
+		tenant_id TEXT NOT NULL REFERENCES tenants(id),
+		created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+		updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+	)`)
+	for _, stmt := range []string{
+		`CREATE INDEX idx_team_tasks_team ON team_tasks(team_id)`,
+		`CREATE INDEX idx_team_tasks_status ON team_tasks(team_id,status)`,
+		`CREATE INDEX idx_team_tasks_user_scope ON team_tasks(team_id,user_id) WHERE user_id IS NOT NULL`,
+		`CREATE INDEX idx_tt_parent ON team_tasks(parent_id) WHERE parent_id IS NOT NULL`,
+		`CREATE INDEX idx_tt_scope ON team_tasks(team_id,channel,chat_id)`,
+		`CREATE INDEX idx_tt_type ON team_tasks(team_id,task_type)`,
+		`CREATE INDEX idx_tt_lock ON team_tasks(lock_expires_at) WHERE lock_expires_at IS NOT NULL AND status='in_progress'`,
+		`CREATE UNIQUE INDEX idx_tt_identifier ON team_tasks(team_id,identifier) WHERE identifier IS NOT NULL`,
+		`CREATE INDEX idx_tt_followup ON team_tasks(followup_at) WHERE followup_at IS NOT NULL AND status='in_progress'`,
+		`CREATE INDEX idx_tt_owner_status ON team_tasks(team_id,owner_agent_id,status)`,
+		`CREATE INDEX idx_team_tasks_tenant ON team_tasks(tenant_id)`,
+	} {
+		mustExec(t, db, stmt)
+	}
+	mustExec(t, db, `UPDATE schema_version SET version=60`)
+	mustExec(t, db, `PRAGMA foreign_keys=ON`)
+	assertSQLiteForeignKeysClean(t, db)
 }
 
 // TestEnsureSchema_MigrationV11_SeedsAgentFiles verifies migration 11→12 seeds
@@ -264,6 +494,11 @@ func openTestDBAtVersion(t *testing.T, targetVersion int) *sql.DB {
 
 	// Undo columns added by migrations after targetVersion.
 	// SQLite DROP COLUMN support varies, so recreate affected tables.
+	if targetVersion < 60 {
+		if _, err := db.Exec(`ALTER TABLE team_tasks DROP COLUMN notification_policy`); err != nil {
+			t.Fatalf("drop v60 notification_policy: %v", err)
+		}
+	}
 
 	// Phase 03 (v15 → v16) adds:
 	//   - team_task_attachments.base_name

@@ -15,6 +15,9 @@ const (
 	UserIDKey contextKey = "goclaw_user_id"
 	// AgentIDKey is the context key for the agent UUID.
 	AgentIDKey contextKey = "goclaw_agent_id"
+	// ExpectedTaskOwnerIDKey carries a backend-derived canonical owner lock into
+	// the final task-store mutation. It is never populated from tool/model args.
+	ExpectedTaskOwnerIDKey contextKey = "goclaw_expected_task_owner_id"
 	// AgentTypeKey is the context key for the agent type ("open" or "predefined").
 	AgentTypeKey contextKey = "goclaw_agent_type"
 	// SenderIDKey is the original individual sender's ID (not group-scoped).
@@ -58,6 +61,20 @@ const (
 	ChannelContextScopeKey contextKey = "goclaw_channel_context_scope"
 	// AgentAudioKey carries the immutable agent audio snapshot for TTS tool dispatch.
 	AgentAudioKey contextKey = "goclaw_agent_audio"
+	// WorkflowTaskAttemptKey carries the accepted, backend-derived
+	// WorkflowTaskAttempt (tenant/team/workflow/task/dispatch_token/plan_revision)
+	// into the loop/tool context. Like ExpectedTaskOwnerIDKey it is NEVER populated
+	// from tool/model args — it is minted by ClaimWorkflowTaskDispatch and accepted
+	// by AcceptWorkflowTaskAttempt, so every attempt-fenced mutation reads one
+	// authoritative identity instead of re-parsing mutable task metadata.
+	WorkflowTaskAttemptKey contextKey = "goclaw_workflow_task_attempt"
+	// WorkflowRecoveryContextKey carries the backend-derived WorkflowRecoveryContext
+	// (tenant/team/workflow/blocked_task) into a coordinator recovery run's context.
+	// Like WorkflowTaskAttemptKey it is NEVER populated from tool/model args — the
+	// recovery run resolves the blocked step from this key so the coordinator's
+	// bounded resolution actions (retry_blocked/cancel_workflow/fail_workflow) never
+	// depend on a model-supplied UUID.
+	WorkflowRecoveryContextKey contextKey = "goclaw_workflow_recovery_context"
 )
 
 // AgentAudioSnapshot is an immutable snapshot of agent audio config carried through
@@ -178,6 +195,55 @@ func AgentMaxTokensFromContext(ctx context.Context) int {
 // WithAgentID returns a new context with the given agent UUID.
 func WithAgentID(ctx context.Context, id uuid.UUID) context.Context {
 	return context.WithValue(ctx, AgentIDKey, id)
+}
+
+func WithExpectedTaskOwnerID(ctx context.Context, id uuid.UUID) context.Context {
+	return context.WithValue(ctx, ExpectedTaskOwnerIDKey, id)
+}
+
+func ExpectedTaskOwnerIDFromContext(ctx context.Context) uuid.UUID {
+	if id, ok := ctx.Value(ExpectedTaskOwnerIDKey).(uuid.UUID); ok {
+		return id
+	}
+	return uuid.Nil
+}
+
+// WithWorkflowTaskAttempt carries the accepted attempt identity into the context
+// so the loop and every workflow-work tool mutation fence on one authoritative
+// tuple. Never populate this from tool/model args — it is backend-derived.
+func WithWorkflowTaskAttempt(ctx context.Context, attempt WorkflowTaskAttempt) context.Context {
+	return context.WithValue(ctx, WorkflowTaskAttemptKey, attempt)
+}
+
+// WorkflowTaskAttemptFromContext extracts the accepted attempt. ok is true only
+// when a non-zero attempt (real dispatch token) is present, so callers can tell a
+// fenced workflow run apart from a generic task run.
+func WorkflowTaskAttemptFromContext(ctx context.Context) (WorkflowTaskAttempt, bool) {
+	attempt, ok := ctx.Value(WorkflowTaskAttemptKey).(WorkflowTaskAttempt)
+	if ok && attempt.DispatchToken != uuid.Nil {
+		return attempt, true
+	}
+	return WorkflowTaskAttempt{}, false
+}
+
+// WithWorkflowRecoveryContext carries the blocked-step identity a coordinator
+// recovery run was scheduled to resolve into the loop/tool context. Like
+// WithWorkflowTaskAttempt it is backend-derived — never populate it from
+// tool/model args — so the recovery executors resolve the workflow and blocked
+// task without the coordinator supplying (or even seeing) a UUID.
+func WithWorkflowRecoveryContext(ctx context.Context, rc WorkflowRecoveryContext) context.Context {
+	return context.WithValue(ctx, WorkflowRecoveryContextKey, rc)
+}
+
+// WorkflowRecoveryContextFromContext extracts the recovery target. ok is true
+// only when a non-zero blocked task ID is present, so callers can tell a
+// coordinator recovery run apart from an ordinary coordinator turn.
+func WorkflowRecoveryContextFromContext(ctx context.Context) (WorkflowRecoveryContext, bool) {
+	rc, ok := ctx.Value(WorkflowRecoveryContextKey).(WorkflowRecoveryContext)
+	if ok && rc.BlockedTaskID != uuid.Nil {
+		return rc, true
+	}
+	return WorkflowRecoveryContext{}, false
 }
 
 // AgentIDFromContext extracts the agent UUID from context. Returns uuid.Nil if not set.

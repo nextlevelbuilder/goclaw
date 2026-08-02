@@ -50,6 +50,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/systemmessages"
+	"github.com/nextlevelbuilder/goclaw/internal/teamworkconfig"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 	usagepricing "github.com/nextlevelbuilder/goclaw/internal/usage/pricing"
@@ -301,7 +302,6 @@ func runGateway() {
 	if browserMgr != nil && pgStores != nil && pgStores.BrowserCookies != nil && cfg.Tools.Browser.CookieSyncEnabled {
 		browserMgr.SetCookieProvider(newStoreBrowserCookieProvider(pgStores.BrowserCookies))
 	}
-
 	if ttsTool != nil && pgStores.SystemConfigs != nil {
 		ttsTool.SetSystemConfigStore(pgStores.SystemConfigs)
 	}
@@ -369,6 +369,12 @@ func runGateway() {
 			store.WithTenantID(context.Background(), store.MasterTenantID),
 		); err == nil && len(sysConfigs) > 0 {
 			cfg.ApplySystemConfigs(sysConfigs)
+			// Phase 7 Decision 8: process-wide, startup-only keys (e.g.
+			// gateway.task_recovery_interval_sec) are applied here from the
+			// master-tenant seed ONLY — never from the per-tenant
+			// system-config-changed subscriber, which would let any tenant's edit
+			// mutate a shared runtime value the consuming singleton never re-reads.
+			cfg.ApplyStartupSystemConfigs(sysConfigs)
 			slog.Info("system_configs applied to in-memory config", "keys", len(sysConfigs))
 		}
 	}
@@ -418,7 +424,10 @@ func runGateway() {
 		slog.Debug("skipping MCP database init: pgStores.MCP is nil")
 	}
 
-	teamWorkEmbedder := setupMemoryEmbeddings(pgStores, providerRegistry)
+	// Shared embedding wiring for memory, KG, vault/skill search and semantic task
+	// search. The Team Work classifier is a one-call LLM route and deliberately
+	// consumes no embedder, so the resolved provider is not propagated to it.
+	setupMemoryEmbeddings(pgStores, providerRegistry)
 	usageCapSvc := usagecaps.NewService(pgStores.UsageCaps, pgStores.Providers)
 
 	// Resolve background provider for consolidation + vault enrichment.
@@ -539,6 +548,18 @@ func runGateway() {
 	server.SetPairingService(pgStores.Pairing)
 	server.SetMessageBus(msgBus)
 	server.SetExecApprovalManager(execApprovalMgr)
+	if teamAccessStore, ok := pgStores.Teams.(store.UserTeamIDLister); ok {
+		server.Router().SetTeamAccessStore(teamAccessStore)
+	}
+	msgBus.Subscribe("team-access-snapshot", func(e bus.Event) {
+		p, ok := e.Payload.(bus.CacheInvalidatePayload)
+		if !ok || p.Kind != bus.CacheKindTeamAccess {
+			return
+		}
+		// Refresh asynchronously: MessageBus broadcasts synchronously, so a team
+		// mutation must never wait on its own snapshot reload.
+		go server.Router().HandleTeamAccessInvalidation(context.Background(), p.TenantID)
+	})
 	server.SetOAuthHandler(httpapi.NewOAuthHandler(pgStores.Providers, pgStores.ConfigSecrets, providerRegistry, msgBus))
 
 	// contextFileInterceptor is created inside wireExtras.
@@ -617,10 +638,20 @@ func runGateway() {
 		mcpOAuthRefresher = mcpoauth.NewRefresher(pgStores.MCPOAuthTokens, security.NewSafeClient(15*time.Second))
 	}
 
+	// One shared per-tenant Team Work config resolver is needed by both inbound
+	// classification and coordinator recovery replans. It is created before
+	// wireExtras so the injected replan service observes identical overrides.
+	teamWorkCfg := teamworkconfig.NewResolver(teamworkconfig.Defaults{
+		ClassifyEnabled:    cfg.Gateway.TeamWorkClassify,
+		ClassifierProvider: cfg.Gateway.TeamWorkClassifyProvider,
+		ClassifierModel:    cfg.Gateway.TeamWorkClassifyModel,
+		ClassifyTimeoutSec: cfg.Gateway.TeamWorkClassifyTimeoutSec,
+	}, pgStores.SystemConfigs)
+
 	var mcpPool *mcpbridge.Pool
 	var mediaStore *media.Store
 	var postTurn tools.PostTurnProcessor
-	contextFileInterceptor, mcpPool, mediaStore, postTurn = wireExtras(pgStores, agentRouter, providerRegistry, modelReg, msgBus, pgStores.Sessions, toolsReg, toolPE, skillsLoader, hasMemory, traceCollector, workspace, cfg.Gateway.InjectionAction, cfg, sandboxMgr, redisClient, domainBus, usageCapSvc, mcpOAuthRefresher, childRunAdmission)
+	contextFileInterceptor, mcpPool, mediaStore, postTurn = wireExtras(pgStores, agentRouter, providerRegistry, modelReg, msgBus, pgStores.Sessions, toolsReg, toolPE, skillsLoader, hasMemory, traceCollector, workspace, cfg.Gateway.InjectionAction, cfg, sandboxMgr, redisClient, domainBus, usageCapSvc, teamWorkCfg, mcpOAuthRefresher, childRunAdmission)
 	if mcpPool != nil {
 		defer mcpPool.Stop()
 	}
@@ -634,6 +665,7 @@ func runGateway() {
 		providerRegistry: providerRegistry,
 		agentRouter:      agentRouter,
 		toolsReg:         toolsReg,
+		toolPE:           toolPE,
 		skillsLoader:     skillsLoader,
 		enrichProgress:   enrichProgress,
 		enrichWorker:     enrichWorker,
@@ -643,7 +675,7 @@ func runGateway() {
 		domainBus:        domainBus,
 		usageCapSvc:      usageCapSvc,
 		audioMgr:         audioMgr,
-		teamWorkEmbedder: teamWorkEmbedder,
+		teamWorkCfg:      teamWorkCfg,
 	}
 
 	gatewayAddr := loopbackAddr(cfg.Gateway.Host, cfg.Gateway.Port)
@@ -751,7 +783,7 @@ func runGateway() {
 	// Register all RPC methods
 	server.SetLogTee(logTee)
 	server.SetRuntimeLogsHandler(httpapi.NewRuntimeLogsHandler(logTee))
-	pairingMethods, heartbeatMethods, chatMethods, cfgPermsMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Tracing, pgStores.RunTimeline, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, pgStores.AgentLinks, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants, pgStores.SkillTenantCfgs, audioMgr, usageCapSvc, providerRegistry, teamWorkEmbedder)
+	pairingMethods, heartbeatMethods, chatMethods, cfgPermsMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Tracing, pgStores.RunTimeline, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, skillsLoader, pgStores.ConfigSecrets, pgStores.Teams, pgStores.AgentLinks, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants, pgStores.SkillTenantCfgs, audioMgr, usageCapSvc, providerRegistry, teamWorkMCPBatchStore(pgStores.MCP), pgStores.BuiltinTools, pgStores.BuiltinToolTenantCfgs, toolPE, toolsReg)
 
 	// Phase 3: Agent hooks RPC methods (hooks.list/create/update/delete/toggle/test/history).
 	if hs, ok := pgStores.Hooks.(hooks.HookStore); ok && hs != nil {
@@ -965,7 +997,7 @@ func runGateway() {
 	registerConfigChannels(cfg, channelMgr, msgBus, pgStores, instanceLoader, audioMgr)
 
 	// Register channels/instances/links/teams RPC methods
-	chInstancesM := wireChannelRPCMethods(server, pgStores, channelMgr, instanceLoader, agentRouter, msgBus, cfg, workspace)
+	chInstancesM := wireChannelRPCMethods(server, pgStores, channelMgr, instanceLoader, agentRouter, msgBus, cfg, workspace, postTurn)
 
 	// Bitrix24 orphan-bot cleaner. Fires from channel_instances delete handler
 	// when the channel is no longer loaded in the Manager (typical scenario:
@@ -1042,6 +1074,17 @@ func runGateway() {
 	// Inbound message consumer setup
 	consumerTeamStore := pgStores.Teams
 
+	// The shared per-tenant Team Work resolver was created before wireExtras so
+	// coordinator recovery and inbound classification read the same tenant cache.
+	if chatMethods != nil {
+		chatMethods.SetTeamWorkConfigResolver(deps.teamWorkCfg)
+	}
+	// Process-local cache invalidation (Phase 7 review 7B-H3): drop a tenant's
+	// cached Team Work settings when its system_configs change. Registered on its
+	// own bus subscriber ID so it coexists with the shared-config refresh
+	// subscriber rather than overwriting it.
+	registerTeamWorkConfigInvalidator(msgBus, deps.teamWorkCfg)
+
 	// Quota checker: enforces per-user/group request limits.
 	config.MergeChannelGroupQuotas(cfg)
 	var quotaChecker *channels.QuotaChecker
@@ -1098,6 +1141,7 @@ func runGateway() {
 		auditCh:           auditCh,
 		sigCh:             sigCh,
 		terminateProcess:  os.Exit,
+		chatMethods:       chatMethods,
 	})
 }
 

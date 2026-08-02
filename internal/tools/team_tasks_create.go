@@ -96,12 +96,41 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 
 	// Resolve assignee (agent key → UUID). Required — every task must be assigned.
 	assigneeKey, _ := args["assignee"].(string)
+	assigneeKey = strings.TrimSpace(assigneeKey)
 	if assigneeKey == "" {
 		return ErrorResult("assignee is required — specify which team member should handle this task")
 	}
 	assigneeID, err := t.manager.ResolveAgentByKey(ctx, assigneeKey)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("assignee %q not found: %v", assigneeKey, err))
+	}
+	createCtx := ctx
+	if constraint := TeamWorkOwnerConstraintFromCtx(ctx); constraint != nil {
+		expectedOwnerID := constraint.OwnerID
+		expectedOwnerKey := strings.TrimSpace(constraint.OwnerKey)
+		if expectedOwnerID == uuid.Nil && expectedOwnerKey != "" {
+			resolved, resolveErr := t.manager.ResolveAgentByKey(ctx, expectedOwnerKey)
+			if resolveErr != nil {
+				return ErrorResult(fmt.Sprintf("team workflow owner %q is no longer available", expectedOwnerKey))
+			}
+			expectedOwnerID = resolved
+		}
+		if expectedOwnerID == uuid.Nil {
+			return ErrorResult("team workflow owner constraint is invalid")
+		}
+		slog.Info("team_work_owner_enforcement",
+			"expected_owner_id", expectedOwnerID,
+			"expected_owner_key", expectedOwnerKey,
+			"attempted_owner_id", assigneeID,
+			"attempted_owner_key", assigneeKey,
+			"owner_match", assigneeID == expectedOwnerID)
+		if assigneeID != expectedOwnerID {
+			if expectedOwnerKey == "" {
+				expectedOwnerKey = expectedOwnerID.String()
+			}
+			return ErrorResult(fmt.Sprintf("team workflow requires assignee %q; got %q", expectedOwnerKey, assigneeKey))
+		}
+		createCtx = store.WithExpectedTaskOwnerID(ctx, expectedOwnerID)
 	}
 	// Verify assignee is a member of this team.
 	members, err := t.manager.CachedListMembers(ctx, team.ID, agentID)
@@ -215,12 +244,12 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 	}
 
 	task := &store.TeamTaskData{
-		TeamID:           team.ID,
-		Subject:          subject,
-		Description:      description,
-		Status:           status,
-		BlockedBy:        blockedBy,
-		Priority:         priority,
+		TeamID:      team.ID,
+		Subject:     subject,
+		Description: description,
+		Status:      status,
+		BlockedBy:   blockedBy,
+		Priority:    priority,
 		// SCOPE-intentional (#915 audit 2026-04-16): team task visibility is
 		// per-chat, not per-user. team_tasks_read.go filters end-user lists by
 		// this same UserID. Migrating to ActorIDFromContext would hide group
@@ -243,7 +272,7 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 		}
 	}
 
-	if err := t.manager.Store().CreateTask(ctx, task); err != nil {
+	if err := t.manager.Store().CreateTask(createCtx, task); err != nil {
 		return ErrorResult("failed to create task: " + err.Error())
 	}
 

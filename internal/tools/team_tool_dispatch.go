@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -22,6 +23,24 @@ import (
 func (m *TeamToolManager) DispatchTaskToAgent(ctx context.Context, task *store.TeamTaskData, team *store.TeamData, agentID uuid.UUID) {
 	m.dispatchTaskToAgent(ctx, task, team, agentID)
 }
+
+func (m *TeamToolManager) dispatchRequesterAgentKey(ctx context.Context, task *store.TeamTaskData, team *store.TeamData) string {
+	if task != nil && task.CreatedByAgentID != nil && *task.CreatedByAgentID != uuid.Nil {
+		if ag, err := m.cachedGetAgentByID(ctx, *task.CreatedByAgentID); err == nil && ag != nil && ag.AgentKey != "" {
+			return ag.AgentKey
+		}
+	}
+	if key := ToolAgentKeyFromCtx(ctx); key != "" {
+		return key
+	}
+	if team != nil && team.LeadAgentID != uuid.Nil {
+		if leadAg, err := m.cachedGetAgentByID(ctx, team.LeadAgentID); err == nil && leadAg != nil {
+			return leadAg.AgentKey
+		}
+	}
+	return ""
+}
+
 func (m *TeamToolManager) BuildBlockerResultsSummary(ctx context.Context, task *store.TeamTaskData) string {
 	return m.buildBlockerResultsSummary(ctx, task)
 }
@@ -35,6 +54,76 @@ func (m *TeamToolManager) RestoreTraceContext(ctx context.Context, task *store.T
 // maxTaskDispatches is the max number of times a single task can be dispatched
 // before it auto-fails. Prevents infinite loops when agents can't complete a task.
 const maxTaskDispatches = 3
+
+// MaxTaskDispatches exposes the dispatch budget to callers outside this package
+// that requeue a task themselves (post-turn settlement of a member request task
+// whose run produced no usable result). Without a shared ceiling that requeue
+// would loop forever on a provider that keeps returning nothing.
+const MaxTaskDispatches = maxTaskDispatches
+
+// TaskDispatchCount reports how many times this task has been dispatched, using
+// whichever of the two sources of truth applies to it (durable column for
+// workflow work tasks, metadata for everything else).
+func TaskDispatchCount(task *store.TeamTaskData) int {
+	return taskDispatchCount(task)
+}
+
+func taskDispatchCount(task *store.TeamTaskData) int {
+	if task == nil {
+		return 0
+	}
+	// Workflow work tasks track dispatch count in the durable column
+	// (migration 000098 moved it out of the metadata JSON blob so the
+	// atomic claim can increment a single source of truth).
+	if task.WorkflowID != nil && task.WorkflowKind == store.TeamWorkflowTaskKindWork {
+		return task.DispatchCount
+	}
+	if task.Metadata == nil {
+		return 0
+	}
+	switch value := task.Metadata["dispatch_count"].(type) {
+	case float64:
+		return int(value)
+	case int:
+		return value
+	case int64:
+		return int(value)
+	default:
+		return 0
+	}
+}
+
+// WorkflowStepHasDispatchBudget reports whether a workflow work task could still
+// be dispatched again under maxTaskDispatches. Settlement uses it to decide
+// whether a TRANSIENT run failure is worth requeueing: without the check a
+// permanently broken provider would requeue forever and the workflow would hang
+// instead of surfacing a failure. A nil task is treated as having budget — the
+// dispatcher re-reads the row and enforces the cap authoritatively anyway.
+func WorkflowStepHasDispatchBudget(task *store.TeamTaskData) bool {
+	if task == nil {
+		return true
+	}
+	return taskDispatchCount(task) < maxTaskDispatches
+}
+
+func (m *TeamToolManager) failTaskDispatch(ctx context.Context, task *store.TeamTaskData, teamID uuid.UUID, reason string) {
+	if task.WorkflowID != nil && task.WorkflowKind == store.TeamWorkflowTaskKindWork {
+		workflowStore, ok := m.teamStore.(store.TeamWorkflowStore)
+		if !ok {
+			slog.Error("team_tasks.dispatch: workflow store unavailable while failing task", "task_id", task.ID)
+			return
+		}
+		if _, err := workflowStore.SettleWorkflowTask(ctx, task.ID, teamID, reason, true, time.Now().Add(2*time.Minute)); err != nil {
+			slog.Warn("team_tasks.dispatch: workflow failure settlement failed", "task_id", task.ID, "error", err)
+		}
+		return
+	}
+	if err := m.teamStore.FailTask(ctx, task.ID, teamID, reason); err != nil {
+		if pendingErr := m.teamStore.FailPendingTask(ctx, task.ID, teamID, reason); pendingErr != nil {
+			slog.Warn("team_tasks.dispatch: task auto-fail failed", "task_id", task.ID, "error", err, "pending_error", pendingErr)
+		}
+	}
+}
 
 // dispatchTaskToAgent publishes a teammate-style inbound message so the
 // gateway consumer picks it up and runs the assigned agent, then auto-completes
@@ -50,41 +139,43 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 	}
 	teamID := team.ID
 
-	// Safety net: never dispatch to the lead agent — causes dual-session loop.
-	// Self-assignment is blocked at create time, but catch edge cases
-	// from retry, ticker recovery, or manual DB edits.
-	if agentID == team.LeadAgentID {
+	// Safety net: never dispatch to the lead agent — causes a dual-session loop.
+	// Self-assignment is blocked at create time, but this catches edge cases from
+	// retry, ticker recovery, or manual DB edits. It MUST mirror the
+	// leadTaskAutoFails exception (used by DispatchUnblockedTasks above): the one
+	// case where dispatching to the lead is correct is a terminal workflow-work
+	// task — the integration step of a coordinator DAG (create_dag). That is a
+	// bounded, terminal turn with no downstream work, so the lead runs it
+	// directly. Without this exception the G4 create-time contract (which allows
+	// the lead to own the terminal task) is violated at dispatch time and every
+	// lead-owned terminal task auto-fails, collapsing the whole DAG with zero
+	// requester delivery.
+	if agentID == team.LeadAgentID && leadTaskAutoFails(agentID, team.LeadAgentID, task) {
 		slog.Warn("team_tasks.dispatch: blocked dispatch to lead agent",
 			"task_id", task.ID, "agent_id", agentID, "team_id", teamID)
-		_ = m.teamStore.UpdateTask(ctx, task.ID, map[string]any{
-			"status": store.TeamTaskStatusFailed,
-			"result": "Cannot dispatch task to the team lead — reassign to a team member",
-		})
+		m.failTaskDispatch(ctx, task, teamID, "Cannot dispatch task to the team lead - reassign to a team member")
 		return
 	}
 
 	// Circuit breaker: auto-fail tasks that have been dispatched too many times.
-	dispatchCount := 0
-	if dc, ok := task.Metadata["dispatch_count"].(float64); ok {
-		dispatchCount = int(dc)
-	}
+	dispatchCount := taskDispatchCount(task)
 	if dispatchCount >= maxTaskDispatches {
 		slog.Warn("team_tasks.dispatch: max dispatch count reached, auto-failing task",
 			"task_id", task.ID, "dispatch_count", dispatchCount)
 		failReason := fmt.Sprintf("Task auto-failed after %d dispatch attempts", dispatchCount)
-		_ = m.teamStore.UpdateTask(ctx, task.ID, map[string]any{
-			"status": store.TeamTaskStatusFailed,
-			"result": failReason,
-		})
+		m.failTaskDispatch(ctx, task, teamID, failReason)
 		return
 	}
 
-	// Increment dispatch count in metadata.
-	if task.Metadata == nil {
-		task.Metadata = make(map[string]any)
+	// Durable workflow claims increment dispatch_count atomically in the store.
+	// Regular tasks retain the existing metadata update path.
+	if task.WorkflowID == nil {
+		if task.Metadata == nil {
+			task.Metadata = make(map[string]any)
+		}
+		task.Metadata["dispatch_count"] = dispatchCount + 1
+		_ = m.teamStore.UpdateTask(ctx, task.ID, map[string]any{"metadata": task.Metadata})
 	}
-	task.Metadata["dispatch_count"] = dispatchCount + 1
-	_ = m.teamStore.UpdateTask(ctx, task.ID, map[string]any{"metadata": task.Metadata})
 
 	ag, err := m.cachedGetAgentByID(ctx, agentID)
 	if err != nil {
@@ -118,6 +209,25 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 		"- Use team_tasks(action=\"comment\", type=\"blocker\", text=\"...\") when BLOCKED and need leader input — auto-fails task and notifies leader\n" +
 		"- When done: team_tasks(action=\"complete\", result=\"summary of your work\")\n" +
 		"- Write output files to team workspace so lead can review")
+	// A workflow step's result is the ONLY thing the reviewer and the integrator
+	// receive: files in the workspace are not handed to them automatically. Agents
+	// were observed ending a step turn with a bare "..." and no complete call, so
+	// the step settled as done carrying "..." as its deliverable and downstream
+	// steps reviewed nothing. Settlement now requeues such a step, but say so here
+	// too so the attempt is not wasted in the first place.
+	if task.WorkflowID != nil && task.WorkflowKind == store.TeamWorkflowTaskKindWork {
+		content.WriteString("\n\n[This is a workflow step — mandatory]\n" +
+			"- You MUST finish by calling team_tasks(action=\"complete\", result=\"...\") with the substance of your work in `result`. Do not end your turn without it.\n" +
+			"- `result` is the only thing the next steps and the reviewer receive. Name the files you wrote AND summarise the findings, decisions, and caveats — a bare acknowledgement, a file path alone, or \"done\" is not a deliverable.\n" +
+			"- If you truly cannot do the work, say why via team_tasks(action=\"comment\", type=\"blocker\", text=\"...\") instead of completing empty.")
+	}
+	if task.WorkflowID != nil && task.WorkflowTerminal {
+		content.WriteString("\n\n[TERMINAL integration step - your answer goes straight to the user]\n" +
+			"- The result of team_tasks(action=\"complete\") IS the final message delivered to the user verbatim.\n" +
+			"- Write it as a complete user-ready answer in the user language with proper formatting: short intro, markdown headings and bullets where useful, blank lines between paragraphs. Never send one dense blob.\n" +
+			"- Reference every file you produced by exact workspace path AND call team_tasks(action=\"attach\", path=\"<workspace path>\") for each file so it is delivered as an attachment. Files not attached are NOT sent.\n" +
+			"- Keep internal jargon out; the user has not seen intermediate steps.")
+	}
 
 	// Use task's stored channel/chat as primary source for routing.
 	// Falls back to ctx values for initial dispatch (task just created, fields match ctx).
@@ -129,11 +239,9 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 	if originChatID == "" {
 		originChatID = ToolChatIDFromCtx(ctx)
 	}
-	// Resolve lead agent key for completion announce routing.
-	fromAgent := ToolAgentKeyFromCtx(ctx)
-	if leadAg, err := m.cachedGetAgentByID(ctx, team.LeadAgentID); err == nil {
-		fromAgent = leadAg.AgentKey
-	}
+	// Resolve the actual requester/creator for display and run metadata.
+	// The team lead is passed separately via MetaLeaderAgentID for announce routing.
+	fromAgent := m.dispatchRequesterAgentKey(ctx, task, team)
 
 	// Resolve user ID: prefer context (available during leader's turn),
 	// fall back to task's chat ID (stable for dispatches from consumer/ticker context).
@@ -165,15 +273,27 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 	}
 
 	meta := map[string]string{
-		MetaOriginChannel:   originChannel,
-		MetaOriginPeerKind:  originPeerKind,
-		MetaOriginChatID:    originChatID,
-		MetaOriginUserID:    originUserID,
-		MetaFromAgent:       fromAgent,
-		MetaToAgent:         ag.AgentKey,
-		MetaToAgentDisplay:  ag.DisplayName,
-		MetaTeamTaskID:      task.ID.String(),
-		MetaTeamID:          teamID.String(),
+		MetaOriginChannel:  originChannel,
+		MetaOriginPeerKind: originPeerKind,
+		MetaOriginChatID:   originChatID,
+		MetaOriginUserID:   originUserID,
+		MetaFromAgent:      fromAgent,
+		MetaToAgent:        ag.AgentKey,
+		MetaToAgentDisplay: ag.DisplayName,
+		MetaTeamTaskID:     task.ID.String(),
+		MetaTeamID:         teamID.String(),
+	}
+	if task.WorkflowID != nil {
+		meta[MetaWorkflowID] = task.WorkflowID.String()
+		meta[MetaWorkflowStepID] = task.WorkflowStepID
+		meta[MetaWorkflowTerminal] = fmt.Sprintf("%t", task.WorkflowTerminal)
+		meta[MetaWorkflowPlanRevision] = fmt.Sprintf("%d", store.PlanRevisionOrDefault(task.PlanRevision))
+		if task.DispatchToken != nil {
+			meta[MetaDispatchToken] = task.DispatchToken.String()
+		}
+		if routing, ok := task.Metadata[TaskMetaOriginRouting].(string); ok && routing != "" {
+			meta[MetaOriginRouting] = routing
+		}
 	}
 	if originSenderID != "" {
 		meta[MetaOriginSenderID] = originSenderID
@@ -345,6 +465,20 @@ func (m *TeamToolManager) restoreTraceContext(ctx context.Context, task *store.T
 // queued tasks sharing the same session.
 // Called after task completion/cancellation to start newly-unblocked work
 // instead of waiting for the ticker (up to 5 min delay).
+// leadTaskAutoFails reports whether a pending task owned by the team lead must be
+// auto-failed instead of dispatched (a lead-owned task would otherwise dispatch
+// back to the coordinator and loop). The one narrow exception is a terminal
+// workflow-work task: that is the integration step of a coordinator DAG
+// (create_dag), a bounded terminal turn with no downstream work, so the lead runs
+// it directly. Every other lead-owned task — ordinary tasks and non-terminal
+// workflow steps — auto-fails.
+func leadTaskAutoFails(ownerID, leadID uuid.UUID, task *store.TeamTaskData) bool {
+	if ownerID != leadID {
+		return false
+	}
+	return !(task.WorkflowKind == store.TeamWorkflowTaskKindWork && task.WorkflowTerminal)
+}
+
 func (m *TeamToolManager) DispatchUnblockedTasks(ctx context.Context, teamID uuid.UUID) {
 	team, err := m.teamStore.GetTeam(ctx, teamID)
 	if err != nil || team == nil {
@@ -363,23 +497,58 @@ func (m *TeamToolManager) DispatchUnblockedTasks(ctx context.Context, teamID uui
 		if task.Status != store.TeamTaskStatusPending || task.OwnerAgentID == nil {
 			continue
 		}
+		if task.WorkflowKind == store.TeamWorkflowTaskKindAudit {
+			continue
+		}
 		ownerID := *task.OwnerAgentID
 		// Auto-fail tasks assigned to the lead agent — would cause self-dispatch loop.
 		// Don't just skip: pending lead-owned tasks would stay stuck until stale timeout.
-		if ownerID == team.LeadAgentID {
+		// NARROW EXCEPTION: a terminal workflow-work task owned by the lead is the
+		// integration step of a coordinator DAG (create_dag). It is a bounded,
+		// terminal turn with no downstream work to loop into, so the lead may run it
+		// directly. Every other lead-owned task (ordinary tasks and non-terminal
+		// workflow steps) still auto-fails.
+		if leadTaskAutoFails(ownerID, team.LeadAgentID, task) {
 			slog.Warn("DispatchUnblockedTasks: auto-failing lead-owned task",
 				"task_id", task.ID, "team_id", teamID)
-			_ = m.teamStore.UpdateTask(ctx, task.ID, map[string]any{
-				"status": store.TeamTaskStatusFailed,
-				"result": "Cannot dispatch task to the team lead — reassign to a team member",
-			})
+			if task.WorkflowID != nil && task.WorkflowKind == store.TeamWorkflowTaskKindWork {
+				if workflowStore, ok := m.teamStore.(store.TeamWorkflowStore); ok {
+					_, _ = workflowStore.SettleWorkflowTask(ctx, task.ID, teamID,
+						"Workflow step cannot be dispatched to the team lead coordinator", true, time.Now().Add(2*time.Minute))
+				}
+			} else {
+				_ = m.teamStore.UpdateTask(ctx, task.ID, map[string]any{
+					"status": store.TeamTaskStatusFailed,
+					"result": "Cannot dispatch task to the team lead — reassign to a team member",
+				})
+			}
+			continue
+		}
+		if task.WorkflowID != nil && task.WorkflowKind == store.TeamWorkflowTaskKindWork && taskDispatchCount(task) >= maxTaskDispatches {
+			slog.Warn("DispatchUnblockedTasks: max workflow dispatch count reached",
+				"task_id", task.ID, "dispatch_count", taskDispatchCount(task))
+			m.failTaskDispatch(ctx, task, teamID, fmt.Sprintf("Task auto-failed after %d dispatch attempts", taskDispatchCount(task)))
 			continue
 		}
 		if dispatched[ownerID] {
 			continue // skip — this owner already has a higher-priority task dispatched
 		}
-		// Assign (pending → in_progress + lock) so consumer can auto-complete.
-		if err := m.teamStore.AssignTask(ctx, task.ID, ownerID, teamID); err != nil {
+		dispatchStatus := store.TeamTaskStatusInProgress
+		if task.WorkflowID != nil && task.WorkflowKind == store.TeamWorkflowTaskKindWork {
+			workflowStore, ok := m.teamStore.(store.TeamWorkflowStore)
+			if !ok {
+				slog.Error("DispatchUnblockedTasks: workflow store unavailable", "task_id", task.ID)
+				continue
+			}
+			token, claimErr := workflowStore.ClaimWorkflowTaskDispatch(ctx, task.ID, teamID, time.Now().Add(2*time.Minute))
+			if claimErr != nil {
+				slog.Warn("DispatchUnblockedTasks: workflow dispatch claim failed", "task_id", task.ID, "error", claimErr)
+				continue
+			}
+			task.DispatchToken = &token
+			task.Status = store.TeamTaskStatusDispatching
+			dispatchStatus = store.TeamTaskStatusDispatching
+		} else if err := m.teamStore.AssignTask(ctx, task.ID, ownerID, teamID); err != nil {
 			slog.Warn("DispatchUnblockedTasks: assign failed", "task_id", task.ID, "error", err)
 			continue
 		}
@@ -394,7 +563,7 @@ func (m *TeamToolManager) DispatchUnblockedTasks(ctx context.Context, teamID uui
 		}
 		m.broadcastTeamEvent(ctx, protocol.EventTeamTaskDispatched, BuildTaskEventPayload(
 			teamID.String(), task.ID.String(),
-			store.TeamTaskStatusInProgress,
+			dispatchStatus,
 			"system", "dispatch_unblocked",
 			WithTaskInfo(task.TaskNumber, task.Subject),
 			WithOwnerAgentKey(m.agentKeyFromID(ctx, ownerID)),

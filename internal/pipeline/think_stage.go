@@ -292,6 +292,28 @@ func isEmptyLengthResponse(resp *providers.ChatResponse) bool {
 		len(resp.Images) == 0
 }
 
+// controlEnvelopeMarkers are the leading markers of internal relay-control
+// envelopes injected as inbound messages to the team lead (auto-status relays
+// and blocker escalations). When the model parrots one of these back in a
+// tool-iteration turn it is an internal coordination directive, not user-facing
+// progress, so it must never be relayed to the user as a block.reply.
+var controlEnvelopeMarkers = []string{
+	"[Auto-status",
+	"[Escalation]",
+}
+
+// isControlEnvelopeContent reports whether trimmed content begins with one of
+// the internal relay-control envelope markers.
+func isControlEnvelopeContent(content string) bool {
+	trimmed := strings.TrimSpace(content)
+	for _, marker := range controlEnvelopeMarkers {
+		if strings.HasPrefix(trimmed, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *ThinkStage) emitToolIterationBlockReply(_ context.Context, resp *providers.ChatResponse) {
 	content := resp.Content
 	source := protocol.BlockReplySourceLLMProgress
@@ -299,6 +321,11 @@ func (s *ThinkStage) emitToolIterationBlockReply(_ context.Context, resp *provid
 		source = protocol.BlockReplySourceToolAnnouncement
 	}
 	if strings.TrimSpace(content) == "" {
+		return
+	}
+	// Suppress internal relay-control envelopes parroted back by the model; these
+	// are coordinator directives, not user-facing progress.
+	if isControlEnvelopeContent(content) {
 		return
 	}
 	if s.deps.EmitBlockReplyWithSource != nil {

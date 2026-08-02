@@ -104,11 +104,15 @@ func findLivePIDs(t *testing.T, pids []string) []string {
 
 	var found []string
 	for _, pid := range pids {
-		out, err := exec.Command("ps", "-p", pid, "-o", "pid=").Output()
+		out, err := exec.Command("ps", "-p", pid, "-o", "stat=").Output()
 		if err != nil {
 			continue
 		}
-		if strings.TrimSpace(string(out)) != "" {
+		// A zombie has exited and cannot execute or retain resources; PID 1 may
+		// reap it asynchronously in containers. Only a non-zombie process is an
+		// orphan that survived process-group termination.
+		state := strings.TrimSpace(string(out))
+		if state != "" && !strings.HasPrefix(state, "Z") {
 			found = append(found, pid)
 		}
 	}

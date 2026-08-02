@@ -4,7 +4,7 @@ import { Trash2, Ban, MessageSquare, Paperclip } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useTranslation } from "react-i18next";
 import { isTaskLocked } from "./board-utils";
-import { isTerminalStatus } from "../task-sections/task-utils";
+import { isTerminalStatus, taskStatusBadgeVariant } from "../task-sections/task-utils";
 import type { TeamTaskData } from "@/types/team";
 
 const PRIORITY_LABELS: Record<number, { label: string; color: string }> = {
@@ -105,6 +105,16 @@ export const KanbanCard = memo(function KanbanCard({ task, isTeamV2, emojiLookup
         </span>
         {task.task_type && task.task_type !== "general" && (
           <Badge variant="outline" className="text-2xs px-1 py-0">{task.task_type}</Badge>
+        )}
+        {task.workflow_step_id && (
+          <Badge variant="outline" className="text-2xs px-1 py-0">
+            {task.workflow_step_id} · r{task.plan_revision ?? 1}
+          </Badge>
+        )}
+        {task.workflow_id && (
+          <Badge variant={taskStatusBadgeVariant(task.status)} className="text-2xs px-1 py-0">
+            {t(`taskStatus.${task.status}`)}
+          </Badge>
         )}
         {(task.comment_count ?? 0) > 0 && (
           <span className="flex items-center gap-0.5 text-2xs text-muted-foreground ml-auto">

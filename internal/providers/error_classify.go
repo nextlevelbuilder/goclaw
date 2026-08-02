@@ -138,6 +138,16 @@ func ClassifyHTTPError(classifier ErrorClassifier, err error) FailoverClassifica
 	if err == nil {
 		return classifyReason(FailoverUnknown)
 	}
+	// A response that carried no signal at all is an upstream that accepted the
+	// request and delivered nothing. Classified explicitly because the message
+	// carries no HTTP status and no network-error wording, so it would otherwise
+	// fall through to FailoverUnknown — which both suppresses failover
+	// (runOrdered returns instead of trying the next candidate) and fails the
+	// transient check that lets a workflow step be retried.
+	var emptyErr *EmptyResponseError
+	if errors.As(err, &emptyErr) {
+		return classifyReason(FailoverServerError)
+	}
 	var httpErr *HTTPError
 	if errors.As(err, &httpErr) {
 		return classifier.Classify(err, httpErr.Status, httpErr.Body)

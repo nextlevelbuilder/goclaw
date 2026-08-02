@@ -17,6 +17,8 @@ import (
 // ---- minimal AgentStore stub for interceptor tests ----
 
 type stubAgentStore struct {
+	agentsByID    map[uuid.UUID]*store.AgentData
+	agentsByKey   map[string]*store.AgentData
 	agentFiles    []store.AgentContextFileData
 	userFiles     []store.UserContextFileData
 	agentCallsN   atomic.Int32 // counts GetAgentContextFiles calls
@@ -77,20 +79,42 @@ func (s *stubAgentStore) MigrateUserDataOnMerge(_ context.Context, _ []string, _
 
 // Remaining interface methods — not exercised in these tests.
 func (s *stubAgentStore) Create(_ context.Context, _ *store.AgentData) error { return nil }
-func (s *stubAgentStore) GetByKey(_ context.Context, _ string) (*store.AgentData, error) {
-	return nil, nil
+func (s *stubAgentStore) GetByKey(_ context.Context, key string) (*store.AgentData, error) {
+	if s.agentsByKey != nil {
+		if ag, ok := s.agentsByKey[key]; ok {
+			return ag, nil
+		}
+	}
+	return nil, errors.New("agent not found")
 }
-func (s *stubAgentStore) GetByID(_ context.Context, _ uuid.UUID) (*store.AgentData, error) {
-	return nil, nil
+func (s *stubAgentStore) GetByID(_ context.Context, id uuid.UUID) (*store.AgentData, error) {
+	if s.agentsByID != nil {
+		if ag, ok := s.agentsByID[id]; ok {
+			return ag, nil
+		}
+	}
+	return nil, errors.New("agent not found")
 }
 func (s *stubAgentStore) GetByIDUnscoped(_ context.Context, _ uuid.UUID) (*store.AgentData, error) {
 	return nil, nil
 }
-func (s *stubAgentStore) GetByKeys(_ context.Context, _ []string) ([]store.AgentData, error) {
-	return nil, nil
+func (s *stubAgentStore) GetByKeys(_ context.Context, keys []string) ([]store.AgentData, error) {
+	var out []store.AgentData
+	for _, key := range keys {
+		if ag, ok := s.agentsByKey[key]; ok {
+			out = append(out, *ag)
+		}
+	}
+	return out, nil
 }
-func (s *stubAgentStore) GetByIDs(_ context.Context, _ []uuid.UUID) ([]store.AgentData, error) {
-	return nil, nil
+func (s *stubAgentStore) GetByIDs(_ context.Context, ids []uuid.UUID) ([]store.AgentData, error) {
+	var out []store.AgentData
+	for _, id := range ids {
+		if ag, ok := s.agentsByID[id]; ok {
+			out = append(out, *ag)
+		}
+	}
+	return out, nil
 }
 func (s *stubAgentStore) GetDefault(_ context.Context) (*store.AgentData, error)        { return nil, nil }
 func (s *stubAgentStore) ResetStuckSummoning(_ context.Context) (int64, error)          { return 0, nil }

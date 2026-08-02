@@ -5,11 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
-	"math"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
@@ -30,233 +29,286 @@ const (
 )
 
 const (
-	DefaultCloseMargin     = 0.08
-	defaultTeamThreshold   = 0.35
-	defaultEvidenceTimeout = 8 * time.Second
-	defaultArbiterTimeout  = 30 * time.Second
+	defaultArbiterTimeout = 30 * time.Second
+	defaultPlannerTimeout = 60 * time.Second
 )
 
-type Embedder interface {
-	Embed(ctx context.Context, texts []string) ([][]float32, error)
-}
-
 type Profile struct {
-	Kind string
-	Name string
-	Text string
+	Kind                 string
+	Name                 string
+	Text                 string
+	AgentID              uuid.UUID
+	AgentKey             string
+	DisplayName          string
+	TeamRole             string
+	Capabilities         []StructuredCapability
+	CapabilitiesStatus   DataStatus
+	ExpertiseSummary     string
+	AvailableTools       []string
+	AvailableToolsStatus DataStatus
 }
 
 type Input struct {
 	Mode                       Mode
 	Message                    string
+	RecentContext              string
+	PinnedSkillsContext        string
+	PinnedSkillNames           []string
+	PinnedSkillsWarning        string
 	CurrentAgent               Profile
 	SelfTools                  []Profile
 	Team                       Profile
 	Members                    []Profile
 	Delegates                  []Profile
 	CollaborationTools         []Profile
+	ToolAllow                  []string
 	TeamRole                   string
 	CanAssignTeamTasks         bool
 	MemberRequestsEnabled      bool
 	MemberRequestsAutoDispatch bool
-	Embedder                   Embedder
-	CloseMargin                float64
-	TeamThreshold              float64
+	CoordinatorAgentID         uuid.UUID
+	CoordinatorAgentKey        string
 	Timeout                    time.Duration
 }
 
 type Result struct {
-	Decision           Decision
-	Confidence         float64
-	Reason             string
-	SelfScore          float64
-	CollaborationScore float64
-	Mode               Mode
-	RequiredTool       string
-	WorkflowHint       string
+	Decision                 Decision
+	Confidence               float64
+	Reason                   string
+	Mode                     Mode
+	RequiredTool             string
+	WorkflowHint             string
+	CurrentAgentRole         string
+	TaskType                 string
+	CurrentAgentFit          string
+	BestTeamOwner            string
+	BestTeamOwnerID          uuid.UUID
+	BestTeamOwnerRole        string
+	BestTeamFit              string
+	SpecialistMatchFound     bool
+	LeadSelectedAsFallback   bool
+	RoutingPriorityUsed      string
+	OwnerSelectionReason     string
+	FollowupContextReference bool
+	BetterCollaboratorFit    string
+	RequestKind              string
+	WorkflowExecutable       bool
+	DecisionBeforeValidation Decision
+	ValidatorReason          string
+	WorkflowMode             WorkflowMode
+	Plan                     *WorkflowPlan
+	PlannerRepaired          bool
+	PlannerValidationReason  string
+	RequestedWorkShape       WorkShape
+	VerifiedWorkShape        WorkShape
+	EffectiveWorkShape       WorkShape
+	RequestedWorkflowMode    WorkflowMode
+	EffectiveWorkflowMode    WorkflowMode
+	ShapeTraits              []ShapeTrait
+	RequestedReviewRequired  bool
+	EffectiveReviewRequired  bool
+	DegradedWorkflow         bool
+	DegradedReasonCode       string
+	NonExecutable            bool
+	StandaloneRequest        string
+	IntentRelation           IntentRelation
+	IntentInheritedScope     []string
+	IntentRequestedOutputs   []string
+	StaffingGaps             []string
 }
 
-func Classify(ctx context.Context, input Input) Result {
-	if input.Mode == "" || input.Mode == ModeSpawn {
-		return Result{Decision: DecisionSelf, Reason: "no team or delegate capability"}
-	}
-	if input.Embedder == nil {
-		return Result{Decision: DecisionSelf, Reason: "embedding unavailable"}
-	}
-	if strings.TrimSpace(input.Message) == "" {
-		return Result{Decision: DecisionSelf, Reason: "empty message"}
-	}
-	if looksCasualOrSmallDirect(input.Message) {
-		return Result{Decision: DecisionSelf, Reason: "message looks casual or direct"}
-	}
+type IntentRelation string
 
-	timeout := input.Timeout
-	if timeout <= 0 {
-		timeout = defaultEvidenceTimeout
-	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
+const (
+	IntentRelationNew          IntentRelation = "new"
+	IntentRelationContinuation IntentRelation = "continuation"
+	IntentRelationRefinement   IntentRelation = "refinement"
+	IntentRelationCorrection   IntentRelation = "correction"
+)
 
-	selfDocs, collaborationDocs := splitProfileDocuments(input)
-	if len(selfDocs) == 0 || len(collaborationDocs) == 0 {
-		return Result{Decision: DecisionSelf, Reason: "insufficient collaboration profile"}
-	}
-
-	texts := append([]string{input.Message}, append(selfDocs, collaborationDocs...)...)
-	vectors, err := input.Embedder.Embed(ctx, texts)
-	if err != nil || len(vectors) != len(texts) {
-		return Result{Decision: DecisionSelf, Reason: "embedding failed"}
-	}
-	query := vectors[0]
-	selfScore := bestCosine(query, vectors[1:1+len(selfDocs)])
-	collabScore := bestCosine(query, vectors[1+len(selfDocs):])
-
-	margin := input.CloseMargin
-	if margin <= 0 {
-		margin = DefaultCloseMargin
-	}
-	threshold := input.TeamThreshold
-	if threshold <= 0 {
-		threshold = defaultTeamThreshold
-	}
-
-	diff := collabScore - selfScore
-	bestScore := math.Max(selfScore, collabScore)
-	switch {
-	case math.Abs(diff) <= margin:
-		return Result{
-			Decision:           DecisionSelf,
-			Confidence:         bestScore,
-			Reason:             "profiles are close; defaulting to self",
-			SelfScore:          selfScore,
-			CollaborationScore: collabScore,
-			Mode:               input.Mode,
-		}
-	case diff > margin && collabScore >= threshold:
-		return Result{
-			Decision:           DecisionTeam,
-			Confidence:         diff,
-			Reason:             "request is closer to team/delegate capability",
-			SelfScore:          selfScore,
-			CollaborationScore: collabScore,
-			Mode:               input.Mode,
-			RequiredTool:       requiredToolForMode(input.Mode),
-		}
-	default:
-		return Result{
-			Decision:           DecisionSelf,
-			Confidence:         -diff,
-			Reason:             "request is closer to current agent capability",
-			SelfScore:          selfScore,
-			CollaborationScore: collabScore,
-			Mode:               input.Mode,
-		}
-	}
-}
-
-func ClassifyWithLLM(ctx context.Context, input Input, provider providers.Provider, model string, caps *usagecaps.Service) Result {
-	fallback := Classify(ctx, input)
-	if input.Mode == "" || input.Mode == ModeSpawn || provider == nil || strings.TrimSpace(model) == "" {
-		return forceSelfDecision(fallback, "arbiter unavailable: ")
-	}
-
-	timeout := input.Timeout
-	if timeout <= 0 {
-		timeout = defaultArbiterTimeout
-	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	req := providers.ChatRequest{
-		Messages: BuildArbiterMessages(input, fallback),
-		Model:    model,
-		Options: map[string]any{
-			providers.OptMaxTokens:   300,
-			providers.OptTemperature: 0.0,
-		},
-	}
-	var (
-		resp *providers.ChatResponse
-		err  error
-	)
+func callClassifierProvider(ctx context.Context, provider providers.Provider, req providers.ChatRequest, model string, caps *usagecaps.Service, purpose string) (*providers.ChatResponse, error) {
 	if caps != nil {
-		resp, err = caps.Chat(ctx, provider, req, usagecaps.ChatOptions{
-			ModelID:         model,
-			Purpose:         "team-work-classify",
-			MaxOutputTokens: 300,
-		})
-	} else {
-		resp, err = provider.Chat(ctx, req)
+		return caps.Chat(ctx, provider, req, usagecaps.ChatOptions{ModelID: model, Purpose: purpose})
 	}
-	if err != nil || resp == nil {
-		slog.Warn("team_work_classify: arbiter call failed",
-			"model", model,
-			"provider_type", fmt.Sprintf("%T", provider),
-			"has_usage_caps", caps != nil,
-			"mode", input.Mode,
-			"timeout", timeout.String(),
-			"response_nil", resp == nil,
-			"error", err,
-		)
-		return forceSelfDecision(fallback, "arbiter_failed: ")
-	}
-	result, err := ParseArbiterResult(resp.Content, input.Mode)
-	if err != nil {
-		slog.Warn("team_work_classify: arbiter parse failed",
-			"model", model,
-			"provider_type", fmt.Sprintf("%T", provider),
-			"mode", input.Mode,
-			"content_len", len(resp.Content),
-			"error", err,
-		)
-		return forceSelfDecision(fallback, "arbiter_parse_failed: ")
-	}
-	result.SelfScore = fallback.SelfScore
-	result.CollaborationScore = fallback.CollaborationScore
-	if result.Reason == "" {
-		result.Reason = fallback.Reason
-	}
-	return applyTeamPermissionGate(input, result)
+	return provider.Chat(ctx, req)
 }
 
-func forceSelfDecision(evidence Result, reasonPrefix string) Result {
-	evidence.Decision = DecisionSelf
-	evidence.RequiredTool = ""
-	evidence.WorkflowHint = ""
-	evidence.Reason = reasonPrefix + evidence.Reason
-	return evidence
+func callClassifierAttempt(parent context.Context, timeout time.Duration, provider providers.Provider, req providers.ChatRequest, model string, caps *usagecaps.Service, purpose string) (*providers.ChatResponse, error) {
+	callCtx, cancel := context.WithTimeout(parent, timeout)
+	defer cancel()
+	return callClassifierProvider(callCtx, provider, req, model, caps, purpose)
 }
 
-func applyTeamPermissionGate(input Input, result Result) Result {
-	if result.Decision != DecisionTeam {
-		return result
+// stageTimeouts returns the active route budget and a retained planner budget
+// for persisted legacy workflow validation. Non-positive input keeps built-in
+// defaults; a configured route budget preserves the historical ratio.
+func stageTimeouts(configured time.Duration) (arbiter, planner time.Duration) {
+	if configured <= 0 {
+		return defaultArbiterTimeout, defaultPlannerTimeout
 	}
-	if result.WorkflowHint == "" {
-		result.WorkflowHint = workflowHintForInput(input)
+	return configured, scalePlannerTimeout(configured)
+}
+
+// scalePlannerTimeout applies the built-in planner:arbiter ratio to a configured
+// budget. The ratio is computed as a plain integer FIRST: multiplying two
+// time.Duration values multiplies their nanosecond counts, which yields a
+// meaningless (and overflow-prone) product rather than a scaled duration.
+func scalePlannerTimeout(configured time.Duration) time.Duration {
+	ratio := int64(defaultPlannerTimeout / defaultArbiterTimeout)
+	if ratio < 1 {
+		ratio = 1
 	}
-	if input.Mode != ModeTeam {
-		return result
+	return configured * time.Duration(ratio)
+}
+
+func callFailureReason(parent context.Context, err error, prefix string) string {
+	if parent.Err() != nil {
+		return prefix + "_transport_failed"
 	}
-	role := strings.ToLower(strings.TrimSpace(input.TeamRole))
-	if role == "" || role == "lead" || input.CanAssignTeamTasks {
-		return result
+	if errors.Is(err, context.DeadlineExceeded) {
+		return prefix + "_timeout"
 	}
-	if input.MemberRequestsEnabled && input.MemberRequestsAutoDispatch {
-		return result
+	return prefix + "_transport_failed"
+}
+
+func safeSelfResult(input Input, reason string) Result {
+	return Result{
+		Decision: DecisionSelf, DecisionBeforeValidation: DecisionSelf, Mode: input.Mode,
+		Reason: reason, ValidatorReason: reason, DegradedWorkflow: true, DegradedReasonCode: reason,
+		WorkflowMode: WorkflowModeSelf, RequestedWorkflowMode: WorkflowModeSelf, EffectiveWorkflowMode: WorkflowModeSelf,
+		CurrentAgentFit: "partial", BestTeamFit: "none",
+		TaskType: classifyTaskType(input.Message, input.RecentContext), RequestKind: requestKindFromTaskType(classifyTaskType(input.Message, input.RecentContext), DecisionSelf),
 	}
-	result.Decision = DecisionSelf
-	result.RequiredTool = ""
-	result.WorkflowHint = ""
-	reason := "member lacks auto-dispatch team request permission"
-	if !input.MemberRequestsEnabled {
-		reason = "member lacks team request permission"
+}
+
+type Capability string
+
+const (
+	CapabilityLeadCoordinator Capability = "lead_coordinator"
+	CapabilityResearch        Capability = "research"
+	CapabilityStrategy        Capability = "strategy"
+	CapabilityAnalyticsCritic Capability = "analytics_critic"
+	CapabilityContentLead     Capability = "content_lead"
+	CapabilityVisualPrompt    Capability = "visual_prompt_artist"
+	CapabilityTechnical       Capability = "technical"
+	CapabilityQA              Capability = "qa"
+)
+
+func classifyTaskType(message, recent string) string {
+	text := strings.ToLower(message + "\n" + recent)
+	switch {
+	case containsAny(text, "kpi", "performance", "data", "evidence", "risk", "quota", "analytics", "analyst", "số liệu", "du lieu", "bằng chứng", "bang chung", "rủi ro", "rui ro"):
+		return "analytics"
+	case containsAny(text, "research", "nghiên cứu", "nghien cuu", "market", "thị trường", "thi truong", "customer", "competitor", "đối thủ", "doi thu", "category", "vendor", "pricing", "nhà cung cấp", "nha cung cap", "giá", "gia", "vàng", "vang"):
+		return "research"
+	case containsAny(text, "strategy", "campaign", "funnel", "positioning", "messaging", "chiến lược", "chien luoc"):
+		return "strategy"
+	case containsAny(text, "content", "copy", "bài viết", "bai viet", "kịch bản", "kich ban"):
+		return "content"
+	case containsAny(text, "visual", "image", "video", "prompt", "ảnh", "anh"):
+		return "visual"
+	case containsAny(text, "dev", "code", "debug", "api", "automation", "tracking", "landing", "form", "crm", "sửa lỗi", "sua loi"):
+		return "dev"
+	case containsAny(text, "qa", "final", "coordination", "điều phối", "dieu phoi", "intake", "review"):
+		return "coordination"
+	default:
+		return "other"
 	}
-	if strings.TrimSpace(result.Reason) == "" {
-		result.Reason = reason
-	} else {
-		result.Reason = reason + ": " + result.Reason
+}
+
+func agentKeyFromProfile(profile Profile) string {
+	if strings.TrimSpace(profile.AgentKey) != "" {
+		return strings.TrimSpace(profile.AgentKey)
 	}
-	return result
+	for _, line := range strings.Split(profile.Text, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(strings.ToLower(line), "agent_key:") {
+			return strings.TrimSpace(line[len("agent_key:"):])
+		}
+	}
+	return ""
+}
+
+func profileAgentKey(profile Profile) string {
+	return firstNonEmpty(profile.AgentKey, agentKeyFromProfile(profile), profile.Name)
+}
+
+func containsAny(text string, markers ...string) bool {
+	for _, marker := range markers {
+		if strings.Contains(text, strings.ToLower(marker)) {
+			return true
+		}
+	}
+	return false
+}
+
+func requestKindFromTaskType(taskType string, decision Decision) string {
+	switch taskType {
+	case "other":
+		return "unclear"
+	}
+	if decision == DecisionTeam {
+		return "team_work"
+	}
+	return "self_work"
+}
+
+func workflowExecutability(input Input) (bool, string) {
+	requiredTool := requiredToolForMode(input.Mode)
+	if requiredTool == "" {
+		return false, "required_tool_unavailable"
+	}
+	// Positive-presence policy: the orchestration required tool must actually
+	// appear in the current agent's available-tool snapshot. Unknown ABSENCE is
+	// not availability — a snapshot that could not confirm the tool (nil list,
+	// failed roster load, or a tool from a source that could not be enumerated)
+	// fails safe to self. Positive evidence still passes even when an UNRELATED
+	// tool source is unknown, because builtins/static-server tools remain listed
+	// even when a dynamic MCP server flips the status to unknown.
+	if !profileHasAvailableTool(input.CurrentAgent, requiredTool) {
+		return false, "required_tool_unavailable"
+	}
+	switch input.Mode {
+	case ModeTeam:
+		if input.CoordinatorAgentID == uuid.Nil || strings.TrimSpace(input.CoordinatorAgentKey) == "" {
+			return false, "canonical_coordinator_unavailable"
+		}
+		canonicalMembers := 0
+		for _, member := range input.Members {
+			if member.AgentID != uuid.Nil && strings.TrimSpace(profileAgentKey(member)) != "" {
+				canonicalMembers++
+			}
+		}
+		if canonicalMembers == 0 {
+			return false, "insufficient_canonical_members"
+		}
+		role := strings.ToLower(strings.TrimSpace(input.TeamRole))
+		if role == "" || role == "lead" || input.CanAssignTeamTasks {
+			return true, ""
+		}
+		if !input.MemberRequestsEnabled {
+			return false, "member_request_path_unavailable"
+		}
+		return true, ""
+	case ModeDelegate:
+		for _, delegate := range input.Delegates {
+			if delegate.AgentID != uuid.Nil && strings.TrimSpace(profileAgentKey(delegate)) != "" {
+				return true, ""
+			}
+		}
+		return false, "insufficient_canonical_members"
+	default:
+		return false, "workflow_permission_unavailable"
+	}
+}
+
+func profileHasAvailableTool(profile Profile, required string) bool {
+	for _, name := range profile.AvailableTools {
+		if strings.EqualFold(strings.TrimSpace(name), required) {
+			return true
+		}
+	}
+	return false
 }
 
 func workflowHintForInput(input Input) string {
@@ -266,89 +318,17 @@ func workflowHintForInput(input Input) string {
 	case ModeTeam:
 		role := strings.ToLower(strings.TrimSpace(input.TeamRole))
 		if role != "" && role != "lead" && !input.CanAssignTeamTasks {
-			if input.MemberRequestsEnabled && input.MemberRequestsAutoDispatch {
-				return `As a team member, do not create or assign general team tasks. Use team_tasks(action="create", task_type="request", ...) to ask a teammate for help. This team's member requests auto-dispatch to the assignee after creation.`
-			}
 			if input.MemberRequestsEnabled {
-				return "As a team member, member requests are enabled but auto-dispatch is disabled; choose self because request tasks would stay pending for leader review and may not run in this turn."
+				if input.MemberRequestsAutoDispatch {
+					return `As a team member, do not create or assign general team tasks. Use team_tasks(action="create", task_type="request", ...) for the canonical coordinator; the backend expands validated workflows without a coordinator LLM turn.`
+				}
+				return `As a team member, use team_tasks(action="create", task_type="request", ...) for the canonical coordinator. The durable workflow waits for explicit lead approval before expansion.`
 			}
 			return "As a team member, you cannot create or assign general team tasks, and member request tasks are disabled. Handle the request directly or explain that a lead must coordinate the team work."
 		}
 		return `Use team_tasks(action="search" or "list") first, then team_tasks(action="create", ...) to assign work to an appropriate team member when new team work is required.`
 	default:
 		return ""
-	}
-}
-
-func BuildArbiterMessages(input Input, evidence Result) []providers.Message {
-	system := `You are a Team Work routing arbiter.
-Return ONLY JSON. Do not answer the user.
-Choose exactly one decision:
-- self: the current agent should handle the request directly.
-- team: the current agent must use the available team/delegate workflow.
-Never return ask. If uncertain, choose self so normal chat is not disrupted.
-
-Strict routing policy:
-- Choose self when the user directly asks the current agent to read, summarize, explain, compare, or interpret existing files, documents, results, or prior team outputs.
-- Choose self when the current agent can answer by using existing files, existing task results, or already completed team work without assigning new work.
-- Do not choose team only because files are located in the team workspace.
-- Do not choose team only because the topic mentions team, workflow, strategy, content, or prior team output.
-- Choose team only when the user explicitly asks to assign, delegate, split work, ask other members, create tasks, gather opinions, or perform new multi-role work.
-- Choose team when the request clearly needs new work from multiple roles, not merely synthesis of existing material.
-- Permission matters: a team member who is not lead cannot assign or create general team tasks.
-- If the current agent is a member and member requests are disabled, choose self for requests to assign, split, coordinate, or ask teammates.
-- If the current agent is a member and member requests are enabled but auto-dispatch is disabled, choose self because pending leader review is not an immediate executable workflow.
-- If the current agent is a member and member requests plus auto-dispatch are enabled, choose team only for a request-help workflow using task_type="request"; do not treat it as lead-style assignment.
-- When self_score and collaboration_score are close, choose self unless there is a clear team signal.`
-
-	var b strings.Builder
-	b.WriteString("User request:\n")
-	b.WriteString(input.Message)
-	b.WriteString("\n\nRouting mode: ")
-	b.WriteString(string(input.Mode))
-	b.WriteString("\nRequired workflow tool when team is chosen: ")
-	b.WriteString(requiredToolForMode(input.Mode))
-	if input.Mode == ModeTeam {
-		b.WriteString("\n\nTeam permission context:\n")
-		b.WriteString("current_agent_team_role: ")
-		b.WriteString(firstNonEmpty(input.TeamRole, "unknown"))
-		b.WriteString("\ncan_assign_team_tasks: ")
-		b.WriteString(fmt.Sprintf("%t", input.CanAssignTeamTasks))
-		b.WriteString("\nmember_requests_enabled: ")
-		b.WriteString(fmt.Sprintf("%t", input.MemberRequestsEnabled))
-		b.WriteString("\nmember_requests_auto_dispatch: ")
-		b.WriteString(fmt.Sprintf("%t", input.MemberRequestsAutoDispatch))
-		if hint := workflowHintForInput(input); hint != "" {
-			b.WriteString("\nworkflow_hint: ")
-			b.WriteString(hint)
-		}
-	}
-	b.WriteString("\n\nEmbedding evidence:\n")
-	b.WriteString(fmt.Sprintf("self_score: %.4f\n", evidence.SelfScore))
-	b.WriteString(fmt.Sprintf("collaboration_score: %.4f\n", evidence.CollaborationScore))
-	b.WriteString("embedding_fallback_decision: ")
-	b.WriteString(string(evidence.Decision))
-	b.WriteString("\n\nCurrent agent and direct capability:\n")
-	for _, doc := range appendProfileDocs(input.CurrentAgent, input.SelfTools) {
-		b.WriteString("---\n")
-		b.WriteString(doc)
-		b.WriteString("\n")
-	}
-	b.WriteString("\nTeam/delegate/tool capability:\n")
-	collaborationProfiles := append([]Profile{}, input.Members...)
-	collaborationProfiles = append(collaborationProfiles, input.Delegates...)
-	collaborationProfiles = append(collaborationProfiles, input.CollaborationTools...)
-	for _, doc := range appendProfileDocs(input.Team, collaborationProfiles) {
-		b.WriteString("---\n")
-		b.WriteString(doc)
-		b.WriteString("\n")
-	}
-	b.WriteString("\nReturn JSON shape:\n")
-	b.WriteString(`{"decision":"self|team","confidence":0.0,"mode":"team|delegate","required_tool":"team_tasks|delegate","workflow_hint":"short permission-aware tool guidance","reason":"short internal reason"}`)
-
-	return []providers.Message{
-		{Role: "system", Content: system},
-		{Role: "user", Content: b.String()},
 	}
 }
 
@@ -365,53 +345,77 @@ func appendProfileDocs(first Profile, rest []Profile) []string {
 	return docs
 }
 
-func ParseArbiterResult(content string, mode Mode) (Result, error) {
+func normalizeArbiterContent(content string) (string, error) {
 	raw := strings.TrimSpace(content)
-	if start := strings.Index(raw, "{"); start >= 0 {
-		if end := strings.LastIndex(raw, "}"); end >= start {
-			raw = raw[start : end+1]
+	if strings.HasPrefix(raw, "{") && strings.HasSuffix(raw, "}") {
+		if json.Valid([]byte(raw)) {
+			return raw, nil
 		}
 	}
-	var parsed struct {
-		Decision     string  `json:"decision"`
-		Confidence   float64 `json:"confidence"`
-		Mode         string  `json:"mode"`
-		RequiredTool string  `json:"required_tool"`
-		WorkflowHint string  `json:"workflow_hint"`
-		Reason       string  `json:"reason"`
-	}
-	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-		return Result{}, err
-	}
-	resultMode := Mode(strings.TrimSpace(parsed.Mode))
-	if resultMode == "" || resultMode == ModeSpawn {
-		resultMode = mode
-	}
-	requiredTool := strings.TrimSpace(parsed.RequiredTool)
-	if requiredTool == "" {
-		requiredTool = requiredToolForMode(resultMode)
-	}
-	switch Decision(strings.ToLower(strings.TrimSpace(parsed.Decision))) {
-	case DecisionTeam:
-		if resultMode != ModeTeam && resultMode != ModeDelegate {
-			resultMode = mode
+	if strings.HasPrefix(raw, "```") && strings.HasSuffix(raw, "```") {
+		inner := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(raw, "```"), "```"))
+		lines := strings.Split(inner, "\n")
+		if len(lines) > 0 {
+			first := strings.ToLower(strings.TrimSpace(lines[0]))
+			if first == "json" || first == "javascript" || first == "js" {
+				inner = strings.TrimSpace(strings.Join(lines[1:], "\n"))
+			}
 		}
-		if resultMode != ModeTeam && resultMode != ModeDelegate {
-			return Result{Decision: DecisionSelf, Mode: mode, Reason: "arbiter requested team without workflow mode"}, nil
+		if strings.HasPrefix(inner, "{") && strings.HasSuffix(inner, "}") {
+			return inner, nil
 		}
-		return Result{
-			Decision:     DecisionTeam,
-			Confidence:   parsed.Confidence,
-			Reason:       strings.TrimSpace(parsed.Reason),
-			Mode:         resultMode,
-			RequiredTool: requiredTool,
-			WorkflowHint: strings.TrimSpace(parsed.WorkflowHint),
-		}, nil
-	case DecisionSelf:
-		return Result{Decision: DecisionSelf, Confidence: parsed.Confidence, Reason: strings.TrimSpace(parsed.Reason), Mode: mode}, nil
-	default:
-		return Result{Decision: DecisionSelf, Confidence: parsed.Confidence, Reason: "arbiter returned unsupported decision; defaulting to self", Mode: mode}, nil
+		return "", fmt.Errorf("fenced arbiter response is not a JSON object")
 	}
+	if object, ok := firstJSONObject(raw); ok {
+		return object, nil
+	}
+	return "", fmt.Errorf("arbiter response is not a JSON object")
+}
+
+func firstJSONObject(raw string) (string, bool) {
+	start := strings.IndexByte(raw, '{')
+	if start < 0 {
+		return "", false
+	}
+	depth := 0
+	inString := false
+	escaped := false
+	for i := start; i < len(raw); i++ {
+		switch raw[i] {
+		case '\\':
+			if inString {
+				escaped = !escaped
+			}
+			continue
+		case '"':
+			if !escaped {
+				inString = !inString
+			}
+		case '{':
+			if !inString {
+				depth++
+			}
+		case '}':
+			if !inString {
+				depth--
+				if depth == 0 {
+					object := raw[start : i+1]
+					return object, json.Valid([]byte(object))
+				}
+			}
+		}
+		escaped = false
+	}
+	return "", false
+}
+
+func validEnum(value string, allowed ...string) bool {
+	for _, item := range allowed {
+		if value == item {
+			return true
+		}
+	}
+	return false
 }
 
 func requiredToolForMode(mode Mode) string {
@@ -423,69 +427,6 @@ func requiredToolForMode(mode Mode) string {
 	default:
 		return ""
 	}
-}
-
-func looksCasualOrSmallDirect(message string) bool {
-	s := strings.ToLower(strings.TrimSpace(message))
-	if s == "" {
-		return true
-	}
-	actionMarkers := []string{
-		"hãy ", "hay ", "viết", "viet", "tạo", "tao", "làm", "lam",
-		"kiểm tra", "kiem tra", "phân tích", "phan tich", "soạn", "soan",
-		"dịch", "dich", "tìm", "tim", "lập kế hoạch", "lap ke hoach",
-		"triển khai", "trien khai", "thiết kế", "thiet ke", "sửa", "sua",
-		"đánh giá", "danh gia", "tóm tắt", "tom tat", "nghiên cứu", "nghien cuu",
-		"check", "create", "write", "analyze", "analyse", "fix", "build",
-		"plan", "research", "design", "review", "summarize", "summarise",
-		"查", "写", "创建", "分析", "修复", "设计", "总结",
-		"작성", "생성", "분석", "수정", "설계", "요약",
-	}
-	for _, marker := range actionMarkers {
-		if strings.Contains(s, marker) {
-			return false
-		}
-	}
-	casualMarkers := []string{
-		"chào", "chao", "hello", "hi", "ok", "ừ", "uh", "cảm ơn", "cam on",
-		"thanks", "thank you", "xin lỗi", "sorry", "được rồi", "duoc roi",
-	}
-	for _, marker := range casualMarkers {
-		if strings.Contains(s, marker) {
-			return true
-		}
-	}
-	return len([]rune(s)) <= 80
-}
-
-func BuildProfileDocuments(input Input) []string {
-	selfDocs, collaborationDocs := splitProfileDocuments(input)
-	return append(selfDocs, collaborationDocs...)
-}
-
-func splitProfileDocuments(input Input) ([]string, []string) {
-	var selfDocs []string
-	if doc := renderProfile(input.CurrentAgent); doc != "" {
-		selfDocs = append(selfDocs, doc)
-	}
-	for _, p := range input.SelfTools {
-		if doc := renderProfile(p); doc != "" {
-			selfDocs = append(selfDocs, doc)
-		}
-	}
-
-	var collaborationDocs []string
-	if doc := renderProfile(input.Team); doc != "" {
-		collaborationDocs = append(collaborationDocs, doc)
-	}
-	for _, group := range [][]Profile{input.Members, input.Delegates, input.CollaborationTools} {
-		for _, p := range group {
-			if doc := renderProfile(p); doc != "" {
-				collaborationDocs = append(collaborationDocs, doc)
-			}
-		}
-	}
-	return selfDocs, collaborationDocs
 }
 
 func renderProfile(p Profile) string {
@@ -511,36 +452,4 @@ func renderProfile(p Profile) string {
 		b.WriteString(text)
 	}
 	return b.String()
-}
-
-func bestCosine(query []float32, docs [][]float32) float64 {
-	best := -1.0
-	for _, doc := range docs {
-		score, err := cosine(query, doc)
-		if err == nil && score > best {
-			best = score
-		}
-	}
-	if best < 0 {
-		return 0
-	}
-	return best
-}
-
-func cosine(a, b []float32) (float64, error) {
-	if len(a) == 0 || len(a) != len(b) {
-		return 0, errors.New("dimension mismatch")
-	}
-	var dot, na, nb float64
-	for i := range a {
-		av := float64(a[i])
-		bv := float64(b[i])
-		dot += av * bv
-		na += av * av
-		nb += bv * bv
-	}
-	if na == 0 || nb == 0 {
-		return 0, nil
-	}
-	return dot / (math.Sqrt(na) * math.Sqrt(nb)), nil
 }

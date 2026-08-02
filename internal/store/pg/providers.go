@@ -19,6 +19,15 @@ type PGProviderStore struct {
 	encKey string // AES-256 encryption key for API keys (empty = plain text)
 }
 
+const providerSelectColumns = `id, name,
+	COALESCE(display_name, '') AS display_name,
+	provider_type,
+	COALESCE(api_base, '') AS api_base,
+	COALESCE(api_key, '') AS api_key,
+	enabled,
+	COALESCE(settings, '{}'::jsonb) AS settings,
+	created_at, updated_at, tenant_id`
+
 func NewPGProviderStore(db *sql.DB, encryptionKey string) *PGProviderStore {
 	if encryptionKey != "" {
 		slog.Info("provider store: API key encryption enabled")
@@ -78,8 +87,7 @@ func (s *PGProviderStore) GetProvider(ctx context.Context, id uuid.UUID) (*store
 	}
 	var p store.LLMProviderData
 	err = pkgSqlxDB.GetContext(ctx, &p,
-		`SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at, tenant_id
-		 FROM llm_providers WHERE id = $1`+tClause,
+		`SELECT `+providerSelectColumns+` FROM llm_providers WHERE id = $1`+tClause,
 		append([]any{id}, tArgs...)...,
 	)
 	if err != nil {
@@ -96,8 +104,7 @@ func (s *PGProviderStore) GetProviderByName(ctx context.Context, name string) (*
 	}
 	var p store.LLMProviderData
 	err = pkgSqlxDB.GetContext(ctx, &p,
-		`SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at, tenant_id
-		 FROM llm_providers WHERE name = $1`+tClause,
+		`SELECT `+providerSelectColumns+` FROM llm_providers WHERE name = $1`+tClause,
 		append([]any{name}, tArgs...)...,
 	)
 	if err != nil {
@@ -114,8 +121,7 @@ func (s *PGProviderStore) ListProviders(ctx context.Context) ([]store.LLMProvide
 	}
 	var result []store.LLMProviderData
 	err = pkgSqlxDB.SelectContext(ctx, &result,
-		`SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at, tenant_id
-		 FROM llm_providers WHERE true`+tClause+` ORDER BY name`, tArgs...)
+		`SELECT `+providerSelectColumns+` FROM llm_providers WHERE true`+tClause+` ORDER BY name`, tArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -129,8 +135,7 @@ func (s *PGProviderStore) ListProviders(ctx context.Context) ([]store.LLMProvide
 func (s *PGProviderStore) ListAllProviders(ctx context.Context) ([]store.LLMProviderData, error) {
 	var result []store.LLMProviderData
 	err := pkgSqlxDB.SelectContext(ctx, &result,
-		`SELECT id, name, display_name, provider_type, api_base, api_key, enabled, settings, created_at, updated_at, tenant_id
-		 FROM llm_providers WHERE true ORDER BY name`)
+		`SELECT `+providerSelectColumns+` FROM llm_providers WHERE true ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}

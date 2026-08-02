@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -12,6 +13,36 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
+
+// ErrRunOwnershipLost is returned by Loop.Run when the run completed its work
+// but lost session ownership before the success tail — it was force-aborted or
+// superseded by a replacement run on the same session (Phase 7 Decision 3 /
+// closure item 1). It is the outer-delivery fence: the inner ownership guards
+// already suppressed the history/session commit and the run.completed event, but
+// Loop.Run previously still returned (result, nil), so WS/inbound callers read a
+// stale success and continued title/TTS/outbound/turn-completed delivery. Callers
+// must treat this typed error as "this run's output must not be delivered"; the
+// replacement/current owner is responsible for user delivery and turn lifecycle.
+// Ownership loss is a run outcome, not an assistant result, so it is a sentinel
+// error rather than a field on RunResult.
+var ErrRunOwnershipLost = errors.New("run lost session ownership")
+
+// ownsSession reports whether this run still owns its session for user-visible
+// commits (Phase 7 Decision 3 zombie-run fence). A nil fence — delegations,
+// announce runs, tests, or any path that did not wire RegisterRun's ownership
+// generation — means "unfenced" and always returns true, preserving the
+// pre-Decision-3 behavior exactly. A wired fence returns false once the run was
+// force-aborted, unregistered, or superseded by a replacement run on the same
+// session; the now-zombie run then suppresses its history append, session save,
+// and final success event so it cannot write into a session another run owns.
+// It is deliberately consulted ONLY at those user-visible commit sites: cleanup,
+// stale-attempt no-ops, and operational tracing must still run for a zombie.
+func (req *RunRequest) ownsSession() bool {
+	if req == nil || req.IsCurrentOwner == nil {
+		return true
+	}
+	return req.IsCurrentOwner()
+}
 
 // Run processes a single message through the agent loop.
 // It blocks until completion and returns the final response.
@@ -240,7 +271,21 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		if result != nil && len(result.Media) > 0 {
 			completedPayload["media"] = result.Media
 		}
-		emitRun(AgentEvent{Type: protocol.AgentEventRunCompleted, AgentID: l.id, RunID: req.RunID, Payload: completedPayload})
+		// Zombie-run fence (Phase 7 Decision 3): suppress the final success event if
+		// this run no longer owns its session. A run that was force-aborted or
+		// superseded by a replacement on the same session must not emit run.completed
+		// — that event carries the assistant content the client persists/renders as
+		// the turn's answer, and a stale one would overwrite the owner's result. The
+		// trace is still finalized below (operational record, not a user-visible
+		// commit) and cancelled/failed emits above are unaffected: only the success
+		// write is gated. Ownership is lost via UnregisterRun before Done closes, so
+		// by the time a superseding run exists this check reliably sees non-ownership.
+		if req.ownsSession() {
+			emitRun(AgentEvent{Type: protocol.AgentEventRunCompleted, AgentID: l.id, RunID: req.RunID, Payload: completedPayload})
+		} else {
+			slog.Warn("v3.run.completed suppressed: run lost session ownership (zombie)",
+				"agent", l.id, "run", req.RunID, "session", req.SessionKey)
+		}
 		if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
 			traceFinalized = true
 			if result != nil {
@@ -249,6 +294,15 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 			} else {
 				l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", "")
 			}
+		}
+		// Outer-delivery fence (Phase 7 closure item 1): the inner guards above
+		// already suppressed the history/session commit and run.completed for a
+		// zombie run, but returning (result, nil) still let WS/inbound callers
+		// deliver this stale run's content as the turn's answer. After operational
+		// trace finalization (which must run even for a zombie), convert the lost
+		// ownership into a typed error so the outer caller suppresses delivery.
+		if !req.ownsSession() {
+			return nil, ErrRunOwnershipLost
 		}
 		return result, nil
 	}

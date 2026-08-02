@@ -64,7 +64,9 @@ func TestRouter_AbortRun_Concurrent_OnlyOneStops(t *testing.T) {
 	_, cancel := context.WithCancel(context.Background())
 	runID := "run-1"
 	sessionKey := "session-1"
-	_ = router.RegisterRun(context.Background(), runID, sessionKey, "agent-1", cancel)
+	if _, generation := router.RegisterRun(context.Background(), runID, sessionKey, "agent-1", cancel); generation == 0 {
+		t.Fatal("expected run registration to return a nonzero ownership generation")
+	}
 
 	// Goroutine closes Done after 50ms (simulating normal graceful exit)
 	go func() {

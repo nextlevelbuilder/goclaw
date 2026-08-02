@@ -102,6 +102,9 @@ func (t *TeamTasksTool) executeRetry(ctx context.Context, args map[string]any) *
 	if task.TeamID != team.ID {
 		return ErrorResult("task does not belong to your team")
 	}
+	if task.WorkflowID != nil {
+		return ErrorResult("workflow tasks cannot be retried through the generic task action")
+	}
 	switch task.Status {
 	case store.TeamTaskStatusStale, store.TeamTaskStatusFailed, store.TeamTaskStatusCompleted:
 		// OK — can retry/reopen these statuses

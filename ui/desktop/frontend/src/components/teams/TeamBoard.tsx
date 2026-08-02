@@ -143,7 +143,15 @@ export function TeamBoard() {
 
       {/* Task detail modal */}
       {selectedTask && (
-        <TaskDetailModal task={selectedTask} members={members} onClose={() => setSelectedTask(null)} onAssign={assignTask} onDelete={deleteTask} onFetchDetail={fetchTaskDetail} />
+        <TaskDetailModal
+          task={selectedTask}
+          members={members}
+          onClose={() => setSelectedTask(null)}
+          onAssign={assignTask}
+          onDelete={deleteTask}
+          onFetchDetail={fetchTaskDetail}
+          onWorkflowChanged={() => { if (activeTeamId) fetchTasks(activeTeamId, statusFilter || undefined) }}
+        />
       )}
 
       {/* Team settings modal */}

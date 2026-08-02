@@ -11,10 +11,18 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+)
+
+// Keep successful workflow delivery markers longer than the two-minute DB
+// delivery lease, while bounding memory to workflows delivered in this window.
+const (
+	workflowDeliveryDedupeTTL        = 10 * time.Minute
+	workflowDeliveryDedupeMaxEntries = 4096
 )
 
 // WebhookRoute holds a path and handler pair for mounting on the main gateway mux.
@@ -133,13 +141,37 @@ func (m *Manager) dispatchShard(ctx context.Context, id int, q <-chan bus.Outbou
 }
 
 // deliverOutbound sends one message and cleans up its temp media.
+//
+// Workflow deliveries (messages carrying a workflow_delivery_id) get
+// exactly-once semantics on top of the sharded send: the first dispatch
+// through marks the id and delivers; a duplicate within the dedupe window is
+// acked as delivered without sending again. Every terminal path — duplicate,
+// unknown channel, empty payload, send failure, send success — acks the
+// delivery so the workflow recovery loop never waits on a lease for an
+// outcome dispatch already decided. A failed send releases the dedupe marker
+// so the recovery retry is allowed to deliver.
 func (m *Manager) deliverOutbound(ctx context.Context, msg bus.OutboundMessage) {
+	deliveryID := msg.Metadata["workflow_delivery_id"]
+	if deliveryID != "" {
+		if m.markWorkflowDelivery(deliveryID, time.Now()) {
+			ackOutboundDelivery(msg, nil)
+			return
+		}
+	}
+	failDelivery := func(err error) {
+		if deliveryID != "" {
+			m.workflowDelivery.Delete(deliveryID)
+		}
+		ackOutboundDelivery(msg, err)
+	}
+
 	m.mu.RLock()
 	channel, exists := m.channels[msg.Channel]
 	m.mu.RUnlock()
 
 	if !exists {
 		slog.Warn("unknown channel for outbound message", "channel", msg.Channel)
+		failDelivery(fmt.Errorf("unknown channel %q", msg.Channel))
 		return
 	}
 
@@ -148,7 +180,10 @@ func (m *Manager) deliverOutbound(ctx context.Context, msg bus.OutboundMessage) 
 	msg.Media = kept
 
 	// If only media was in this message and every file is gone, skip entirely.
+	// For a workflow delivery this means the payload was already delivered by
+	// another dispatch, so ack success.
 	if len(msg.Media) == 0 && msg.Content == "" {
+		ackOutboundDelivery(msg, nil)
 		return
 	}
 
@@ -168,7 +203,10 @@ func (m *Manager) deliverOutbound(ctx context.Context, msg bus.OutboundMessage) 
 
 	if err := channel.Send(sendCtx, msg); err != nil {
 		m.handleSendFailure(sendCtx, channel, msg, err)
+		failDelivery(err)
+		return
 	}
+	ackOutboundDelivery(msg, nil)
 }
 
 // claimTempMedia filters msg.Media down to the files this dispatch owns, and
@@ -223,6 +261,49 @@ func (m *Manager) releaseTempMedia(claimed []string) {
 		}
 		m.mediaClaims.Delete(path)
 	}
+}
+
+// markWorkflowDelivery returns true when deliveryID is still inside the
+// dedupe window. Expired entries are pruned on every workflow delivery.
+func (m *Manager) markWorkflowDelivery(deliveryID string, now time.Time) bool {
+	count := 0
+	var oldestKey any
+	var oldestExpiry time.Time
+	m.workflowDelivery.Range(func(key, value any) bool {
+		expiresAt, ok := value.(time.Time)
+		if !ok || !expiresAt.After(now) {
+			m.workflowDelivery.Delete(key)
+			return true
+		}
+		count++
+		if oldestKey == nil || expiresAt.Before(oldestExpiry) {
+			oldestKey = key
+			oldestExpiry = expiresAt
+		}
+		return true
+	})
+	if value, ok := m.workflowDelivery.Load(deliveryID); ok {
+		if expiresAt, valid := value.(time.Time); valid && expiresAt.After(now) {
+			return true
+		}
+	}
+	if count >= workflowDeliveryDedupeMaxEntries && oldestKey != nil {
+		m.workflowDelivery.Delete(oldestKey)
+	}
+	m.workflowDelivery.Store(deliveryID, now.Add(workflowDeliveryDedupeTTL))
+	return false
+}
+
+func ackOutboundDelivery(msg bus.OutboundMessage, err error) {
+	if msg.DeliveryAck == nil {
+		return
+	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			slog.Error("outbound delivery ack panicked", "panic", recovered)
+		}
+	}()
+	msg.DeliveryAck(err)
 }
 
 // handleSendFailure reports a failed channel.Send from dispatchOutbound.

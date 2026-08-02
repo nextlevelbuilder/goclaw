@@ -102,7 +102,26 @@ func (l *Loop) compactMessagesInPlace(ctx context.Context, messages []providers.
 	summaryContent, chunkCount, err := l.summarizeCompactionUnits(sctx, units, inputCap, 1)
 	if err != nil {
 		slog.Warn("mid_loop_compaction_failed", "agent", l.id, "timeout_seconds", int(timeout/time.Second), "error", err)
-		return nil
+		// Summarizing needs its own LLM call, so it inherits every way that call
+		// can fail — and on a large session it reliably exceeds the compaction
+		// timeout. Giving up here returned the history unchanged, so the caller
+		// recounted, still found it over budget, and aborted the run before the
+		// provider was ever reached. Every subsequent run on that session did the
+		// same: the agent was wedged permanently, answering nothing.
+		//
+		// Falling back to a mechanical extract keeps the run alive. It is a worse
+		// summary than the model's, but it is bounded, needs no network call, and
+		// cannot fail — which is the property the hot path actually requires.
+		summaryContent = extractiveCompactionSummary(toSummarize, inputCap)
+		if strings.TrimSpace(summaryContent) == "" {
+			return nil
+		}
+		chunkCount = 0
+		slog.Warn("mid_loop_compaction_extractive_fallback",
+			"agent", l.id,
+			"summarized_msgs", len(toSummarize),
+			"summary_chars", len(summaryContent),
+		)
 	}
 	slog.Info("compact_budget",
 		"path", "mid-loop",
@@ -355,6 +374,111 @@ func (l *Loop) estimateCompactionRequestTokens(content string) int {
 func dynamicSummaryMax(inputTokens int) int {
 	out := min(max(inputTokens/25, 1024), 8192)
 	return out
+}
+
+const (
+	// extractiveCompactionSummaryMinTokens floors the fallback's output budget so a
+	// pathologically small cap still produces a usable extract.
+	extractiveCompactionSummaryMinTokens = 1024
+
+	// extractiveCompactionRunesPerToken converts the token budget into a character
+	// budget, matching estimateSummaryInputTokens' rune/3 fallback ratio.
+	extractiveCompactionRunesPerToken = 3
+
+	// extractiveCompactionHeaderAllowance reserves room for the extract's own header
+	// lines. The budget must bound the WHOLE returned string, not just the units:
+	// the header is unconditionally prepended, so charging only the units let the
+	// result exceed the ceiling by exactly the header's size.
+	extractiveCompactionHeaderAllowance = 200
+)
+
+// estimateCompactionSpanTokens is the receiver-free counterpart of
+// (*Loop).estimateSummaryInputTokens, used by the extractive fallback which has
+// no Loop (and must not make a network call to size itself).
+func estimateCompactionSpanTokens(messages []providers.Message) int {
+	total := 0
+	for _, m := range messages {
+		total += len([]rune(m.Content)) / extractiveCompactionRunesPerToken
+	}
+	return total
+}
+
+// extractiveCompactionSummary builds a compaction summary without calling any
+// model. Used when the summarizer LLM call fails (typically a timeout on a large
+// session): a mechanical extract is a worse summary than the model's, but it is
+// bounded, deterministic, and cannot fail — so the run proceeds instead of
+// aborting with no answer.
+//
+// The extract must be sized like the summary it stands in for, NOT like the
+// summarizer's input. Sizing it off inputCap (the per-request INPUT ceiling,
+// ~160k tokens on a 200k window) produced a 41k-token "summary" — 5x what the
+// LLM path is even allowed to emit, since every real summary is capped by
+// dynamicSummaryMax at 8192 tokens. The compacted history is that summary plus
+// the kept tail, so an oversized extract left the recount still over budget and
+// the run aborted anyway: the fallback fired, and bought nothing.
+//
+// Strategy is recency-first: walk the span backwards keeping whole rendered
+// units until the character budget is spent, then restore chronological order.
+// Recent turns are what the agent needs to resume work; the oldest context is
+// the most expendable.
+func extractiveCompactionSummary(messages []providers.Message, inputCap int) string {
+	if len(messages) == 0 {
+		return ""
+	}
+	// Mirror the LLM path's output budget: dynamicSummaryMax of the same span,
+	// so the extract occupies the space a real summary would have occupied.
+	tokenBudget := dynamicSummaryMax(estimateCompactionSpanTokens(messages))
+	if tokenBudget < extractiveCompactionSummaryMinTokens {
+		tokenBudget = extractiveCompactionSummaryMinTokens
+	}
+	// Never let the extract exceed what a single summarizer request could accept.
+	if inputCap > 0 && tokenBudget > inputCap {
+		tokenBudget = inputCap
+	}
+	budget := tokenBudget*extractiveCompactionRunesPerToken - extractiveCompactionHeaderAllowance
+	if budget <= 0 {
+		return ""
+	}
+
+	units := buildCompactionUnits(messages)
+	kept := make([]string, 0, len(units))
+	used := 0
+	dropped := 0
+	for i := len(units) - 1; i >= 0; i-- {
+		unit := units[i]
+		size := len([]rune(unit))
+		if used+size > budget {
+			// Truncate the boundary unit rather than dropping it whole, so the
+			// oldest kept turn still carries its opening context.
+			if remaining := budget - used; remaining > 200 {
+				runes := []rune(unit)
+				kept = append(kept, string(runes[len(runes)-remaining:]))
+				used = budget
+			}
+			dropped = i + 1
+			break
+		}
+		kept = append(kept, unit)
+		used += size
+	}
+	if len(kept) == 0 {
+		return ""
+	}
+	// Restore chronological order (the walk above was newest-first).
+	for i, j := 0, len(kept)-1; i < j; i, j = i+1, j-1 {
+		kept[i], kept[j] = kept[j], kept[i]
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Automatic extract of earlier conversation (summarizer unavailable; oldest context omitted).\n")
+	if dropped > 0 {
+		fmt.Fprintf(&sb, "Omitted %d earlier turn(s).\n", dropped)
+	}
+	sb.WriteString("\n")
+	for _, unit := range kept {
+		sb.WriteString(unit)
+	}
+	return sb.String()
 }
 
 // estimateSummaryInputTokens returns a best-effort input-token count. Prefers

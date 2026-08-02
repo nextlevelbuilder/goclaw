@@ -36,6 +36,13 @@ func TestHooksTracing_EmitHookSpan(t *testing.T) {
 		ID:        traceID,
 		Status:    store.SpanStatusCompleted,
 		StartTime: time.Now().Add(-5 * time.Second),
+		// Set CreatedAt to now so the row is never older than the collector's
+		// 7-day prune cutoff. Without this the zero-value (year 0001) makes the
+		// row an unconditional DeleteTracesOlderThan candidate for any prune
+		// fired by another test in this package, which can cascade-delete the
+		// parent trace between CreateTrace and the buffered span flush and trip
+		// spans_trace_id_fkey (23503). Test-only; production always sets it.
+		CreatedAt: time.Now().UTC(),
 	}); err != nil {
 		t.Fatalf("CreateTrace: %v", err)
 	}
@@ -90,6 +97,10 @@ func TestHooksTracing_DispatcherEmitsSpan(t *testing.T) {
 	if err := c.CreateTrace(tenantCtx(tenantID), &store.TraceData{
 		ID: traceID, Status: store.SpanStatusCompleted,
 		StartTime: time.Now().Add(-5 * time.Second),
+		// See TestHooksTracing_EmitHookSpan: pin CreatedAt to now so a concurrent
+		// prune from another test cannot cascade-delete this parent trace and
+		// trip spans_trace_id_fkey (23503). Test-only; production always sets it.
+		CreatedAt: time.Now().UTC(),
 	}); err != nil {
 		t.Fatalf("CreateTrace: %v", err)
 	}

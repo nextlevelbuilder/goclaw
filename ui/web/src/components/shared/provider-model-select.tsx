@@ -2,6 +2,7 @@ import { useMemo, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Combobox } from "@/components/ui/combobox";
 import {
   Select,
@@ -44,6 +45,8 @@ interface ProviderModelSelectProps {
   /** Extra models to prepend to the dropdown (e.g. curated embedding models not returned by API). */
   extraModels?: { id: string; name: string }[];
   disabled?: boolean;
+  /** Hide label tooltips for compact inline settings. */
+  noTips?: boolean;
 }
 
 export function ProviderModelSelect({
@@ -66,6 +69,7 @@ export function ProviderModelSelect({
   modelFilter,
   extraModels,
   disabled,
+  noTips,
 }: ProviderModelSelectProps) {
   const { t } = useTranslation("common");
   const { providers } = useProviders();
@@ -136,10 +140,21 @@ export function ProviderModelSelect({
     await verify(selectedProviderId, model.trim());
   };
 
+  const providerLabelNode = noTips ? (
+    <Label>{providerLabel ?? t("provider")}</Label>
+  ) : (
+    <InfoLabel tip={providerTip ?? t("providerTip")}>{providerLabel ?? t("provider")}</InfoLabel>
+  );
+  const modelLabelNode = noTips ? (
+    <Label>{modelLabel ?? t("model")}</Label>
+  ) : (
+    <InfoLabel tip={modelTip ?? t("modelTip")}>{modelLabel ?? t("model")}</InfoLabel>
+  );
+
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div className="grid gap-1.5">
-        <InfoLabel tip={providerTip ?? t("providerTip")}>{providerLabel ?? t("provider")}</InfoLabel>
+        {providerLabelNode}
         {enabledProviders.length > 0 ? (
           <Select value={provider || "__empty__"} onValueChange={(v) => handleProviderChange(v === "__empty__" ? "" : v)} disabled={disabled}>
             <SelectTrigger>
@@ -173,7 +188,7 @@ export function ProviderModelSelect({
         )}
       </div>
       <div className="grid gap-1.5">
-        <InfoLabel tip={modelTip ?? t("modelTip")}>{modelLabel ?? t("model")}</InfoLabel>
+        {modelLabelNode}
         <div className="flex gap-2">
           <div className="flex-1">
             <Combobox

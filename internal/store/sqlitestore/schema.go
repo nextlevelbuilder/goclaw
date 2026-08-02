@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 )
 
 //go:embed schema.sql
@@ -16,7 +17,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 60
+const SchemaVersion = 63
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -122,6 +123,230 @@ CREATE INDEX IF NOT EXISTS idx_channel_message_archive_archived_at ON channel_me
 	58: `ALTER TABLE subagent_tasks
 	ADD COLUMN root_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL;
 ` + sqliteSubagentRootAgentScopeMigrationBody,
+	// Version 61 → 62: Team Work enforcement deltas — attempt fencing, blocker/
+	// recovery, bounded expansion/delivery, plan revisions, owner exclusion and
+	// the classifier audit trail. Mirrors PG migration 000098.
+	//
+	// team_workflows is rebuilt (SQLite cannot ALTER a CHECK constraint) to widen
+	// status + delivery_status and add the new columns in one pass. The rebuild
+	// runs under foreign_keys=OFF (see EnsureSchema, v == 62): team_tasks.workflow_id
+	// CASCADEs from team_workflows, so a plain DROP with FK on would delete every
+	// workflow-linked task. The team_tasks ADD COLUMNs are stripped when already
+	// present via sqliteWorkflowEnforcementMigrationPatch so the forced-version
+	// replay tests (which traverse this step on a full-schema DB) stay green.
+	62: `-- Classifier audit trail (created first: team_workflows FKs into it).
+CREATE TABLE IF NOT EXISTS team_work_classification_audits (
+    id TEXT NOT NULL PRIMARY KEY,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    ingress VARCHAR(16) NOT NULL CHECK (ingress IN ('inbound','ws','system')),
+    run_id VARCHAR(255) NOT NULL DEFAULT '',
+    session_key VARCHAR(500) NOT NULL DEFAULT '',
+    agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+    original_hash VARCHAR(64) NOT NULL DEFAULT '',
+    resolved_hash VARCHAR(64) NOT NULL DEFAULT '',
+    verified_shape VARCHAR(40) NOT NULL DEFAULT '',
+    traits TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(traits)),
+    requested_mode VARCHAR(24) NOT NULL DEFAULT '' CHECK (requested_mode IN ('','self','single_owner','multi_role')),
+    effective_mode VARCHAR(24) NOT NULL DEFAULT '' CHECK (effective_mode IN ('','self','single_owner','multi_role')),
+    independent_review INTEGER NOT NULL DEFAULT 0 CHECK (independent_review IN (0,1)),
+    selected_owner_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+    coordinator_agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+    plan_hash VARCHAR(64) NOT NULL DEFAULT '',
+    stage_statuses TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(stage_statuses)),
+    degraded_stage VARCHAR(40) NOT NULL DEFAULT '',
+    degraded_reason TEXT NOT NULL DEFAULT '',
+    classifier_provider VARCHAR(60) NOT NULL DEFAULT '',
+    classifier_model VARCHAR(120) NOT NULL DEFAULT '',
+    schema_version INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_twc_audits_tenant_time ON team_work_classification_audits(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_twc_audits_tenant_session_time ON team_work_classification_audits(tenant_id, session_key, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_twc_audits_tenant_run ON team_work_classification_audits(tenant_id, run_id);
+
+-- Rebuild team_workflows: widen status + delivery_status CHECKs and add the
+-- enforcement columns. Explicit 39-column INSERT/SELECT avoids silent drift.
+CREATE TABLE team_workflows_new (
+    id TEXT NOT NULL PRIMARY KEY,
+    team_id TEXT NOT NULL REFERENCES agent_teams(id) ON DELETE CASCADE,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    status VARCHAR(24) NOT NULL CHECK (status IN ('pending_expansion','running','needs_revision','failing','cancelling','completed','failed','cancelled')),
+    canonical_plan TEXT NOT NULL,
+    schema_version INTEGER NOT NULL,
+    plan_hash VARCHAR(64) NOT NULL CHECK (
+    length(plan_hash) = 64
+    AND plan_hash NOT GLOB '*[^0-9a-f]*'
+  ),
+    coordinator_agent_id TEXT NOT NULL REFERENCES agents(id),
+    coordinator_agent_key VARCHAR(255) NOT NULL,
+    origin_agent_id TEXT NOT NULL REFERENCES agents(id),
+    origin_agent_key VARCHAR(255) NOT NULL,
+    origin_run_id VARCHAR(255) NOT NULL,
+    origin_session_key VARCHAR(500) NOT NULL,
+    origin_channel VARCHAR(60) NOT NULL,
+    origin_chat_id VARCHAR(255) NOT NULL,
+    origin_peer_kind VARCHAR(20) NOT NULL DEFAULT 'direct',
+    origin_local_key VARCHAR(500) NOT NULL DEFAULT '',
+    origin_user_id VARCHAR(255) NOT NULL DEFAULT '',
+    origin_sender_id VARCHAR(255) NOT NULL DEFAULT '',
+    origin_role VARCHAR(60) NOT NULL DEFAULT '',
+    origin_routing TEXT NOT NULL DEFAULT '{}',
+    auto_expand INTEGER NOT NULL DEFAULT 0,
+    audit_task_id TEXT REFERENCES team_tasks(id) ON DELETE SET NULL,
+    terminal_task_id TEXT REFERENCES team_tasks(id) ON DELETE SET NULL,
+    expansion_token TEXT,
+    expansion_lease_until TEXT,
+    finalize_token TEXT,
+    finalize_lease_until TEXT,
+    finalize_claimed_at TEXT,
+    finalized_at TEXT,
+    failure_settle_deadline TEXT,
+    failure_summary TEXT NOT NULL DEFAULT '',
+    result_summary TEXT NOT NULL DEFAULT '',
+    delivery_status VARCHAR(16) NOT NULL DEFAULT 'pending' CHECK (delivery_status IN ('pending','enqueuing','delivered','dead')),
+    delivery_token TEXT,
+    delivery_lease_until TEXT,
+    delivered_at TEXT,
+    plan_revision INTEGER NOT NULL DEFAULT 1,
+    expansion_attempt_count INTEGER NOT NULL DEFAULT 0,
+    next_expansion_at TEXT,
+    last_expansion_error TEXT NOT NULL DEFAULT '',
+    delivery_attempt_count INTEGER NOT NULL DEFAULT 0,
+    next_delivery_at TEXT,
+    last_delivery_error TEXT NOT NULL DEFAULT '',
+    cancel_reason TEXT NOT NULL DEFAULT '',
+    cancelled_at TEXT,
+    classification_audit_id TEXT REFERENCES team_work_classification_audits(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+INSERT INTO team_workflows_new (
+    id, team_id, tenant_id, status, canonical_plan, schema_version, plan_hash,
+    coordinator_agent_id, coordinator_agent_key, origin_agent_id, origin_agent_key,
+    origin_run_id, origin_session_key, origin_channel, origin_chat_id,
+    origin_peer_kind, origin_local_key, origin_user_id, origin_sender_id, origin_role,
+    origin_routing, auto_expand, audit_task_id, terminal_task_id,
+    expansion_token, expansion_lease_until, finalize_token, finalize_lease_until,
+    finalize_claimed_at, finalized_at, failure_settle_deadline, failure_summary,
+    result_summary, delivery_status, delivery_token, delivery_lease_until, delivered_at,
+    created_at, updated_at
+) SELECT
+    id, team_id, tenant_id, status, canonical_plan, schema_version, plan_hash,
+    coordinator_agent_id, coordinator_agent_key, origin_agent_id, origin_agent_key,
+    origin_run_id, origin_session_key, origin_channel, origin_chat_id,
+    origin_peer_kind, origin_local_key, origin_user_id, origin_sender_id, origin_role,
+    origin_routing, auto_expand, audit_task_id, terminal_task_id,
+    expansion_token, expansion_lease_until, finalize_token, finalize_lease_until,
+    finalize_claimed_at, finalized_at, failure_settle_deadline, failure_summary,
+    result_summary, delivery_status, delivery_token, delivery_lease_until, delivered_at,
+    created_at, updated_at
+  FROM team_workflows;
+DROP TABLE team_workflows;
+ALTER TABLE team_workflows_new RENAME TO team_workflows;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_team_workflows_creation ON team_workflows(tenant_id, team_id, origin_run_id, plan_hash);
+CREATE INDEX IF NOT EXISTS idx_team_workflows_plan_lookup ON team_workflows(tenant_id, team_id, plan_hash, status);
+CREATE INDEX IF NOT EXISTS idx_team_workflows_recovery ON team_workflows(tenant_id, status, expansion_lease_until, finalize_lease_until);
+CREATE INDEX IF NOT EXISTS idx_team_workflows_delivery_recovery ON team_workflows(tenant_id, delivery_status, delivery_lease_until) WHERE finalized_at IS NOT NULL AND delivered_at IS NULL;
+
+-- Workflow task enforcement columns (ADD COLUMN; stripped when present).
+ALTER TABLE team_tasks ADD COLUMN plan_revision INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE team_tasks ADD COLUMN dispatch_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE team_tasks ADD COLUMN blocker_reason TEXT NOT NULL DEFAULT '';
+ALTER TABLE team_tasks ADD COLUMN recovery_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE team_tasks ADD COLUMN escalation_status VARCHAR(16) NOT NULL DEFAULT 'pending' CHECK (escalation_status IN ('pending','enqueuing','delivered','dead'));
+ALTER TABLE team_tasks ADD COLUMN escalation_attempt_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE team_tasks ADD COLUMN escalation_next_at TEXT;
+ALTER TABLE team_tasks ADD COLUMN escalation_last_error TEXT NOT NULL DEFAULT '';
+
+-- Move the legacy dispatch_count out of the metadata JSON blob into the column.
+UPDATE team_tasks
+   SET dispatch_count = CAST(COALESCE(json_extract(metadata, '$.dispatch_count'), 0) AS INTEGER)
+ WHERE json_extract(metadata, '$.dispatch_count') IS NOT NULL;
+UPDATE team_tasks
+   SET metadata = json_remove(metadata, '$.dispatch_count')
+ WHERE json_extract(metadata, '$.dispatch_count') IS NOT NULL;
+
+-- Revision-aware unique step key.
+DROP INDEX IF EXISTS idx_team_tasks_workflow_step;
+CREATE UNIQUE INDEX idx_team_tasks_workflow_step ON team_tasks(tenant_id, workflow_id, plan_revision, workflow_step_id) WHERE workflow_id IS NOT NULL;
+
+-- Owner exclusion: at most one active workflow work task per owner/tenant.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_team_tasks_active_owner ON team_tasks(tenant_id, owner_agent_id) WHERE workflow_kind = 'work' AND owner_agent_id IS NOT NULL AND status IN ('dispatching','in_progress');`,
+	// Version 60 → 61: typed user-notification policy with workflow backfill.
+	61: `ALTER TABLE team_tasks ADD COLUMN notification_policy VARCHAR(24) NOT NULL DEFAULT 'default' CHECK (notification_policy IN ('default','suppress_handoff','workflow_internal'));
+UPDATE team_tasks SET notification_policy='workflow_internal' WHERE workflow_id IS NOT NULL AND workflow_kind IN ('audit','work');`,
+	// Version 59 → 60: durable multi-agent workflows and typed task linkage.
+	60: `CREATE TABLE IF NOT EXISTS team_workflows (
+    id TEXT NOT NULL PRIMARY KEY,
+    team_id TEXT NOT NULL REFERENCES agent_teams(id) ON DELETE CASCADE,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    status VARCHAR(24) NOT NULL CHECK (status IN ('pending_expansion','running','failing','completed','failed')),
+    canonical_plan TEXT NOT NULL,
+    schema_version INTEGER NOT NULL,
+    plan_hash VARCHAR(64) NOT NULL CHECK (
+    length(plan_hash) = 64
+    AND plan_hash NOT GLOB '*[^0-9a-f]*'
+  ),
+    coordinator_agent_id TEXT NOT NULL REFERENCES agents(id),
+    coordinator_agent_key VARCHAR(255) NOT NULL,
+    origin_agent_id TEXT NOT NULL REFERENCES agents(id),
+    origin_agent_key VARCHAR(255) NOT NULL,
+    origin_run_id VARCHAR(255) NOT NULL,
+    origin_session_key VARCHAR(500) NOT NULL,
+    origin_channel VARCHAR(60) NOT NULL,
+    origin_chat_id VARCHAR(255) NOT NULL,
+    origin_peer_kind VARCHAR(20) NOT NULL DEFAULT 'direct',
+    origin_local_key VARCHAR(500) NOT NULL DEFAULT '',
+    origin_user_id VARCHAR(255) NOT NULL DEFAULT '',
+    origin_sender_id VARCHAR(255) NOT NULL DEFAULT '',
+    origin_role VARCHAR(60) NOT NULL DEFAULT '',
+	 origin_routing TEXT NOT NULL DEFAULT '{}',
+    auto_expand INTEGER NOT NULL DEFAULT 0,
+    audit_task_id TEXT REFERENCES team_tasks(id) ON DELETE SET NULL,
+    terminal_task_id TEXT REFERENCES team_tasks(id) ON DELETE SET NULL,
+    expansion_token TEXT,
+    expansion_lease_until TEXT,
+    finalize_token TEXT,
+    finalize_lease_until TEXT,
+    finalize_claimed_at TEXT,
+    finalized_at TEXT,
+    failure_settle_deadline TEXT,
+    failure_summary TEXT NOT NULL DEFAULT '',
+    result_summary TEXT NOT NULL DEFAULT '',
+	 delivery_status VARCHAR(16) NOT NULL DEFAULT 'pending' CHECK (delivery_status IN ('pending','enqueuing','delivered')),
+	 delivery_token TEXT,
+	 delivery_lease_until TEXT,
+	 delivered_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+ALTER TABLE team_tasks ADD COLUMN workflow_id TEXT REFERENCES team_workflows(id) ON DELETE CASCADE;
+ALTER TABLE team_tasks ADD COLUMN workflow_step_id VARCHAR(100);
+ALTER TABLE team_tasks ADD COLUMN workflow_kind VARCHAR(10);
+ALTER TABLE team_tasks ADD COLUMN workflow_terminal INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE team_tasks ADD COLUMN dispatch_token TEXT;
+ALTER TABLE team_tasks ADD COLUMN dispatch_lease_until TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_team_tasks_workflow_step ON team_tasks(tenant_id, workflow_id, workflow_step_id) WHERE workflow_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_team_tasks_workflow_status ON team_tasks(tenant_id, workflow_id, status) WHERE workflow_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_team_tasks_dispatch_recovery ON team_tasks(tenant_id, status, dispatch_lease_until) WHERE workflow_id IS NOT NULL AND workflow_kind = 'work';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_team_workflows_creation ON team_workflows(tenant_id, team_id, origin_run_id, plan_hash);
+CREATE INDEX IF NOT EXISTS idx_team_workflows_plan_lookup ON team_workflows(tenant_id, team_id, plan_hash, status);
+CREATE INDEX IF NOT EXISTS idx_team_workflows_recovery ON team_workflows(tenant_id, status, expansion_lease_until, finalize_lease_until);
+CREATE INDEX IF NOT EXISTS idx_team_workflows_delivery_recovery ON team_workflows(tenant_id, delivery_status, delivery_lease_until) WHERE finalized_at IS NOT NULL AND delivered_at IS NULL;
+CREATE TRIGGER IF NOT EXISTS trg_team_tasks_workflow_insert BEFORE INSERT ON team_tasks
+WHEN NOT (
+  (NEW.workflow_id IS NULL AND NEW.workflow_step_id IS NULL AND NEW.workflow_kind IS NULL AND NEW.workflow_terminal = 0 AND NEW.dispatch_token IS NULL AND NEW.dispatch_lease_until IS NULL)
+  OR (NEW.workflow_id IS NOT NULL AND NEW.workflow_kind = 'audit' AND NEW.workflow_step_id IS NULL AND NEW.workflow_terminal = 0 AND NEW.dispatch_token IS NULL AND NEW.dispatch_lease_until IS NULL)
+  OR (NEW.workflow_id IS NOT NULL AND NEW.workflow_kind = 'work' AND NEW.workflow_step_id IS NOT NULL)
+)
+BEGIN SELECT RAISE(ABORT, 'invalid workflow task fields'); END;
+CREATE TRIGGER IF NOT EXISTS trg_team_tasks_workflow_update BEFORE UPDATE OF workflow_id,workflow_step_id,workflow_kind,workflow_terminal,dispatch_token,dispatch_lease_until ON team_tasks
+WHEN NOT (
+  (NEW.workflow_id IS NULL AND NEW.workflow_step_id IS NULL AND NEW.workflow_kind IS NULL AND NEW.workflow_terminal = 0 AND NEW.dispatch_token IS NULL AND NEW.dispatch_lease_until IS NULL)
+  OR (NEW.workflow_id IS NOT NULL AND NEW.workflow_kind = 'audit' AND NEW.workflow_step_id IS NULL AND NEW.workflow_terminal = 0 AND NEW.dispatch_token IS NULL AND NEW.dispatch_lease_until IS NULL)
+  OR (NEW.workflow_id IS NOT NULL AND NEW.workflow_kind = 'work' AND NEW.workflow_step_id IS NOT NULL)
+)
+BEGIN SELECT RAISE(ABORT, 'invalid workflow task fields'); END;`,
 	// Version 57 → 58: restore custom skills previously converted by the bundled skill seeder.
 	57: `UPDATE skills
 SET is_system = 0,
@@ -1544,7 +1769,8 @@ func updateBaseNames(ctx context.Context, db *sql.DB, updateSQL string, rows [][
 //  1. Fresh DB (no schema_version row) → apply full schema.sql + set version = SchemaVersion
 //  2. Existing DB with version < SchemaVersion → apply patches sequentially
 //  3. Existing DB with version == SchemaVersion → no-op
-//  4. Always: seed master tenant (idempotent)
+//  4. Existing DB with version > SchemaVersion → reject as incompatible
+//  5. Always for compatible schemas: seed master tenant (idempotent)
 func EnsureSchema(db *sql.DB) error {
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_version (
 		version INTEGER NOT NULL PRIMARY KEY
@@ -1576,6 +1802,9 @@ func EnsureSchema(db *sql.DB) error {
 	}
 	if err != nil {
 		return fmt.Errorf("read schema version: %w", err)
+	}
+	if current > SchemaVersion {
+		return fmt.Errorf("sqlite: database schema version %d is newer than supported version %d", current, SchemaVersion)
 	}
 
 	// Apply incremental migrations for existing DBs.
@@ -1619,56 +1848,27 @@ func EnsureSchema(db *sql.DB) error {
 					return fmt.Errorf("inspect subagent task root-agent column: %w", err)
 				}
 			}
+			if v == 60 {
+				patch, err = sqliteWorkflowMigrationPatch(db, patch)
+				if err != nil {
+					return fmt.Errorf("inspect workflow task columns: %w", err)
+				}
+			}
+			if v == 62 {
+				patch, err = sqliteWorkflowEnforcementMigrationPatch(db, patch)
+				if err != nil {
+					return fmt.Errorf("inspect workflow enforcement columns: %w", err)
+				}
+			}
 			// Migrations that rebuild a table referenced by another table's FK
 			// require foreign_keys=OFF per SQLite altertable §7. The pragma is
-			// a no-op inside a transaction, so toggle it around BEGIN/COMMIT.
+			// connection-local and a no-op inside a transaction, so the helper pins
+			// one connection across the pragma, transaction, check, and restoration.
 			// v25 → v26: rebuilds agent_heartbeats; heartbeat_run_logs.heartbeat_id FKs into it.
-			needsFKOff := v == 25
-			if needsFKOff {
-				if _, err := db.Exec("PRAGMA foreign_keys=OFF"); err != nil {
-					return fmt.Errorf("disable FK before v%d: %w", v, err)
-				}
-			}
-			tx, txErr := db.Begin()
-			if txErr != nil {
-				if needsFKOff {
-					_, _ = db.Exec("PRAGMA foreign_keys=ON")
-				}
-				return fmt.Errorf("begin migration tx v%d: %w", v, txErr)
-			}
-			if _, err := tx.Exec(patch); err != nil {
-				tx.Rollback()
-				if needsFKOff {
-					_, _ = db.Exec("PRAGMA foreign_keys=ON")
-				}
-				return fmt.Errorf("apply migration v%d: %w", v, err)
-			}
-			if _, err := tx.Exec(
-				"UPDATE schema_version SET version = ? WHERE version = ?", v+1, v,
-			); err != nil {
-				tx.Rollback()
-				if needsFKOff {
-					_, _ = db.Exec("PRAGMA foreign_keys=ON")
-				}
-				return fmt.Errorf("update schema version v%d: %w", v, err)
-			}
-			if err := tx.Commit(); err != nil {
-				if needsFKOff {
-					_, _ = db.Exec("PRAGMA foreign_keys=ON")
-				}
-				return fmt.Errorf("commit migration v%d: %w", v, err)
-			}
-			if needsFKOff {
-				// Verify referential integrity after the rebuild.
-				if rows, qErr := db.Query("PRAGMA foreign_key_check"); qErr == nil {
-					if rows.Next() {
-						slog.Warn("sqlite: foreign_key_check reported violations after migration", "version", v+1)
-					}
-					rows.Close()
-				}
-				if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
-					return fmt.Errorf("re-enable FK after v%d: %w", v, err)
-				}
+			// v61 → v62: rebuilds team_workflows; team_tasks.workflow_id FKs into it.
+			needsFKOff := v == 25 || v == 62
+			if err := applySQLiteMigration(db, v, patch, needsFKOff); err != nil {
+				return err
 			}
 			// Post-SQL backfill hooks for migrations needing app-side logic.
 			// modernc.org/sqlite lacks regexp_replace, so the v15 → v16
@@ -1683,6 +1883,140 @@ func EnsureSchema(db *sql.DB) error {
 	}
 
 	return seedMasterTenant(db)
+}
+
+func applySQLiteMigration(db *sql.DB, version int, patch string, needsFKOff bool) (retErr error) {
+	if !needsFKOff {
+		tx, err := db.Begin()
+		if err != nil {
+			return fmt.Errorf("begin migration tx v%d: %w", version, err)
+		}
+		if _, err := tx.Exec(patch); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("apply migration v%d: %w", version, err)
+		}
+		if _, err := tx.Exec(
+			"UPDATE schema_version SET version = ? WHERE version = ?", version+1, version,
+		); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("update schema version v%d: %w", version, err)
+		}
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit migration v%d: %w", version, err)
+		}
+		return nil
+	}
+
+	conn, err := db.Conn(context.Background())
+	if err != nil {
+		return fmt.Errorf("pin connection before v%d: %w", version, err)
+	}
+	defer func() {
+		if _, err := conn.ExecContext(context.Background(), "PRAGMA foreign_keys=ON"); err != nil && retErr == nil {
+			retErr = fmt.Errorf("re-enable FK after v%d: %w", version, err)
+		}
+		if err := conn.Close(); err != nil && retErr == nil {
+			retErr = fmt.Errorf("release migration connection v%d: %w", version, err)
+		}
+	}()
+
+	if _, err := conn.ExecContext(context.Background(), "PRAGMA foreign_keys=OFF"); err != nil {
+		return fmt.Errorf("disable FK before v%d: %w", version, err)
+	}
+	tx, err := conn.BeginTx(context.Background(), nil)
+	if err != nil {
+		return fmt.Errorf("begin migration tx v%d: %w", version, err)
+	}
+	if _, err := tx.Exec(patch); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("apply migration v%d: %w", version, err)
+	}
+	rows, err := tx.Query("PRAGMA foreign_key_check")
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("foreign key check after v%d: %w", version, err)
+	}
+	hasViolation := rows.Next()
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		_ = tx.Rollback()
+		return fmt.Errorf("scan foreign key check after v%d: %w", version, err)
+	}
+	if err := rows.Close(); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("close foreign key check after v%d: %w", version, err)
+	}
+	if hasViolation {
+		_ = tx.Rollback()
+		return fmt.Errorf("foreign key check after v%d reported violations", version)
+	}
+	if _, err := tx.Exec(
+		"UPDATE schema_version SET version = ? WHERE version = ?", version+1, version,
+	); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("update schema version v%d: %w", version, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit migration v%d: %w", version, err)
+	}
+	return nil
+}
+
+func sqliteWorkflowMigrationPatch(db *sql.DB, patch string) (string, error) {
+	columns := []struct {
+		name string
+		stmt string
+	}{
+		{"workflow_id", "ALTER TABLE team_tasks ADD COLUMN workflow_id TEXT REFERENCES team_workflows(id) ON DELETE CASCADE;\n"},
+		{"workflow_step_id", "ALTER TABLE team_tasks ADD COLUMN workflow_step_id VARCHAR(100);\n"},
+		{"workflow_kind", "ALTER TABLE team_tasks ADD COLUMN workflow_kind VARCHAR(10);\n"},
+		{"workflow_terminal", "ALTER TABLE team_tasks ADD COLUMN workflow_terminal INTEGER NOT NULL DEFAULT 0;\n"},
+		{"dispatch_token", "ALTER TABLE team_tasks ADD COLUMN dispatch_token TEXT;\n"},
+		{"dispatch_lease_until", "ALTER TABLE team_tasks ADD COLUMN dispatch_lease_until TEXT;\n"},
+	}
+	for _, column := range columns {
+		exists, err := sqliteColumnExists(db, "team_tasks", column.name)
+		if err != nil {
+			return "", err
+		}
+		if exists {
+			patch = strings.ReplaceAll(patch, column.stmt, "")
+		}
+	}
+	return patch, nil
+}
+
+// sqliteWorkflowEnforcementMigrationPatch strips the team_tasks enforcement
+// ADD COLUMN statements (v61 → v62) that are already present. The upstream
+// forced-version replay tests set schema_version back and re-run EnsureSchema
+// against a full-schema DB, so these columns can already exist; a raw ADD
+// COLUMN would then fail with "duplicate column name". The team_workflows
+// rebuild and index/backfill statements are left intact (CREATE ... IF NOT
+// EXISTS and the rebuild are self-guarding).
+func sqliteWorkflowEnforcementMigrationPatch(db *sql.DB, patch string) (string, error) {
+	columns := []struct {
+		name string
+		stmt string
+	}{
+		{"plan_revision", "ALTER TABLE team_tasks ADD COLUMN plan_revision INTEGER NOT NULL DEFAULT 1;\n"},
+		{"dispatch_count", "ALTER TABLE team_tasks ADD COLUMN dispatch_count INTEGER NOT NULL DEFAULT 0;\n"},
+		{"blocker_reason", "ALTER TABLE team_tasks ADD COLUMN blocker_reason TEXT NOT NULL DEFAULT '';\n"},
+		{"recovery_count", "ALTER TABLE team_tasks ADD COLUMN recovery_count INTEGER NOT NULL DEFAULT 0;\n"},
+		{"escalation_status", "ALTER TABLE team_tasks ADD COLUMN escalation_status VARCHAR(16) NOT NULL DEFAULT 'pending' CHECK (escalation_status IN ('pending','enqueuing','delivered','dead'));\n"},
+		{"escalation_attempt_count", "ALTER TABLE team_tasks ADD COLUMN escalation_attempt_count INTEGER NOT NULL DEFAULT 0;\n"},
+		{"escalation_next_at", "ALTER TABLE team_tasks ADD COLUMN escalation_next_at TEXT;\n"},
+		{"escalation_last_error", "ALTER TABLE team_tasks ADD COLUMN escalation_last_error TEXT NOT NULL DEFAULT '';\n"},
+	}
+	for _, column := range columns {
+		exists, err := sqliteColumnExists(db, "team_tasks", column.name)
+		if err != nil {
+			return "", err
+		}
+		if exists {
+			patch = strings.ReplaceAll(patch, column.stmt, "")
+		}
+	}
+	return patch, nil
 }
 
 func idempotentColumnMigration(version int) (string, string, bool) {
@@ -1707,6 +2041,8 @@ func idempotentColumnMigration(version int) (string, string, bool) {
 		return "webhook_calls", "last_heartbeat_at", true
 	case 55:
 		return "mcp_servers", "require_user_credentials", true
+	case 61:
+		return "team_tasks", "notification_policy", true
 	default:
 		return "", "", false
 	}

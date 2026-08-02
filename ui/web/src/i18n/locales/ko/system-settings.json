@@ -41,8 +41,11 @@
     "intentClassifyInfo": "이 기능은 세션이 작업 중일 때만 적용되며, 요청에 팀 워크플로가 필요한지는 판단하지 않습니다.",
     "teamWorkClassify": "Team Work 분류",
     "teamWorkClassifyHint": "새 요청을 직접 처리 또는 team/delegate 워크플로로 분류합니다.",
-    "teamWorkClassifyInfo": "요청이 현재 에이전트의 범위를 넘거나 분담이 필요하면 시스템이 embedding을 근거로 사용하고 모델이 직접 처리와 team/delegate 워크플로 중 하나를 결정하게 합니다. 시스템은 lead/member 권한도 확인합니다. member는 팀에서 member request와 auto-dispatch를 모두 켠 경우에만 도움 요청을 만들 수 있습니다.",
-    "teamWorkClassifyEmbeddingRequired": "Team Work 분류를 켜려면 먼저 embedding을 설정해야 합니다."
+    "teamWorkClassifyInfo": "요청이 현재 에이전트 범위를 넘거나 분담이 필요하면 한 번의 LLM 라우팅 호출로 직접 처리 또는 team/delegate 워크플로를 선택합니다. embedding 설정은 필요하지 않습니다. Provider/Model을 Agent default로 두면 현재 에이전트를 사용하고, provider만 선택하면 해당 provider의 기본 모델을 사용합니다.",
+    "teamWorkClassifyProvider": "Provider",
+    "teamWorkClassifyModel": "Model",
+    "teamWorkClassifyProviderPlaceholder": "Agent default",
+    "teamWorkClassifyModelPlaceholder": "Agent default"
   },
   "kg": {
     "title": "지식 그래프",

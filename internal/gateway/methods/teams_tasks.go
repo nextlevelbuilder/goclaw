@@ -10,20 +10,16 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // maxCommentLength caps comment/reason content to prevent DB bloat.
 const maxCommentLength = 10000
-
-func taskBusEvent(name string, payload any) bus.Event {
-	return bus.Event{Name: name, Payload: payload}
-}
 
 func taskNowUTC() string {
 	return time.Now().UTC().Format("2006-01-02T15:04:05Z")
@@ -83,7 +79,6 @@ func (m *TeamsMethods) handleTaskGet(ctx context.Context, client *gateway.Client
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidID, "taskId")))
 		return
 	}
-
 	task, err := m.teamStore.GetTask(ctx, taskID)
 	if err != nil {
 		if errors.Is(err, store.ErrTaskNotFound) {
@@ -191,11 +186,69 @@ func (m *TeamsMethods) handleTaskApprove(ctx context.Context, client *gateway.Cl
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "comment too long"))
 		return
 	}
+	task, err := m.teamStore.GetTask(ctx, taskID)
+	if err != nil || task.TeamID != teamID {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "task", "")))
+		return
+	}
 
-	if err := m.teamStore.ApproveTask(ctx, taskID, teamID, params.Comment); err != nil {
+	approvedStatus := store.TeamTaskStatusCompleted
+	workflowExpanded := false
+	if task.WorkflowID != nil && task.WorkflowKind == store.TeamWorkflowTaskKindAudit {
+		workflowStore, ok := m.teamStore.(store.TeamWorkflowStore)
+		if !ok {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "")))
+			return
+		}
+		workflow, workflowErr := workflowStore.GetWorkflow(ctx, *task.WorkflowID)
+		team, teamErr := m.teamStore.GetTeam(ctx, teamID)
+		if workflowErr != nil || teamErr != nil || team == nil || workflow.CoordinatorAgentID != team.LeadAgentID || task.OwnerAgentID == nil || *task.OwnerAgentID != team.LeadAgentID {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "workflow request is not approvable"))
+			return
+		}
+		if m.postTurn == nil || m.postTurn.RevalidateWorkflow(ctx, workflow) != nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "workflow plan is no longer executable; re-plan is required"))
+			return
+		}
+		workflowTasks, buildErr := tools.BuildWorkflowTasksFromStoredPlan(workflow)
+		if buildErr != nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "stored workflow plan is invalid"))
+			return
+		}
+		tools.InheritWorkflowTaskContext(workflowTasks, task)
+		members, memberErr := m.teamStore.ListMembers(ctx, teamID)
+		memberIDs := make(map[uuid.UUID]struct{}, len(members))
+		for _, member := range members {
+			memberIDs[member.AgentID] = struct{}{}
+		}
+		if memberErr != nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "")))
+			return
+		}
+		for _, workflowTask := range workflowTasks {
+			if workflowTask.OwnerAgentID == nil {
+				client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "workflow owner is invalid"))
+				return
+			}
+			if _, exists := memberIDs[*workflowTask.OwnerAgentID]; !exists {
+				client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "workflow roster changed; re-plan is required"))
+				return
+			}
+		}
+		if err := workflowStore.ApprovePendingWorkflowRequest(ctx, workflow.ID, task.ID, store.WorkflowApprovalActor{UserID: client.UserID(), Role: string(client.Role())}, workflowTasks); err != nil {
+			slog.Warn("teams.tasks.approve workflow failed", "workflow_id", workflow.ID, "error", err)
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "")))
+			return
+		}
+		approvedStatus = store.TeamWorkflowStatusRunning
+		workflowExpanded = true
+	} else if err := m.teamStore.ApproveTask(ctx, taskID, teamID, params.Comment); err != nil {
 		slog.Warn("teams.tasks.approve failed", "task_id", taskID, "error", err)
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "")))
 		return
+	}
+	if workflowExpanded && m.postTurn != nil {
+		m.postTurn.DispatchUnblockedTasks(ctx, teamID)
 	}
 
 	// Add optional comment.
@@ -212,16 +265,15 @@ func (m *TeamsMethods) handleTaskApprove(ctx context.Context, client *gateway.Cl
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"ok": true}))
 
 	if m.msgBus != nil {
-		m.msgBus.Broadcast(taskBusEvent(protocol.EventTeamTaskApproved, protocol.TeamTaskEventPayload{
-			TeamID:    teamID.String(),
-			TaskID:    taskID.String(),
-			Status:    store.TeamTaskStatusCompleted,
-			UserID:    client.UserID(),
-			Channel:   "dashboard",
-			Timestamp: taskNowUTC(),
-			ActorType: "human",
-			ActorID:   client.UserID(),
-		}))
+		// Identity/status/workflow/owner are re-derived from the committed row
+		// inside the publish path (approvedStatus is a local hint only — the
+		// authoritative row wins, as it did before this refactor); owner display
+		// is resolved via m.agentStore.
+		_ = approvedStatus
+		tools.PublishTaskEventWithResolver(m.teamStore, m.msgBus, m.agentStore, protocol.EventTeamTaskApproved, tools.BuildTeamTaskEventPayload(task, "", tools.TeamTaskEventOptions{
+			UserID: client.UserID(), Channel: "dashboard",
+			ActorType: "human", ActorID: client.UserID(),
+		}), uuid.Nil)
 	}
 }
 
@@ -269,17 +321,17 @@ func (m *TeamsMethods) handleTaskReject(ctx context.Context, client *gateway.Cli
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"ok": true}))
 
 	if m.msgBus != nil {
-		m.msgBus.Broadcast(taskBusEvent(protocol.EventTeamTaskRejected, protocol.TeamTaskEventPayload{
-			TeamID:    teamID.String(),
+		// Identity/status re-derived from the committed row inside the publish
+		// path; Reason is caller-supplied context. Owner display via m.agentStore.
+		tools.PublishTaskEventWithResolver(m.teamStore, m.msgBus, m.agentStore, protocol.EventTeamTaskRejected, protocol.TeamTaskEventPayload{
 			TaskID:    taskID.String(),
-			Status:    store.TeamTaskStatusCancelled,
 			Reason:    reason,
 			UserID:    client.UserID(),
 			Channel:   "dashboard",
 			Timestamp: taskNowUTC(),
 			ActorType: "human",
 			ActorID:   client.UserID(),
-		}))
+		}, uuid.Nil)
 	}
 }
 
@@ -342,18 +394,10 @@ func (m *TeamsMethods) handleTaskComment(ctx context.Context, client *gateway.Cl
 		if runes := []rune(commentPreview); len(runes) > 500 {
 			commentPreview = string(runes[:500]) + "..."
 		}
-		m.msgBus.Broadcast(taskBusEvent(protocol.EventTeamTaskCommented, protocol.TeamTaskEventPayload{
-			TeamID:      teamID.String(),
-			TaskID:      taskID.String(),
-			TaskNumber:  task.TaskNumber,
-			Subject:     task.Subject,
-			CommentText: commentPreview,
-			UserID:      client.UserID(),
-			Channel:     "dashboard",
-			Timestamp:   taskNowUTC(),
-			ActorType:   "human",
-			ActorID:     client.UserID(),
-		}))
+		tools.PublishTaskEventWithResolver(m.teamStore, m.msgBus, m.agentStore, protocol.EventTeamTaskCommented, tools.BuildTeamTaskEventPayload(task, "", tools.TeamTaskEventOptions{
+			CommentText: commentPreview, UserID: client.UserID(), Channel: "dashboard",
+			ActorType: "human", ActorID: client.UserID(),
+		}), uuid.Nil)
 	}
 }
 
@@ -457,4 +501,3 @@ type taskCreateParams struct {
 	Channel     string `json:"channel"`  // optional scope — defaults to "dashboard"
 	ChatID      string `json:"chatId"`   // optional scope — defaults to teamID
 }
-

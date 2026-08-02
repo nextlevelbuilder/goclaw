@@ -15,10 +15,11 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
-	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/teamworkconfig"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -28,7 +29,7 @@ import (
 // and routes them through the scheduler/agent loop, then publishes the response back.
 // Also handles subagent announcements: routes them through the parent agent's session
 // (matching TS subagent-announce.ts pattern) so the agent can reformulate for the user.
-func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents *agent.Router, cfg *config.Config, sched *scheduler.Scheduler, channelMgr *channels.Manager, teamStore store.TeamStore, agentLinkStore store.AgentLinkStore, quotaChecker *channels.QuotaChecker, sessStore store.SessionStore, agentStore store.AgentStore, contactCollector *store.ContactCollector, postTurn tools.PostTurnProcessor, subagentMgr *tools.SubagentManager, usageCapSvc *usagecaps.Service, providerReg *providers.Registry, teamWorkEmbedder memory.EmbeddingProvider) {
+func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents *agent.Router, cfg *config.Config, sched *scheduler.Scheduler, channelMgr *channels.Manager, teamStore store.TeamStore, agentLinkStore store.AgentLinkStore, quotaChecker *channels.QuotaChecker, sessStore store.SessionStore, agentStore store.AgentStore, contactCollector *store.ContactCollector, postTurn tools.PostTurnProcessor, subagentMgr *tools.SubagentManager, usageCapSvc *usagecaps.Service, providerReg *providers.Registry, skillsLoader *skills.Loader, mcpStore store.MCPAgentGrantBatchStore, builtinToolStore store.BuiltinToolStore, tenantToolStore store.BuiltinToolTenantConfigStore, toolPolicy *tools.PolicyEngine, toolRegistry *tools.Registry, teamWorkCfg *teamworkconfig.Resolver) {
 	slog.Info("inbound message consumer started")
 
 	// Inbound message deduplication (matching TS src/infra/dedupe.ts + inbound-dedupe.ts).
@@ -63,8 +64,14 @@ func consumeInboundMessages(ctx context.Context, msgBus *bus.MessageBus, agents 
 		SubagentMgr:      subagentMgr,
 		UsageCaps:        usageCapSvc,
 		ProviderReg:      providerReg,
-		TeamWorkEmbedder: teamWorkEmbedder,
+		SkillsLoader:     skillsLoader,
+		MCPStore:         mcpStore,
+		BuiltinToolStore: builtinToolStore,
+		TenantToolStore:  tenantToolStore,
+		ToolPolicy:       toolPolicy,
+		ToolRegistry:     toolRegistry,
 		GetAnnounceMu:    getAnnounceMu,
+		TeamWorkCfg:      teamWorkCfg,
 	}
 
 	// Track running teammate tasks so they can be cancelled when the task is

@@ -6,6 +6,7 @@ export default defineConfig({
     // jsdom provides browser globals: crypto.subtle, Blob, File, TextEncoder
     environment: "jsdom",
     globals: false,
+    setupFiles: ["./src/test-setup.ts"],
   },
   resolve: {
     alias: {

@@ -43,6 +43,18 @@ func (e *FailoverSummaryError) Error() string {
 	return b.String()
 }
 
+// Unwrap exposes the last attempt's error so errors.As/errors.Is see through the
+// summary. Without it, every caller that classifies or retries — the transient
+// check for workflow steps, IsRetryableError, ClassifyHTTPError — sees only an
+// opaque "candidates exhausted" string and falls through to FailoverUnknown,
+// which reads as "permanent" and discards work that a retry would have saved.
+func (e *FailoverSummaryError) Unwrap() error {
+	if len(e.Attempts) == 0 {
+		return nil
+	}
+	return e.Attempts[len(e.Attempts)-1].Err
+}
+
 // isProfileRotatable returns true for transient errors where rotating API key/profile may help.
 func isProfileRotatable(reason FailoverReason) bool {
 	switch reason {

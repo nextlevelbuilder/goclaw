@@ -25,6 +25,8 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
+const teamWorkEnforcementAttemptTimeout = 30 * time.Second
+
 // pipelineCallbacks creates all callback closures that capture *Loop.
 // Each callback bridges a pipeline.PipelineDeps function to an existing Loop method.
 func (l *Loop) pipelineCallbacks(req *RunRequest, bridgeRS *runState) pipelineCallbackSet {
@@ -242,6 +244,10 @@ func (l *Loop) makeBuildFilteredTools(req *RunRequest) func(state *pipeline.RunS
 
 		// Cache hit: reuse tool defs from first call for non-final iterations.
 		if cacheValid && state.Iteration != maxIter {
+			if state.TeamWorkDisabled || req.RunKind == RunKindWorkflowFinalize {
+				state.Tool.HardToolAllowlist = true
+				return l.filterSelfFallbackToolDefs(cachedToolDefs), nil
+			}
 			return cachedToolDefs, nil
 		}
 
@@ -275,6 +281,10 @@ func (l *Loop) makeBuildFilteredTools(req *RunRequest) func(state *pipeline.RunS
 		allMsgs := state.Messages.All()
 		toolDefs, _, returnedMsgs := l.buildFilteredTools(req, state.Context.HadBootstrap,
 			state.Iteration, maxIter, allMsgs, userTools)
+		if state.TeamWorkDisabled || req.RunKind == RunKindWorkflowFinalize {
+			toolDefs = l.filterSelfFallbackToolDefs(toolDefs)
+			state.Tool.HardToolAllowlist = true
+		}
 		// buildFilteredTools returns the full messages slice; only messages appended
 		// beyond the original length are injections (e.g. final-iteration hint).
 		// Appending the entire slice would duplicate system+history into pending.
@@ -315,6 +325,20 @@ func countMCPToolDefs(toolDefs []providers.ToolDefinition) int {
 	return n
 }
 
+func setAllowedToolsFromChatRequest(state *pipeline.RunState, req providers.ChatRequest, hard bool) {
+	if state == nil {
+		return
+	}
+	allowed := make(map[string]bool, len(req.Tools))
+	for _, td := range req.Tools {
+		if td.Function != nil && td.Function.Name != "" {
+			allowed[td.Function.Name] = true
+		}
+	}
+	state.Tool.AllowedTools = allowed
+	state.Tool.HardToolAllowlist = hard
+}
+
 // makeAuthorizeToolCall enforces a runtime fail-closed allowlist check before
 // every tool execution. AllowedTools is keyed by canonical registry names (built
 // by ThinkStage from FilterTools output). The model may emit prefixed names when
@@ -332,10 +356,18 @@ func (l *Loop) makeAuthorizeToolCall() func(ctx context.Context, state *pipeline
 		// Resolve to canonical name before allowlist lookup. AllowedTools is keyed
 		// by canonical names; the model may emit prefixed names when toolCallPrefix
 		// is set (e.g. "proxy_exec" vs "exec"). Without this the lookup always misses.
-		name := l.resolveToolCallName(tc.Name)
+		name := l.canonicalToolCallName(tc.Name)
+		if state.TeamWorkDisabled || (state.Input != nil && state.Input.RunKind == RunKindWorkflowFinalize) {
+			if l.isSelfFallbackDeniedTool(name) {
+				return false, selfFallbackToolBlockedMessage
+			}
+		}
 
 		if allowed[name] {
 			return true, ""
+		}
+		if state.Tool.HardToolAllowlist {
+			return false, "tool not allowed by active routing directive: " + name
 		}
 
 		// Preserve lazy activation for deferred tools (typically per-user MCP).
@@ -363,6 +395,16 @@ func allowedToolNamesSlice(allowed map[string]bool) []string {
 	}
 	slices.Sort(names)
 	return names
+}
+
+func setAllowedToolNamesOption(req *providers.ChatRequest, allowed map[string]bool) {
+	if req == nil || allowed == nil {
+		return
+	}
+	if req.Options == nil {
+		req.Options = make(map[string]any)
+	}
+	req.Options[providers.OptAllowedToolNames] = allowedToolNamesSlice(allowed)
 }
 
 func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx context.Context, state *pipeline.RunState, chatReq providers.ChatRequest) (*providers.ChatResponse, error) {
@@ -412,9 +454,7 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 		// (not wired) — do NOT set the option in that case, so the CLI
 		// provider's own fail-closed default (nil -> no tools allowed) applies
 		// rather than silently omitting the flag.
-		if state.Tool.AllowedTools != nil {
-			chatReq.Options[providers.OptAllowedToolNames] = allowedToolNamesSlice(state.Tool.AllowedTools)
-		}
+		setAllowedToolNamesOption(&chatReq, state.Tool.AllowedTools)
 		tenantID := store.TenantIDFromContext(ctx)
 		if tenantID != uuid.Nil {
 			chatReq.Options[providers.OptTenantID] = tenantID.String()
@@ -477,7 +517,7 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 			}
 		}
 		fallbackTraceClassifier := providers.NewDefaultClassifier()
-		callProvider := func(attempt string, request providers.ChatRequest) (*providers.ChatResponse, error) {
+		callProvider := func(callCtx context.Context, attempt string, request providers.ChatRequest, forceNonStream bool) (*providers.ChatResponse, error) {
 			if fallbackProvider, ok := provider.(*providers.ModelFallbackProvider); ok {
 				before := func(callCtx context.Context, entry providers.FallbackCandidate, actualReq providers.ChatRequest) (providers.FallbackAfterCall, error) {
 					candidateAttempt := fmt.Sprintf("%s:%s:%s", attempt, entry.ProviderName, actualReq.Model)
@@ -516,42 +556,83 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 						}
 					}, nil
 				}
-				if req.Stream {
-					return fallbackProvider.ChatStreamWithHook(ctx, request, emitChunk, before)
+				if req.Stream && !forceNonStream {
+					return fallbackProvider.ChatStreamWithHook(callCtx, request, emitChunk, before)
 				}
-				return fallbackProvider.ChatWithHook(ctx, request, before)
+				return fallbackProvider.ChatWithHook(callCtx, request, before)
 			}
-			reservation, reserveErr := l.reserveLLMUsage(ctx, req, state, request, attempt)
+			reservation, reserveErr := l.reserveLLMUsage(callCtx, req, state, request, attempt)
 			if reserveErr != nil {
 				recordUsageCapAttempt(reservation)
 				return nil, reserveErr
 			}
 			var callResp *providers.ChatResponse
 			var callErr error
-			if req.Stream {
+			if req.Stream && !forceNonStream {
 				streamed := false
-				callResp, callErr = provider.ChatStream(ctx, request, func(chunk providers.StreamChunk) {
+				callResp, callErr = provider.ChatStream(callCtx, request, func(chunk providers.StreamChunk) {
 					if chunk.Content != "" || chunk.Thinking != "" || len(chunk.Images) > 0 {
 						streamed = true
 					}
 					emitChunk(chunk)
 				})
 				if reservation != nil {
-					reservation.ReconcileStream(ctx, callResp, callErr, streamed)
+					reservation.ReconcileStream(callCtx, callResp, callErr, streamed)
 					recordUsageCapAttempt(reservation)
 				}
-				return callResp, callErr
+				return l.rejectSignallessResponse(callResp, callErr, attempt, opts)
 			} else {
-				callResp, callErr = provider.Chat(ctx, request)
+				callResp, callErr = provider.Chat(callCtx, request)
 			}
 			if reservation != nil {
-				reservation.Reconcile(ctx, callResp, callErr)
+				reservation.Reconcile(callCtx, callResp, callErr)
 				recordUsageCapAttempt(reservation)
 			}
-			return callResp, callErr
+			return l.rejectSignallessResponse(callResp, callErr, attempt, opts)
 		}
 
-		resp, err := callProvider("initial", chatReq)
+		directive := req.TeamWorkDirective
+		if state.TeamWorkDisabled {
+			directive = nil
+		}
+		teamStep := teamWorkDirectiveNextStep(directive, chatReq.Messages)
+		callReq := chatReq
+		if directive != nil && !teamStep.Satisfied {
+			callReq = buildTeamWorkDirectiveStepRequest(chatReq, directive, teamStep, false)
+			slog.Info("team_work_classify: directive state",
+				"required_tool", teamStep.RequiredTool,
+				"required_action", teamStep.RequiredAction,
+				"search_done", teamStep.Progress.SearchDone,
+				"search_count_set", teamStep.Progress.SearchCountSet,
+				"search_count", teamStep.Progress.SearchCount,
+				"last_action", teamStep.Progress.LastAction,
+				"iteration", state.Iteration)
+		}
+
+		directiveRequired := directive != nil && !teamStep.Satisfied
+		setAllowedToolsFromChatRequest(state, callReq, directiveRequired)
+		setAllowedToolNamesOption(&callReq, state.Tool.AllowedTools)
+		callAttempt := func(attempt string, request providers.ChatRequest, forceNonStream bool) (*providers.ChatResponse, error) {
+			if !directiveRequired {
+				return callProvider(ctx, attempt, request, forceNonStream)
+			}
+			attemptCtx, cancel := context.WithTimeout(ctx, directive.enforcementAttemptTimeout())
+			defer cancel()
+			return callProvider(attemptCtx, attempt, request, forceNonStream)
+		}
+		resp, err := callAttempt("initial", callReq, directiveRequired)
+		// A transient provider failure must not cost the run its validated plan:
+		// give the same enforcement step one more attempt before failing closed.
+		// The parent context is checked explicitly because a cancelled parent means
+		// the caller gave up, and providers wrap context errors inconsistently.
+		if directiveRequired && err != nil && teamWorkEnforcementRetryableError(err) && ctx.Err() == nil {
+			slog.Warn("team_work_classify: directive provider error; retrying enforcement once",
+				"required_tool", teamStep.RequiredTool,
+				"required_action", teamStep.RequiredAction,
+				"attempt_timeout", directive.enforcementAttemptTimeout().String(),
+				"error", err)
+			resp, err = callAttempt("team-work-directive-error-retry", callReq, true)
+		}
 		slog.Info("debug.llm.first_response",
 			"has_error", err != nil,
 			"tool_calls_count", func() int {
@@ -560,31 +641,72 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 				}
 				return len(resp.ToolCalls)
 			}(),
-			"tools_provided", len(chatReq.Tools))
+			"tools_provided", len(callReq.Tools))
 
-		if err == nil && teamWorkDirectiveNeedsRetry(req.TeamWorkDirective, state.Iteration, resp) {
-			retryReq := buildTeamWorkDirectiveRetryRequest(chatReq, req.TeamWorkDirective)
-			resp, err = callProvider("team-work-directive-retry", retryReq)
+		needsSelfFallback := directiveRequired && err != nil
+		if directiveRequired && err == nil && !teamWorkDirectiveResponseAdvances(teamStep, resp) {
+			retryReq := buildTeamWorkDirectiveStepRequest(chatReq, directive, teamStep, true)
+			setAllowedToolsFromChatRequest(state, retryReq, true)
+			setAllowedToolNamesOption(&retryReq, state.Tool.AllowedTools)
+			resp, err = callAttempt("team-work-directive-retry", retryReq, true)
 			slog.Info("team_work_classify: directive retry response",
 				"has_error", err != nil,
-				"required_tool", req.TeamWorkDirective.normalizedRequiredTool(),
+				"required_tool", teamStep.RequiredTool,
+				"required_action", teamStep.RequiredAction,
 				"tool_calls_count", func() int {
 					if resp == nil {
 						return -1
 					}
 					return len(resp.ToolCalls)
 				}())
-			if err == nil && teamWorkDirectiveNeedsRetry(req.TeamWorkDirective, state.Iteration, resp) {
-				resp = &providers.ChatResponse{
-					Content:      teamWorkDirectiveBlocker(req.TeamWorkDirective),
-					FinishReason: "stop",
-				}
+			if err != nil || !teamWorkDirectiveResponseAdvances(teamStep, resp) {
+				needsSelfFallback = true
+				slog.Warn("team_work_classify: directive unsatisfied",
+					"has_error", err != nil,
+					"required_tool", teamStep.RequiredTool,
+					"required_action", teamStep.RequiredAction,
+					"tool_calls_count", func() int {
+						if resp == nil {
+							return -1
+						}
+						return len(resp.ToolCalls)
+					}())
 			}
+		}
+		if needsSelfFallback {
+			fallbackReason := "directive_unsatisfied"
+			if err != nil {
+				fallbackReason = "directive_provider_error"
+			}
+			slog.Warn("team_work_classify: run-level self fallback",
+				"self_fallback_reason", fallbackReason,
+				"canonical_blocked_tools", tools.OrchestrationToolNames())
+			state.TeamWorkDisabled = true
+			fallbackCtx := state.Ctx
+			if fallbackCtx == nil {
+				fallbackCtx = ctx
+			}
+			state.Ctx = tools.WithTeamWorkDisabled(fallbackCtx)
+			fallbackReq := chatReq
+			fallbackReq.Tools = l.filterSelfFallbackToolDefs(chatReq.Tools)
+			fallbackReq.Messages = stripTeamWorkRoutingLockMessages(chatReq.Messages)
+			fallbackReq.Options = make(map[string]any, len(chatReq.Options))
+			for k, v := range chatReq.Options {
+				fallbackReq.Options[k] = v
+			}
+			delete(fallbackReq.Options, providers.OptToolChoice)
+			fallbackReq.Messages = append(fallbackReq.Messages, providers.Message{
+				Role:    "system",
+				Content: "Internal workflow delegation failed. Answer the user directly as best-effort now. Do not mention internal routing, tool failures, or workflow enforcement.",
+			})
+			setAllowedToolsFromChatRequest(state, fallbackReq, true)
+			setAllowedToolNamesOption(&fallbackReq, state.Tool.AllowedTools)
+			resp, err = callProvider(ctx, "team-work-directive-self-fallback", fallbackReq, false)
 		}
 
 		// One guarded retry when MCP task tools are available but the model
 		// returns text-only instead of tool calls.
-		retryEligible := req.TeamWorkDirective == nil && err == nil && resp != nil && len(resp.ToolCalls) == 0 && shouldRetryTaskMCP(chatReq)
+		retryEligible := directive == nil && err == nil && resp != nil && len(resp.ToolCalls) == 0 && shouldRetryTaskMCP(chatReq)
 		slog.Info("debug.llm.retry_guard", "retry_eligible", retryEligible)
 		if retryEligible {
 			retryReq := chatReq
@@ -596,7 +718,7 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 				Role:    "system",
 				Content: "MCP task tools are available in this turn. Do not ask for CRM identifier/email first. Call the relevant MCP task tool immediately, then answer with the tool result.",
 			})
-			resp, err = callProvider("retry-tool-choice", retryReq)
+			resp, err = callProvider(ctx, "retry-tool-choice", retryReq, false)
 			slog.Info("debug.llm.retry_response",
 				"has_error", err != nil,
 				"tool_calls_count", func() int {
@@ -649,6 +771,32 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 		}
 		return resp, err
 	}
+}
+
+func stripTeamWorkRoutingLockMessages(messages []providers.Message) []providers.Message {
+	out := make([]providers.Message, 0, len(messages))
+	for _, msg := range messages {
+		if !strings.Contains(msg.Content, "TEAM WORK ROUTING LOCK") {
+			out = append(out, msg)
+			continue
+		}
+		cleaned := stripTeamWorkRoutingLockBlock(msg.Content)
+		if strings.TrimSpace(cleaned) == "" {
+			continue
+		}
+		msg.Content = cleaned
+		out = append(out, msg)
+	}
+	return out
+}
+
+func stripTeamWorkRoutingLockBlock(content string) string {
+	idx := strings.Index(content, "## TEAM WORK ROUTING LOCK")
+	if idx < 0 {
+		return content
+	}
+	before := strings.TrimRight(content[:idx], "\n")
+	return before
 }
 
 func shouldRetryTaskMCP(chatReq providers.ChatRequest) bool {
@@ -744,6 +892,16 @@ func (l *Loop) makeFlushMessages(req *RunRequest) func(ctx context.Context, sess
 	// persists the user message on first flush to match v2 session format.
 	var userMsgFlushed bool
 	return func(ctx context.Context, sessionKey string, msgs []providers.Message) error {
+		// BEGIN Team Work hunk (Phase 7 Decision 3) — transplant onto compaction base in Phase 10.
+		// Zombie-run fence: a run that lost session ownership (force-aborted or
+		// superseded by a replacement run on the same session) must not append
+		// messages into a session another run now owns. Suppress the write and let
+		// the run unwind — cleanup and tracing still proceed. Unfenced runs
+		// (nil IsCurrentOwner: delegations, announce, tests) always pass.
+		if !req.ownsSession() {
+			return nil
+		}
+		// END Team Work hunk.
 		if !userMsgFlushed && !req.HideInput && req.Message != "" {
 			userMsgFlushed = true
 			inputMessage := providers.Message{
@@ -764,6 +922,15 @@ func (l *Loop) makeFlushMessages(req *RunRequest) func(ctx context.Context, sess
 
 func (l *Loop) makeUpdateMetadata(req *RunRequest) func(ctx context.Context, sessionKey string, usage, lastUsage providers.Usage, msgCount int) error {
 	return func(ctx context.Context, sessionKey string, usage, lastUsage providers.Usage, msgCount int) error {
+		// BEGIN Team Work hunk (Phase 7 Decision 3) — transplant onto compaction base in Phase 10.
+		// Zombie-run fence: a run that lost session ownership must not commit
+		// metadata/token/session state into a session a replacement run now owns —
+		// doing so would clobber the owner's saved cursor and token accounting.
+		// Suppress the whole save; cleanup and tracing still run. Unfenced runs pass.
+		if !req.ownsSession() {
+			return nil
+		}
+		// END Team Work hunk.
 		l.sessions.UpdateMetadata(ctx, sessionKey, l.model, l.provider.Name(), req.Channel)
 		l.sessions.AccumulateTokens(ctx, sessionKey, int64(usage.PromptTokens), int64(usage.CompletionTokens))
 		// Persist session to DB (matching v2 finalizeRun behavior).
