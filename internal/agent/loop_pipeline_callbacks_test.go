@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -53,6 +54,61 @@ type recordingSessionStore struct {
 
 func (s *recordingSessionStore) AddMessage(_ context.Context, _ string, msg providers.Message) {
 	s.added = append(s.added, msg)
+}
+
+// retryOnceProvider fails the first Chat call with a transient 429 via RetryDo
+// (which fires the injected retry hook), then succeeds — mimicking a flaky
+// provider whose internal RetryDo consumes the run's retry hook.
+type retryOnceProvider struct {
+	calls int
+	cfg   providers.RetryConfig
+}
+
+func (p *retryOnceProvider) Chat(ctx context.Context, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+	return providers.RetryDo(ctx, p.cfg, func() (*providers.ChatResponse, error) {
+		p.calls++
+		if p.calls == 1 {
+			return nil, &providers.HTTPError{Status: 429, Body: "rate limited"}
+		}
+		return &providers.ChatResponse{Content: "ok"}, nil
+	})
+}
+
+func (p *retryOnceProvider) ChatStream(ctx context.Context, _ providers.ChatRequest, _ func(providers.StreamChunk)) (*providers.ChatResponse, error) {
+	return p.Chat(ctx, providers.ChatRequest{})
+}
+
+func (p *retryOnceProvider) DefaultModel() string { return "test-model" }
+func (p *retryOnceProvider) Name() string         { return "test-provider" }
+
+func TestMakeCallLLMEmitsRetryingOnTransientProviderError(t *testing.T) {
+	col := &eventCollector{}
+	loop := &Loop{id: "test-agent", onEvent: col.onEvent}
+	req := &RunRequest{RunID: "run-1", SessionKey: "sess-1", Channel: "telegram"}
+	state := &pipeline.RunState{
+		Provider: &retryOnceProvider{
+			cfg: providers.RetryConfig{Attempts: 2, MinDelay: time.Millisecond, MaxDelay: time.Millisecond},
+		},
+		Model:     "test-model",
+		Iteration: 0,
+	}
+
+	resp, err := loop.makeCallLLM(req, col.onEvent)(context.Background(), state, providers.ChatRequest{})
+	if err != nil {
+		t.Fatalf("makeCallLLM returned error: %v", err)
+	}
+	if resp == nil || resp.Content != "ok" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+
+	retrying := col.filter(protocol.AgentEventRunRetrying)
+	if len(retrying) != 1 {
+		t.Fatalf("retrying events = %+v, want exactly one", retrying)
+	}
+	payload, ok := retrying[0].Payload.(map[string]string)
+	if !ok || payload["attempt"] != "1" || payload["maxAttempts"] != "2" {
+		t.Fatalf("retrying payload = %+v, want attempt=1 maxAttempts=2", retrying[0].Payload)
+	}
 }
 
 func TestMakeCallLLM_StreamsFinalThinkingWhenNoThinkingChunkArrives(t *testing.T) {

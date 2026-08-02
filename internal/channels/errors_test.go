@@ -63,3 +63,34 @@ func TestFormatAgentError_Empty(t *testing.T) {
 		t.Errorf("expected empty string for empty error, got %q", result)
 	}
 }
+
+func TestIsTransientFailureMessage(t *testing.T) {
+	t.Parallel()
+	transient := []string{
+		"llm call: HTTP 429: rate limited",
+		"request timeout",
+		"deadline exceeded",
+		"service overloaded",
+		"connection reset by peer",
+		"llm call: HTTP 503: service unavailable",
+		"too many requests",
+	}
+	for _, tc := range transient {
+		if !isTransientFailureMessage(tc) {
+			t.Errorf("expected %q to be transient", tc)
+		}
+	}
+
+	permanent := []string{
+		"unauthorized access",
+		"invalid api key",
+		"context length exceeded",
+		"request context budget exceeded",
+		"",
+	}
+	for _, tc := range permanent {
+		if isTransientFailureMessage(tc) {
+			t.Errorf("expected %q to be permanent", tc)
+		}
+	}
+}

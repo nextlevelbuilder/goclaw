@@ -417,7 +417,18 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 		case protocol.AgentEventRunCompleted:
 			status = "done"
 		case protocol.AgentEventRunFailed:
-			status = "error"
+			// Issue 3: transient provider failures (rate limit, timeout, overload)
+			// already surface a friendly retry message via FormatAgentError — a
+			// terminal 💔 reaction would be misleading. Clear any interim reaction
+			// instead; permanent errors keep the 💔.
+			if isTransientFailureMessage(extractPayloadString(payload, "error")) {
+				if err := reactionCh.ClearReaction(ctx, rc.ChatID, rc.MessageID); err != nil {
+					slog.Debug("reaction clear failed", "channel", rc.ChannelName, "error", err)
+				}
+				status = ""
+			} else {
+				status = "error"
+			}
 		case protocol.AgentEventRunCancelled:
 			status = "done"
 		}

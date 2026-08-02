@@ -1,10 +1,38 @@
 package channels
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
+
+// isTransientFailureMessage reports whether an agent run failure string is a
+// transient provider error (rate limit, timeout, overload, connection drop)
+// that the user can simply retry — as opposed to a permanent error (auth,
+// context overflow). Used to decide whether a failure should surface a
+// terminal 💔 reaction (see events.go reaction forwarding).
+func isTransientFailureMessage(errStr string) bool {
+	if errStr == "" {
+		return false
+	}
+	lower := strings.ToLower(errStr)
+	// Reuse the provider retryability classifier (429/5xx typed errors,
+	// connection reset, timeouts, rate limits, EOF) on the raw message.
+	if providers.IsRetryableError(errors.New(errStr)) {
+		return true
+	}
+	// Mirror FormatAgentError's transient matchers (rate limit, timeout,
+	// overload) plus HTTP 5xx status codes, which IsRetryableError only matches
+	// on typed HTTPError values — the string seen here has been re-wrapped.
+	return strings.Contains(lower, "rate limit") ||
+		strings.Contains(lower, "too many requests") ||
+		strings.Contains(lower, "429") ||
+		strings.Contains(lower, "timeout") ||
+		strings.Contains(lower, "deadline exceeded") ||
+		strings.Contains(lower, "overload") ||
+		strings.Contains(lower, "http 5")
+}
 
 // FormatAgentError converts internal error to user-friendly message.
 // Issue 958: Send user-friendly error on RunFailed instead of silent "...".

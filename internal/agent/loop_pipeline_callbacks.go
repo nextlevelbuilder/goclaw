@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -368,6 +369,22 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 	return func(ctx context.Context, state *pipeline.RunState, chatReq providers.ChatRequest) (*providers.ChatResponse, error) {
 		provider := state.Provider
 		model := state.Model
+
+		// Issue 3: surface transient provider retries to the user ("Provider busy,
+		// retrying...") instead of a silent failure ending in a 💔 reaction. The
+		// providers' internal RetryDo / codex loops fire this hook before each retry
+		// attempt; the channel layer turns run.retrying into a placeholder update.
+		ctx = providers.WithRetryHook(ctx, func(attempt, maxAttempts int, _ error) {
+			emitRun(AgentEvent{
+				Type:    protocol.AgentEventRunRetrying,
+				AgentID: l.id,
+				RunID:   req.RunID,
+				Payload: map[string]string{
+					"attempt":     strconv.Itoa(attempt),
+					"maxAttempts": strconv.Itoa(maxAttempts),
+				},
+			})
+		})
 
 		// Enrich ChatRequest options to match v2 (providers need these for caching, routing, audit).
 		if chatReq.Options == nil {
