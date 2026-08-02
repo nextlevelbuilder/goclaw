@@ -2,6 +2,7 @@ package providers
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 )
 
@@ -242,23 +243,31 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 }
 
 // anthropicSkipsTemperature reports whether the Messages API rejects sampling
-// parameters for this model. Claude Opus/Sonnet 4.6+ and Opus 4.7+ return HTTP
-// 400 when temperature (and top_p/top_k) are included; omit them entirely.
+// parameters for this model. Claude Opus/Sonnet 4.6+ return HTTP 400 when
+// temperature (and top_p/top_k) are included; omit them entirely.
 func anthropicSkipsTemperature(model string) bool {
 	m := strings.ToLower(model)
-	for _, family := range []string{"claude-opus-4-", "claude-sonnet-4-"} {
+	for _, family := range []string{"claude-opus-", "claude-sonnet-"} {
 		after, ok := strings.CutPrefix(m, family)
 		if !ok {
 			continue
 		}
-		minor := 0
-		for _, c := range after {
-			if c < '0' || c > '9' {
-				break
-			}
-			minor = minor*10 + int(c-'0')
+
+		majorPart, afterMajor, hasMinor := strings.Cut(after, "-")
+		major, err := strconv.Atoi(majorPart)
+		if err != nil {
+			continue
 		}
-		if minor >= 6 {
+		if major > 4 {
+			return true
+		}
+		if major < 4 || !hasMinor {
+			continue
+		}
+
+		minorPart, _, _ := strings.Cut(afterMajor, "-")
+		minor, err := strconv.Atoi(minorPart)
+		if err == nil && minor >= 6 {
 			return true
 		}
 	}

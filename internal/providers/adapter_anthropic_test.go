@@ -150,10 +150,16 @@ func TestAnthropicAdapterToRequest_Thinking(t *testing.T) {
 	}
 }
 
-func TestAnthropicAdapterToRequest_SkipsTemperatureForClaude46(t *testing.T) {
+func TestAnthropicAdapterToRequest_SkipsTemperatureForClaude46AndNewer(t *testing.T) {
 	adapter, _ := NewAnthropicAdapter(ProviderConfig{APIKey: "sk-test"})
 
-	for _, model := range []string{"claude-opus-4-6", "claude-sonnet-4-6", "claude-opus-4-7-20260501"} {
+	for _, model := range []string{
+		"claude-opus-4-6",
+		"claude-sonnet-4-6",
+		"claude-opus-4-7-20260501",
+		"claude-opus-5",
+		"claude-sonnet-5",
+	} {
 		t.Run(model, func(t *testing.T) {
 			req := ChatRequest{
 				Model:    model,
@@ -371,4 +377,3 @@ func TestAnthropicAdapterToRequest_NativeToolIgnored(t *testing.T) {
 		t.Errorf("expected tool name 'web_search', got %v", tool["name"])
 	}
 }
-
