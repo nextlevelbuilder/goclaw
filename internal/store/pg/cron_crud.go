@@ -66,11 +66,27 @@ func (s *PGCronStore) AddJob(ctx context.Context, name string, schedule store.Cr
 
 	nextRun := computeNextRun(&schedule, now, s.defaultTZ)
 
+	// Resolve the tenant ONCE and use it for both the insert and the read-back.
+	//
+	// These used to disagree: the insert fell back to the master tenant when the
+	// context had none (tenantIDForInsert), while the read filtered on the raw
+	// context value. So a tenant-less caller wrote a row into master and then could
+	// not see it — surfacing as "inserted but could not be read back", with the row
+	// left behind as an orphaned schedule nobody could trace. Resolving once makes
+	// the asymmetry impossible rather than merely unlikely.
+	insertTenant := tenantIDForInsert(ctx)
+	if store.TenantIDFromContext(ctx) == uuid.Nil {
+		// Not an error — single-tenant deployments legitimately land here — but it
+		// is worth seeing, because a job in the master tenant is invisible to the
+		// tenant whose agent it runs.
+		slog.Warn("cron.addjob.no_tenant_in_context", "job", id, "fallback_tenant", insertTenant, "name", name)
+	}
+
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO cron_jobs (id, tenant_id, agent_id, user_id, name, enabled, schedule_kind, cron_expression, run_at, timezone,
 		 interval_ms, payload, delete_after_run, deliver, deliver_channel, deliver_to, wake_heartbeat, next_run_at, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, true, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
-		id, tenantIDForInsert(ctx), agentUUID, userIDPtr, name, scheduleKind, cronExpr, runAt, tz,
+		id, insertTenant, agentUUID, userIDPtr, name, scheduleKind, cronExpr, runAt, tz,
 		intervalMS, payloadJSON, deleteAfterRun, deliver, channel, to, false, nextRun, now, now,
 	)
 	if err != nil {
@@ -79,14 +95,13 @@ func (s *PGCronStore) AddJob(ctx context.Context, name string, schedule store.Cr
 
 	s.cacheLoaded = false // invalidate cache
 
-	// Read back so the caller gets the row as stored (next_run_at, defaults).
+	// Read back so the caller gets the row as stored (next_run_at, defaults),
+	// through the SAME tenant the insert used.
 	//
-	// A miss here used to return (nil, nil), which violates the contract every
-	// caller writes against — `if err != nil` then dereference — and nil-panics
-	// them instead. It happens for real: GetJob is tenant-scoped, so an insert
-	// made in one scope and read in another finds nothing. Report it as the error
-	// it is.
-	job, ok := s.GetJob(ctx, id.String())
+	// A miss here used to return (nil, nil), violating the contract every caller
+	// writes against — `if err != nil` then dereference — and nil-panicking them
+	// instead. Now it cannot normally miss at all, and if it does it is an error.
+	job, ok := s.GetJob(store.WithTenantID(ctx, insertTenant), id.String())
 	if !ok || job == nil {
 		return nil, fmt.Errorf("create cron job: job %s was inserted but could not be read back", id)
 	}
