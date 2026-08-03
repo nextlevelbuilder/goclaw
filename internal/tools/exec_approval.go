@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -120,9 +121,18 @@ const ToolNameExec = "exec"
 // internal/gateway/event_filter.go), so an approval never surfaces in someone
 // else's dashboard.
 type ApprovalRequest struct {
-	ToolName   string // "exec", "delegate_external", …
-	Command    string // exec path: the shell command (empty for non-exec tools)
-	Detail     string // human-readable "what would run" (defaults to Command)
+	ToolName string // "exec", "delegate_external", …
+	Command  string // exec path: the shell command (empty for non-exec tools)
+	Detail   string // human-readable "what would run" (defaults to Command)
+	// Input is the tool's RAW arguments, so a client can render what the action
+	// actually does rather than a one-line summary. For an Edit that means showing
+	// the diff instead of only the file path — approving a change you cannot see is
+	// a decision about WHERE, not WHAT.
+	//
+	// Bounded, not unbounded: see clampApprovalInput. A tool input can carry a
+	// whole file, and this rides on a WS event to every client the approval is
+	// visible to.
+	Input      json.RawMessage
 	AgentID    string
 	SessionKey string
 	UserID     string
@@ -147,14 +157,15 @@ func NewApprovalRequest(ctx context.Context, toolName, agentID string) ApprovalR
 // ToolName/Detail/SessionKey/UserID generalise the record so a non-exec action
 // can describe itself.
 type PendingApproval struct {
-	ID         string    `json:"id"`
-	ToolName   string    `json:"toolName"`
-	Command    string    `json:"command"`
-	Detail     string    `json:"detail,omitempty"`
-	AgentID    string    `json:"agentId"`
-	SessionKey string    `json:"sessionKey,omitempty"`
-	UserID     string    `json:"userId,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID         string          `json:"id"`
+	ToolName   string          `json:"toolName"`
+	Command    string          `json:"command"`
+	Detail     string          `json:"detail,omitempty"`
+	Input      json.RawMessage `json:"input,omitempty"`
+	AgentID    string          `json:"agentId"`
+	SessionKey string          `json:"sessionKey,omitempty"`
+	UserID     string          `json:"userId,omitempty"`
+	CreatedAt  time.Time       `json:"createdAt"`
 
 	tenantID uuid.UUID // event scope only — never serialised to clients
 	resultCh chan ApprovalOutcome
@@ -171,15 +182,46 @@ func (pa *PendingApproval) Wire() map[string]any {
 		return map[string]any{}
 	}
 	return map[string]any{
-		"id":         pa.ID,
-		"toolName":   pa.ToolName,
-		"command":    pa.Command,
-		"detail":     pa.Detail,
+		"id":       pa.ID,
+		"toolName": pa.ToolName,
+		"command":  pa.Command,
+		"detail":   pa.Detail,
+		// Omitted entirely when absent or oversized, so a client can rely on
+		// "present means renderable".
+		"input":      inputOrNil(pa.Input),
 		"agentId":    pa.AgentID,
 		"sessionKey": pa.SessionKey,
 		"userId":     pa.UserID,
 		"createdAt":  pa.CreatedAt.UnixMilli(),
 	}
+}
+
+// maxApprovalInputBytes bounds the raw tool input carried to clients.
+//
+// Generous enough for a real edit (a few hundred lines of before/after) and far
+// below what a whole-file Write can be. Past it the input is DROPPED rather than
+// truncated: half a JSON document is not renderable, and a diff cut off mid-hunk
+// would misrepresent the change someone is approving — the summary in Detail is
+// the honest fallback.
+const maxApprovalInputBytes = 24 * 1024
+
+// clampApprovalInput returns the input if it is a sane, bounded JSON object, else
+// nil.
+func clampApprovalInput(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 || len(raw) > maxApprovalInputBytes {
+		return nil
+	}
+	if !json.Valid(raw) {
+		return nil
+	}
+	return raw
+}
+
+func inputOrNil(raw json.RawMessage) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	return raw
 }
 
 // ExecApprovalManager manages pending approval requests and the dynamic allowlist.
@@ -310,6 +352,7 @@ func (m *ExecApprovalManager) RequestApprovalOutcome(req ApprovalRequest, timeou
 		UserID:     req.UserID,
 		CreatedAt:  time.Now(),
 		tenantID:   req.TenantID,
+		Input:      clampApprovalInput(req.Input),
 		resultCh:   make(chan ApprovalOutcome, 1),
 	}
 	m.pending[id] = pa

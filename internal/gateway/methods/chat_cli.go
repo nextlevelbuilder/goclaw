@@ -1015,7 +1015,11 @@ func (r *cliRelay) permission(ctx context.Context, pr clisession.PermissionReque
 		// adds its binary to the exec tool's dynamic allowlist — so approving one
 		// `git push` from a CLI would silently widen what the AGENT's own exec
 		// tool may run unattended. Everything the user needs to see is in Detail.
-		Detail:     cliApprovalDetail(connName, pr),
+		Detail: cliApprovalDetail(connName, pr),
+		// The raw arguments, so the card can show the DIFF for an edit rather than
+		// just the file path. The broker bounds and validates this; anything
+		// oversized is dropped there and Detail remains the fallback.
+		Input:      pr.Input,
 		AgentID:    r.agentID(),
 		SessionKey: r.sessionKey,
 		UserID:     userID,

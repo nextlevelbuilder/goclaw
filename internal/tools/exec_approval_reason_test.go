@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -132,4 +133,63 @@ func waitForPending(t *testing.T, m *ExecApprovalManager) string {
 	}
 	t.Fatal("no approval became pending")
 	return ""
+}
+
+// The raw tool input is what lets a client show a DIFF instead of a file path, so
+// it must reach the wire — but bounded, because it rides on an event to every
+// client the approval is visible to and a tool input can carry a whole file.
+func TestApprovalCarriesBoundedInput(t *testing.T) {
+	m := NewExecApprovalManager(ExecApprovalConfig{})
+
+	edit := `{"file_path":"/workspace/main.go","old_string":"a := 1","new_string":"a := 2"}`
+	go func() {
+		_, _ = m.RequestApprovalOutcome(ApprovalRequest{
+			ToolName: "cli:Edit",
+			Detail:   "Edit: /workspace/main.go",
+			Input:    json.RawMessage(edit),
+		}, 5*time.Second)
+	}()
+	id := waitForPending(t, m)
+
+	var pending *PendingApproval
+	for _, p := range m.ListPending() {
+		if p.ID == id {
+			pending = p
+		}
+	}
+	if pending == nil {
+		t.Fatal("approval vanished")
+	}
+	if string(pending.Input) != edit {
+		t.Errorf("input not carried: %s", pending.Input)
+	}
+	if got := pending.Wire()["input"]; got == nil {
+		t.Error("input missing from the wire payload — the card cannot render a diff")
+	}
+	_ = m.Resolve(id, ApprovalAllowOnce)
+}
+
+// Oversized input is DROPPED, not truncated: half a JSON document is not
+// renderable, and a diff cut off mid-hunk would misrepresent the change being
+// approved. Detail remains the honest fallback.
+func TestOversizedOrInvalidInputIsDropped(t *testing.T) {
+	huge := json.RawMessage(`{"new_string":"` + strings.Repeat("x", maxApprovalInputBytes) + `"}`)
+	if clampApprovalInput(huge) != nil {
+		t.Error("an oversized input was carried to clients")
+	}
+	for _, bad := range []string{``, `{"broken":`, `not json`} {
+		if clampApprovalInput(json.RawMessage(bad)) != nil {
+			t.Errorf("invalid input %q was carried", bad)
+		}
+	}
+	ok := json.RawMessage(`{"command":"ls"}`)
+	if clampApprovalInput(ok) == nil {
+		t.Error("a valid small input was dropped")
+	}
+	// And an absent input must be OMITTED from the wire, so "present" means
+	// "renderable" for the client.
+	pa := &PendingApproval{ID: "x"}
+	if _, present := pa.Wire()["input"]; present && pa.Wire()["input"] != nil {
+		t.Error("absent input should not appear on the wire")
+	}
 }
