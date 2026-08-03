@@ -421,3 +421,112 @@ func TestCompilerUnavailable(t *testing.T) {
 		t.Error("apply on an unavailable compiler silently succeeded")
 	}
 }
+
+// ── Output nodes ─────────────────────────────────────────────────────────────
+//
+// cron delivers only when Deliver AND channel AND chat id are all set; otherwise
+// it logs "output discarded" and the user sees nothing. So an incomplete output
+// must be refused at compile time — a workflow that reports success and silently
+// goes nowhere is the worst available outcome.
+
+func outputGraph(t *testing.T, outputData string) *Graph {
+	t.Helper()
+	return graphOf(t, `{
+	  "nodes":[
+	    {"id":"t1","type":"trigger","data":{"kind":"cron","expr":"0 8 * * 1"}},
+	    {"id":"a1","type":"agent","data":{"agentId":"`+UUIDA+`","prompt":"summarise"}},
+	    {"id":"o1","type":"output","data":`+outputData+`}
+	  ],
+	  "edges":[{"id":"e1","source":"t1","target":"a1"},{"id":"e2","source":"a1","target":"o1"}]}`)
+}
+
+const UUIDA = "11111111-1111-4111-8111-111111111111"
+
+func TestOutputNodeAttachesDelivery(t *testing.T) {
+	steps, err := outputGraph(t, `{"kind":"channel","channel":"telegram-bot","to":"12345"}`).Plan()
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	s := steps[0]
+	if !s.Deliver || s.DeliverChan != "telegram-bot" || s.DeliverTo != "12345" {
+		t.Errorf("delivery not attached: %+v", s)
+	}
+}
+
+func TestOutputNodeRefusals(t *testing.T) {
+	cases := map[string]struct{ data, want string }{
+		"no channel":       {`{"kind":"channel","to":"123"}`, "where to send"},
+		"no chat":          {`{"kind":"channel","channel":"telegram-bot"}`, "which chat"},
+		"empty":            {`{}`, "where to send"},
+		"unsupported kind": {`{"kind":"google_sheets","channel":"x","to":"y"}`, "cannot be sent to"},
+	}
+	for name, c := range cases {
+		_, err := outputGraph(t, c.data).Plan()
+		if err == nil {
+			t.Errorf("%s: compiled, want refusal", name)
+			continue
+		}
+		if !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: error %q does not mention %q", name, err, c.want)
+		}
+	}
+}
+
+// cron carries ONE delivery target. Two outputs would mean silently dropping one.
+func TestTwoOutputsRefused(t *testing.T) {
+	g := graphOf(t, `{
+	  "nodes":[
+	    {"id":"t1","type":"trigger","data":{"kind":"cron","expr":"* * * * *"}},
+	    {"id":"a1","type":"agent","data":{"agentId":"`+UUIDA+`","prompt":"p"}},
+	    {"id":"o1","type":"output","data":{"kind":"channel","channel":"c1","to":"1"}},
+	    {"id":"o2","type":"output","data":{"kind":"channel","channel":"c2","to":"2"}}
+	  ],
+	  "edges":[
+	    {"id":"e1","source":"t1","target":"a1"},
+	    {"id":"e2","source":"a1","target":"o1"},
+	    {"id":"e3","source":"a1","target":"o2"}
+	  ]}`)
+	_, err := g.Plan()
+	if err == nil || !strings.Contains(err.Error(), "only send its result to one place") {
+		t.Errorf("two outputs gave %v, want a refusal naming the ambiguity", err)
+	}
+}
+
+// No output wired is legitimate: the result stays in the run log.
+func TestNoOutputIsFine(t *testing.T) {
+	steps, err := graphOf(t, validGraph).Plan()
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if steps[0].Deliver {
+		t.Error("delivery was set with no output node wired")
+	}
+}
+
+// And the whole way through: an output node must reach the actual cron job.
+func TestOutputReachesTheCronJob(t *testing.T) {
+	cron := &fakeCron{}
+	wfs := newFakeWFStore()
+	c := NewCompiler(wfs, cron)
+	creator := "creator-1"
+	w := &store.Workflow{
+		ID: uuid.New(), TenantID: uuid.New(), Name: "Delivered", Enabled: true, CreatedBy: &creator,
+		Graph: json.RawMessage(`{
+		  "nodes":[
+		    {"id":"t1","type":"trigger","data":{"kind":"cron","expr":"0 8 * * 1"}},
+		    {"id":"a1","type":"agent","data":{"agentId":"` + UUIDA + `","prompt":"summarise"}},
+		    {"id":"o1","type":"output","data":{"kind":"channel","channel":"telegram-bot","to":"999"}}
+		  ],
+		  "edges":[{"id":"e1","source":"t1","target":"a1"},{"id":"e2","source":"a1","target":"o1"}]}`),
+	}
+	if err := c.Apply(context.Background(), w); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if len(cron.added) != 1 {
+		t.Fatalf("created %d jobs", len(cron.added))
+	}
+	j := cron.added[0]
+	if !j.Deliver || j.DeliverChannel != "telegram-bot" || j.DeliverTo != "999" {
+		t.Errorf("cron job has no delivery: deliver=%v channel=%q to=%q", j.Deliver, j.DeliverChannel, j.DeliverTo)
+	}
+}

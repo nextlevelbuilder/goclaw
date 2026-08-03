@@ -64,6 +64,20 @@ type AgentData struct {
 	DeliverTo      string `json:"deliverTo,omitempty"`
 }
 
+// OutputData is the `data` of a node with type "output": where a step's result
+// goes when it finishes.
+//
+// Only channel delivery exists today, because that is the only thing cron can do
+// with a result (see cmd/gateway_cron.go). Writing to a Sheet or a Doc is a TOOL
+// the agent calls, not a delivery target, so it belongs in the instruction rather
+// than here — modelling it as an output node would imply the platform routes it,
+// which it does not.
+type OutputData struct {
+	Kind    string `json:"kind"`    // "channel"
+	Channel string `json:"channel"` // channel instance name, e.g. "telegram-mybot"
+	To      string `json:"to"`      // chat id within that channel
+}
+
 // Step is one compiled unit: "on this schedule, send this prompt to this agent".
 type Step struct {
 	TriggerNodeID string
@@ -164,6 +178,10 @@ func (g *Graph) Plan() ([]Step, error) {
 			DeliverChan:   strings.TrimSpace(ad.DeliverChannel),
 			DeliverTo:     strings.TrimSpace(ad.DeliverTo),
 		}
+		// Delivery, if this agent is wired to an output node.
+		if err := g.attachOutput(&step, byID); err != nil {
+			return nil, err
+		}
 		if err := step.validate(); err != nil {
 			return nil, err
 		}
@@ -176,6 +194,65 @@ func (g *Graph) Plan() ([]Step, error) {
 		return nil, ValidationError{Msg: "this workflow has no trigger connected to an agent, so there is nothing to run"}
 	}
 	return steps, nil
+}
+
+// attachOutput finds the output node an agent is wired to and folds it into the
+// step.
+//
+// Refuses an incomplete output rather than passing it through. Cron only delivers
+// when Deliver AND channel AND chat id are all present — otherwise it logs
+// "output discarded" and the user sees nothing at all, which is the worst
+// available outcome: the workflow reports success and silently goes nowhere.
+func (g *Graph) attachOutput(step *Step, byID map[string]Node) error {
+	var found *OutputData
+	var foundID string
+	for _, e := range g.Edges {
+		if e.Source != step.AgentNodeID {
+			continue
+		}
+		dst, ok := byID[e.Target]
+		if !ok || dst.Type != "output" {
+			continue
+		}
+		var od OutputData
+		if len(dst.Data) > 0 {
+			if err := json.Unmarshal(dst.Data, &od); err != nil {
+				return ValidationError{NodeID: dst.ID, Msg: "output settings are not readable"}
+			}
+		}
+		if found != nil {
+			// cron carries ONE delivery target per job. Two would mean silently
+			// dropping one, so the graph has to say which.
+			return ValidationError{NodeID: dst.ID, Msg: "an agent can only send its result to one place"}
+		}
+		found = &od
+		foundID = dst.ID
+	}
+	if found == nil {
+		return nil // no output wired: the result stays in the run log
+	}
+
+	kind := strings.TrimSpace(found.Kind)
+	if kind == "" {
+		kind = "channel"
+	}
+	if kind != "channel" {
+		return ValidationError{NodeID: foundID, Msg: fmt.Sprintf("results cannot be sent to %q yet", kind)}
+	}
+	channel := strings.TrimSpace(found.Channel)
+	to := strings.TrimSpace(found.To)
+	if channel == "" {
+		return ValidationError{NodeID: foundID, Msg: "choose where to send the result"}
+	}
+	if to == "" {
+		// Named separately from the channel: cron discards the output when either is
+		// missing, and "which chat" is the half people forget.
+		return ValidationError{NodeID: foundID, Msg: "set which chat to send it to"}
+	}
+	step.Deliver = true
+	step.DeliverChan = channel
+	step.DeliverTo = to
+	return nil
 }
 
 func (s Step) validate() error {
