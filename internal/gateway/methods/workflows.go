@@ -23,6 +23,13 @@ import (
 // and the store's isolation only helps if the caller cannot choose the scope.
 type WorkflowsMethods struct {
 	workflows store.WorkflowStore
+	// cron supplies each armed workflow's LAST RUN and NEXT RUN.
+	//
+	// Read from the cron jobs the compiler created rather than tracked separately:
+	// cron already records lastRunAt/lastStatus/lastError as it executes, and a
+	// second copy would drift from the thing actually running. Nil-safe — without
+	// it a workflow simply reports no run history.
+	cron store.CronStore
 	// compiler turns an armed graph into cron jobs. Nil-safe: without it the CRUD
 	// surface still works and workflows simply never arm, which is the honest
 	// behaviour for a deployment with no scheduler rather than pretending to save
@@ -32,6 +39,12 @@ type WorkflowsMethods struct {
 
 func NewWorkflowsMethods(workflows store.WorkflowStore, compiler *workflow.Compiler) *WorkflowsMethods {
 	return &WorkflowsMethods{workflows: workflows, compiler: compiler}
+}
+
+// WithCron enables last-run/next-run reporting.
+func (m *WorkflowsMethods) WithCron(cron store.CronStore) *WorkflowsMethods {
+	m.cron = cron
+	return m
 }
 
 func (m *WorkflowsMethods) Register(router *gateway.MethodRouter) {
@@ -61,6 +74,23 @@ type workflowInfo struct {
 	CompileError string          `json:"compileError,omitempty"`
 	CreatedAt    string          `json:"createdAt"`
 	UpdatedAt    string          `json:"updatedAt"`
+	// Runs is what actually happened, one entry per compiled schedule. Absent when
+	// the workflow has never been armed or the deployment has no scheduler — the UI
+	// must not present "no runs yet" and "cannot tell" as the same thing.
+	Runs []workflowRunInfo `json:"runs,omitempty"`
+}
+
+// workflowRunInfo mirrors cron's own state for one compiled schedule.
+type workflowRunInfo struct {
+	NextRunAtMS *int64 `json:"nextRunAtMs,omitempty"`
+	LastRunAtMS *int64 `json:"lastRunAtMs,omitempty"`
+	LastStatus  string `json:"lastStatus,omitempty"`
+	LastError   string `json:"lastError,omitempty"`
+	// Missing means the compiler recorded a job that no longer exists — someone
+	// deleted it by hand, or a restore lost it. Surfaced rather than skipped,
+	// because a workflow that looks armed and has no schedule is exactly the state
+	// a user needs told about.
+	Missing bool `json:"missing,omitempty"`
 }
 
 func toWorkflowInfo(w *store.Workflow) workflowInfo {
@@ -83,6 +113,43 @@ func toWorkflowInfo(w *store.Workflow) workflowInfo {
 		info.Graph = json.RawMessage(`{}`)
 	}
 	return info
+}
+
+// withRuns is toWorkflowInfo plus run state, for the single-workflow responses.
+func (m *WorkflowsMethods) withRuns(ctx context.Context, w *store.Workflow) workflowInfo {
+	info := toWorkflowInfo(w)
+	m.attachRuns(ctx, w, &info)
+	return info
+}
+
+// attachRuns fills in what happened, reading the cron jobs the last compile
+// created. Silent when there is no cron store or nothing compiled.
+func (m *WorkflowsMethods) attachRuns(ctx context.Context, w *store.Workflow, info *workflowInfo) {
+	if m.cron == nil || len(w.Compiled) == 0 {
+		return
+	}
+	var compiled struct {
+		CronJobIDs []string `json:"cron_ids"`
+	}
+	if json.Unmarshal(w.Compiled, &compiled) != nil {
+		return
+	}
+	for _, id := range compiled.CronJobIDs {
+		if strings.TrimSpace(id) == "" {
+			continue
+		}
+		job, ok := m.cron.GetJob(ctx, id)
+		if !ok || job == nil {
+			info.Runs = append(info.Runs, workflowRunInfo{Missing: true})
+			continue
+		}
+		info.Runs = append(info.Runs, workflowRunInfo{
+			NextRunAtMS: job.State.NextRunAtMS,
+			LastRunAtMS: job.State.LastRunAtMS,
+			LastStatus:  job.State.LastStatus,
+			LastError:   job.State.LastError,
+		})
+	}
 }
 
 // scope resolves the tenant and reports whether the request can proceed.
@@ -117,7 +184,9 @@ func (m *WorkflowsMethods) handleList(ctx context.Context, client *gateway.Clien
 	}
 	items := make([]workflowInfo, 0, len(rows))
 	for _, w := range rows {
-		items = append(items, toWorkflowInfo(w))
+		info := toWorkflowInfo(w)
+		m.attachRuns(ctx, w, &info)
+		items = append(items, info)
 	}
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"workflows": items}))
 }
@@ -141,7 +210,7 @@ func (m *WorkflowsMethods) handleGet(ctx context.Context, client *gateway.Client
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "workflow")))
 		return
 	}
-	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"workflow": toWorkflowInfo(w)}))
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"workflow": m.withRuns(ctx, w)}))
 }
 
 type workflowWriteParams struct {
@@ -183,7 +252,7 @@ func (m *WorkflowsMethods) handleCreate(ctx context.Context, client *gateway.Cli
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToCreate, "workflow", "internal error")))
 		return
 	}
-	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"workflow": toWorkflowInfo(w)}))
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"workflow": m.withRuns(ctx, w)}))
 }
 
 // newWorkflowFromParams maps create params onto a row.
@@ -272,7 +341,7 @@ func (m *WorkflowsMethods) handleUpdate(ctx context.Context, client *gateway.Cli
 	// running disagree, silently. For a disarmed one this is a cheap no-op that
 	// also cleans up anything a previous arm left behind.
 	m.recompile(ctx, existing)
-	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"workflow": toWorkflowInfo(existing)}))
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"workflow": m.withRuns(ctx, existing)}))
 }
 
 // handleSetEnabled arms or disarms a workflow.
@@ -322,7 +391,7 @@ func (m *WorkflowsMethods) handleSetEnabled(ctx context.Context, client *gateway
 	// anything fires. Apply writes any compile error onto `existing`, so the
 	// response below carries the reason a graph refused to arm.
 	m.recompile(ctx, existing)
-	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"workflow": toWorkflowInfo(existing)}))
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"workflow": m.withRuns(ctx, existing)}))
 }
 
 func (m *WorkflowsMethods) handleDelete(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {

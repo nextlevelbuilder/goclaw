@@ -1,6 +1,7 @@
 package methods
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -134,5 +135,100 @@ func TestNewWorkflowFromParamsMapsFields(t *testing.T) {
 	}
 	if w.CreatedBy != nil {
 		t.Errorf("empty user stored as %q", *w.CreatedBy)
+	}
+}
+
+// ── Run status (phase 3c) ─────────────────────────────────────────────────────
+
+type runStateCron struct {
+	store.CronStore
+	jobs map[string]*store.CronJob
+}
+
+func (c *runStateCron) GetJob(_ context.Context, id string) (*store.CronJob, bool) {
+	j, ok := c.jobs[id]
+	return j, ok
+}
+
+func ms(v int64) *int64 { return &v }
+
+func TestAttachRunsReportsCronState(t *testing.T) {
+	cron := &runStateCron{jobs: map[string]*store.CronJob{
+		"j1": {ID: "j1", State: store.CronJobState{
+			NextRunAtMS: ms(2000), LastRunAtMS: ms(1000), LastStatus: "ok",
+		}},
+	}}
+	m := NewWorkflowsMethods(nil, nil).WithCron(cron)
+
+	w := &store.Workflow{Compiled: json.RawMessage(`{"cron_ids":["j1"]}`)}
+	info := toWorkflowInfo(w)
+	m.attachRuns(context.Background(), w, &info)
+
+	if len(info.Runs) != 1 {
+		t.Fatalf("got %d run entries, want 1", len(info.Runs))
+	}
+	r := info.Runs[0]
+	if r.LastStatus != "ok" || r.LastRunAtMS == nil || *r.LastRunAtMS != 1000 || r.NextRunAtMS == nil {
+		t.Errorf("cron state not carried: %+v", r)
+	}
+	if r.Missing {
+		t.Error("an existing job was reported missing")
+	}
+}
+
+// A recorded job that no longer exists is the state a user most needs told about:
+// the workflow looks armed and has no schedule. Reporting it beats skipping it.
+func TestAttachRunsFlagsAMissingJob(t *testing.T) {
+	m := NewWorkflowsMethods(nil, nil).WithCron(&runStateCron{jobs: map[string]*store.CronJob{}})
+	w := &store.Workflow{Compiled: json.RawMessage(`{"cron_ids":["gone"]}`)}
+	info := toWorkflowInfo(w)
+	m.attachRuns(context.Background(), w, &info)
+
+	if len(info.Runs) != 1 || !info.Runs[0].Missing {
+		t.Errorf("a vanished job was not flagged: %+v", info.Runs)
+	}
+}
+
+// "Never armed" and "cannot tell" must not look the same, so Runs stays absent
+// rather than becoming an empty-but-present list.
+func TestAttachRunsStaysSilentWhenItCannotKnow(t *testing.T) {
+	cases := map[string]*WorkflowsMethods{
+		"no cron store": NewWorkflowsMethods(nil, nil),
+		"cron present":  NewWorkflowsMethods(nil, nil).WithCron(&runStateCron{jobs: map[string]*store.CronJob{}}),
+	}
+	for name, m := range cases {
+		// Never compiled.
+		w := &store.Workflow{}
+		info := toWorkflowInfo(w)
+		m.attachRuns(context.Background(), w, &info)
+		if len(info.Runs) != 0 {
+			t.Errorf("%s: reported runs for a workflow that was never armed: %+v", name, info.Runs)
+		}
+	}
+
+	// And a corrupt compile record must not invent entries either.
+	m := NewWorkflowsMethods(nil, nil).WithCron(&runStateCron{jobs: map[string]*store.CronJob{}})
+	w := &store.Workflow{Compiled: json.RawMessage(`not json`)}
+	info := toWorkflowInfo(w)
+	m.attachRuns(context.Background(), w, &info)
+	if len(info.Runs) != 0 {
+		t.Errorf("invented runs from a corrupt record: %+v", info.Runs)
+	}
+}
+
+// The failure a user cares about most: the schedule fired and the run failed.
+func TestAttachRunsCarriesTheFailure(t *testing.T) {
+	cron := &runStateCron{jobs: map[string]*store.CronJob{
+		"j1": {ID: "j1", State: store.CronJobState{
+			LastRunAtMS: ms(1000), LastStatus: "error", LastError: "provider rejected the call",
+		}},
+	}}
+	m := NewWorkflowsMethods(nil, nil).WithCron(cron)
+	w := &store.Workflow{Compiled: json.RawMessage(`{"cron_ids":["j1"]}`)}
+	info := toWorkflowInfo(w)
+	m.attachRuns(context.Background(), w, &info)
+
+	if info.Runs[0].LastStatus != "error" || info.Runs[0].LastError == "" {
+		t.Errorf("failure not surfaced: %+v", info.Runs[0])
 	}
 }

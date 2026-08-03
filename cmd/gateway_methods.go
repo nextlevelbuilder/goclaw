@@ -99,7 +99,7 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 	// Phase 2: Authored workflows (migration 000083). Always registered — the
 	// handlers report "not available on this deployment" when the store is nil,
 	// which is what a build without the migration applied looks like.
-	methods.NewWorkflowsMethods(workflowStore, workflowCompiler).Register(router)
+	methods.NewWorkflowsMethods(workflowStore, workflowCompiler).WithCron(cronStore).Register(router)
 
 	// Phase 2: Send (outbound message routing)
 	methods.NewSendMethods(msgBus).Register(router)
