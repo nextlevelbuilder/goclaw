@@ -434,7 +434,10 @@ func runGateway() {
 	// The compiler turns armed workflow graphs into cron jobs. Built here so it
 	// shares the same cron store the scheduler runs from — a compiler writing to a
 	// different store would create jobs nothing ever fires.
-	workflowCompiler := workflow.NewCompiler(pgStores.Workflows, pgStores.Cron)
+	// WithLinks enables agent→agent handoffs: a chain needs a delegation link to
+	// exist or the delegate tool refuses it at run time, which would half-run the
+	// workflow rather than failing to arm.
+	workflowCompiler := workflow.NewCompiler(pgStores.Workflows, pgStores.Cron).WithLinks(pgStores.AgentLinks)
 
 	pairingMethods, heartbeatMethods, chatMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants, pgStores.SkillTenantCfgs, audioMgr, pgStores.Reminders, pgStores.SubagentTasks, pgStores.CLIConnections, pgStores.Workflows, workflowCompiler, cliChat)
 	// Wire tool registry so chat.toolResult can route client-tool responses.

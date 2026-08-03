@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -18,16 +20,31 @@ import (
 // previous arm created, which then fire forever with nobody to explain them.
 type Compiled struct {
 	CronJobIDs []string `json:"cron_ids,omitempty"`
+	// AgentLinkIDs are the delegation links this compile CREATED, so retraction
+	// removes exactly those. Links the user made themselves must survive a disarm,
+	// which is why they are recorded rather than derived from the graph.
+	AgentLinkIDs []string `json:"agent_link_ids,omitempty"`
 }
 
 // Compiler arms and disarms workflows by creating and removing cron jobs.
 type Compiler struct {
 	workflows store.WorkflowStore
 	cron      store.CronStore
+	// links permits agent→agent handoffs. Nil-safe: without it a chain refuses to
+	// arm rather than arming a handoff the delegate tool would then deny — a
+	// workflow that runs its first step and stops is harder to diagnose than one
+	// that never arms.
+	links store.AgentLinkStore
 }
 
 func NewCompiler(workflows store.WorkflowStore, cron store.CronStore) *Compiler {
 	return &Compiler{workflows: workflows, cron: cron}
+}
+
+// WithLinks enables agent→agent handoffs.
+func (c *Compiler) WithLinks(links store.AgentLinkStore) *Compiler {
+	c.links = links
+	return c
 }
 
 // Available reports whether compilation can happen at all on this deployment.
@@ -82,11 +99,22 @@ func (c *Compiler) Apply(ctx context.Context, w *store.Workflow) error {
 
 	var created Compiled
 	for i, s := range steps {
+		// Permit each handoff before scheduling anything. A chain whose links cannot
+		// be created must not arm: the first agent would run, try to delegate, be
+		// refused by the delegate tool, and the workflow would half-happen.
+		linkIDs, err := c.ensureLinks(ctx, w, s)
+		created.AgentLinkIDs = append(created.AgentLinkIDs, linkIDs...)
+		if err != nil {
+			c.removeJobs(ctx, created.CronJobIDs)
+			c.removeLinks(ctx, created.AgentLinkIDs)
+			return c.failed(ctx, w, err)
+		}
+
 		job, err := c.cron.AddJob(
 			ctx,
 			jobName(w, i),
 			store.CronSchedule{Kind: s.Kind, Expr: s.Expr, EveryMS: s.EveryMS, AtMS: s.AtMS, TZ: s.TZ},
-			s.Prompt,
+			chainPrompt(s),
 			s.Deliver, s.DeliverChan, s.DeliverTo,
 			s.AgentID,
 			// The workflow's creator, as the ACTOR for the run.
@@ -117,6 +145,7 @@ func (c *Compiler) Apply(ctx context.Context, w *store.Workflow) error {
 			// an armed workflow is all-or-nothing. Half a workflow firing is worse
 			// than none of it, because the half that runs looks like success.
 			c.removeJobs(ctx, created.CronJobIDs)
+			c.removeLinks(ctx, created.AgentLinkIDs)
 			return c.failed(ctx, w, fmt.Errorf("could not schedule step %d: %w", i+1, err))
 		}
 		created.CronJobIDs = append(created.CronJobIDs, job.ID)
@@ -149,6 +178,7 @@ func (c *Compiler) retract(ctx context.Context, w *store.Workflow) {
 		}
 	}
 	c.removeJobs(ctx, prev.CronJobIDs)
+	c.removeLinks(ctx, prev.AgentLinkIDs)
 }
 
 func (c *Compiler) removeJobs(ctx context.Context, ids []string) {
@@ -163,6 +193,94 @@ func (c *Compiler) removeJobs(ctx context.Context, ids []string) {
 			slog.Debug("workflow.retract.remove_job", "job", id, "error", err)
 		}
 	}
+}
+
+// ensureLinks creates the delegation links a chain needs, returning the ids of the
+// ones IT created — never ids of links that already existed, which must survive a
+// disarm because a user may depend on them elsewhere.
+func (c *Compiler) ensureLinks(ctx context.Context, w *store.Workflow, s Step) ([]string, error) {
+	if len(s.Handoffs) == 0 {
+		return nil, nil
+	}
+	if c.links == nil {
+		return nil, fmt.Errorf("this deployment cannot chain agents")
+	}
+
+	// The chain is first → handoff[0] → handoff[1] …, so links are consecutive
+	// pairs starting from the step's own agent.
+	from := s.AgentID
+	var madeIDs []string
+	for _, h := range s.Handoffs {
+		src, err := uuid.Parse(from)
+		if err != nil {
+			return madeIDs, fmt.Errorf("agent %q is not a valid id", from)
+		}
+		dst, err := uuid.Parse(h.AgentID)
+		if err != nil {
+			return madeIDs, fmt.Errorf("agent %q is not a valid id", h.AgentID)
+		}
+
+		// Reuse an existing link rather than adding a duplicate — and do NOT record
+		// it, so disarming does not revoke a permission the user set up themselves.
+		if ok, err := c.links.CanDelegate(ctx, src, dst); err == nil && ok {
+			from = h.AgentID
+			continue
+		}
+
+		link := &store.AgentLinkData{
+			SourceAgentID: src,
+			TargetAgentID: dst,
+			Direction:     store.LinkDirectionOutbound,
+			Description:   fmt.Sprintf("workflow handoff: %s", w.Name),
+			MaxConcurrent: 1,
+			Status:        "active",
+		}
+		if w.CreatedBy != nil {
+			link.CreatedBy = *w.CreatedBy
+		}
+		if err := c.links.CreateLink(ctx, link); err != nil {
+			return madeIDs, fmt.Errorf("could not allow the handoff to %s: %w", h.AgentID, err)
+		}
+		madeIDs = append(madeIDs, link.ID.String())
+		from = h.AgentID
+	}
+	return madeIDs, nil
+}
+
+func (c *Compiler) removeLinks(ctx context.Context, ids []string) {
+	if c.links == nil {
+		return
+	}
+	for _, raw := range ids {
+		id, err := uuid.Parse(strings.TrimSpace(raw))
+		if err != nil {
+			continue
+		}
+		if err := c.links.DeleteLink(ctx, id); err != nil {
+			slog.Debug("workflow.retract.remove_link", "link", id, "error", err)
+		}
+	}
+}
+
+// chainPrompt is the instruction the first agent receives.
+//
+// For a single step it is just the prompt. For a chain it names each subsequent
+// agent and what to ask it, because the handoff is MODEL-DRIVEN: the delegate tool
+// is available and permitted, but nothing makes the agent use it except being told
+// to. Being explicit about the sequence is the difference between a chain that
+// happens and one that does not.
+func chainPrompt(s Step) string {
+	if len(s.Handoffs) == 0 {
+		return s.Prompt
+	}
+	var b strings.Builder
+	b.WriteString(s.Prompt)
+	b.WriteString("\n\nThen hand the result on, in this order, using the delegate tool:")
+	for i, h := range s.Handoffs {
+		fmt.Fprintf(&b, "\n%d. delegate to agent %s — %s", i+1, h.AgentID, h.Prompt)
+	}
+	b.WriteString("\n\nWait for each agent's reply before moving to the next, and treat the LAST reply as the final result.")
+	return b.String()
 }
 
 func (c *Compiler) record(ctx context.Context, w *store.Workflow, compiled Compiled, compileErr *string) error {

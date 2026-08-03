@@ -530,3 +530,218 @@ func TestOutputReachesTheCronJob(t *testing.T) {
 		t.Errorf("cron job has no delivery: deliver=%v channel=%q to=%q", j.Deliver, j.DeliverChannel, j.DeliverTo)
 	}
 }
+
+// ── Flow edges: model-driven handoff ─────────────────────────────────────────
+
+const UUIDB = "22222222-2222-4222-8222-222222222222"
+
+type fakeLinks struct {
+	store.AgentLinkStore
+	created []store.AgentLinkData
+	deleted []uuid.UUID
+	// canDelegate simulates a link the USER already made.
+	canDelegate map[string]bool
+	createErr   error
+}
+
+func (f *fakeLinks) CreateLink(_ context.Context, l *store.AgentLinkData) error {
+	if f.createErr != nil {
+		return f.createErr
+	}
+	l.ID = uuid.New()
+	f.created = append(f.created, *l)
+	return nil
+}
+func (f *fakeLinks) DeleteLink(_ context.Context, id uuid.UUID) error {
+	f.deleted = append(f.deleted, id)
+	return nil
+}
+func (f *fakeLinks) CanDelegate(_ context.Context, from, to uuid.UUID) (bool, error) {
+	return f.canDelegate[from.String()+"->"+to.String()], nil
+}
+
+const chainGraph = `{
+  "nodes":[
+    {"id":"t1","type":"trigger","data":{"kind":"cron","expr":"0 8 * * 1"}},
+    {"id":"a1","type":"agent","data":{"agentId":"` + UUIDA + `","prompt":"research competitors"}},
+    {"id":"a2","type":"agent","data":{"agentId":"` + UUIDB + `","prompt":"write it up"}}
+  ],
+  "edges":[{"id":"e1","source":"t1","target":"a1"},{"id":"e2","source":"a1","target":"a2"}]}`
+
+func chainWorkflow() *store.Workflow {
+	creator := "creator-1"
+	return &store.Workflow{
+		ID: uuid.New(), TenantID: uuid.New(), Name: "Chain", Enabled: true,
+		CreatedBy: &creator, Graph: json.RawMessage(chainGraph),
+	}
+}
+
+func TestChainCreatesLinkAndComposesPrompt(t *testing.T) {
+	cron := &fakeCron{}
+	links := &fakeLinks{canDelegate: map[string]bool{}}
+	c := NewCompiler(newFakeWFStore(), cron).WithLinks(links)
+
+	if err := c.Apply(context.Background(), chainWorkflow()); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if len(links.created) != 1 {
+		t.Fatalf("created %d links, want 1", len(links.created))
+	}
+	l := links.created[0]
+	if l.SourceAgentID.String() != UUIDA || l.TargetAgentID.String() != UUIDB {
+		t.Errorf("link is %s -> %s, want %s -> %s", l.SourceAgentID, l.TargetAgentID, UUIDA, UUIDB)
+	}
+
+	// The handoff is model-driven: nothing makes the agent delegate except being
+	// told to, so the instruction must name the next agent explicitly.
+	msg := cron.added[0].Payload.Message
+	for _, want := range []string{"research competitors", "delegate", UUIDB, "write it up"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("composed prompt is missing %q:\n%s", want, msg)
+		}
+	}
+}
+
+// A link the USER created must survive a disarm — the compiler only owns what it
+// made itself.
+func TestExistingLinkIsReusedNotRecorded(t *testing.T) {
+	cron := &fakeCron{}
+	links := &fakeLinks{canDelegate: map[string]bool{UUIDA + "->" + UUIDB: true}}
+	wfs := newFakeWFStore()
+	c := NewCompiler(wfs, cron).WithLinks(links)
+	w := chainWorkflow()
+
+	if err := c.Apply(context.Background(), w); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if len(links.created) != 0 {
+		t.Errorf("created a duplicate link: %+v", links.created)
+	}
+	var rec Compiled
+	_ = json.Unmarshal(wfs.compiled[w.ID], &rec)
+	if len(rec.AgentLinkIDs) != 0 {
+		t.Error("recorded a link it did not create — disarming would revoke the user's own permission")
+	}
+}
+
+// Disarming removes the links the compile created, not just the cron job.
+func TestDisarmRemovesCreatedLinks(t *testing.T) {
+	cron := &fakeCron{}
+	links := &fakeLinks{canDelegate: map[string]bool{}}
+	c := NewCompiler(newFakeWFStore(), cron).WithLinks(links)
+	w := chainWorkflow()
+
+	if err := c.Apply(context.Background(), w); err != nil {
+		t.Fatalf("arm: %v", err)
+	}
+	made := links.created[0].ID
+
+	w.Enabled = false
+	if err := c.Apply(context.Background(), w); err != nil {
+		t.Fatalf("disarm: %v", err)
+	}
+	if len(links.deleted) != 1 || links.deleted[0] != made {
+		t.Errorf("disarm deleted %v, want just %s", links.deleted, made)
+	}
+}
+
+// A chain that cannot be permitted must not arm at all: the first agent would run,
+// be refused by the delegate tool, and the workflow would half-happen.
+func TestChainRefusesWhenLinkCannotBeCreated(t *testing.T) {
+	cron := &fakeCron{}
+	links := &fakeLinks{canDelegate: map[string]bool{}, createErr: errors.New("nope")}
+	wfs := newFakeWFStore()
+	c := NewCompiler(wfs, cron).WithLinks(links)
+	w := chainWorkflow()
+
+	if err := c.Apply(context.Background(), w); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if len(cron.added) != 0 {
+		t.Error("scheduled a job for a chain it could not permit")
+	}
+	if wfs.errs[w.ID] == nil || !strings.Contains(*wfs.errs[w.ID], "handoff") {
+		t.Errorf("compile error does not explain the handoff failure: %v", wfs.errs[w.ID])
+	}
+}
+
+// Without a link store a chain refuses rather than arming something the delegate
+// tool would deny at run time.
+func TestChainRefusedWithoutLinkStore(t *testing.T) {
+	wfs := newFakeWFStore()
+	c := NewCompiler(wfs, &fakeCron{}) // no WithLinks
+	w := chainWorkflow()
+	if err := c.Apply(context.Background(), w); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if wfs.errs[w.ID] == nil || !strings.Contains(*wfs.errs[w.ID], "cannot chain agents") {
+		t.Errorf("expected a refusal about chaining, got %v", wfs.errs[w.ID])
+	}
+}
+
+func TestChainRefusals(t *testing.T) {
+	cases := map[string]struct{ graph, want string }{
+		"fork": {`{
+		  "nodes":[
+		    {"id":"t1","type":"trigger","data":{"kind":"cron","expr":"* * * * *"}},
+		    {"id":"a1","type":"agent","data":{"agentId":"` + UUIDA + `","prompt":"p"}},
+		    {"id":"a2","type":"agent","data":{"agentId":"` + UUIDB + `","prompt":"p"}},
+		    {"id":"a3","type":"agent","data":{"agentId":"33333333-3333-4333-8333-333333333333","prompt":"p"}}
+		  ],
+		  "edges":[{"id":"e1","source":"t1","target":"a1"},
+		           {"id":"e2","source":"a1","target":"a2"},
+		           {"id":"e3","source":"a1","target":"a3"}]}`, "order is unclear"},
+		"loop": {`{
+		  "nodes":[
+		    {"id":"t1","type":"trigger","data":{"kind":"cron","expr":"* * * * *"}},
+		    {"id":"a1","type":"agent","data":{"agentId":"` + UUIDA + `","prompt":"p"}},
+		    {"id":"a2","type":"agent","data":{"agentId":"` + UUIDB + `","prompt":"p"}}
+		  ],
+		  "edges":[{"id":"e1","source":"t1","target":"a1"},
+		           {"id":"e2","source":"a1","target":"a2"},
+		           {"id":"e3","source":"a2","target":"a1"}]}`, "loop"},
+		"incomplete link in the chain": {`{
+		  "nodes":[
+		    {"id":"t1","type":"trigger","data":{"kind":"cron","expr":"* * * * *"}},
+		    {"id":"a1","type":"agent","data":{"agentId":"` + UUIDA + `","prompt":"p"}},
+		    {"id":"a2","type":"agent","data":{"agentId":"` + UUIDB + `"}}
+		  ],
+		  "edges":[{"id":"e1","source":"t1","target":"a1"},{"id":"e2","source":"a1","target":"a2"}]}`,
+			"say what this agent should do"},
+	}
+	for name, c := range cases {
+		_, err := graphOf(t, c.graph).Plan()
+		if err == nil {
+			t.Errorf("%s: compiled, want refusal", name)
+			continue
+		}
+		if !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: error %q does not mention %q", name, err, c.want)
+		}
+	}
+}
+
+// Delivery belongs to the END of a chain: an output wired to the first agent would
+// send the intermediate answer, not the result.
+func TestOutputAttachesToTheEndOfAChain(t *testing.T) {
+	g := graphOf(t, `{
+	  "nodes":[
+	    {"id":"t1","type":"trigger","data":{"kind":"cron","expr":"* * * * *"}},
+	    {"id":"a1","type":"agent","data":{"agentId":"`+UUIDA+`","prompt":"research"}},
+	    {"id":"a2","type":"agent","data":{"agentId":"`+UUIDB+`","prompt":"write"}},
+	    {"id":"o1","type":"output","data":{"kind":"channel","channel":"telegram-bot","to":"7"}}
+	  ],
+	  "edges":[{"id":"e1","source":"t1","target":"a1"},
+	           {"id":"e2","source":"a1","target":"a2"},
+	           {"id":"e3","source":"a2","target":"o1"}]}`)
+	steps, err := g.Plan()
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if !steps[0].Deliver || steps[0].DeliverTo != "7" {
+		t.Errorf("output at the end of the chain was not attached: %+v", steps[0])
+	}
+	if len(steps[0].Handoffs) != 1 {
+		t.Errorf("chain length = %d, want 1 handoff", len(steps[0].Handoffs))
+	}
+}

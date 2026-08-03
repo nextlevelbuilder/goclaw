@@ -89,9 +89,25 @@ type Step struct {
 	TZ            string
 	AgentID       string
 	Prompt        string
-	Deliver       bool
-	DeliverChan   string
-	DeliverTo     string
+	// Handoffs are the agents this step passes work to, in graph order.
+	//
+	// MODEL-DRIVEN, not a deterministic pipeline. goclaw's delegation is a TOOL the
+	// agent chooses to call, so a chain compiles to (a) a link permitting the
+	// handoff and (b) an instruction telling the agent to make it. The sequence is
+	// something the model is asked to do, not something the runtime enforces — a
+	// real sequencing runtime can replace this behind the same graph shape, which is
+	// why the chain is modelled explicitly here instead of buried in the prompt.
+	Handoffs    []Handoff
+	Deliver     bool
+	DeliverChan string
+	DeliverTo   string
+}
+
+// Handoff is one link in a chain: who to pass to, and what to ask for.
+type Handoff struct {
+	NodeID  string
+	AgentID string
+	Prompt  string
 }
 
 // ValidationError names the node or edge at fault so the canvas can highlight it
@@ -178,7 +194,11 @@ func (g *Graph) Plan() ([]Step, error) {
 			DeliverChan:   strings.TrimSpace(ad.DeliverChannel),
 			DeliverTo:     strings.TrimSpace(ad.DeliverTo),
 		}
-		// Delivery, if this agent is wired to an output node.
+		// Follow the chain of agent→agent edges from this step.
+		if err := g.attachHandoffs(&step, byID); err != nil {
+			return nil, err
+		}
+		// Delivery, if the LAST agent in the chain is wired to an output node.
 		if err := g.attachOutput(&step, byID); err != nil {
 			return nil, err
 		}
@@ -194,6 +214,80 @@ func (g *Graph) Plan() ([]Step, error) {
 		return nil, ValidationError{Msg: "this workflow has no trigger connected to an agent, so there is nothing to run"}
 	}
 	return steps, nil
+}
+
+// maxChainLength bounds a handoff chain.
+//
+// Each hop is an agent run, so a long chain is expensive and slow — and a runaway
+// one is hard to stop once armed. Eight is far beyond any workflow drawn so far.
+const maxChainLength = 8
+
+// attachHandoffs walks agent→agent edges from the step's agent and records the
+// chain, moving step.AgentNodeID to the LAST agent so an output node attaches to
+// the END of the chain rather than the start.
+//
+// Refuses a fork: an agent with two outgoing agent edges has no defined order, and
+// picking one silently would run a workflow other than the one drawn.
+func (g *Graph) attachHandoffs(step *Step, byID map[string]Node) error {
+	seen := map[string]bool{step.AgentNodeID: true}
+	current := step.AgentNodeID
+
+	for {
+		var next Node
+		var found bool
+		for _, e := range g.Edges {
+			if e.Source != current {
+				continue
+			}
+			dst, ok := byID[e.Target]
+			if !ok || dst.Type != "agent" {
+				continue
+			}
+			if found {
+				return ValidationError{NodeID: current, Msg: "this agent hands off to more than one agent, so the order is unclear"}
+			}
+			next, found = dst, true
+		}
+		if !found {
+			break
+		}
+		if seen[next.ID] {
+			// A cycle would compile to a chain that instructs itself forever.
+			return ValidationError{NodeID: next.ID, Msg: "these agents hand off to each other in a loop"}
+		}
+		if len(step.Handoffs)+1 >= maxChainLength {
+			return ValidationError{NodeID: next.ID, Msg: fmt.Sprintf("a workflow can chain at most %d agents", maxChainLength)}
+		}
+
+		var ad AgentData
+		if len(next.Data) > 0 {
+			if err := json.Unmarshal(next.Data, &ad); err != nil {
+				return ValidationError{NodeID: next.ID, Msg: "agent settings are not readable"}
+			}
+		}
+		agentID := strings.TrimSpace(ad.AgentID)
+		prompt := strings.TrimSpace(ad.Prompt)
+		if agentID == "" {
+			return ValidationError{NodeID: next.ID, Msg: "choose which agent should run"}
+		}
+		if _, err := uuid.Parse(agentID); err != nil {
+			return ValidationError{NodeID: next.ID, Msg: "the agent must be identified by its id, not its name"}
+		}
+		if prompt == "" {
+			return ValidationError{NodeID: next.ID, Msg: "say what this agent should do"}
+		}
+
+		step.Handoffs = append(step.Handoffs, Handoff{NodeID: next.ID, AgentID: agentID, Prompt: prompt})
+		seen[next.ID] = true
+		current = next.ID
+	}
+
+	if len(step.Handoffs) > 0 {
+		// Delivery belongs to the END of the chain: the last agent produces the result
+		// a user sees, so an output wired to the first would send the intermediate one.
+		step.AgentNodeID = current
+	}
+	return nil
 }
 
 // attachOutput finds the output node an agent is wired to and folds it into the
