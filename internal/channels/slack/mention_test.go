@@ -67,6 +67,68 @@ func TestStripBotMention(t *testing.T) {
 	}
 }
 
+// --- shouldRespondInGroup: require_mention gating on the event's own text ---
+
+func TestShouldRespondInGroup(t *testing.T) {
+	tests := []struct {
+		name      string
+		eventText string
+		threadTS  string
+		ttl       time.Duration
+		particip  map[string]time.Time
+		want      bool
+	}{
+		{"mention in event text", "hey <@U12345> ping", "", 0, nil, true},
+		{"mention in event text inside thread", "<@U12345> and now?", "111.222", 0, nil, true},
+		{"no mention, channel level", "just chatting", "", 0, nil, false},
+		// Regression guard: with thread_ttl=0 a thread reply without its own
+		// mention must never trigger, even when the bot participated — and even
+		// though the parent message that started the thread mentioned the bot
+		// (the gate sees only the event text, not injected parent context).
+		{"no mention, thread, ttl disabled", "any update?", "111.222", 0,
+			map[string]time.Time{"C1:particip:111.222": time.Now()}, false},
+		{"no mention, thread, fresh participation", "any update?", "111.222", time.Hour,
+			map[string]time.Time{"C1:particip:111.222": time.Now()}, true},
+		{"no mention, thread, stale participation", "any update?", "111.222", time.Hour,
+			map[string]time.Time{"C1:particip:111.222": time.Now().Add(-2 * time.Hour)}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ch := &Channel{
+				BaseChannel: channels.NewBaseChannel(channels.TypeSlack, nil, nil),
+				botUserID:   "U12345",
+				threadTTL:   tt.ttl,
+			}
+			for k, v := range tt.particip {
+				ch.threadParticip.Store(k, v)
+			}
+
+			got := ch.shouldRespondInGroup(tt.eventText, "C1", tt.threadTS)
+			if got != tt.want {
+				t.Errorf("shouldRespondInGroup(%q, C1, %q) = %v, want %v",
+					tt.eventText, tt.threadTS, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestShouldRespondInGroupEvictsStaleParticipation(t *testing.T) {
+	ch := &Channel{
+		BaseChannel: channels.NewBaseChannel(channels.TypeSlack, nil, nil),
+		botUserID:   "U12345",
+		threadTTL:   1 * time.Hour,
+	}
+	ch.threadParticip.Store("C1:particip:111.222", time.Now().Add(-2*time.Hour))
+
+	if ch.shouldRespondInGroup("any update?", "C1", "111.222") {
+		t.Fatal("stale participation must not trigger a response")
+	}
+	if _, ok := ch.threadParticip.Load("C1:particip:111.222"); ok {
+		t.Error("stale participation entry should be evicted")
+	}
+}
+
 // --- resolveDisplayName cache ---
 
 func TestResolveDisplayNameCacheHit(t *testing.T) {

@@ -160,25 +160,12 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 		localKey = fmt.Sprintf("%s:thread:%s", channelID, threadTS)
 	}
 
-	// Mention gating in groups (with thread participation cache)
+	// Mention gating in groups (with thread participation cache).
+	// Gate on the event's own text (ev.Text), NOT on content: content already
+	// embeds the quoted thread-parent context, whose mention tags must not
+	// satisfy require_mention for replies that don't mention the bot themselves.
 	if !isDM && c.RequireMention() {
-		mentioned := c.isBotMentioned(content)
-
-		// Thread participation cache: auto-reply in threads where bot previously participated
-		if !mentioned && threadTS != "" && c.threadTTL > 0 {
-			participKey := channelID + ":particip:" + threadTS
-			if lastReply, ok := c.threadParticip.Load(participKey); ok {
-				if time.Since(lastReply.(time.Time)) < c.threadTTL {
-					mentioned = true
-					slog.Debug("slack: auto-reply in participated thread",
-						"channel_id", channelID, "thread_ts", threadTS)
-				} else {
-					c.threadParticip.Delete(participKey)
-				}
-			}
-		}
-
-		if !mentioned {
+		if !c.shouldRespondInGroup(ev.Text, channelID, threadTS) {
 			c.GroupHistory().Record(localKey, channels.HistoryEntry{
 				Sender:    displayName,
 				SenderID:  senderID,

@@ -115,6 +115,35 @@ func (c *Channel) isBotMentioned(text string) bool {
 	return strings.Contains(text, "<@"+c.botUserID+">")
 }
 
+// shouldRespondInGroup reports whether a channel message may trigger the agent
+// when require_mention is on: either the event's own text @mentions the bot, or
+// the bot recently participated in the thread (within threadTTL).
+//
+// eventText MUST be the raw event text only — never content that has had the
+// thread parent quoted into it (fetchThreadParentContext): the parent's
+// mention tags would otherwise make every reply in a thread started with a
+// @mention pass the gate, regardless of require_mention/thread_ttl.
+func (c *Channel) shouldRespondInGroup(eventText, channelID, threadTS string) bool {
+	if c.isBotMentioned(eventText) {
+		return true
+	}
+
+	// Thread participation cache: auto-reply in threads where bot previously participated
+	if threadTS != "" && c.threadTTL > 0 {
+		participKey := channelID + ":particip:" + threadTS
+		if lastReply, ok := c.threadParticip.Load(participKey); ok {
+			if time.Since(lastReply.(time.Time)) < c.threadTTL {
+				slog.Debug("slack: auto-reply in participated thread",
+					"channel_id", channelID, "thread_ts", threadTS)
+				return true
+			}
+			c.threadParticip.Delete(participKey)
+		}
+	}
+
+	return false
+}
+
 // stripBotMention removes <@botUserID> from message text.
 func (c *Channel) stripBotMention(text string) string {
 	return strings.ReplaceAll(text, "<@"+c.botUserID+">", "")
