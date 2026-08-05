@@ -253,13 +253,11 @@ func (h *AgentsHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	// that writes the row directly, without me having to find them all.
 	h.maybeEnsureBuiltins(r.Context())
 
-	var agents []store.AgentData
-	var err error
-	if h.isOwnerUser(userID) {
-		agents, err = h.agents.List(r.Context(), "") // owners see all agents
-	} else {
-		agents, err = h.agents.ListAccessible(r.Context(), userID)
-	}
+	// ALWAYS ListAccessible — see the matching comment in the WS handler. A personal
+	// agent is its owner's, and an org owner is not an exception; the bypass this
+	// replaces matched nobody as configured but would have granted one env-var entry
+	// silent read access to every member's agents.
+	agents, err := h.agents.ListAccessible(r.Context(), userID)
 	if err != nil {
 		slog.Error("agents.list", "error", err)
 		locale := store.LocaleFromContext(r.Context())
@@ -558,7 +556,9 @@ func (h *AgentsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 func (h *AgentsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	userID := store.UserIDFromContext(r.Context())
 	locale := store.LocaleFromContext(r.Context())
-	isOwner := h.isOwnerUser(userID)
+	// No owner exemption on READ. Fetching one agent by id returns its full record,
+	// system prompt included, so an exemption here would undo the listing change
+	// for anyone who knows an id.
 
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -568,7 +568,7 @@ func (h *AgentsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "agent", r.PathValue("id")))
 			return
 		}
-		if userID != "" && !isOwner {
+		if userID != "" {
 			if ok, _, _ := h.agents.CanAccess(r.Context(), ag.ID, userID); !ok {
 				writeError(w, http.StatusForbidden, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgNoAccess, "agent"))
 				return
@@ -584,7 +584,7 @@ func (h *AgentsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if userID != "" && !isOwner {
+	if userID != "" {
 		if ok, _, _ := h.agents.CanAccess(r.Context(), id, userID); !ok {
 			writeError(w, http.StatusForbidden, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgNoAccess, "agent"))
 			return
@@ -828,7 +828,10 @@ func (h *AgentsHandler) handleSyncWorkspace(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// List all agents (empty ownerID = all agents)
+	// unscoped-list-ok: this is an admin bulk WRITE, not a read for a user. It
+	// rewrites every agent's workspace root, so it genuinely needs the whole tenant,
+	// and it filters ag.TenantID below. No agent data is returned to the caller —
+	// only a count of what changed.
 	agents, err := h.agents.List(r.Context(), "")
 	if err != nil {
 		slog.Error("agents.sync_workspace: list failed", "error", err)

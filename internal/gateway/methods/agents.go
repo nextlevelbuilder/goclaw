@@ -10,7 +10,6 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
-	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -30,11 +29,6 @@ type AgentsMethods struct {
 
 func NewAgentsMethods(agents *agent.Router, cfg *config.Config, cfgPath, workspace string, agentStore store.AgentStore, interceptor *tools.ContextFileInterceptor, eventBus bus.EventPublisher) *AgentsMethods {
 	return &AgentsMethods{agents: agents, cfg: cfg, cfgPath: cfgPath, workspace: workspace, agentStore: agentStore, interceptor: interceptor, eventBus: eventBus}
-}
-
-// isOwnerUser checks if the given user ID is in the configured owner IDs.
-func (m *AgentsMethods) isOwnerUser(userID string) bool {
-	return canSeeAll(permissions.RoleViewer, m.cfg.Gateway.OwnerIDs, userID)
 }
 
 func (m *AgentsMethods) Register(router *gateway.MethodRouter) {
@@ -106,13 +100,23 @@ func (m *AgentsMethods) handleList(ctx context.Context, client *gateway.Client, 
 			return
 		}
 
-		var agents []store.AgentData
-		var err error
-		if m.isOwnerUser(userID) {
-			agents, err = m.agentStore.List(ctx, "")
-		} else {
-			agents, err = m.agentStore.ListAccessible(ctx, userID)
-		}
+		// ALWAYS ListAccessible. A personal agent is visible to its owner, to anyone
+		// it was explicitly shared with, and to nobody else — including an org owner
+		// or admin.
+		//
+		// There used to be a bypass here for cfg.Gateway.OwnerIDs, which returned
+		// every agent in the tenant. As configured it matched nobody (staging sets
+		// GOCLAW_OWNER_IDS=system, and no human user has the id "system"), so this
+		// changes no behaviour today. It removes the LATENT hole: adding one real
+		// user id to that env var would have silently granted a person read access
+		// to every member's private agents, with no audit trail and nothing in the
+		// UI to indicate it.
+		//
+		// Privacy should not depend on an environment variable being left alone.
+		// Cross-tenant platform operations are unaffected — ListAccessible has its
+		// own IsCrossTenant branch, which is an explicit scope rather than a
+		// per-user exemption.
+		agents, err := m.agentStore.ListAccessible(ctx, userID)
 		if err != nil {
 			slog.Warn("agents.list: store query failed", "error", err)
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToList, "agents")))
