@@ -123,9 +123,11 @@ func runProvidersAdd() {
 	typeOptions := []SelectOption[string]{
 		{"Anthropic", "anthropic"},
 		{"OpenAI", "openai"},
+		{"Atlas Cloud", "atlascloud"},
 		{"OpenRouter", "openrouter"},
 		{"DashScope (Alibaba)", "dashscope"},
-		{"OpenAI-compatible", "openai-compat"},
+		{"OpenAI-compatible", "openai_compat"},
+		{"Ollama (local)", "ollama"},
 	}
 	providerType, err := promptSelect("Provider type", typeOptions, 0)
 	if err != nil {
@@ -140,18 +142,30 @@ func runProvidersAdd() {
 		return
 	}
 
-	// Step 3: API key
-	apiKey, err := promptPassword("API key", "will be encrypted at rest")
-	if err != nil || apiKey == "" {
-		fmt.Println("Cancelled.")
-		return
+	// Step 3: API key (optional for local Ollama only)
+	var apiKey string
+	requiresKey := providerType != "ollama"
+	if requiresKey {
+		apiKey, err = promptPassword("API key", "will be encrypted at rest")
+		if err != nil || apiKey == "" {
+			fmt.Println("Cancelled.")
+			return
+		}
+	} else {
+		fmt.Println("(Ollama local requires no API key)")
 	}
 
 	// Step 4: Base URL (pre-fill per type, editable)
 	defaultURL := defaultBaseURL(providerType)
 	baseURL := ""
-	if providerType == "openai-compat" {
-		baseURL, err = promptString("Base URL", "e.g. https://api.example.com/v1", defaultURL)
+	if providerType == "openai_compat" || providerType == "atlascloud" || providerType == "ollama" {
+		prompt := "Base URL"
+		if providerType == "ollama" {
+			prompt = "Ollama base URL (e.g. http://localhost:11434)"
+		} else {
+			prompt = "Base URL (e.g. https://api.example.com/v1)"
+		}
+		baseURL, err = promptString(prompt, "", defaultURL)
 		if err != nil {
 			fmt.Println("Cancelled.")
 			return
@@ -161,8 +175,10 @@ func runProvidersAdd() {
 	body := map[string]any{
 		"name":          name,
 		"provider_type": providerType,
-		"api_key":       apiKey,
 		"enabled":       true,
+	}
+	if apiKey != "" {
+		body["api_key"] = apiKey
 	}
 	if baseURL != "" {
 		body["base_url"] = baseURL
@@ -310,10 +326,14 @@ func defaultBaseURL(providerType string) string {
 		return "https://api.anthropic.com"
 	case "openai":
 		return "https://api.openai.com/v1"
+	case "atlascloud":
+		return "https://api.atlascloud.ai/v1"
 	case "openrouter":
 		return "https://openrouter.ai/api/v1"
 	case "dashscope":
 		return "https://dashscope.aliyuncs.com/compatible-mode/v1"
+	case "ollama":
+		return "http://localhost:11434"
 	default:
 		return ""
 	}
