@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"log/slog"
+
+	"github.com/google/uuid"
 )
 
 // BuiltinAgent is a format specialist that EVERY user of a tenant sees, without
@@ -141,7 +143,21 @@ Say plainly what these models are bad at (legible text in images, precise counts
 // workspaceRoot is the same path the per-user starters use, with the key as the
 // leaf — each built-in gets its own directory rather than sharing one, so a file
 // Slides writes cannot collide with a file Docs writes.
+// EnsureBuiltinAgentsForTenant is the same guarantee for ONE tenant.
+//
+// The startup pass covers every tenant that existed when the gateway booted. A
+// tenant created afterwards — which is what a brand-new organisation is — would
+// otherwise have no built-ins until the next restart, i.e. until the next deploy.
+// Callers on a request path use this so a new org gets them on first use.
+func EnsureBuiltinAgentsForTenant(ctx context.Context, db *sql.DB, workspaceRoot string, tenantID uuid.UUID) (int64, error) {
+	return ensureBuiltins(ctx, db, workspaceRoot, &tenantID)
+}
+
 func EnsureBuiltinAgents(ctx context.Context, db *sql.DB, workspaceRoot string) (int64, error) {
+	return ensureBuiltins(ctx, db, workspaceRoot, nil)
+}
+
+func ensureBuiltins(ctx context.Context, db *sql.DB, workspaceRoot string, tenantID *uuid.UUID) (int64, error) {
 	// PostgreSQL only, and deliberately a no-op elsewhere: the sqliteonly build
 	// leaves Stores.DB nil, so desktop/Lite skips this the same way it skips
 	// BackfillCapabilities — which uses the same uuid_generate_v7()/NOW(). Lite
@@ -149,6 +165,13 @@ func EnsureBuiltinAgents(ctx context.Context, db *sql.DB, workspaceRoot string) 
 	// the allowance for something a single-user desktop does not need.
 	if db == nil {
 		return 0, nil
+	}
+
+	// A nil tenant means "every tenant"; the SQL treats NULL as no filter rather
+	// than needing two versions of the statement.
+	var tenantArg any
+	if tenantID != nil {
+		tenantArg = *tenantID
 	}
 
 	var total int64
@@ -175,13 +198,14 @@ func EnsureBuiltinAgents(ctx context.Context, db *sql.DB, workspaceRoot string) 
 				true, false, '{"enabled":true}', '{}',
 				'{"bootstrapMaxChars":24000}', NOW(), NOW()
 			FROM tenants t
-			WHERE NOT EXISTS (
+			WHERE ($9::uuid IS NULL OR t.id = $9::uuid)
+			AND NOT EXISTS (
 				SELECT 1 FROM agents ex
 				WHERE ex.tenant_id = t.id AND ex.agent_key = $1::varchar AND ex.deleted_at IS NULL
 			)`,
 			a.Key, a.DisplayName, a.Emoji,
 			builtinProvider, builtinModel, workspaceRoot+"/"+a.Key,
-			a.SystemPrompt, a.MaxIter,
+			a.SystemPrompt, a.MaxIter, tenantArg,
 		)
 		if err != nil {
 			// Keep going: one built-in failing should not deny the others. The

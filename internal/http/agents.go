@@ -242,6 +242,17 @@ func (h *AgentsHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		h.maybeSeedStarterTemplates(r.Context(), userID)
 	}
 
+	// Built-ins for a tenant created since the gateway started. The startup pass
+	// in cmd/gateway.go covers tenants that existed then; a brand-new
+	// organisation is by definition not one of those, and waiting for the next
+	// deploy to give it Slides/Sheets/Docs/Studio would mean the newest users are
+	// the only ones without them.
+	//
+	// Done HERE rather than at tenant creation on purpose: this covers every path
+	// that can produce a tenant, including auth-proxy provisioning and anything
+	// that writes the row directly, without me having to find them all.
+	h.maybeEnsureBuiltins(r.Context())
+
 	var agents []store.AgentData
 	var err error
 	if h.isOwnerUser(userID) {
@@ -312,6 +323,41 @@ func (h *AgentsHandler) maybeSeedStarterTemplates(ctx context.Context, userID st
 		slog.Info("agents.starter_seed.created",
 			"user_id", userID, "tenant_id", tenantID,
 			"agent_key", agent.AgentKey, "template", tmpl.Key)
+	}
+}
+
+// maybeEnsureBuiltins creates any missing built-in for the CALLER'S tenant.
+//
+// Guarded by a count so the common case is one indexed query and no writes: the
+// tenant already has them, and we return. Best-effort — a failure here must never
+// block the agent list, since the tenant default and the user's own agents are
+// still perfectly usable without a Slides agent.
+func (h *AgentsHandler) maybeEnsureBuiltins(ctx context.Context) {
+	if h.db == nil {
+		return
+	}
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID == uuid.Nil {
+		return
+	}
+	var have int
+	if err := h.db.QueryRowContext(ctx,
+		`SELECT count(*) FROM agents
+		 WHERE tenant_id = $1 AND owner_id = 'system' AND agent_type = 'predefined'
+		 AND deleted_at IS NULL`, tenantID).Scan(&have); err != nil {
+		slog.Warn("agents.builtins.count_failed", "tenant_id", tenantID, "error", err)
+		return
+	}
+	if have >= len(bootstrap.BuiltinAgents) {
+		return
+	}
+	n, err := bootstrap.EnsureBuiltinAgentsForTenant(ctx, h.db, h.defaultWorkspace, tenantID)
+	if err != nil {
+		slog.Warn("agents.builtins.ensure_failed", "tenant_id", tenantID, "error", err)
+		return
+	}
+	if n > 0 {
+		slog.Info("agents.builtins.created", "tenant_id", tenantID, "rows", n)
 	}
 }
 

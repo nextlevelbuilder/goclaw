@@ -105,11 +105,21 @@ func TestEnsureBuiltinAgents(t *testing.T) {
 		t.Errorf("second run created %d rows, want 0", created)
 	}
 
-	// A tenant created AFTER the gateway started gets its built-ins on the next
-	// run — that is the documented trade for not blocking tenant creation on them.
+	// A tenant created AFTER the gateway started — i.e. a brand-new organisation.
+	// The tenant-SCOPED call is what agents.list uses, so a new org does not wait
+	// for the next deploy to receive its built-ins.
 	later := newTenant("builtin-two")
-	if _, err := bootstrap.EnsureBuiltinAgents(ctx, db, "/tmp/ws"); err != nil {
-		t.Fatalf("third ensure: %v", err)
+	n, err := bootstrap.EnsureBuiltinAgentsForTenant(ctx, db, "/tmp/ws", later)
+	if err != nil {
+		t.Fatalf("scoped ensure: %v", err)
+	}
+	if n != int64(len(bootstrap.BuiltinAgents)) {
+		t.Errorf("scoped ensure created %d rows for the new tenant, want %d", n, len(bootstrap.BuiltinAgents))
+	}
+	// And it must touch ONLY that tenant: a scoped call that quietly rewrote every
+	// tenant would turn a per-request hook into a full-table write on every list.
+	if again, err := bootstrap.EnsureBuiltinAgentsForTenant(ctx, db, "/tmp/ws", later); err != nil || again != 0 {
+		t.Errorf("second scoped ensure created %d rows (err %v), want 0", again, err)
 	}
 	for _, id := range []uuid.UUID{tenant, later} {
 		var count int
