@@ -177,12 +177,40 @@ func (s *PGTenantStore) CreateTenantUserReturning(ctx context.Context, tenantID 
 	return &d, nil
 }
 
+// RemoveUser removes a member from a tenant AND hands their agents to the
+// workspace, in one transaction.
+//
+// The two halves belong together. Personal agents are invisible to everyone but
+// their owner, so removing a member without this leaves rows that NOBODY can see
+// and that keep firing on whatever schedule they were armed with — the worst of
+// both worlds. Flipping them to 'org' means the workspace inherits what it was
+// already paying for, and can review, re-own or delete it.
+//
+// Enforced HERE rather than in the two callers (HTTP + WS) because it is an
+// invariant, not a policy: there is no correct way to remove a member and skip it,
+// and a third caller added later would otherwise silently reintroduce the orphan.
 func (s *PGTenantStore) RemoveUser(ctx context.Context, tenantID uuid.UUID, userID string) error {
-	_, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE agents SET visibility = 'org', updated_at = NOW()
+		 WHERE tenant_id = $1 AND owner_id = $2
+		   AND visibility <> 'org' AND deleted_at IS NULL`,
+		tenantID, userID,
+	); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM tenant_users WHERE tenant_id = $1 AND user_id = $2`,
 		tenantID, userID,
-	)
-	return err
+	); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *PGTenantStore) GetUserRole(ctx context.Context, tenantID uuid.UUID, userID string) (string, error) {

@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 29
+const SchemaVersion = 30
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -586,6 +586,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_workflows_tenant_name
 CREATE INDEX IF NOT EXISTS idx_workflows_tenant_updated
     ON workflows (tenant_id, updated_at DESC);
 `,
+	// Version 29 → 30: agent visibility (mirrors PG migration 000084). 'private'
+	// keeps every existing row exactly as visible as it is today; 'org' is set when
+	// a member is removed, so their agents are inherited by the workspace rather
+	// than becoming invisible while still firing on a schedule.
+	29: `ALTER TABLE agents ADD COLUMN visibility VARCHAR(16) NOT NULL DEFAULT 'private';`,
 }
 
 // addHooksTables is the SQLite incremental migration for schema v19 → v20.

@@ -460,6 +460,11 @@ func (s *PGAgentStore) ListAccessible(ctx context.Context, userID string) ([]sto
 			     owner_id = $1
 			     OR is_default = true
 			     OR (agent_type = 'predefined' AND owner_id = 'system')
+		     OR visibility = 'org'
+			     -- Org-visible: either shared deliberately, or inherited by the
+			     -- workspace when its owner was removed. Without this an ex-member's
+			     -- agents are visible to nobody while still firing if armed.
+			     OR visibility = 'org'
 			     OR id IN (SELECT agent_id FROM agent_shares WHERE user_id = $1)
 			     OR (
 			         agent_type = 'predefined'
@@ -491,6 +496,7 @@ func (s *PGAgentStore) ListAccessible(ctx context.Context, userID string) ([]sto
 		     owner_id = $1
 		     OR is_default = true
 		     OR (agent_type = 'predefined' AND owner_id = 'system')
+		     OR visibility = 'org'
 		     OR id IN (SELECT agent_id FROM agent_shares WHERE user_id = $1 AND tenant_id = $2)
 		     OR (
 		         agent_type = 'predefined'

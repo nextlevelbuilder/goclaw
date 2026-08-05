@@ -101,6 +101,9 @@ CREATE INDEX IF NOT EXISTS idx_llm_providers_tenant ON llm_providers(tenant_id);
 CREATE TABLE IF NOT EXISTS agents (
     id                    TEXT NOT NULL PRIMARY KEY,
     agent_key             VARCHAR(100) NOT NULL,
+    -- 'private' (owner + explicit shares) | 'org' (every member of the tenant).
+    -- See PG migration 000084.
+    visibility            VARCHAR(16) NOT NULL DEFAULT 'private',
     display_name          VARCHAR(255),
     owner_id              VARCHAR(255) NOT NULL,
     provider              VARCHAR(50) NOT NULL DEFAULT 'openrouter',
