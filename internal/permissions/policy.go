@@ -178,6 +178,20 @@ func isAdminMethod(method string) bool {
 		protocol.MethodAgentsLinksCreate,
 		protocol.MethodAgentsLinksUpdate,
 		protocol.MethodAgentsLinksDelete,
+		// Tenant-level CLI connections. These were OPERATOR, which put deleting the
+		// one connection a whole workspace delegates through — and cascading away
+		// every member's stored credential — at the same level as sending a
+		// message. Creating an agent already needs admin; removing the workspace's
+		// shared tool should not be easier than that.
+		//
+		// Deliberately NOT included: connections.credential.* stays operator,
+		// because a credential row is keyed (connection_id, user_id) and is the
+		// caller's own secret — needing an admin to remove your own API key would be
+		// absurd. connections.list stays viewer-readable, and connections.chat.open
+		// stays operator: opening a conversation spends only your own credential.
+		protocol.MethodConnectionsCreate,
+		protocol.MethodConnectionsUpdate,
+		protocol.MethodConnectionsDelete,
 		protocol.MethodChannelsToggle,
 		protocol.MethodPairingApprove,
 		protocol.MethodPairingRevoke,
@@ -218,13 +232,11 @@ func isWriteMethod(method string) bool {
 		protocol.MethodTeamsTaskComment,
 		protocol.MethodTeamsTaskCreate,
 		protocol.MethodTeamsTaskAssign,
-		// Tenant-level CLI connections: mutations need operator+, while
-		// connections.list stays viewer-readable — so the write methods are
-		// listed individually rather than adding a bare "connections." prefix,
-		// which would also gate the read.
-		protocol.MethodConnectionsCreate,
-		protocol.MethodConnectionsUpdate,
-		protocol.MethodConnectionsDelete,
+		// Tenant-level CLI connections: the MUTATIONS moved to isAdminMethod above
+		// (they change what the whole workspace can delegate to). What stays at
+		// operator is per-user work: your own credential, and opening a chat that
+		// spends it. connections.list stays viewer-readable, which is why these are
+		// listed individually rather than as a bare "connections." prefix.
 		"connections.credential.",
 		// Opening a CLI conversation is a write in the sense that matters: the
 		// first message starts a process in the sandbox on the user's own CLI
