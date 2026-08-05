@@ -153,6 +153,13 @@ func EnsureBuiltinAgents(ctx context.Context, db *sql.DB, workspaceRoot string) 
 
 	var total int64
 	for _, a := range BuiltinAgents {
+		// The casts are NOT decoration. $1 appears twice — as the inserted
+		// agent_key and in the NOT EXISTS comparison — and Postgres refuses to
+		// deduce one type for both uses:
+		//   ERROR: inconsistent types deduced for parameter $1 (SQLSTATE 42P08)
+		// which is exactly how this failed on staging: the statement never ran, the
+		// warning was logged, and nothing else broke. Every parameter is cast so
+		// the next one added does not reintroduce it.
 		res, err := db.ExecContext(ctx, `
 			INSERT INTO agents (
 				id, agent_key, display_name, emoji, owner_id, tenant_id,
@@ -162,15 +169,15 @@ func EnsureBuiltinAgents(ctx context.Context, db *sql.DB, workspaceRoot string) 
 				other_config, created_at, updated_at
 			)
 			SELECT
-				uuid_generate_v7(), $1, $2, $3, 'system', t.id,
-				'predefined', $4, $5, 'active', $6,
-				true, $7, $8,
+				uuid_generate_v7(), $1::varchar, $2::varchar, $3::text, 'system', t.id,
+				'predefined', $4::varchar, $5::varchar, 'active', $6::text,
+				true, $7::text, $8::int,
 				true, false, '{"enabled":true}', '{}',
 				'{"bootstrapMaxChars":24000}', NOW(), NOW()
 			FROM tenants t
 			WHERE NOT EXISTS (
 				SELECT 1 FROM agents ex
-				WHERE ex.tenant_id = t.id AND ex.agent_key = $1 AND ex.deleted_at IS NULL
+				WHERE ex.tenant_id = t.id AND ex.agent_key = $1::varchar AND ex.deleted_at IS NULL
 			)`,
 			a.Key, a.DisplayName, a.Emoji,
 			builtinProvider, builtinModel, workspaceRoot+"/"+a.Key,
