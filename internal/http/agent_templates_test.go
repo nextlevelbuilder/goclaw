@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 )
 
 // The starter prompts name skills and tools by their exact identifiers. A prompt
@@ -15,6 +17,31 @@ import (
 //
 // These tests read the REAL skills directory and the REAL tool sources, so a
 // renamed skill or a deleted tool breaks them.
+//
+// Both catalogues are checked from here: the per-user starters in this package and
+// the tenant-wide built-ins in bootstrap. They are separate lists for good reasons
+// (who can edit them, who receives them) but they have the identical failure mode,
+// and a guard that covered only one would leave the other free to rot.
+
+type promptedAgent struct {
+	Key          string
+	DisplayName  string
+	Emoji        string
+	SystemPrompt string
+	MaxIter      int
+	Origin       string
+}
+
+func allPromptedAgents() []promptedAgent {
+	var out []promptedAgent
+	for _, t := range starterAgentTemplates {
+		out = append(out, promptedAgent{t.Key, t.DisplayName, t.Emoji, t.SystemPrompt, t.MaxIter, "starter"})
+	}
+	for _, b := range bootstrap.BuiltinAgents {
+		out = append(out, promptedAgent{b.Key, b.DisplayName, b.Emoji, b.SystemPrompt, b.MaxIter, "builtin"})
+	}
+	return out
+}
 
 // e.g. `use_skill`, `create_video` — two or more lowercase words joined by _.
 var toolTokenRe = regexp.MustCompile(`\b[a-z]+(?:_[a-z]+)+\b`)
@@ -77,7 +104,7 @@ func registeredToolNames(t *testing.T) map[string]bool {
 
 func TestStarterTemplatesNameRealSkills(t *testing.T) {
 	skills := shippedSkills(t)
-	for _, tmpl := range starterAgentTemplates {
+	for _, tmpl := range allPromptedAgents() {
 		for _, m := range quotedRe.FindAllStringSubmatch(tmpl.SystemPrompt, -1) {
 			word := m[1]
 			// Only judge quoted words that LOOK like a skill reference — the
@@ -89,8 +116,8 @@ func TestStarterTemplatesNameRealSkills(t *testing.T) {
 				continue
 			}
 			if !skills[word] {
-				t.Errorf("template %q names skill %q, which is not in skills/ (have: %v)",
-					tmpl.Key, word, keys(skills))
+				t.Errorf("%s %q names skill %q, which is not in skills/ (have: %v)",
+					tmpl.Origin, tmpl.Key, word, keys(skills))
 			}
 		}
 	}
@@ -101,20 +128,20 @@ func TestStarterTemplatesNameRealTools(t *testing.T) {
 	// Words that are snake_case English rather than tool names. Kept explicit and
 	// short: if this list starts growing, the prompts are drifting into jargon.
 	allowed := map[string]bool{}
-	for _, tmpl := range starterAgentTemplates {
+	for _, tmpl := range allPromptedAgents() {
 		for _, tok := range toolTokenRe.FindAllString(tmpl.SystemPrompt, -1) {
 			if allowed[tok] || tools[tok] {
 				continue
 			}
-			t.Errorf("template %q references %q, which is not a registered tool name in internal/tools",
-				tmpl.Key, tok)
+			t.Errorf("%s %q references %q, which is not a registered tool name in internal/tools",
+				tmpl.Origin, tmpl.Key, tok)
 		}
 	}
 }
 
 func TestStarterTemplatesAreWellFormed(t *testing.T) {
 	seen := map[string]bool{}
-	for _, tmpl := range starterAgentTemplates {
+	for _, tmpl := range allPromptedAgents() {
 		if tmpl.Key == "" || tmpl.DisplayName == "" || tmpl.Emoji == "" {
 			t.Errorf("template %+v is missing key, name or emoji", tmpl)
 		}

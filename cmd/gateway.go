@@ -257,6 +257,15 @@ func runGateway() {
 		slog.Info("bootstrap: capabilities backfill complete", "agents", count)
 	}
 
+	// Built-in format specialists (Slides / Sheets / Docs / Studio), one shared
+	// row per tenant. Unlike the per-user starters these reach EXISTING users,
+	// which is the whole reason they are built-in rather than seeded.
+	if count, err := bootstrap.EnsureBuiltinAgents(context.Background(), pgStores.DB, workspace); err != nil {
+		slog.Warn("bootstrap: built-in agents failed", "error", err)
+	} else if count > 0 {
+		slog.Info("bootstrap: built-in agents created", "rows", count)
+	}
+
 	// Subagent system
 	subagentMgr := setupSubagents(providerRegistry, cfg, msgBus, toolsReg, workspace, sandboxMgr)
 	if subagentMgr != nil {
