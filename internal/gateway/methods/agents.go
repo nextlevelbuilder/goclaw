@@ -140,6 +140,16 @@ func (m *AgentsMethods) handleList(ctx context.Context, client *gateway.Client, 
 				"emoji":               a.Emoji,
 				"agent_description":   a.AgentDescription,
 				"is_default":          a.IsDefault,
+				// owner_id + is_locked: how a client tells a tenant BUILT-IN
+				// (owner_id 'system', shared with every member, not editable) from a
+				// personal agent. This map is hand-built, so unlike the HTTP handler —
+				// which marshals the whole struct — a field missing here is simply
+				// invisible over WS. The board's built-in styling silently never
+				// applied for exactly that reason: it tested owner_id, which was not
+				// being sent. ListAccessible uses this same predicate server-side, so
+				// sending it keeps one definition of "shared" rather than two.
+				"owner_id":            a.OwnerID,
+				"is_locked":           a.IsLocked,
 				"max_tool_iterations": a.MaxToolIterations,
 				"context_window":      a.ContextWindow,
 				"model":               a.Model,
