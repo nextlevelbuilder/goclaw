@@ -195,7 +195,12 @@ func NewCRUDServer(deps CRUDDeps, version string) *mcpserver.StreamableHTTPServe
 		registered += 8
 	}
 	if deps.Pairing != nil {
-		registerPairingCRUDTools(srv, deps.Pairing)
+		registerPairingCRUDTools(srv, pairingCRUDDeps{
+			pairing:    deps.Pairing,
+			channelMgr: deps.ChannelManager,
+			msgBus:     deps.MessageBus,
+			cfg:        deps.Config,
+		})
 		registered += 6
 	}
 	if deps.ExecApproval != nil {

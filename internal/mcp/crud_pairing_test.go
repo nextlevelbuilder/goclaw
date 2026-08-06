@@ -10,7 +10,7 @@ import (
 func TestPairingDeviceRequest_HappyAndInvalidSenderID(t *testing.T) {
 	pairing := newFakePairingStore()
 	srv := newTestMCPServer()
-	registerPairingCRUDTools(srv, pairing)
+	registerPairingCRUDTools(srv, pairingCRUDDeps{pairing: pairing})
 
 	result := callTool(t, srv, "goclaw_pairing_device_request", map[string]any{
 		"sender_id": "user-123", "channel": "telegram",
@@ -28,7 +28,7 @@ func TestPairingDeviceRequest_HappyAndInvalidSenderID(t *testing.T) {
 func TestPairingDeviceApproveDenyList(t *testing.T) {
 	pairing := newFakePairingStore()
 	srv := newTestMCPServer()
-	registerPairingCRUDTools(srv, pairing)
+	registerPairingCRUDTools(srv, pairingCRUDDeps{pairing: pairing})
 
 	req := callTool(t, srv, "goclaw_pairing_device_request", map[string]any{"sender_id": "user-1", "channel": "telegram"})
 	require.False(t, toolIsError(req))
@@ -47,7 +47,7 @@ func TestPairingDeviceApproveDenyList(t *testing.T) {
 func TestPairingDeviceRevoke(t *testing.T) {
 	pairing := newFakePairingStore()
 	srv := newTestMCPServer()
-	registerPairingCRUDTools(srv, pairing)
+	registerPairingCRUDTools(srv, pairingCRUDDeps{pairing: pairing})
 
 	// Not paired: revoke should fail.
 	result := callTool(t, srv, "goclaw_pairing_device_revoke", map[string]any{"sender_id": "user-9", "channel": "telegram"})
@@ -57,7 +57,7 @@ func TestPairingDeviceRevoke(t *testing.T) {
 func TestPairingBrowserStatus_Expired(t *testing.T) {
 	pairing := newFakePairingStore()
 	srv := newTestMCPServer()
-	registerPairingCRUDTools(srv, pairing)
+	registerPairingCRUDTools(srv, pairingCRUDDeps{pairing: pairing})
 
 	result := callTool(t, srv, "goclaw_pairing_browser_status", map[string]any{"sender_id": "user-1"})
 	require.False(t, toolIsError(result))
