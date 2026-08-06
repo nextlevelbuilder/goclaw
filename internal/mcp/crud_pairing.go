@@ -106,7 +106,7 @@ func registerPairingCRUDTools(srv *mcpserver.MCPServer, deps pairingCRUDDeps) {
 		mcpgo.WithString("sender_id", mcpgo.Required(), mcpgo.Description("Sender identifier.")),
 		mcpgo.WithString("channel", mcpgo.Required(), mcpgo.Description("Channel name.")),
 		mcpgo.WithDestructiveHintAnnotation(true),
-	), handlePairingDeviceRevoke(deps.pairing))
+	), handlePairingDeviceRevoke(deps))
 
 	srv.AddTool(mcpgo.NewTool("goclaw_pairing_browser_status",
 		mcpgo.WithDescription("Check the pairing status for a pending browser client."),
@@ -176,7 +176,7 @@ func handlePairingDeviceList(pairing store.PairingStore) mcpserver.ToolHandlerFu
 	}
 }
 
-func handlePairingDeviceRevoke(pairing store.PairingStore) mcpserver.ToolHandlerFunc {
+func handlePairingDeviceRevoke(deps pairingCRUDDeps) mcpserver.ToolHandlerFunc {
 	return func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 		senderID, err := req.RequireString("sender_id")
 		if err != nil {
@@ -190,8 +190,20 @@ func handlePairingDeviceRevoke(pairing store.PairingStore) mcpserver.ToolHandler
 			slog.Warn("security.invalid_sender_id_format", "handler", "mcp.pairing.revoke")
 			return mcpgo.NewToolResultError("pairing.revoke: invalid sender_id format"), nil
 		}
-		if err := pairing.RevokePairing(ctx, senderID, channel); err != nil {
+		if err := deps.pairing.RevokePairing(ctx, senderID, channel); err != nil {
 			return toolError("pairing.revoke", err)
+		}
+		// Broadcast revocation so the gateway force-disconnects active WebSocket
+		// sessions and clears the in-memory group approval cache (parity with
+		// internal/gateway/methods/pairing.go's handleRevoke).
+		if deps.msgBus != nil {
+			deps.msgBus.Broadcast(bus.Event{
+				Name: bus.EventPairingRevoked,
+				Payload: bus.PairingRevokedPayload{
+					SenderID: senderID,
+					Channel:  channel,
+				},
+			})
 		}
 		return jsonToolResult(map[string]bool{"revoked": true})
 	}

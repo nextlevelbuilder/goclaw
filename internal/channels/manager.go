@@ -171,6 +171,23 @@ func (m *Manager) GetChannel(name string) (Channel, bool) {
 	return channel, ok
 }
 
+// ClearGroupApproval removes a chat from a channel's in-memory pairing
+// approval cache (BaseChannel.approvedGroups). Used when a group pairing is
+// revoked so the bot re-enters the pairing gate on the next message instead of
+// continuing to reply as if it were still approved. Channels that don't embed
+// BaseChannel are ignored.
+func (m *Manager) ClearGroupApproval(channelName, chatID string) {
+	m.mu.RLock()
+	ch, ok := m.channels[channelName]
+	m.mu.RUnlock()
+	if !ok {
+		return
+	}
+	if c, ok := ch.(interface{ ClearGroupApproval(string) }); ok {
+		c.ClearGroupApproval(chatID)
+	}
+}
+
 // GetStatus returns the running status of all channels.
 func (m *Manager) GetStatus() map[string]any {
 	m.mu.RLock()

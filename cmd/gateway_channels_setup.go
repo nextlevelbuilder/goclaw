@@ -240,7 +240,9 @@ func wireChannelEventSubscribers(
 		}
 	})
 
-	// Wire pairing revocation → force disconnect active WebSocket sessions.
+	// Wire pairing revocation → force disconnect active WebSocket sessions and
+	// clear the in-memory group approval cache so a revoked group re-enters the
+	// pairing gate on its next message instead of the bot replying as usual.
 	msgBus.Subscribe(bus.TopicPairingRevoked, func(event bus.Event) {
 		if event.Name != bus.EventPairingRevoked {
 			return
@@ -250,6 +252,13 @@ func wireChannelEventSubscribers(
 			return
 		}
 		go server.DisconnectByPairing(payload.SenderID, payload.Channel)
+		// Group pairings use "group:<chatID>" as sender ID (telegram) or
+		// "<chatID>" (other channels); only group entries carry an
+		// approvedGroups cache entry worth clearing.
+		if groupChatID, isGroup := strings.CutPrefix(payload.SenderID, "group:"); isGroup {
+			slog.Debug("pairing revoked, clearing group approval cache", "channel", payload.Channel, "chat_id", groupChatID)
+			channelMgr.ClearGroupApproval(payload.Channel, groupChatID)
+		}
 	})
 
 	// Cascade: when an agent becomes inactive, disable its linked channel instances.

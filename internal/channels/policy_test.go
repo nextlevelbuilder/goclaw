@@ -68,6 +68,13 @@ func (m *mockPairingStore) setPaired(senderID, channel string) {
 	m.pairedDevices[senderID][channel] = true
 }
 
+// setUnpaired removes a mock paired relationship.
+func (m *mockPairingStore) setUnpaired(senderID, channel string) {
+	if m.pairedDevices[senderID] != nil {
+		delete(m.pairedDevices[senderID], channel)
+	}
+}
+
 // TestCheckDMPolicy_PolicyDisabled rejects all messages.
 func TestCheckDMPolicy_PolicyDisabled(t *testing.T) {
 	bc := NewBaseChannel("test", nil, nil)
@@ -565,6 +572,59 @@ func TestCheckGroupPolicy_PairingMarksGroupApproved(t *testing.T) {
 		t.Error("Group should be cached as approved after successful pairing check")
 	}
 }
+
+// TestManagerClearGroupApproval verifies the Manager clears the per-channel
+// in-memory approval cache used to short-circuit the pairing gate after a
+// pairing is revoked.
+func TestManagerClearGroupApproval(t *testing.T) {
+	bc := newApprovalChannel("telegram")
+	ps := newMockPairingStore()
+	bc.SetPairingService(ps)
+
+	mgr := NewManager(nil)
+	mgr.RegisterChannel("telegram", bc)
+
+	chatID := "chat_group_1"
+	ps.setPaired("group:"+chatID, "telegram")
+
+	ctx := context.Background()
+	if got := bc.CheckGroupPolicy(ctx, "user1", chatID, "pairing"); got != PolicyAllow {
+		t.Fatalf("paired group policy = %v; want PolicyAllow", got)
+	}
+	if !bc.IsGroupApproved(chatID) {
+		t.Fatal("group should be cached as approved before revocation")
+	}
+
+	// Revoke → cache must be cleared so the next message re-enters the pairing gate.
+	mgr.ClearGroupApproval("telegram", chatID)
+	if bc.IsGroupApproved(chatID) {
+		t.Fatal("group approval cache should be cleared after revocation")
+	}
+
+	// DB row is gone → next policy check must return PolicyNeedsPairing.
+	ps.setUnpaired("group:"+chatID, "telegram")
+	if got := bc.CheckGroupPolicy(ctx, "user1", chatID, "pairing"); got != PolicyNeedsPairing {
+		t.Fatalf("post-revoke group policy = %v; want PolicyNeedsPairing", got)
+	}
+
+	// Unknown channel names are a no-op (no panic).
+	mgr.ClearGroupApproval("nonexistent", chatID)
+}
+
+// approvalChannel wraps BaseChannel so it satisfies channels.Channel in tests.
+type approvalChannel struct {
+	*BaseChannel
+}
+
+func newApprovalChannel(name string) *approvalChannel {
+	return &approvalChannel{BaseChannel: NewBaseChannel(name, nil, nil)}
+}
+
+func (c *approvalChannel) Send(context.Context, bus.OutboundMessage) error { return nil }
+
+func (c *approvalChannel) Start(context.Context) error { return nil }
+
+func (c *approvalChannel) Stop(context.Context) error { return nil }
 
 // TestCheckDMPolicy_AllPolicies_TableDriven comprehensive table test.
 func TestCheckDMPolicy_AllPolicies_TableDriven(t *testing.T) {
