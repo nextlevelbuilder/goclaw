@@ -30,6 +30,7 @@ func testPostgresConnection(dsn string) error {
 var defaultPlaceholderProviders = []store.LLMProviderData{
 	{Name: "aimlapi", DisplayName: "AI/ML API", ProviderType: store.ProviderAIMLAPI, APIBase: providers.AIMLAPIDefaultAPIBase, Enabled: false},
 	{Name: "openrouter", DisplayName: "OpenRouter", ProviderType: store.ProviderOpenRouter, APIBase: "https://openrouter.ai/api/v1", Enabled: false},
+	{Name: "orcarouter", DisplayName: "OrcaRouter", ProviderType: store.ProviderOrcaRouter, APIBase: store.OrcaRouterDefaultAPIBase, Enabled: false},
 	{Name: "synthetic", DisplayName: "Synthetic", ProviderType: store.ProviderOpenAICompat, APIBase: "https://api.synthetic.new/openai/v1", Enabled: false},
 	{Name: "alicloud-api", DisplayName: "AliCloud API", ProviderType: store.ProviderDashScope, APIBase: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", Enabled: false},
 	{Name: "alicloud-sub", DisplayName: "AliCloud Sub", ProviderType: store.ProviderBailian, APIBase: "https://coding-intl.dashscope.aliyuncs.com/v1", Enabled: false},

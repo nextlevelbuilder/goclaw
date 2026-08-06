@@ -315,6 +315,8 @@ func defaultBaseURL(providerType string) string {
 		return "https://api.atlascloud.ai/v1"
 	case "openrouter":
 		return "https://openrouter.ai/api/v1"
+	case "orcarouter":
+		return "https://api.orcarouter.ai/v1"
 	case "dashscope":
 		return "https://dashscope.aliyuncs.com/compatible-mode/v1"
 	default:

@@ -26,6 +26,8 @@ func TestShouldEnforceProvider(t *testing.T) {
 		{store.ProviderOpenAICompat, true, true},
 		{store.ProviderOpenRouter, true, true},
 		{store.ProviderOpenRouter, false, false},
+		{store.ProviderOrcaRouter, true, true},
+		{store.ProviderOrcaRouter, false, false},
 	}
 	for _, tc := range cases {
 		if got := ShouldEnforceProvider(tc.providerType, tc.hasKey); got != tc.want {

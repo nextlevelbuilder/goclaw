@@ -106,6 +106,7 @@
     "openai_compat": "OpenAI 호환",
     "gemini_native": "Gemini",
     "openrouter": "OpenRouter",
+    "orcarouter": "OrcaRouter",
     "groq": "Groq",
     "deepseek": "DeepSeek",
     "mistral": "Mistral",

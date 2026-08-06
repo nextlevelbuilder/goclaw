@@ -205,14 +205,15 @@ func (p *OpenAIProvider) schemaProviderName() string {
 }
 
 // resolveModel returns the model ID to use for a request.
-// For OpenRouter, model IDs require a provider prefix (e.g. "anthropic/claude-sonnet-4-5-20250929").
+// For OpenRouter and OrcaRouter, model IDs require a provider prefix
+// (e.g. "anthropic/claude-sonnet-4-5-20250929", "orcarouter/auto").
 // If the caller passes an unprefixed model, fall back to the provider's default.
 // After alias resolution, checks the registry for forward-compat specs.
 func (p *OpenAIProvider) resolveModel(model string) string {
 	if model == "" {
 		return p.defaultModel
 	}
-	if p.name == "openrouter" && !strings.Contains(model, "/") {
+	if (p.name == "openrouter" || p.name == "orcarouter" || p.providerType == "orcarouter") && !strings.Contains(model, "/") {
 		return p.defaultModel
 	}
 	// Trigger forward-compat resolution to cache specs for token counting.
