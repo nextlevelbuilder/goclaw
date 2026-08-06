@@ -242,6 +242,8 @@ func openRouterProviderPrefixes(providerName, providerType string) []string {
 		return nil
 	case store.ProviderOpenRouter:
 		return nil
+	case store.ProviderOrcaRouter:
+		return nil
 	case store.ProviderGroq:
 		return []string{"groq"}
 	case store.ProviderDeepSeek:

@@ -61,6 +61,17 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 		slog.Info("registered provider", "name", "openrouter")
 	}
 
+	if cfg.Providers.OrcaRouter.APIKey != "" {
+		base := cfg.Providers.OrcaRouter.APIBase
+		if base == "" {
+			base = store.OrcaRouterDefaultAPIBase
+		}
+		orcaProv := providers.NewOpenAIProvider("orcarouter", cfg.Providers.OrcaRouter.APIKey, base, store.OrcaRouterDefaultModel)
+		orcaProv.WithSiteInfo("https://goclaw.sh", "GoClaw")
+		registry.Register(orcaProv)
+		slog.Info("registered provider", "name", "orcarouter")
+	}
+
 	if cfg.Providers.Groq.APIKey != "" {
 		registry.Register(providers.NewOpenAIProvider("groq", cfg.Providers.Groq.APIKey, "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile"))
 		slog.Info("registered provider", "name", "groq")
@@ -456,7 +467,7 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, model)
 			prov.WithProviderType(p.ProviderType)
 			prov.WithThinkingEnabled(store.ParseThinkingEnabled(p.Settings))
-			if p.ProviderType == store.ProviderOpenRouter {
+			if p.ProviderType == store.ProviderOpenRouter || p.ProviderType == store.ProviderOrcaRouter {
 				prov.WithSiteInfo("https://goclaw.sh", "GoClaw")
 			}
 			registry.RegisterForTenant(p.TenantID, prov)

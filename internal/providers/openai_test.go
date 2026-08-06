@@ -752,3 +752,55 @@ func TestBuildRequestBody_OllamaThinkingEnabledOverrideTakesPrecedenceOverLevel(
 		t.Fatalf("expected think=false when provider override is false, got %v (present=%v)", think, ok)
 	}
 }
+
+func TestResolveModel_OrcaRouterRequiresPrefixedModel(t *testing.T) {
+	cases := []struct {
+		name        string
+		provider    *OpenAIProvider
+		model       string
+		wantDefault bool
+	}{
+		{
+			name:        "orcarouter unprefixed falls back to default",
+			provider:    NewOpenAIProvider("orcarouter", "key", "https://api.orcarouter.ai/v1", "orcarouter/auto"),
+			model:       "gpt-5.5",
+			wantDefault: true,
+		},
+		{
+			name:        "orcarouter namespaced model passes through",
+			provider:    NewOpenAIProvider("orcarouter", "key", "https://api.orcarouter.ai/v1", "orcarouter/auto"),
+			model:       "orcarouter/auto",
+			wantDefault: false,
+		},
+		{
+			name:        "orcarouter providerType without slash falls back",
+			provider:    NewOpenAIProvider("my-orca", "key", "https://api.orcarouter.ai/v1", "orcarouter/auto").WithProviderType("orcarouter"),
+			model:       "claude-opus-5",
+			wantDefault: true,
+		},
+		{
+			name:        "openrouter behavior preserved",
+			provider:    NewOpenAIProvider("openrouter", "key", "https://openrouter.ai/api/v1", "anthropic/claude-sonnet-4-5-20250929"),
+			model:       "claude-sonnet-4-5",
+			wantDefault: true,
+		},
+		{
+			name:        "generic openai provider keeps unprefixed model",
+			provider:    NewOpenAIProvider("openai", "key", "https://api.openai.com/v1", "gpt-4o"),
+			model:       "gpt-5.5",
+			wantDefault: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.provider.resolveModel(tc.model)
+			if tc.wantDefault {
+				if got != tc.provider.defaultModel {
+					t.Fatalf("resolveModel(%q) = %q, want default %q", tc.model, got, tc.provider.defaultModel)
+				}
+			} else if got != tc.model {
+				t.Fatalf("resolveModel(%q) = %q, want %q", tc.model, got, tc.model)
+			}
+		})
+	}
+}

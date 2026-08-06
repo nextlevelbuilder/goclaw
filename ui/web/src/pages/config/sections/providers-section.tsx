@@ -18,6 +18,7 @@ const KNOWN_PROVIDERS = [
   { key: "anthropic", label: "Anthropic", envKey: "GOCLAW_ANTHROPIC_API_KEY" },
   { key: "openai", label: "OpenAI", envKey: "GOCLAW_OPENAI_API_KEY" },
   { key: "openrouter", label: "OpenRouter", envKey: "GOCLAW_OPENROUTER_API_KEY" },
+  { key: "orcarouter", label: "OrcaRouter", envKey: "GOCLAW_ORCAROUTER_API_KEY" },
   { key: "groq", label: "Groq", envKey: "GOCLAW_GROQ_API_KEY" },
   { key: "gemini", label: "Gemini", envKey: "GOCLAW_GEMINI_API_KEY" },
   { key: "deepseek", label: "DeepSeek", envKey: "GOCLAW_DEEPSEEK_API_KEY" },
