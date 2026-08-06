@@ -96,7 +96,7 @@ const agentSelectCols = `id, agent_key, display_name, frontmatter, owner_id, pro
 		 shell_deny_groups, kg_dedup_config,
 		 COALESCE(system_prompt, '') AS system_prompt,
 		 agent_type, is_default, is_locked, status, budget_monthly_cents, created_at, updated_at, tenant_id,
-		 connected_agents`
+		 connected_agents, visibility`
 
 func (s *PGAgentStore) Create(ctx context.Context, agent *store.AgentData) error {
 	if agent.ID == uuid.Nil {
@@ -540,7 +540,7 @@ func scanAgentRow(row agentRowScanner) (*store.AgentData, error) {
 		&d.SelfEvolve, &d.SkillEvolve, &d.SkillNudgeInterval,
 		&reasoningCfg, &wsCfg, &oauthCfg, &shellCfg, &kgCfg, &d.SystemPrompt,
 		&d.AgentType, &d.IsDefault, &d.IsLocked, &d.Status, &d.BudgetMonthlyCents, &d.CreatedAt, &d.UpdatedAt, &d.TenantID,
-		&connectedAgents)
+		&connectedAgents, &d.Visibility)
 	if err != nil {
 		return nil, err
 	}

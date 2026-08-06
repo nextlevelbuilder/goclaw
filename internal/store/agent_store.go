@@ -61,6 +61,11 @@ type AgentData struct {
 	// agent_key='default'). API consumers cannot set this field — it's filtered
 	// out of POST/PUT bodies via the agentAllowedFields allowlist.
 	IsLocked            bool      `json:"is_locked" db:"is_locked"`
+	// Visibility: 'private' (owner + explicit shares) | 'org' (every member).
+	// Owner-only to change (see gateway/methods/agents_update.go) — never for a
+	// locked agent, which is already org-wide through owner_id='system' instead.
+	// Migration 000084.
+	Visibility          string    `json:"visibility" db:"visibility"`
 	Status              string    `json:"status" db:"status"`
 
 	// Budget: optional monthly spending limit in cents (nil = unlimited)

@@ -56,6 +56,10 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 		ChatGPTOAuthRouting json.RawMessage `json:"chatgpt_oauth_routing,omitempty"`
 		ShellDenyGroups     json.RawMessage `json:"shell_deny_groups,omitempty"`
 		KGDedupConfig       json.RawMessage `json:"kg_dedup_config,omitempty"`
+		// 'private' (default: owner + explicit shares) | 'org' (every member).
+		// Pointer so omitting the field leaves visibility untouched, matching every
+		// other optional field in this handler.
+		Visibility *string `json:"visibility,omitempty"`
 	}
 	if req.Params != nil {
 		json.Unmarshal(req.Params, &params)
@@ -84,7 +88,44 @@ func (m *AgentsMethods) handleUpdate(ctx context.Context, client *gateway.Client
 		}
 		params.AgentID = ag.AgentKey
 
+		// visibility is validated and authorized BEFORE anything else in this
+		// request is applied, and on failure the whole call returns without
+		// touching the store — same convention as the OtherConfig v3-flag check
+		// below. A request that asked to share an agent should not partially
+		// succeed by quietly renaming it instead.
+		if params.Visibility != nil {
+			if *params.Visibility != "private" && *params.Visibility != "org" {
+				client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest,
+					i18n.T(locale, i18n.MsgInvalidRequest, `visibility must be "private" or "org"`)))
+				return
+			}
+			// Built-ins are already org-wide through owner_id='system', a
+			// SEPARATE mechanism ListAccessible checks independently of this
+			// column — toggling visibility on one would not change who can see
+			// it and would misrepresent why it is shared. is_locked is the
+			// signal for "not yours to change" generally, and it happens to be
+			// true for every agent that reaches this branch today.
+			if ag.IsLocked {
+				client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized,
+					i18n.T(locale, i18n.MsgPermissionDenied, "change visibility of a locked agent")))
+				return
+			}
+			// OWNER ONLY — deliberately no admin override. Sharing your agent
+			// with the org is your call to make about your own agent; an admin
+			// forcibly publishing (or un-publishing) someone else's would undo
+			// the privacy guarantee agents.private-by-construction just built.
+			userID := client.UserID()
+			if userID == "" || ag.OwnerID != userID {
+				client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized,
+					i18n.T(locale, i18n.MsgPermissionDenied, "change visibility of an agent you do not own")))
+				return
+			}
+		}
+
 		updates := map[string]any{}
+		if params.Visibility != nil {
+			updates["visibility"] = *params.Visibility
+		}
 		if params.Name != "" {
 			updates["display_name"] = params.Name
 		}

@@ -154,6 +154,11 @@ func (m *AgentsMethods) handleList(ctx context.Context, client *gateway.Client, 
 				// sending it keeps one definition of "shared" rather than two.
 				"owner_id":            a.OwnerID,
 				"is_locked":           a.IsLocked,
+				// Same lesson as owner_id above, learned once already: a field
+				// absent from this hand-built map is invisible to the client with
+				// no error anywhere. The share-with-org toggle needs this to know
+				// its OWN current state.
+				"visibility":          a.Visibility,
 				"max_tool_iterations": a.MaxToolIterations,
 				"context_window":      a.ContextWindow,
 				"model":               a.Model,

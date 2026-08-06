@@ -36,7 +36,7 @@ const agentSelectCols = `id, agent_key, display_name, frontmatter, owner_id, pro
 	 self_evolve, skill_evolve, skill_nudge_interval,
 	 reasoning_config, workspace_sharing, chatgpt_oauth_routing,
 	 shell_deny_groups, kg_dedup_config,
-	 agent_type, is_default, is_locked, status, budget_monthly_cents, created_at, updated_at, tenant_id`
+	 agent_type, is_default, is_locked, status, budget_monthly_cents, created_at, updated_at, tenant_id, visibility`
 
 func (s *SQLiteAgentStore) Create(ctx context.Context, agent *store.AgentData) error {
 	if agent.ID == uuid.Nil {
@@ -272,7 +272,7 @@ func scanAgentRow(row agentRowScanner) (*store.AgentData, error) {
 		&d.SelfEvolve, &d.SkillEvolve, &d.SkillNudgeInterval,
 		&reasoningCfg, &wsCfg, &oauthCfg, &shellCfg, &kgCfg,
 		&d.AgentType, &d.IsDefault, &d.IsLocked, &d.Status, &d.BudgetMonthlyCents,
-		createdAt, updatedAt, &d.TenantID,
+		createdAt, updatedAt, &d.TenantID, &d.Visibility,
 	)
 	if err != nil {
 		return nil, err
