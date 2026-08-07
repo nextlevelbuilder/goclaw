@@ -92,9 +92,16 @@ func setupToolRegistry(
 		toolsReg.Register(tools.NewExecTool(workspace, agentCfg.RestrictToWorkspace))
 	}
 	// deliver_file surfaces an existing workspace file (e.g. an exec-generated
-	// .xlsx/.docx) to the user as a download link. No sandbox variant needed —
-	// it only stats/reads host workspace files (shared with the sandbox mount).
-	toolsReg.Register(tools.NewDeliverFileTool(workspace, agentCfg.RestrictToWorkspace))
+	// .xlsx/.docx) to the user as a download link — it only stats/reads host
+	// workspace files (shared with the sandbox mount), so no sandboxed
+	// variant is needed for the delivery itself. It's still handed the
+	// sandbox manager: a delivered .pptx gets a per-slide JPEG preview
+	// rendered via soffice/pdftoppm INSIDE the sandbox container (Debian —
+	// the gateway's own Alpine runtime can't run LibreOffice reliably), a
+	// no-op when sandboxMgr is nil.
+	deliverFileTool := tools.NewDeliverFileTool(workspace, agentCfg.RestrictToWorkspace)
+	deliverFileTool.SetSandboxManager(sandboxMgr)
+	toolsReg.Register(deliverFileTool)
 
 	// Memory tools — PG-backed; always registered (PG memory is always available)
 	toolsReg.Register(tools.NewMemorySearchTool())

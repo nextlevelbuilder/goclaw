@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,6 +28,7 @@ type DeliverFileTool struct {
 	allowedPrefixes []string
 	deniedPrefixes  []string
 	mediaUpload     MediaUploadFunc
+	sandboxMgr      sandbox.Manager
 }
 
 // NewDeliverFileTool creates a DeliverFileTool bound to a workspace root.
@@ -38,6 +40,12 @@ func NewDeliverFileTool(workspace string, restrict bool) *DeliverFileTool {
 // (wired alongside WriteFileTool's hook). Without it, delivery falls back to the
 // local workspace path (works immediately, pruned after the 7d cleanup cron).
 func (t *DeliverFileTool) SetMediaUploadFunc(fn MediaUploadFunc) { t.mediaUpload = fn }
+
+// SetSandboxManager enables per-slide JPEG previews for delivered .pptx files
+// (rendered via LibreOffice + poppler, run inside the sandbox container — see
+// renderPptxSlidePreviews). Without it, a delivered .pptx is still a fully
+// working download; it just has no visual preview attached.
+func (t *DeliverFileTool) SetSandboxManager(mgr sandbox.Manager) { t.sandboxMgr = mgr }
 
 // AllowPaths / DenyPaths mirror WriteFileTool so deliver_file honours the same
 // path boundaries as write/read.
@@ -142,6 +150,47 @@ func (t *DeliverFileTool) Execute(ctx context.Context, args map[string]any) *Res
 		filepath.Base(resolved), fi.Size(),
 	))
 	result.Media = []bus.MediaFile{{Path: deliveredPath, Filename: filepath.Base(resolved)}}
+
+	// A delivered .pptx also gets a per-slide JPEG preview, best-effort — a
+	// deck is the one delivered format with no reliable client-side visual
+	// render (unlike .xlsx/.docx/.pdf), so without this the chat can only
+	// show a text outline. Never blocks or fails the delivery itself: any
+	// error here (sandbox unconfigured, soffice/pdftoppm missing or
+	// crashing, timeout) just means no preview, not a failed deliver_file.
+	if t.sandboxMgr != nil && strings.EqualFold(filepath.Ext(resolved), ".pptx") {
+		workspace := ToolWorkspaceFromCtx(ctx)
+		if workspace == "" {
+			workspace = t.workspace
+		}
+		previews, err := renderPptxSlidePreviews(ctx, t.sandboxMgr, workspace, resolved)
+		if err != nil {
+			slog.Warn("deliver_file: pptx slide preview render failed", "file", filepath.Base(resolved), "error", err)
+		}
+		base := strings.TrimSuffix(filepath.Base(resolved), filepath.Ext(resolved))
+		for i, imgPath := range previews {
+			imgDeliveredPath := imgPath
+			if t.mediaUpload != nil {
+				if cachePath := uploadDeliveredToMediaStore(ctx, t.mediaUpload, imgPath); cachePath != "" {
+					imgDeliveredPath = cachePath
+					// durably uploaded — the local render copy is no longer needed.
+					// safeWorkspacePath is redundant with renderPptxSlidePreviews'
+					// own bounds checks on every path it returns, but this is a
+					// filesystem delete: it gets its own independent, visible guard,
+					// and deletes the value IT returns rather than trusting imgPath
+					// never to have escaped between there and here.
+					if safePath, err := safeWorkspacePath(workspace, imgPath); err == nil {
+						_ = os.Remove(safePath)
+					}
+				}
+			}
+			result.Media = append(result.Media, bus.MediaFile{
+				Path:     imgDeliveredPath,
+				MimeType: "image/jpeg",
+				Filename: fmt.Sprintf("%s-slide-%d.jpg", base, i+1),
+			})
+		}
+	}
+
 	// Track delivered path so the message tool's self-send guard detects dupes.
 	if dm := DeliveredMediaFromCtx(ctx); dm != nil {
 		dm.Mark(deliveredPath)

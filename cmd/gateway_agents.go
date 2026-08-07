@@ -239,8 +239,13 @@ func setupSubagents(providerReg *providers.Registry, cfg *config.Config, msgBus 
 			reg.Register(tools.NewExecTool(workspace, agentCfg.RestrictToWorkspace))
 		}
 		// deliver_file: hand an existing workspace file to the user as a download
-		// link (e.g. exec-generated .xlsx/.docx). No sandbox variant needed.
-		reg.Register(tools.NewDeliverFileTool(workspace, agentCfg.RestrictToWorkspace))
+		// link (e.g. exec-generated .xlsx/.docx). Still given sandboxMgr so a
+		// delivered .pptx gets its per-slide JPEG preview rendered inside the
+		// (Debian) sandbox container — see gateway_setup.go's registration for
+		// why that can't run in the gateway's own process.
+		deliverFileTool := tools.NewDeliverFileTool(workspace, agentCfg.RestrictToWorkspace)
+		deliverFileTool.SetSandboxManager(sandboxMgr)
+		reg.Register(deliverFileTool)
 		return reg
 	}
 

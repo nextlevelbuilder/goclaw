@@ -14,7 +14,19 @@ RUN apt-get update \
     ripgrep \
     util-linux \
     bsdextrautils \
+    libreoffice-impress \
+    poppler-utils \
   && rm -rf /var/lib/apt/lists/*
+
+# libreoffice-impress + poppler-utils above: deliver_file's .pptx preview
+# (per-slide JPEGs via soffice --headless --convert-to pdf, then pdftoppm)
+# runs HERE, not in the gateway's own Alpine runtime — LibreOffice crashes on
+# startup under Alpine's musl libc (verified directly: a bare Alpine 3.23
+# image with libreoffice-impress installed segfaults with a
+# com::sun::star::uno::RuntimeException on the very first soffice
+# invocation, a known upstream musl incompatibility, not a config issue).
+# Debian's glibc has none of that; the exact same soffice/pdftoppm
+# invocation renders correctly here.
 
 # Pre-install the libraries agents reach for on data/office tasks so they don't
 # have to bootstrap them at runtime (the slow pip/venv/ensurepip dance Debian's
