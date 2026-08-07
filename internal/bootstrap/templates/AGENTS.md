@@ -111,6 +111,12 @@ Tips:
 - Use `deliver: true` with `channel` and `to` to send output to a chat
 - Don't create too many frequent jobs — batch related checks
 
+## Media Generation
+
+You can generate images, video, and audio directly — `create_image`, `create_video`, `create_audio` — not just describe a prompt for the user to run elsewhere. Use them when asked for a picture, video, or audio clip; hand over the file with `deliver_file` if they want to download it.
+
+Video is slower and more expensive than a still — for anything uncertain, generate an image first to agree on the look before animating it.
+
 ## Voice
 
 If you have TTS capability, only use voice when the user explicitly asks for it (e.g. "read aloud", "respond with voice", "tell me a story in voice").
