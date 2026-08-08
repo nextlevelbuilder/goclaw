@@ -30,7 +30,20 @@ import (
 // Uses a scope key distinct from the session's own coding/exec container: a
 // slow or wedged preview render must not block or share state with whatever
 // the agent's own sandboxed tool calls are doing at the same time.
-func renderPptxSlidePreviews(ctx context.Context, mgr sandbox.Manager, workspace, hostPptxPath string) ([]string, error) {
+//
+// pptxPreviewResult.PDFPath is the same intermediate PDF soffice produces on
+// the way to the JPEGs — kept (not deleted) so the caller can deliver it too,
+// for a real client-side PDF-viewer engine instead of a static image per
+// slide. Best-effort like the rest of this function: a failure to resolve
+// its safe path leaves PDFPath empty rather than failing the whole preview,
+// since the JPEGs (the primary, already-proven artifact) rendered fine
+// regardless.
+type pptxPreviewResult struct {
+	PDFPath    string
+	SlidePaths []string
+}
+
+func renderPptxSlidePreviews(ctx context.Context, mgr sandbox.Manager, workspace, hostPptxPath string) (pptxPreviewResult, error) {
 	// hostPptxPath was already resolved through any symlinks by
 	// resolvePath/resolvePathWithAllowed (deliver_file.go's Execute always
 	// passes its post-resolution `resolved`, never the raw model-supplied
@@ -46,14 +59,14 @@ func renderPptxSlidePreviews(ctx context.Context, mgr sandbox.Manager, workspace
 	}
 	hostPptxPath, err := safeWorkspacePath(workspace, hostPptxPath)
 	if err != nil {
-		return nil, fmt.Errorf("file is outside the sandbox-mounted workspace: %w", err)
+		return pptxPreviewResult{}, fmt.Errorf("file is outside the sandbox-mounted workspace: %w", err)
 	}
 	// rel is used only to build a CONTAINER-side command argument below
 	// (sb.Exec, not a host filesystem call) — the containment check itself
 	// is safeWorkspacePath's HasPrefix check above, not this.
 	rel, err := filepath.Rel(workspace, hostPptxPath)
 	if err != nil {
-		return nil, fmt.Errorf("compute container-relative path: %w", err)
+		return pptxPreviewResult{}, fmt.Errorf("compute container-relative path: %w", err)
 	}
 
 	// Bounds the whole render (container get + 4 execs), not just one call —
@@ -73,7 +86,7 @@ func renderPptxSlidePreviews(ctx context.Context, mgr sandbox.Manager, workspace
 
 	sb, err := mgr.Get(ctx, scopeKey, workspace, nil)
 	if err != nil {
-		return nil, fmt.Errorf("get sandbox: %w", err)
+		return pptxPreviewResult{}, fmt.Errorf("get sandbox: %w", err)
 	}
 
 	// Everything from here on is built from CONSTANTS plus a server-generated
@@ -88,22 +101,22 @@ func renderPptxSlidePreviews(ctx context.Context, mgr sandbox.Manager, workspace
 	containerOutDir := path.Join(containerWorkdir, relDir)
 	hostOutDir, err := safeWorkspacePath(workspace, filepath.Join(workspace, filepath.FromSlash(relDir)))
 	if err != nil {
-		return nil, err
+		return pptxPreviewResult{}, err
 	}
 
 	containerInputPptx := path.Join(containerOutDir, "deck.pptx")
 	containerPdfPath := path.Join(containerOutDir, "deck.pdf")
 
 	if res, err := sb.Exec(ctx, []string{"mkdir", "-p", containerOutDir}, containerWorkdir); err != nil {
-		return nil, fmt.Errorf("mkdir: %w", err)
+		return pptxPreviewResult{}, fmt.Errorf("mkdir: %w", err)
 	} else if res.ExitCode != 0 {
-		return nil, fmt.Errorf("mkdir: exit %d: %s", res.ExitCode, res.Stderr)
+		return pptxPreviewResult{}, fmt.Errorf("mkdir: exit %d: %s", res.ExitCode, res.Stderr)
 	}
 
 	if res, err := sb.Exec(ctx, []string{"cp", containerPptxPath, containerInputPptx}, containerWorkdir); err != nil {
-		return nil, fmt.Errorf("cp: %w", err)
+		return pptxPreviewResult{}, fmt.Errorf("cp: %w", err)
 	} else if res.ExitCode != 0 {
-		return nil, fmt.Errorf("cp: exit %d: %s", res.ExitCode, res.Stderr)
+		return pptxPreviewResult{}, fmt.Errorf("cp: exit %d: %s", res.ExitCode, res.Stderr)
 	}
 
 	// The sandbox container's root filesystem is read-only (Dockerfile.sandbox
@@ -122,18 +135,18 @@ func renderPptxSlidePreviews(ctx context.Context, mgr sandbox.Manager, workspace
 		containerWorkdir,
 		sandbox.WithEnv(map[string]string{"HOME": containerOutDir}),
 	); err != nil {
-		return nil, fmt.Errorf("soffice: %w", err)
+		return pptxPreviewResult{}, fmt.Errorf("soffice: %w", err)
 	} else if res.ExitCode != 0 {
-		return nil, fmt.Errorf("soffice: exit %d: %s", res.ExitCode, res.Stderr)
+		return pptxPreviewResult{}, fmt.Errorf("soffice: exit %d: %s", res.ExitCode, res.Stderr)
 	}
 
 	if res, err := sb.Exec(ctx,
 		[]string{"pdftoppm", "-jpeg", "-r", "100", containerPdfPath, path.Join(containerOutDir, "slide")},
 		containerWorkdir,
 	); err != nil {
-		return nil, fmt.Errorf("pdftoppm: %w", err)
+		return pptxPreviewResult{}, fmt.Errorf("pdftoppm: %w", err)
 	} else if res.ExitCode != 0 {
-		return nil, fmt.Errorf("pdftoppm: exit %d: %s", res.ExitCode, res.Stderr)
+		return pptxPreviewResult{}, fmt.Errorf("pdftoppm: exit %d: %s", res.ExitCode, res.Stderr)
 	}
 
 	// Re-derive the safe directory path fresh, right before the read, rather
@@ -143,11 +156,11 @@ func renderPptxSlidePreviews(ctx context.Context, mgr sandbox.Manager, workspace
 	// check, not a single check whose result is trusted at a distance.
 	safeOutDir, err := safeWorkspacePath(workspace, hostOutDir)
 	if err != nil {
-		return nil, err
+		return pptxPreviewResult{}, err
 	}
 	entries, err := os.ReadDir(safeOutDir)
 	if err != nil {
-		return nil, fmt.Errorf("read rendered output (host/container workspace mount mismatch?): %w", err)
+		return pptxPreviewResult{}, fmt.Errorf("read rendered output (host/container workspace mount mismatch?): %w", err)
 	}
 
 	type numberedSlide struct {
@@ -177,20 +190,18 @@ func renderPptxSlidePreviews(ctx context.Context, mgr sandbox.Manager, workspace
 	}
 	sort.Slice(slides, func(i, j int) bool { return slides[i].n < slides[j].n })
 
-	// The intermediate PDF served no purpose past this point — only the
-	// per-slide JPEGs get delivered.
-	if pdfPath, err := safeWorkspacePath(workspace, filepath.Join(safeOutDir, "deck.pdf")); err == nil {
-		_ = os.Remove(pdfPath)
-	}
-
 	if len(slides) == 0 {
-		return nil, fmt.Errorf("soffice/pdftoppm reported success but produced no slide images")
+		return pptxPreviewResult{}, fmt.Errorf("soffice/pdftoppm reported success but produced no slide images")
 	}
 	out := make([]string, len(slides))
 	for i, s := range slides {
 		out[i] = s.path
 	}
-	return out, nil
+	// Best-effort: the JPEGs above are the proven, already-working artifact —
+	// a failure to resolve the PDF's safe path just means PDFPath stays empty
+	// (the caller skips attaching it) rather than failing the whole preview.
+	pdfPath, _ := safeWorkspacePath(workspace, filepath.Join(safeOutDir, "deck.pdf"))
+	return pptxPreviewResult{PDFPath: pdfPath, SlidePaths: out}, nil
 }
 
 // safeWorkspacePath returns candidate's absolute form, but only after

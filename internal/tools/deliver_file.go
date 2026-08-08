@@ -162,12 +162,12 @@ func (t *DeliverFileTool) Execute(ctx context.Context, args map[string]any) *Res
 		if workspace == "" {
 			workspace = t.workspace
 		}
-		previews, err := renderPptxSlidePreviews(ctx, t.sandboxMgr, workspace, resolved)
+		preview, err := renderPptxSlidePreviews(ctx, t.sandboxMgr, workspace, resolved)
 		if err != nil {
 			slog.Warn("deliver_file: pptx slide preview render failed", "file", filepath.Base(resolved), "error", err)
 		}
 		base := strings.TrimSuffix(filepath.Base(resolved), filepath.Ext(resolved))
-		for i, imgPath := range previews {
+		for i, imgPath := range preview.SlidePaths {
 			imgDeliveredPath := imgPath
 			if t.mediaUpload != nil {
 				if cachePath := uploadDeliveredToMediaStore(ctx, t.mediaUpload, imgPath); cachePath != "" {
@@ -187,6 +187,28 @@ func (t *DeliverFileTool) Execute(ctx context.Context, args map[string]any) *Res
 				Path:     imgDeliveredPath,
 				MimeType: "image/jpeg",
 				Filename: fmt.Sprintf("%s-slide-%d.jpg", base, i+1),
+			})
+		}
+		// Sibling to the JPEGs, not a replacement: a real PDF-viewer engine on
+		// the client renders this directly (continuous scroll, zoom, text
+		// search) when present, but preview.PDFPath is empty whenever the
+		// render didn't get far enough to produce one (sandbox unconfigured,
+		// soffice/pdftoppm failure, or its own safe-path resolution failing)
+		// — in which case the JPEGs above are still a complete, usable deck.
+		if preview.PDFPath != "" {
+			pdfDeliveredPath := preview.PDFPath
+			if t.mediaUpload != nil {
+				if cachePath := uploadDeliveredToMediaStore(ctx, t.mediaUpload, preview.PDFPath); cachePath != "" {
+					pdfDeliveredPath = cachePath
+					if safePath, err := safeWorkspacePath(workspace, preview.PDFPath); err == nil {
+						_ = os.Remove(safePath)
+					}
+				}
+			}
+			result.Media = append(result.Media, bus.MediaFile{
+				Path:     pdfDeliveredPath,
+				MimeType: "application/pdf",
+				Filename: base + ".pdf",
 			})
 		}
 	}

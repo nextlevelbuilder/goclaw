@@ -174,18 +174,29 @@ func TestRenderPptxSlidePreviews_DiscoversAndSortsSlides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(got) != 3 {
-		t.Fatalf("expected 3 slide images, got %d: %v", len(got), got)
+	if len(got.SlidePaths) != 3 {
+		t.Fatalf("expected 3 slide images, got %d: %v", len(got.SlidePaths), got.SlidePaths)
 	}
 	for i, want := range []string{"slide-1.jpg", "slide-2.jpg", "slide-10.jpg"} {
-		if filepath.Base(got[i]) != want {
-			t.Errorf("slide %d = %s, want %s (numeric order, not lexical)", i, filepath.Base(got[i]), want)
+		if filepath.Base(got.SlidePaths[i]) != want {
+			t.Errorf("slide %d = %s, want %s (numeric order, not lexical)", i, filepath.Base(got.SlidePaths[i]), want)
 		}
 	}
-	for _, p := range got {
+	for _, p := range got.SlidePaths {
 		if _, err := os.Stat(p); err != nil {
 			t.Errorf("returned path does not exist on disk: %s", p)
 		}
+	}
+	// The intermediate PDF is kept (not deleted) precisely so deliver_file can
+	// attach it as a sibling for the real client-side PDF-viewer engine.
+	if got.PDFPath == "" {
+		t.Fatal("expected PDFPath to be populated — the intermediate deck.pdf should be kept, not deleted")
+	}
+	if filepath.Base(got.PDFPath) != "deck.pdf" {
+		t.Errorf("PDFPath = %s, want a deck.pdf", got.PDFPath)
+	}
+	if _, err := os.Stat(got.PDFPath); err != nil {
+		t.Errorf("PDFPath does not exist on disk: %s", got.PDFPath)
 	}
 }
 
@@ -209,9 +220,10 @@ func TestDeliverFile_PptxPreview_NilSandboxIsANoOp(t *testing.T) {
 }
 
 // TestDeliverFile_PptxPreview_AttachesSlideImages verifies the wiring end of
-// the feature: DeliverFileTool.Execute appends the rendered slide images as
-// additional Media entries alongside the original .pptx, in slide order,
-// each with the expected filename and MIME type.
+// the feature: DeliverFileTool.Execute appends the rendered slide images —
+// and the intermediate PDF, for the real client-side viewer engine — as
+// additional Media entries alongside the original .pptx, each with the
+// expected filename and MIME type.
 func TestDeliverFile_PptxPreview_AttachesSlideImages(t *testing.T) {
 	ws := t.TempDir()
 	if err := os.WriteFile(filepath.Join(ws, "deck.pptx"), []byte("PK fake pptx"), 0644); err != nil {
@@ -248,14 +260,17 @@ func TestDeliverFile_PptxPreview_AttachesSlideImages(t *testing.T) {
 	if res.IsError {
 		t.Fatalf("unexpected error: %s", res.ForLLM)
 	}
-	if len(res.Media) != 2 {
-		t.Fatalf("Media len = %d, want 2 (the .pptx + one slide preview): %+v", len(res.Media), res.Media)
+	if len(res.Media) != 3 {
+		t.Fatalf("Media len = %d, want 3 (the .pptx + one slide preview + the pdf): %+v", len(res.Media), res.Media)
 	}
 	if res.Media[0].Filename != "deck.pptx" {
 		t.Errorf("Media[0] = %q, want the original deck.pptx first", res.Media[0].Filename)
 	}
 	if res.Media[1].Filename != "deck-slide-1.jpg" || res.Media[1].MimeType != "image/jpeg" {
 		t.Errorf("Media[1] = %+v, want {Filename: deck-slide-1.jpg, MimeType: image/jpeg}", res.Media[1])
+	}
+	if res.Media[2].Filename != "deck.pdf" || res.Media[2].MimeType != "application/pdf" {
+		t.Errorf("Media[2] = %+v, want {Filename: deck.pdf, MimeType: application/pdf}", res.Media[2])
 	}
 }
 
