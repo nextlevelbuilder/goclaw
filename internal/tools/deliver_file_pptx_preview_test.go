@@ -18,9 +18,16 @@ import (
 // there rather than just return a canned exit code.
 type previewFakeSandbox struct {
 	onExec func(cmd []string) (*sandbox.ExecResult, error)
+	// onExecWithOpts, when set, is used instead of onExec and additionally
+	// receives the resolved ExecOption values (e.g. WithEnv) — most tests
+	// don't care about these, but the HOME-env regression test does.
+	onExecWithOpts func(cmd []string, opts sandbox.ExecOpts) (*sandbox.ExecResult, error)
 }
 
-func (f *previewFakeSandbox) Exec(_ context.Context, cmd []string, _ string, _ ...sandbox.ExecOption) (*sandbox.ExecResult, error) {
+func (f *previewFakeSandbox) Exec(_ context.Context, cmd []string, _ string, opts ...sandbox.ExecOption) (*sandbox.ExecResult, error) {
+	if f.onExecWithOpts != nil {
+		return f.onExecWithOpts(cmd, sandbox.ApplyExecOpts(opts))
+	}
 	return f.onExec(cmd)
 }
 func (f *previewFakeSandbox) Destroy(context.Context) error { return nil }
@@ -249,5 +256,69 @@ func TestDeliverFile_PptxPreview_AttachesSlideImages(t *testing.T) {
 	}
 	if res.Media[1].Filename != "deck-slide-1.jpg" || res.Media[1].MimeType != "image/jpeg" {
 		t.Errorf("Media[1] = %+v, want {Filename: deck-slide-1.jpg, MimeType: image/jpeg}", res.Media[1])
+	}
+}
+
+// TestRenderPptxSlidePreviews_SofficeGetsWritableHome is a regression guard
+// for a real bug caught only by checking actual staging logs, not local
+// testing: the sandbox container's root filesystem is read-only, and
+// LibreOffice unconditionally tries to bootstrap a user profile under $HOME
+// on every launch — /home/sandbox is part of that read-only root, so it
+// failed outright ("User installation could not be completed... Read-only
+// file system") every single time in the real deployed environment, despite
+// working in every local Docker test that didn't reproduce the hardened
+// --read-only + tmpfs config. The fix is a HOME override pointed at the
+// (writable, bind-mounted) render directory; this test exists so removing
+// that override — e.g. someone "cleaning up" the soffice Exec call — fails
+// loudly instead of only failing on the next real deploy.
+func TestRenderPptxSlidePreviews_SofficeGetsWritableHome(t *testing.T) {
+	ws := realTempDir(t)
+	pptx := filepath.Join(ws, "deck.pptx")
+	if err := os.WriteFile(pptx, []byte("PK fake pptx"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var sofficeHome string
+	sofficeCalled := false
+	mgr := &previewFakeManager{sb: &previewFakeSandbox{onExecWithOpts: func(cmd []string, opts sandbox.ExecOpts) (*sandbox.ExecResult, error) {
+		if len(cmd) == 0 {
+			return &sandbox.ExecResult{ExitCode: 1}, nil
+		}
+		switch cmd[0] {
+		case "mkdir":
+			hostOutDir := filepath.Join(ws, strings.TrimPrefix(cmd[len(cmd)-1], "/workspace/"))
+			return &sandbox.ExecResult{ExitCode: 0}, os.MkdirAll(hostOutDir, 0755)
+		case "soffice":
+			sofficeCalled = true
+			if opts.Env != nil {
+				sofficeHome = opts.Env["HOME"]
+			}
+			var outDir string
+			for i, a := range cmd {
+				if a == "--outdir" && i+1 < len(cmd) {
+					outDir = cmd[i+1]
+				}
+			}
+			hostOutDir := filepath.Join(ws, strings.TrimPrefix(outDir, "/workspace/"))
+			return &sandbox.ExecResult{ExitCode: 0}, os.WriteFile(filepath.Join(hostOutDir, "deck.pdf"), []byte("%PDF"), 0644)
+		case "pdftoppm":
+			hostOutDir := filepath.Dir(filepath.Join(ws, strings.TrimPrefix(cmd[len(cmd)-1], "/workspace/")))
+			return &sandbox.ExecResult{ExitCode: 0}, os.WriteFile(filepath.Join(hostOutDir, "slide-1.jpg"), []byte("jpeg"), 0644)
+		default:
+			return &sandbox.ExecResult{ExitCode: 0}, nil
+		}
+	}}}
+
+	if _, err := renderPptxSlidePreviews(context.Background(), mgr, ws, pptx); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !sofficeCalled {
+		t.Fatal("soffice was never invoked")
+	}
+	if sofficeHome == "" {
+		t.Fatal("soffice ran with no HOME override — this is exactly the config that fails on the real read-only sandbox root")
+	}
+	if sofficeHome == "/home/sandbox" || sofficeHome == "~" {
+		t.Fatalf("HOME = %q points at the read-only root, not a writable location", sofficeHome)
 	}
 }

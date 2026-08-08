@@ -106,9 +106,21 @@ func renderPptxSlidePreviews(ctx context.Context, mgr sandbox.Manager, workspace
 		return nil, fmt.Errorf("cp: exit %d: %s", res.ExitCode, res.Stderr)
 	}
 
+	// The sandbox container's root filesystem is read-only (Dockerfile.sandbox
+	// runs as an unprivileged user under a hardened config — see
+	// sandbox.DefaultConfig: ReadOnlyRoot, tmpfs only at /tmp, /var/tmp, /run).
+	// LibreOffice bootstraps a user profile under $HOME (~/.config/libreoffice,
+	// ~/.cache/dconf) on first launch, every time — /home/sandbox is part of
+	// that read-only root, so it fails outright: "User installation could not
+	// be completed... Read-only file system" (verified directly against the
+	// real staging container, not assumed). containerOutDir is writable (it's
+	// under the bind-mounted /workspace) and already unique per call, so
+	// pointing HOME there gives soffice a real place to bootstrap into without
+	// needing a second UUID or worrying about concurrent renders colliding.
 	if res, err := sb.Exec(ctx,
 		[]string{"soffice", "--headless", "--convert-to", "pdf", "--outdir", containerOutDir, containerInputPptx},
 		containerWorkdir,
+		sandbox.WithEnv(map[string]string{"HOME": containerOutDir}),
 	); err != nil {
 		return nil, fmt.Errorf("soffice: %w", err)
 	} else if res.ExitCode != 0 {
