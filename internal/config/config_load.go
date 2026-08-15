@@ -123,6 +123,13 @@ func Default() *Config {
 			MaxUploadSizeMB: DefaultSkillMaxUploadSizeMB,
 		},
 		Sessions: SessionsConfig{},
+		Reliability: ReliabilityConfig{
+			Runs: RunsConfig{
+				HeartbeatIntervalMs: DefaultRunsHeartbeatIntervalMs,
+				StaleAfterMs:        DefaultRunsStaleAfterMs,
+				SweepIntervalMs:     DefaultRunsSweepIntervalMs,
+			},
+		},
 	}
 }
 

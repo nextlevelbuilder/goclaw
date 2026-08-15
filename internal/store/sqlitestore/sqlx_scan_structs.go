@@ -4,6 +4,7 @@ package sqlitestore
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -129,5 +130,60 @@ func (r *mcpServerRow) toMCPServerData() store.MCPServerData {
 		Enabled:        r.Enabled,
 		RequireUserCredentials: r.RequireUserCredentials,
 		CreatedBy:      r.CreatedBy,
+	}
+}
+
+// agentRunRow is a scan struct for agent_runs rows.
+// Uses sqliteTime for timestamps and nullSqliteTime for the nullable
+// completed_at column to handle SQLite text timestamp storage.
+type agentRunRow struct {
+	ID          uuid.UUID       `json:"id" db:"id"`
+	TenantID    uuid.UUID       `json:"tenant_id" db:"tenant_id"`
+	RunID       string          `json:"run_id" db:"run_id"`
+	SessionKey  string          `json:"session_key" db:"session_key"`
+	AgentID     *uuid.UUID      `json:"agent_id" db:"agent_id"`
+	UserID      *string         `json:"user_id" db:"user_id"`
+	Channel     *string         `json:"channel" db:"channel"`
+	ChatID      *string         `json:"chat_id" db:"chat_id"`
+	Status      string         `json:"status" db:"status"`
+	Attempt     int            `json:"attempt" db:"attempt"`
+	Checkpoint  *string        `json:"checkpoint" db:"checkpoint"`
+	HeartbeatAt sqliteTime     `json:"heartbeat_at" db:"heartbeat_at"`
+	StartedAt   sqliteTime     `json:"started_at" db:"started_at"`
+	CompletedAt nullSqliteTime `json:"completed_at" db:"completed_at"`
+	Error       *string        `json:"error" db:"error"`
+	Metadata    string         `json:"metadata" db:"metadata"`
+	UpdatedAt   sqliteTime     `json:"updated_at" db:"updated_at"`
+	CreatedAt   sqliteTime     `json:"created_at" db:"created_at"`
+}
+
+func (r *agentRunRow) toStore() store.AgentRun {
+	var checkpoint json.RawMessage
+	if r.Checkpoint != nil {
+		checkpoint = []byte(*r.Checkpoint)
+	}
+	var completedAt *time.Time
+	if r.CompletedAt.Valid {
+		completedAt = &r.CompletedAt.Time
+	}
+	return store.AgentRun{
+		ID:          r.ID,
+		TenantID:    r.TenantID,
+		RunID:       r.RunID,
+		SessionKey:  r.SessionKey,
+		AgentID:     r.AgentID,
+		UserID:      derefStr(r.UserID),
+		Channel:     derefStr(r.Channel),
+		ChatID:      derefStr(r.ChatID),
+		Status:      r.Status,
+		Attempt:     r.Attempt,
+		Checkpoint:  checkpoint,
+		HeartbeatAt: r.HeartbeatAt.Time,
+		StartedAt:   r.StartedAt.Time,
+		CompletedAt: completedAt,
+		Error:       derefStr(r.Error),
+		Metadata:    []byte(r.Metadata),
+		UpdatedAt:   r.UpdatedAt.Time,
+		CreatedAt:   r.CreatedAt.Time,
 	}
 }

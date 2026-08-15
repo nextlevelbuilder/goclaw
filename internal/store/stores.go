@@ -14,6 +14,7 @@ type Stores struct {
 	Providers             ProviderStore
 	Tracing               TracingStore
 	RunTimeline           RunTimelineStore
+	Runs                  RunsStore
 	MCP                   MCPServerStore
 	MCPOAuthTokens        MCPOAuthTokenStore
 	ChannelInstances      ChannelInstanceStore

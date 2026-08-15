@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 59
+const SchemaVersion = 60
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -95,6 +95,30 @@ BEGIN
 END;`
 
 var migrations = map[int]string{
+	// Version 59 → 60: durable agent run records (run-state machine backing).
+	59: `CREATE TABLE IF NOT EXISTS agent_runs (
+		id           TEXT NOT NULL PRIMARY KEY,
+		tenant_id    TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+		run_id       TEXT NOT NULL,
+		session_key  TEXT NOT NULL,
+		agent_id     TEXT REFERENCES agents(id) ON DELETE SET NULL,
+		user_id      TEXT,
+		channel      TEXT,
+		chat_id      TEXT,
+		status       TEXT NOT NULL DEFAULT 'pending',
+		attempt      INT NOT NULL DEFAULT 1,
+		checkpoint   TEXT,
+		heartbeat_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+		started_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+		completed_at TEXT,
+		error        TEXT,
+		metadata     TEXT NOT NULL DEFAULT '{}',
+		updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+		created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+		UNIQUE (tenant_id, run_id)
+	);
+	CREATE INDEX IF NOT EXISTS idx_agent_runs_tenant_status ON agent_runs (tenant_id, status);
+	CREATE INDEX IF NOT EXISTS idx_agent_runs_session ON agent_runs (tenant_id, session_key, created_at DESC);`,
 	// Version 58 → 59: scope persisted subagent tasks by immutable root-agent UUID.
 	// Metadata is authoritative; key fallback is allowed only for one matching
 	// agent that predates the task. Unmatched rows remain inaccessible.

@@ -58,11 +58,67 @@ type Config struct {
 	Cron      CronConfig      `json:"cron"`
 	Telemetry TelemetryConfig `json:"telemetry"`
 	Tailscale TailscaleConfig `json:"tailscale"`
+	Reliability ReliabilityConfig `json:"reliability,omitempty"`
 	Bindings  []AgentBinding  `json:"bindings,omitempty"`
 	Hooks     HooksConfig     `json:"hooks"`
 	Packages  PackagesConfig  `json:"packages"` // runtime package mgmt (GitHub updater)
 	Messages  SystemMsgConfig `json:"system_messages,omitempty"`
 	mu        sync.RWMutex
+}
+
+// ReliabilityConfig groups reliability knobs for the gateway. Zero-valued
+// fields fall back to the channel defaults below.
+type ReliabilityConfig struct {
+	Runs RunsConfig `json:"runs,omitempty"`
+}
+
+// RunsConfig tunes the durable agent-run state machine (agent_runs table).
+//
+// HeartbeatIntervalMs is how often a live run's heartbeat_at is advanced
+// (coalesced writes — not one per event). Default 10000 (10s).
+// StaleAfterMs is how long a run heartbeats must lag before the periodic sweep
+// marks it failed. Default 60000 (60s).
+// SweepIntervalMs is how often the stale-run sweep runs. Default 30000 (30s).
+// ExtensionBudgetMs is a per-run execution budget placeholder for a later
+// phase (checkpoint/resume); it is not enforced by the P0 durable-run state
+// machine.
+type RunsConfig struct {
+	HeartbeatIntervalMs int `json:"heartbeat_interval_ms,omitempty"`
+	StaleAfterMs        int `json:"stale_after_ms,omitempty"`
+	SweepIntervalMs     int `json:"sweep_interval_ms,omitempty"`
+	ExtensionBudgetMs   int `json:"extension_budget_ms,omitempty"`
+}
+
+const (
+	DefaultRunsHeartbeatIntervalMs = 10000 // 10s — matches the pre-config default
+	DefaultRunsStaleAfterMs        = 60000 // 60s — stale-run mark-failed threshold
+	DefaultRunsSweepIntervalMs     = 30000 // 30s — periodic sweep cadence
+	DefaultRunsExtensionBudgetMs   = 0     // placeholder, not enforced in P0
+)
+
+// EffectiveHeartbeatInterval returns the run heartbeat cadence in duration
+// form, falling back to the default when unset or invalid.
+func (r RunsConfig) EffectiveHeartbeatInterval() time.Duration {
+	if r.HeartbeatIntervalMs <= 0 {
+		r.HeartbeatIntervalMs = DefaultRunsHeartbeatIntervalMs
+	}
+	return time.Duration(r.HeartbeatIntervalMs) * time.Millisecond
+}
+
+// EffectiveStaleAfter returns the stale-run threshold in duration form.
+func (r RunsConfig) EffectiveStaleAfter() time.Duration {
+	if r.StaleAfterMs <= 0 {
+		r.StaleAfterMs = DefaultRunsStaleAfterMs
+	}
+	return time.Duration(r.StaleAfterMs) * time.Millisecond
+}
+
+// EffectiveSweepInterval returns the periodic sweep cadence in duration form.
+func (r RunsConfig) EffectiveSweepInterval() time.Duration {
+	if r.SweepIntervalMs <= 0 {
+		r.SweepIntervalMs = DefaultRunsSweepIntervalMs
+	}
+	return time.Duration(r.SweepIntervalMs) * time.Millisecond
 }
 
 // BrandingConfig customizes public app metadata and media used by the web UI.
@@ -655,6 +711,7 @@ func (c *Config) ReplaceFrom(src *Config) {
 	c.Cron = src.Cron
 	c.Telemetry = src.Telemetry
 	c.Tailscale = src.Tailscale
+	c.Reliability = src.Reliability
 	c.Bindings = src.Bindings
 	c.Messages = src.Messages.Clone()
 }

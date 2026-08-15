@@ -119,6 +119,11 @@ func buildRunTimelineWhere(ctx context.Context, opts store.RunTimelineListOpts) 
 		args = append(args, opts.RunID)
 		argIdx++
 	}
+	if opts.AfterSeq > 0 {
+		conditions = append(conditions, fmt.Sprintf("seq > $%d", argIdx))
+		args = append(args, opts.AfterSeq)
+		argIdx++
+	}
 	if opts.SessionKey != "" {
 		conditions = append(conditions, fmt.Sprintf("session_key = $%d", argIdx))
 		args = append(args, opts.SessionKey)
@@ -160,6 +165,276 @@ func (r runTimelineRow) toStore() store.RunTimelineItem {
 		Status: derefStr(r.Status), Title: derefStr(r.Title), Preview: derefStr(r.Preview),
 		Content: r.Content, ToolName: derefStr(r.ToolName), ToolCallID: derefStr(r.ToolCallID),
 		TraceID: r.TraceID, SpanID: r.SpanID, Metadata: r.Metadata, CreatedAt: r.CreatedAt,
+	}
+}
+
+// PGRunStore implements store.RunsStore backed by PostgreSQL.
+type PGRunStore struct {
+	db *sql.DB
+}
+
+func NewPGRunStore(db *sql.DB) *PGRunStore {
+	return &PGRunStore{db: db}
+}
+
+func (s *PGRunStore) CreateRun(ctx context.Context, run *store.AgentRun) error {
+	if run.ID == uuid.Nil {
+		run.ID = store.GenNewID()
+	}
+	if run.RunID == "" {
+		return fmt.Errorf("create run: run_id required")
+	}
+	if run.Status == "" {
+		run.Status = store.AgentRunStatusPending
+	}
+	if run.Attempt == 0 {
+		run.Attempt = 1
+	}
+	now := time.Now()
+	if run.StartedAt.IsZero() {
+		run.StartedAt = now
+	}
+	if run.CreatedAt.IsZero() {
+		run.CreatedAt = now
+	}
+	if run.UpdatedAt.IsZero() {
+		run.UpdatedAt = now
+	}
+	if run.HeartbeatAt.IsZero() {
+		run.HeartbeatAt = run.StartedAt
+	}
+	run.TenantID = tenantIDForInsert(ctx)
+	metadata := run.Metadata
+	if len(metadata) == 0 {
+		metadata = []byte(`{}`)
+	}
+	checkpoint := run.Checkpoint
+	if len(checkpoint) == 0 {
+		checkpoint = nil
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO agent_runs
+		 (id, tenant_id, run_id, session_key, agent_id, user_id, channel, chat_id,
+		  status, attempt, checkpoint, heartbeat_at, started_at, completed_at, error,
+		  metadata, updated_at, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+		  $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+		 ON CONFLICT (tenant_id, run_id) DO UPDATE SET
+		  session_key = EXCLUDED.session_key,
+		  agent_id = EXCLUDED.agent_id,
+		  user_id = EXCLUDED.user_id,
+		  channel = EXCLUDED.channel,
+		  chat_id = EXCLUDED.chat_id,
+		  status = EXCLUDED.status,
+		  attempt = EXCLUDED.attempt,
+		  checkpoint = EXCLUDED.checkpoint,
+		  heartbeat_at = EXCLUDED.heartbeat_at,
+		  started_at = EXCLUDED.started_at,
+		  completed_at = EXCLUDED.completed_at,
+		  error = EXCLUDED.error,
+		  metadata = EXCLUDED.metadata,
+		  updated_at = EXCLUDED.updated_at`,
+		run.ID, run.TenantID, run.RunID, run.SessionKey, nilUUID(run.AgentID), nilStr(run.UserID),
+		nilStr(run.Channel), nilStr(run.ChatID), run.Status, run.Attempt, checkpoint,
+		run.HeartbeatAt, run.StartedAt, nilTime(run.CompletedAt), nilStr(run.Error),
+		jsonOrEmpty(metadata), run.UpdatedAt, run.CreatedAt,
+	)
+	return err
+}
+
+func (s *PGRunStore) UpdateRunStatus(ctx context.Context, runID, status string) error {
+	tid, err := requireTenantID(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE agent_runs SET status = $3, updated_at = $4
+		 WHERE run_id = $1 AND tenant_id = $2`,
+		runID, tid, status, time.Now())
+	return err
+}
+
+func (s *PGRunStore) UpdateRunTerminal(ctx context.Context, runID, status, errMsg string, completedAt time.Time) error {
+	tid, err := requireTenantID(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE agent_runs SET status = $3, error = $4, completed_at = $5, updated_at = $6
+		 WHERE run_id = $1 AND tenant_id = $2`,
+		runID, tid, status, nilStr(errMsg), completedAt, time.Now())
+	return err
+}
+
+func (s *PGRunStore) TouchHeartbeat(ctx context.Context, runID string) error {
+	tid, err := requireTenantID(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE agent_runs SET heartbeat_at = $3, updated_at = $3
+		 WHERE run_id = $1 AND tenant_id = $2`,
+		runID, tid, time.Now())
+	return err
+}
+
+func (s *PGRunStore) GetRun(ctx context.Context, runID string) (*store.AgentRun, error) {
+	where, args := buildRunWhere(ctx, runID)
+	q := `SELECT id, tenant_id, run_id, session_key, agent_id, user_id, channel, chat_id,
+		 status, attempt, checkpoint, heartbeat_at, started_at, completed_at, error,
+		 COALESCE(metadata, '{}'::jsonb) AS metadata, updated_at, created_at
+		 FROM agent_runs` + where
+	var row agentRunRow
+	if err := pkgSqlxDB.GetContext(ctx, &row, q, args...); err != nil {
+		return nil, err
+	}
+	run := row.toStore()
+	return &run, nil
+}
+
+func (s *PGRunStore) ListRuns(ctx context.Context, opts store.RunListOpts) ([]store.AgentRun, error) {
+	where, args := buildRunListWhere(ctx, opts)
+	limit := opts.Limit
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	q := `SELECT id, tenant_id, run_id, session_key, agent_id, user_id, channel, chat_id,
+		 status, attempt, checkpoint, heartbeat_at, started_at, completed_at, error,
+		 COALESCE(metadata, '{}'::jsonb) AS metadata, updated_at, created_at
+		 FROM agent_runs` + where +
+		` ORDER BY created_at DESC` +
+		fmt.Sprintf(" OFFSET %d LIMIT %d", opts.Offset, limit)
+
+	var rows []agentRunRow
+	if err := pkgSqlxDB.SelectContext(ctx, &rows, q, args...); err != nil {
+		return nil, err
+	}
+	runs := make([]store.AgentRun, len(rows))
+	for i, row := range rows {
+		runs[i] = row.toStore()
+	}
+	return runs, nil
+}
+
+// RecoverStaleRuns marks runs whose heartbeat has not advanced within staleAfter
+// as failed. Cross-tenant (startup + periodic).
+func (s *PGRunStore) RecoverStaleRuns(ctx context.Context, staleAfter time.Duration) (int64, error) {
+	deadline := time.Now().Add(-staleAfter)
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE agent_runs SET status = $1, error = $2,
+		        completed_at = COALESCE(completed_at, $3), updated_at = $3
+		 WHERE status IN ('pending', 'running', 'compacting')
+		   AND heartbeat_at < $4`,
+		store.AgentRunStatusFailed, "run stalled: heartbeat expired", deadline, deadline)
+	if err != nil {
+		return 0, fmt.Errorf("recover stale runs: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
+// buildRunWhere scopes a single-record read. Fails closed (WHERE 1=0) when a
+// tenant ID is required but absent from the context.
+func buildRunWhere(ctx context.Context, runID string) (string, []any) {
+	var conditions []string
+	var args []any
+	if !store.IsCrossTenant(ctx) {
+		tenantID := store.TenantIDFromContext(ctx)
+		if tenantID == uuid.Nil {
+			return " WHERE 1=0", nil
+		}
+		conditions = append(conditions, "tenant_id = $1")
+		args = append(args, tenantID)
+		conditions = append(conditions, "run_id = $2")
+		args = append(args, runID)
+	} else {
+		conditions = append(conditions, "run_id = $1")
+		args = append(args, runID)
+	}
+	return " WHERE " + strings.Join(conditions, " AND "), args
+}
+
+// buildRunListWhere scopes a run-record list read. Fails closed (WHERE 1=0)
+// when a tenant ID is required but absent from the context.
+func buildRunListWhere(ctx context.Context, opts store.RunListOpts) (string, []any) {
+	var conditions []string
+	var args []any
+	argIdx := 1
+	if !store.IsCrossTenant(ctx) {
+		tenantID := store.TenantIDFromContext(ctx)
+		if tenantID == uuid.Nil {
+			return " WHERE 1=0", nil
+		}
+		conditions = append(conditions, fmt.Sprintf("tenant_id = $%d", argIdx))
+		args = append(args, tenantID)
+		argIdx++
+	}
+	if opts.RunID != "" {
+		conditions = append(conditions, fmt.Sprintf("run_id = $%d", argIdx))
+		args = append(args, opts.RunID)
+		argIdx++
+	}
+	if opts.SessionKey != "" {
+		conditions = append(conditions, fmt.Sprintf("session_key = $%d", argIdx))
+		args = append(args, opts.SessionKey)
+		argIdx++
+	}
+	if opts.Status != "" {
+		conditions = append(conditions, fmt.Sprintf("status = $%d", argIdx))
+		args = append(args, opts.Status)
+		argIdx++
+	}
+	if len(conditions) == 0 {
+		return " WHERE 1=0", nil
+	}
+	return " WHERE " + strings.Join(conditions, " AND "), args
+}
+
+type agentRunRow struct {
+	ID          uuid.UUID       `db:"id"`
+	TenantID    uuid.UUID       `db:"tenant_id"`
+	RunID       string          `db:"run_id"`
+	SessionKey  string          `db:"session_key"`
+	AgentID     *uuid.UUID      `db:"agent_id"`
+	UserID      *string         `db:"user_id"`
+	Channel     *string         `db:"channel"`
+	ChatID      *string         `db:"chat_id"`
+	Status      string          `db:"status"`
+	Attempt     int             `db:"attempt"`
+	Checkpoint  []byte          `db:"checkpoint"`
+	HeartbeatAt time.Time       `db:"heartbeat_at"`
+	StartedAt   time.Time       `db:"started_at"`
+	CompletedAt *time.Time      `db:"completed_at"`
+	Error       *string         `db:"error"`
+	Metadata    json.RawMessage `db:"metadata"`
+	UpdatedAt   time.Time       `db:"updated_at"`
+	CreatedAt   time.Time       `db:"created_at"`
+}
+
+func (r agentRunRow) toStore() store.AgentRun {
+	var checkpoint json.RawMessage
+	if len(r.Checkpoint) > 0 {
+		checkpoint = r.Checkpoint
+	}
+	return store.AgentRun{
+		ID:          r.ID,
+		TenantID:    r.TenantID,
+		RunID:       r.RunID,
+		SessionKey:  r.SessionKey,
+		AgentID:     r.AgentID,
+		UserID:      derefStr(r.UserID),
+		Channel:     derefStr(r.Channel),
+		ChatID:      derefStr(r.ChatID),
+		Status:      r.Status,
+		Attempt:     r.Attempt,
+		Checkpoint:  checkpoint,
+		HeartbeatAt: r.HeartbeatAt,
+		StartedAt:   r.StartedAt,
+		CompletedAt: r.CompletedAt,
+		Error:       derefStr(r.Error),
+		Metadata:    r.Metadata,
+		UpdatedAt:   r.UpdatedAt,
+		CreatedAt:   r.CreatedAt,
 	}
 }
 
