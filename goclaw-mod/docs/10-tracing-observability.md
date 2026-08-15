@@ -266,6 +266,24 @@ Delegation history is automatically recorded by `DelegateManager.saveDelegationH
 
 ---
 
+## 9. Reliability Layer (`internal/reliability`)
+
+A self-contained reliability package layered next to the existing provider
+retry/failover machinery (it does not import provider internals, so no import
+cycles). It is **not yet wired into** the provider or agent loop — it is the
+foundation for a later wiring step.
+
+| Component | File | Purpose |
+|---|---|---|
+| Error taxonomy | `internal/reliability/errors.go` | Canonical `ErrorCode` (`provider.*`, `model.*`, `runtime.*`, `tool.*`) with retryability + severity; `ReliabilityError`, `ClassifyError` (HTTP status/body → code), `IsRetryable` |
+| Circuit breaker | `internal/reliability/circuitbreaker.go` | Per provider:model key state machine (Healthy → Degraded → Open → HalfOpen) with consecutive-failure counting, cooldown, and a `ProbeTimeout` that releases stale half-open probes |
+| Health registry | `internal/reliability/health.go` | Per-key runtime reliability scoring (success ratio minus stall / tool-error penalties), NOT an intelligence benchmark |
+| Rate-limit coordinator | `internal/reliability/ratelimit.go` | Single-flight cooldown across concurrent runs to prevent retry storms; stale waiters never delete newer cooldowns |
+| Metrics | `internal/reliability/metrics.go` | `atomic` counters + `Snapshot`, global swap-safe `Sink` registration, `Flush` drains per-counter via `Swap(0)` |
+
+Classification intentionally mirrors `internal/providers/error_classify.go`
+semantics so the two layers stay consistent.
+
 ## File Reference
 
 | Module | Path | Purpose |
@@ -274,6 +292,7 @@ Delegation history is automatically recorded by `DelegateManager.saveDelegationH
 | Store & snapshots | `internal/store/tracing_store.go`, `internal/store/pg/tracing.go`, `internal/tracing/snapshot_worker.go` | TracingStore interface, PostgreSQL persistence + aggregation, hourly usage snapshots |
 | Agent & pipeline integration | `internal/agent/loop_tracing.go`, `internal/pipeline/` | Span emission from agent loop (LLM, tool, agent spans), pipeline stage tracing |
 | HTTP & RPC handlers | `internal/http/traces.go`, `internal/http/delegations.go`, `internal/gateway/methods/delegations.go` | GET /v1/traces, delegation history HTTP + RPC handlers |
+| Reliability layer | `internal/reliability/` | Unified error taxonomy, circuit breaker, health scoring, rate-limit coordinator, metrics counters (see section 9) |
 
 Use `grep` or your editor's symbol search for specific files.
 
