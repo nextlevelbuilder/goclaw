@@ -99,6 +99,8 @@ Single binary. Production-tested. Agents that orchestrate for you.
 
 A native desktop app for local AI agents — no Docker, no PostgreSQL, no infrastructure.
 
+> ⚠️ **GoClaw Lite (Desktop) là sản phẩm của upstream** — fork này chưa build lite binaries, install scripts trỏ release desktop của upstream.
+
 **macOS:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nextlevelbuilder/goclaw/main/scripts/install-lite.sh | bash
@@ -187,13 +189,13 @@ Sau khi cài: `goclaw onboard` (wizard, tự chạy migrations) rồi `goclaw` �
 ### From Source
 
 ```bash
-git clone -b main https://github.com/nextlevelbuilder/goclaw.git && cd goclaw
+git clone -b dev https://github.com/qkhalk/goclaw.git && cd goclaw
 make build
 ./goclaw onboard        # Interactive setup wizard
 source .env.local && ./goclaw
 ```
 
-> **Note:** The default branch is `dev` (active development). Use `-b main` to clone the stable release branch.
+> **Note:** Fork's default branch is `dev` (active development). To track the upstream stable `main`, clone from `https://github.com/nextlevelbuilder/goclaw.git` with `-b main`.
 
 ### With Docker
 
