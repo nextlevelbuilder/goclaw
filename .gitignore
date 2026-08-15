@@ -73,6 +73,9 @@ deploy-*.sh
 docs/technical-diaries
 docs/zuey
 plans/
+# (goclaw-mod fork) exception: track this plan in the public repo
+!plans/
+!plans/260815-2340-goclaw-repository-reliability/
 release-manifest.json
 k8s-*/*
 
