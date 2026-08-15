@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 59
+const SchemaVersion = 60
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -95,6 +95,27 @@ BEGIN
 END;`
 
 var migrations = map[int]string{
+	// Version 59 → 60: keep an append-only copy of group capture. Pending rows are
+	// deleted when the buffer is handed to the agent and when compaction replaces
+	// them with a summary; before this table those deletes destroyed the only copy.
+	59: `CREATE TABLE IF NOT EXISTS channel_message_archive (
+    id                 TEXT NOT NULL PRIMARY KEY,
+    channel_name       VARCHAR(100) NOT NULL,
+    history_key        VARCHAR(200) NOT NULL,
+    parent_history_key VARCHAR(200) NOT NULL DEFAULT '',
+    sender             VARCHAR(255) NOT NULL,
+    sender_id          VARCHAR(255) NOT NULL DEFAULT '',
+    body               TEXT NOT NULL,
+    platform_msg_id    VARCHAR(100) NOT NULL DEFAULT '',
+    is_summary         BOOLEAN NOT NULL DEFAULT 0,
+    tenant_id          TEXT NOT NULL REFERENCES tenants(id),
+    created_at         TEXT NOT NULL,
+    updated_at         TEXT NOT NULL,
+    archived_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    archive_reason     VARCHAR(20) NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_channel_message_archive_lookup ON channel_message_archive(tenant_id, channel_name, history_key, created_at);
+CREATE INDEX IF NOT EXISTS idx_channel_message_archive_archived_at ON channel_message_archive(tenant_id, archived_at);`,
 	// Version 58 → 59: scope persisted subagent tasks by immutable root-agent UUID.
 	// Metadata is authoritative; key fallback is allowed only for one matching
 	// agent that predates the task. Unmatched rows remain inaccessible.

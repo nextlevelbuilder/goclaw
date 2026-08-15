@@ -140,6 +140,10 @@ func (f *fakePendingStore) DeleteStale(context.Context, time.Duration) (int64, e
 	return 0, nil
 }
 
+func (f *fakePendingStore) ListArchivedByKey(context.Context, string, string, time.Time, int) ([]store.ArchivedMessage, error) {
+	return nil, nil
+}
+
 func (f *fakePendingStore) ListGroups(context.Context) ([]store.PendingMessageGroup, error) {
 	return f.groups, nil
 }
