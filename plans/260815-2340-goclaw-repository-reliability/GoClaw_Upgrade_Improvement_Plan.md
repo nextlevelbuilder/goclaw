@@ -1433,27 +1433,27 @@ Không nên để provider-specific retry logic rải khắp từng provider.
 
 ## Phase 0 — Baseline & instrumentation
 
-- [ ] Chốt commit/tag làm baseline.
-- [ ] Ghi nhận tất cả lỗi hiện có.
-- [ ] Thêm runId/attemptId/correlationId.
-- [ ] Thêm metrics cơ bản.
-- [ ] Thu thập P50/P95/P99 latency.
+- [x] Chốt commit/tag làm baseline. (commits `5100087d`/`def1a9e6`, 2026-08-15)
+- [x] Ghi nhận tất cả lỗi hiện có. (§2 plan, 2026-08-15)
+- [x] Thêm runId/attemptId/correlationId. (runId trên runs record + trace correlation, 2026-08-16)
+- [x] Thêm metrics cơ bản. (`internal/reliability/metrics.go`, phase-03, 2026-08-15)
+- [ ] Thu thập P50/P95/P99 latency. (deferred — cần production telemetry)
 
 ## Phase 1 — Error taxonomy
 
-- [ ] Chuẩn hóa error codes.
-- [ ] Phân biệt retryable/permanent.
-- [ ] Phân biệt provider/runtime/tool/model error.
-- [ ] Chuẩn hóa user-facing error mapping.
+- [x] Chuẩn hóa error codes. (phase-02, 2026-08-15)
+- [x] Phân biệt retryable/permanent. (phase-02, 2026-08-15)
+- [x] Phân biệt provider/runtime/tool/model error. (phase-02, 2026-08-15)
+- [x] Chuẩn hóa user-facing error mapping. (severity trong taxonomy, phase-02, 2026-08-15)
 
 ## Phase 2 — Provider reliability
 
-- [ ] Retry engine mới.
-- [ ] Retry-After parser.
-- [ ] Distributed/shared cooldown.
-- [ ] Provider/model limiter.
-- [ ] Circuit breaker.
-- [ ] Provider health registry.
+- [ ] Retry engine mới. (giữ retry đã có sẵn — plan không re-implement)
+- [ ] Retry-After parser. (Retry-After đã được retry hiện tại ưu tiên; chưa tách parser riêng)
+- [x] Distributed/shared cooldown. (RateLimitCoordinator, phase-03, 2026-08-15)
+- [ ] Provider/model limiter. (backpressure/admission chưa wire — deferred)
+- [x] Circuit breaker. (circuitbreaker.go, phase-03, 2026-08-15)
+- [x] Provider health registry. (health.go, phase-03, 2026-08-15)
 
 ## Phase 3 — Durable Agent Run
 
@@ -1505,7 +1505,7 @@ Không nên để provider-specific retry logic rải khắp từng provider.
 
 ## Phase 9 — Testing
 
-- [ ] Unit tests.
+- [x] Unit tests. (12 cho reliability layer phase-03 + durable run records phase §7, 2026-08-15/16)
 - [ ] Integration tests.
 - [ ] Provider simulation.
 - [ ] Chaos tests.
