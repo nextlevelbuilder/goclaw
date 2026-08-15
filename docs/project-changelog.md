@@ -4,6 +4,31 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+## 2026-08-16
+
+### Durable agent run records (`agent_runs`) + reliability config
+
+**Features**
+
+- Every agent run now writes a durable state-machine record to `agent_runs`
+  (`pending` → `running` → `completed`/`failed`/`cancelled`) regardless of
+  source (chat, cron, channels, heartbeat, delegation). Heartbeat is coalesced;
+  writes are non-fatal (DB outage does not block the run).
+- Periodic stale-run sweep marks hung runs `failed` so they cannot linger as
+  "running" forever after a crash or hang.
+- WS RPC `runs.get` / `runs.list` / `runs.events` + HTTP `GET /v1/runs`,
+  `GET /v1/runs/{id}`, `GET /v1/runs/{id}/events` for run inspect/replay.
+- CLI `goclaw run list|get|events` to inspect run records from the terminal.
+- New `reliability.runs.*` config block (heartbeat/stale/sweep/extension-budget)
+  with backward-compatible defaults; documented in `docs/04-gateway-protocol.md`.
+
+**Docs**
+
+- Added durable-run records section, RPC methods, `/v1/runs` endpoints, and
+  `reliability.runs.*` config reference to `docs/04-gateway-protocol.md`.
+
+---
+
 ## 2026-07-08
 
 ### Passive memory extraction tuning

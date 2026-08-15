@@ -397,6 +397,9 @@ func isReadMethod(method string) bool {
 		protocol.MethodSessionsList,
 		protocol.MethodSessionsPreview,
 		protocol.MethodRunTimelineGet,
+		protocol.MethodRunsGet,
+		protocol.MethodRunsList,
+		protocol.MethodRunsEvents,
 
 		// Skills read
 		protocol.MethodSkillsList,

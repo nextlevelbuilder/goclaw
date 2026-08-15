@@ -82,6 +82,7 @@ func init() {
 		MsgAlreadySummoning:       "agent đang được triệu hồi",
 		MsgSummoningUnavailable:   "triệu hồi không khả dụng",
 		MsgRunTimelineUnavailable: "timeline lượt chạy không khả dụng",
+		MsgRunsUnavailable:        "bản ghi lượt chạy không khả dụng",
 		MsgNoDescription:          "agent không có mô tả để triệu hồi lại",
 		MsgSummonCancelled:        "đã huỷ triệu hồi",
 		MsgCannotCancel:           "agent không trong trạng thái đang triệu hồi",

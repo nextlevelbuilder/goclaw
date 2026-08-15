@@ -83,6 +83,7 @@ const (
 	MsgAlreadySummoning       = "error.already_summoning"        // "agent is already being summoned"
 	MsgSummoningUnavailable   = "error.summoning_unavailable"    // "summoning not available"
 	MsgRunTimelineUnavailable = "error.run_timeline_unavailable" // "run timeline not available"
+	MsgRunsUnavailable        = "error.runs_unavailable"         // "run records not available"
 	MsgNoDescription          = "error.no_description"           // "agent has no description to resummon from"
 	MsgSummonCancelled        = "info.summon_cancelled"          // "summon cancelled by user"
 	MsgCannotCancel           = "error.cannot_cancel_summon"     // "agent is not being summoned"

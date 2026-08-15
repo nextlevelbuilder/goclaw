@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -20,6 +21,37 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
+
+// runStaleRunsSweep periodically marks runs whose heartbeat has not advanced
+// within staleAfter as failed (cross-tenant). Runs on the caller's ctx until it
+// is cancelled. Non-fatal per iteration. Negativized zero args fall back to the
+// reliability.runs.* defaults (10s heartbeat → 60s stale → 30s sweep).
+func runStaleRunsSweep(runs store.RunsStore, staleAfter, interval time.Duration) {
+	ctx := context.Background()
+	if staleAfter <= 0 {
+		staleAfter = (time.Duration(config.DefaultRunsStaleAfterMs) * time.Millisecond)
+	}
+	if interval <= 0 {
+		interval = (time.Duration(config.DefaultRunsSweepIntervalMs) * time.Millisecond)
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			n, err := runs.RecoverStaleRuns(ctx, staleAfter)
+			if err != nil {
+				slog.Warn("runs.stale_sweep_failed", "error", err)
+				continue
+			}
+			if n > 0 {
+				slog.Info("runs.stale_sweep_marked_failed", "count", n)
+			}
+		}
+	}
+}
 
 // makeHeartbeatRunFn creates a function that routes a heartbeat run through the scheduler's cron lane.
 func makeHeartbeatRunFn(sched *scheduler.Scheduler) func(ctx context.Context, req agent.RunRequest) <-chan scheduler.RunOutcome {
@@ -70,6 +102,18 @@ func startCronAndHeartbeat(
 		server.BroadcastEvent(*protocol.NewEvent(protocol.EventHeartbeat, event))
 	})
 	heartbeatTicker.Start()
+
+	// Durable run records: periodic stale-run sweep. A run whose heartbeat has
+	// not advanced within staleness is marked failed so it cannot linger as
+	// "running" forever after a crash or hang. Non-fatal; runs on a detached
+	// context so it outlives the request lifecycle.
+	if pgStores.Runs != nil {
+		go runStaleRunsSweep(
+			pgStores.Runs,
+			cfg.Reliability.Runs.EffectiveStaleAfter(),
+			cfg.Reliability.Runs.EffectiveSweepInterval(),
+		)
+	}
 
 	// Wire heartbeat wake function to tool + RPC + cron wakeMode
 	heartbeatTool.SetWakeFn(heartbeatTicker.Wake)

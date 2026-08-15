@@ -82,6 +82,7 @@ func init() {
 		MsgAlreadySummoning:       "Agent正在被召唤中",
 		MsgSummoningUnavailable:   "召唤功能不可用",
 		MsgRunTimelineUnavailable: "运行时间线不可用",
+		MsgRunsUnavailable:        "运行记录不可用",
 		MsgNoDescription:          "Agent没有可供重新召唤的描述",
 		MsgSummonCancelled:        "已取消召唤",
 		MsgCannotCancel:           "Agent 未处于召唤状态",

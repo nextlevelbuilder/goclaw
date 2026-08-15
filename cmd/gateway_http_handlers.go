@@ -61,6 +61,9 @@ func wireHTTP(stores *store.Stores, defaultWorkspace, dataDir, bundledSkillsDir 
 
 	if stores != nil && stores.Tracing != nil {
 		tracesH = httpapi.NewTracesHandler(stores.Tracing, stores.RunTimeline)
+		if stores.Runs != nil {
+			tracesH.SetRunsStore(stores.Runs)
+		}
 	}
 
 	if stores != nil && stores.MCP != nil {

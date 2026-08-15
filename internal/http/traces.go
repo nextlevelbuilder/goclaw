@@ -22,6 +22,7 @@ import (
 type TracesHandler struct {
 	tracing     store.TracingStore
 	runTimeline store.RunTimelineStore
+	runs        store.RunsStore
 }
 
 // NewTracesHandler creates a handler for trace management endpoints.
@@ -33,6 +34,11 @@ func NewTracesHandler(tracing store.TracingStore, timelines ...store.RunTimeline
 	return h
 }
 
+// SetRunsStore attaches the durable run-record store, enabling the
+// GET /v1/runs/{runID} and GET /v1/runs/{runID}/events endpoints. Nil-safe:
+// those endpoints report an unavailable error when the store is not wired.
+func (h *TracesHandler) SetRunsStore(runs store.RunsStore) { h.runs = runs }
+
 // RegisterRoutes registers trace routes on the given mux.
 func (h *TracesHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/traces", h.authMiddleware(h.handleList))
@@ -40,6 +46,11 @@ func (h *TracesHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/traces/{traceID}/export", h.authMiddleware(h.handleExport))
 	mux.HandleFunc("GET /v1/traces/{traceID}", h.authMiddleware(h.handleGet))
 	mux.HandleFunc("GET /v1/runs/{runID}/timeline", h.authMiddleware(h.handleRunTimeline))
+	// Durable run records (agent_runs state machine). Go's ServeMux prefers the
+	// more specific /{runID}/timeline and /{runID}/events patterns for those
+	// paths, so GET /v1/runs/{runID} matches run records only.
+	mux.HandleFunc("GET /v1/runs/{runID}", h.authMiddleware(h.handleRunGet))
+	mux.HandleFunc("GET /v1/runs/{runID}/events", h.authMiddleware(h.handleRunEvents))
 	mux.HandleFunc("GET /v1/costs/summary", h.authMiddleware(h.handleCostSummary))
 }
 
@@ -385,6 +396,98 @@ func (h *TracesHandler) handleRunTimeline(w http.ResponseWriter, r *http.Request
 		"limit":       opts.Limit,
 		"offset":      opts.Offset,
 	})
+}
+
+// handleRunGet serves GET /v1/runs/{runID}: one durable run record.
+func (h *TracesHandler) handleRunGet(w http.ResponseWriter, r *http.Request) {
+	locale := store.LocaleFromContext(r.Context())
+	if h.runs == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": i18n.T(locale, i18n.MsgRunsUnavailable)})
+		return
+	}
+	runID := r.PathValue("runID")
+	if strings.TrimSpace(runID) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "run_id")})
+		return
+	}
+	run, err := h.runs.GetRun(r.Context(), runID)
+	if err != nil {
+		slog.Warn("runs.get_failed", "run_id", runID, "error", err)
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "run", runID)})
+		return
+	}
+	// Non-admin callers may only read their own run records.
+	auth := resolveAuth(r)
+	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
+		callerID := store.UserIDFromContext(r.Context())
+		if run.UserID != callerID {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "run", runID)})
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"run": run})
+}
+
+// handleRunEvents serves GET /v1/runs/{runID}/events?after=N: cursor replay of
+// run timeline items after a seq cursor (for durable-run resync).
+func (h *TracesHandler) handleRunEvents(w http.ResponseWriter, r *http.Request) {
+	locale := store.LocaleFromContext(r.Context())
+	if h.runTimeline == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": i18n.T(locale, i18n.MsgRunTimelineUnavailable)})
+		return
+	}
+	runID := r.PathValue("runID")
+	if strings.TrimSpace(runID) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "run_id")})
+		return
+	}
+	opts := store.RunTimelineListOpts{RunID: runID, Limit: 200}
+	if v := r.URL.Query().Get("after"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "after must be a non-negative integer")})
+			return
+		}
+		opts.AfterSeq = n
+	}
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			if n > 500 {
+				n = 500
+			}
+			opts.Limit = n
+		}
+	}
+	items, err := h.runTimeline.ListRunTimelineItems(r.Context(), opts)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	auth := resolveAuth(r)
+	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
+		callerID := store.UserIDFromContext(r.Context())
+		items = filterTimelineItemsByUser(items, callerID)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"run_id":    runID,
+		"after":     opts.AfterSeq,
+		"items":     items,
+		"limit":     opts.Limit,
+		"next_after": nextTimelineAfter(items, opts.AfterSeq),
+	})
+}
+
+// nextTimelineAfter computes the cursor for the next page: the seq of the last
+// item returned (or the input cursor when no items were returned).
+func nextTimelineAfter(items []store.RunTimelineItem, after int) int {
+	if len(items) == 0 {
+		return after
+	}
+	last := items[len(items)-1].Seq
+	if last > after {
+		return last
+	}
+	return after
 }
 
 func filterTimelineItemsByUser(items []store.RunTimelineItem, userID string) []store.RunTimelineItem {
