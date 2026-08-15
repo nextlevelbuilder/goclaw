@@ -6,13 +6,17 @@ Upstream: [`nextlevelbuilder/goclaw`](https://github.com/nextlevelbuilder/goclaw
 
 ## Cấu trúc
 
-```
-goclaw-mod/          # Toàn bộ source GoClaw (fork riêng của tôi)
-                    #  - Giữ nguyên module path github.com/nextlevelbuilder/goclaw
-                    #  - Để merge upstream ngược không vỡ imports
-```
+Source GoClaw nằm ở **repo root** (đã un-nest khỏi `goclaw-mod/`), giữ nguyên module path `github.com/nextlevelbuilder/goclaw` để merge upstream ngược không vỡ imports.
 
-Vì source nằm trong `goclaw-mod/`, các GitHub Actions workflow của upstream (`.github/workflows/` bên trong `goclaw-mod/`) **không tự chạy** trên repo này — an toàn, không deploy hay release tự động. Đây là chủ ý.
+Các GitHub Actions workflow của upstream nằm trong `.github.disabled/` — **không tự chạy** trên repo này (an toàn, không deploy hay release tự động). Riêng `ci.yaml` được enable tại `.github/workflows/ci.yaml` (trigger `main` + `dev` + PR) để theo dõi build/test. `dev-beta-release.yaml` chuyển **manual-only** (`workflow_dispatch`) — không auto-deploy production khi push `dev`.
+
+## Fork Features
+
+Xem mục **Fork Features** trong [`README.md`](README.md): reliability layer (`internal/reliability/`) + cấu hình repo/CI.
+
+## Quick Start
+
+Xem [`README.md`](README.md) → **Quick Start**: one-liner install (`curl | bash` cho macOS/Linux/WSL, `irm | iex` cho Windows) hoặc build từ source.
 
 ## Quy trình merge từ upstream (thủ công)
 

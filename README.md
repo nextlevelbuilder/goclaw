@@ -58,7 +58,29 @@ Single binary. Production-tested. Agents that orchestrate for you.
 [🇩🇰 Dansk](_readmes/README.da.md) ·
 [🇳🇴 Norsk](_readmes/README.nb.md)
 
-## Core Features
+## Fork Features
+
+> Fork **`qkhalk/goclaw`** — bản nhánh cá nhân của upstream [`nextlevelbuilder/goclaw`](https://github.com/nextlevelbuilder/goclaw), kèm các cải tiến reliability và cấu hình CI riêng.
+
+**Reliability Layer** (`internal/reliability/`) — bổ sung thống nhất, có unit tests (30/30 pass), không phá vỡ public contracts:
+
+| Module | File | Nội dung |
+|--------|------|----------|
+| Error taxonomy | `internal/reliability/errors.go` | Canonical `ErrorCode` (`provider.*`, `model.*`, `runtime.*`, `tool.*`) với retryability + severity. `ReliabilityError`, `ClassifyError` (HTTP status/body → code), `IsRetryable` |
+| Circuit breaker | `internal/reliability/circuitbreaker.go` | State machine per provider:model (Healthy → Degraded → Open → HalfOpen), consecutive-failure counting, cooldown, `ProbeTimeout` giải phóng stale half-open probe |
+| Health registry | `internal/reliability/health.go` | Per-key runtime reliability scoring (success ratio − stall/tool-error penalties) |
+| Rate-limit coordinator | `internal/reliability/ratelimit.go` | Single-flight cooldown chống retry storms; stale waiter không xóa newer cooldown |
+| Metrics | `internal/reliability/metrics.go` | `atomic` counters + `Snapshot`, global swap-safe `Sink`, `Flush` drain per-counter |
+
+**Repo & CI cấu hình**:
+- Source đã un-nest về repo root (module path giữ nguyên `github.com/nextlevelbuilder/goclaw` → merge upstream không vỡ imports).
+- `ci.yaml` enabled (trigger `main` + `dev` + PR) — build, vet, unit + invariant + integration tests, web lint/build.
+- Auto-deploy (`dev-beta-release.yaml`) chuyển **manual-only** (`workflow_dispatch`) — không tự deploy production khi push `dev`.
+- Upstream `.github/workflows` còn lại giữ disabled (`.github.disabled/`) — không auto-release.
+
+**Cải tiến khác**: docs `10-tracing-observability.md` §9 — reliability layer. Xem [`README-fork.md`](README-fork.md) cho quy trình merge upstream thủ công.
+
+## Quick Start
 
 - **8-Stage Agent Pipeline** — context → history → prompt → think → act → observe → memory → summarize. Pluggable stages, always-on execution
 - **4-Mode Prompt System** — Full / Task / Minimal / None with section gating, cache boundary optimization, and per-session mode resolution
@@ -145,6 +167,22 @@ git tag lite-v0.1.0 && git push origin lite-v0.1.0
 ## Quick Start
 
 **Prerequisites:** Go 1.26+, PostgreSQL 18 with pgvector, Docker (optional)
+
+### Install (one-liner)
+
+> ⚠️ Yêu cầu fork đã có **GitHub Release** đầu tiên (binary tải từ Releases). Khi release chưa tồn tại, dùng **From Source** bên dưới.
+
+```bash
+# macOS / Linux / WSL
+curl -fsSL https://github.com/qkhalk/goclaw/raw/dev/scripts/install.sh | bash
+```
+
+```powershell
+# Windows (PowerShell)
+powershell -c "irm https://github.com/qkhalk/goclaw/raw/dev/scripts/install.ps1 | iex"
+```
+
+Sau khi cài: `goclaw onboard` (wizard, tự chạy migrations) rồi `goclaw` để khởi động gateway. Web dashboard tại `http://localhost:18790`.
 
 ### From Source
 

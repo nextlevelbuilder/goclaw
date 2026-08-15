@@ -2,7 +2,7 @@
 # GoClaw installer — downloads the latest binary from GitHub Releases.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/nextlevelbuilder/goclaw/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/qkhalk/goclaw/dev/scripts/install.sh | bash
 #   curl -fsSL ... | bash -s -- --version v1.30.0
 #   curl -fsSL ... | bash -s -- --dir /opt/goclaw
 #
@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-REPO="nextlevelbuilder/goclaw"
+REPO="qkhalk/goclaw"
 INSTALL_DIR="${GOCLAW_INSTALL_DIR:-/usr/local/bin}"
 MIGRATIONS_DIR="/usr/local/share/goclaw/migrations"
 VERSION=""
