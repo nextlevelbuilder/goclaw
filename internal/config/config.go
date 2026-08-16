@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/cron"
+	"github.com/nextlevelbuilder/goclaw/internal/reliability"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 )
 
@@ -67,9 +68,22 @@ type Config struct {
 }
 
 // ReliabilityConfig groups reliability knobs for the gateway. Zero-valued
-// fields fall back to the channel defaults below.
+// fields fall back to the defaults below.
 type ReliabilityConfig struct {
-	Runs RunsConfig `json:"runs,omitempty"`
+	Runs    RunsConfig    `json:"runs,omitempty"`
+	Circuit CircuitConfig `json:"circuit,omitempty"`
+}
+
+// CircuitConfig tunes the shared reliability singleton constructed at gateway
+// startup (internal/reliability). Zero-valued fields fall back to the
+// reliability package defaults (see DefaultCircuitOptions).
+type CircuitConfig struct {
+	FailureThreshold   int `json:"failure_threshold,omitempty"`    // consecutive failures before Healthy→Degraded→Open (default 5)
+	DegradedThreshold  int `json:"degraded_threshold,omitempty"`   // failures after which Healthy becomes Degraded (default 2)
+	CooldownMs         int `json:"cooldown_ms,omitempty"`          // duration the breaker stays Open before HalfOpen (default 30000)
+	HalfOpenMax        int `json:"half_open_max,omitempty"`        // probe requests allowed while HalfOpen (default 1)
+	ProbeTimeoutMs     int `json:"probe_timeout_ms,omitempty"`     // stale half-open probe slot timeout (default 30000)
+	RateLimitMaxPending int `json:"rate_limit_max_pending,omitempty"` // pending waiter cap for the rate-limit coordinator (0 = unlimited)
 }
 
 // RunsConfig tunes the durable agent-run state machine (agent_runs table).
@@ -94,6 +108,14 @@ const (
 	DefaultRunsStaleAfterMs        = 60000 // 60s — stale-run mark-failed threshold
 	DefaultRunsSweepIntervalMs     = 30000 // 30s — periodic sweep cadence
 	DefaultRunsExtensionBudgetMs   = 0     // placeholder, not enforced in P0
+
+	// Default circuit breaker thresholds — mirror reliability.DefaultCircuitOptions.
+	DefaultCircuitFailureThreshold  = 5
+	DefaultCircuitDegradedThreshold = 2
+	DefaultCircuitCooldownMs        = 30000  // 30s
+	DefaultCircuitHalfOpenMax       = 1
+	DefaultCircuitProbeTimeoutMs    = 30000  // 30s
+	DefaultCircuitRateLimitMaxPending = 0    // 0 = unlimited pending waiters
 )
 
 // EffectiveHeartbeatInterval returns the run heartbeat cadence in duration
@@ -119,6 +141,38 @@ func (r RunsConfig) EffectiveSweepInterval() time.Duration {
 		r.SweepIntervalMs = DefaultRunsSweepIntervalMs
 	}
 	return time.Duration(r.SweepIntervalMs) * time.Millisecond
+}
+
+// EffectiveCircuit returns the circuit breaker options with defaults applied
+// for any unset or invalid field. The returned options feed
+// reliability.Configure, which applies its own normalizing defaults as well.
+func (c CircuitConfig) EffectiveCircuit() reliability.CircuitOptions {
+	opts := reliability.DefaultCircuitOptions()
+	if c.FailureThreshold > 0 {
+		opts.FailureThreshold = c.FailureThreshold
+	}
+	if c.DegradedThreshold > 0 {
+		opts.DegradedThreshold = c.DegradedThreshold
+	}
+	if c.CooldownMs > 0 {
+		opts.Cooldown = time.Duration(c.CooldownMs) * time.Millisecond
+	}
+	if c.HalfOpenMax > 0 {
+		opts.HalfOpenMax = c.HalfOpenMax
+	}
+	if c.ProbeTimeoutMs > 0 {
+		opts.ProbeTimeout = time.Duration(c.ProbeTimeoutMs) * time.Millisecond
+	}
+	return opts
+}
+
+// EffectiveRateLimitMaxPending returns the rate-limit coordinator pending
+// waiter cap (0 = unlimited), or the default when invalid.
+func (c CircuitConfig) EffectiveRateLimitMaxPending() int {
+	if c.RateLimitMaxPending < 0 {
+		return DefaultCircuitRateLimitMaxPending
+	}
+	return c.RateLimitMaxPending
 }
 
 // BrandingConfig customizes public app metadata and media used by the web UI.
