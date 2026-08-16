@@ -41,6 +41,10 @@ func (s *memoryExtractionPendingStore) DeleteStale(context.Context, time.Duratio
 	return 0, nil
 }
 
+func (s *memoryExtractionPendingStore) ListArchivedByKey(context.Context, string, string, time.Time, int) ([]store.ArchivedMessage, error) {
+	return nil, nil
+}
+
 func (s *memoryExtractionPendingStore) ListGroups(context.Context) ([]store.PendingMessageGroup, error) {
 	return s.groups, nil
 }

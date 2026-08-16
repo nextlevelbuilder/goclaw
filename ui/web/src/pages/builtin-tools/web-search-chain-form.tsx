@@ -25,7 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
-type ProviderKey = "exa" | "tavily" | "brave" | "duckduckgo";
+type ProviderKey = "exa" | "tavily" | "brave" | "parallel" | "duckduckgo";
 
 interface ProviderEntry {
   id: string;
@@ -44,30 +44,34 @@ interface Props {
   onCancel: () => void;
 }
 
-const SORTABLE_PROVIDERS: ProviderKey[] = ["exa", "tavily", "brave"];
+const SORTABLE_PROVIDERS: ProviderKey[] = ["exa", "tavily", "brave", "parallel"];
 const LOCKED_PROVIDER: ProviderKey = "duckduckgo";
-const DEFAULT_ORDER: ProviderKey[] = ["exa", "tavily", "brave"];
+const DEFAULT_ORDER: ProviderKey[] = ["exa", "tavily", "brave", "parallel"];
 
 const RAIL_COLOR: Record<ProviderKey, string> = {
   exa: "bg-blue-600",
   tavily: "bg-cyan-500",
   brave: "bg-orange-500",
+  parallel: "bg-violet-500",
   duckduckgo: "bg-slate-500",
 };
 
 function parseInitialEntries(settings: Record<string, unknown>): ProviderEntry[] {
-  const rawOrder = Array.isArray(settings.provider_order)
+  const savedOrder = Array.isArray(settings.provider_order)
     ? (settings.provider_order as string[]).filter((p): p is ProviderKey =>
         SORTABLE_PROVIDERS.includes(p as ProviderKey),
       )
     : DEFAULT_ORDER;
+  const rawOrder: ProviderKey[] = savedOrder.includes("parallel")
+    ? savedOrder
+    : [...savedOrder, "parallel"];
 
   return rawOrder.map((name) => {
     const cfg = (settings[name] ?? {}) as Record<string, unknown>;
     return {
       id: uniqueId(),
       name,
-      enabled: Boolean(cfg.enabled ?? true),
+      enabled: Boolean(cfg.enabled ?? name !== "parallel"),
       max_results: cfg.max_results != null ? Number(cfg.max_results) : undefined,
     };
   });
@@ -140,8 +144,8 @@ function SortableProviderCard({ entry, index, secretsSet, onUpdate }: SortableCa
           />
         </div>
 
-        {/* API key row */}
-        <div className="flex items-center gap-1.5 mt-2 pl-10">
+        {/* API key row — Parallel's hosted Search MCP is keyless. */}
+        {entry.name !== "parallel" && <div className="flex items-center gap-1.5 mt-2 pl-10">
           <Label className="text-xs text-muted-foreground whitespace-nowrap">
             {t("builtin.searchChain.apiKey")}
           </Label>
@@ -173,7 +177,7 @@ function SortableProviderCard({ entry, index, secretsSet, onUpdate }: SortableCa
               className="h-7 flex-1 text-base md:text-sm font-mono"
             />
           )}
-        </div>
+        </div>}
       </div>
     </div>
   );
@@ -190,7 +194,7 @@ function LockedDuckDuckGoCard({ settings }: { settings: Record<string, unknown> 
       <div className="flex-1 px-3 py-3">
         <div className="flex items-center gap-2">
           <Lock className="size-4 text-muted-foreground shrink-0" />
-          <span className="text-xs text-muted-foreground font-mono shrink-0">#4</span>
+          <span className="text-xs text-muted-foreground font-mono shrink-0">#5</span>
           <Switch size="sm" checked disabled />
           <span className="text-sm font-medium flex-1">
             {t("builtin.searchChain.providers.duckduckgo")}
@@ -238,7 +242,7 @@ export function WebSearchChainForm({ initialSettings, secretsSet, onSave, onCanc
         const cfg: Record<string, unknown> = { enabled: entry.enabled };
         if (entry.max_results != null) cfg.max_results = entry.max_results;
         // Include api_key only when user typed a new value — backend extracts and strips it
-        if (entry.apiKey && entry.apiKey.trim() !== "") {
+        if (entry.name !== "parallel" && entry.apiKey && entry.apiKey.trim() !== "") {
           cfg.api_key = entry.apiKey.trim();
         }
         settings[entry.name] = cfg;

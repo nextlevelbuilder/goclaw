@@ -83,17 +83,58 @@ func (s *SQLitePendingMessageStore) ListByKey(ctx context.Context, channelName, 
 	return result, rows.Err()
 }
 
+// archivedColumns are copied verbatim from the buffer into channel_message_archive.
+const archivedColumns = `id, channel_name, history_key, parent_history_key, sender, sender_id,
+	body, platform_msg_id, is_summary, created_at, updated_at, tenant_id`
+
+// archivedReadColumns omits tenant_id: reads are already tenant-scoped by the
+// WHERE clause and ArchivedMessage carries no tenant field.
+const archivedReadColumns = `id, channel_name, history_key, parent_history_key, sender, sender_id,
+	body, platform_msg_id, is_summary, created_at, updated_at, archived_at, archive_reason`
+
+// archivePending copies every buffer row matching where into the archive. Callers
+// pass the same where/args they are about to DELETE with, so the archive cannot
+// miss a row the delete removes. Replaying is a no-op: archived rows keep their
+// original id.
+func archivePending(ctx context.Context, tx *sql.Tx, where string, args []any, reason string) error {
+	// SQLite binds `?` by position in the statement text. The reason placeholder
+	// sits in the SELECT list, ahead of every placeholder in where, so it must be
+	// bound first.
+	insertArgs := make([]any, 0, len(args)+1)
+	insertArgs = append(insertArgs, reason)
+	insertArgs = append(insertArgs, args...)
+	if _, err := tx.ExecContext(ctx,
+		`INSERT OR IGNORE INTO channel_message_archive (`+archivedColumns+`, archive_reason)
+		 SELECT `+archivedColumns+`, ?
+		 FROM channel_pending_messages `+where,
+		insertArgs...,
+	); err != nil {
+		return fmt.Errorf("archive pending: %w", err)
+	}
+	return nil
+}
+
 func (s *SQLitePendingMessageStore) DeleteByKey(ctx context.Context, channelName, historyKey string) error {
 	tClause, tArgs, err := scopeClause(ctx)
 	if err != nil {
 		return err
 	}
 	args := append([]any{channelName, historyKey}, tArgs...)
-	_, err = s.db.ExecContext(ctx,
-		`DELETE FROM channel_pending_messages WHERE channel_name = ? AND history_key = ?`+tClause,
-		args...,
-	)
-	return err
+	where := `WHERE channel_name = ? AND history_key = ?` + tClause
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin delete tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	if err := archivePending(ctx, tx, where, args, store.ArchiveReasonConsumed); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM channel_pending_messages `+where, args...); err != nil {
+		return fmt.Errorf("delete pending: %w", err)
+	}
+	return tx.Commit()
 }
 
 func (s *SQLitePendingMessageStore) Compact(ctx context.Context, deleteIDs []uuid.UUID, summary *store.PendingMessage) error {
@@ -114,10 +155,12 @@ func (s *SQLitePendingMessageStore) Compact(ctx context.Context, deleteIDs []uui
 		args[i] = id
 	}
 
-	res, err := tx.ExecContext(ctx,
-		fmt.Sprintf("DELETE FROM channel_pending_messages WHERE id IN (%s)", strings.Join(placeholders, ",")),
-		args...,
-	)
+	where := fmt.Sprintf("WHERE id IN (%s)", strings.Join(placeholders, ","))
+	if err := archivePending(ctx, tx, where, args, store.ArchiveReasonCompacted); err != nil {
+		return err
+	}
+
+	res, err := tx.ExecContext(ctx, "DELETE FROM channel_pending_messages "+where, args...)
 	if err != nil {
 		return fmt.Errorf("compact delete: %w", err)
 	}
@@ -144,16 +187,73 @@ func (s *SQLitePendingMessageStore) Compact(ctx context.Context, deleteIDs []uui
 }
 
 func (s *SQLitePendingMessageStore) DeleteStale(ctx context.Context, olderThan time.Duration) (int64, error) {
-	cutoff := time.Now().Add(-olderThan)
-	tid := tenantIDForInsert(ctx)
-	result, err := s.db.ExecContext(ctx,
-		`DELETE FROM channel_pending_messages WHERE updated_at < ? AND tenant_id = ?`,
-		cutoff, tid,
-	)
+	args := []any{time.Now().Add(-olderThan), tenantIDForInsert(ctx)}
+	where := `WHERE updated_at < ? AND tenant_id = ?`
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin delete stale tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	if err := archivePending(ctx, tx, where, args, store.ArchiveReasonStale); err != nil {
+		return 0, err
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM channel_pending_messages `+where, args...)
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return affected, nil
+}
+
+func (s *SQLitePendingMessageStore) ListArchivedByKey(ctx context.Context, channelName, historyKey string, since time.Time, limit int) ([]store.ArchivedMessage, error) {
+	tClause, tArgs, err := scopeClause(ctx)
+	if err != nil {
+		return nil, err
+	}
+	args := append([]any{channelName, historyKey}, tArgs...)
+	query := `SELECT ` + archivedReadColumns + `
+		 FROM channel_message_archive
+		 WHERE channel_name = ? AND history_key = ?` + tClause
+	if !since.IsZero() {
+		query += ` AND created_at >= ?`
+		args = append(args, since)
+	}
+	query += ` ORDER BY created_at ASC, id ASC`
+	if limit > 0 {
+		query += ` LIMIT ?`
+		args = append(args, limit)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []store.ArchivedMessage
+	for rows.Next() {
+		var m store.ArchivedMessage
+		createdAt, updatedAt := scanTimePair()
+		archivedAt := &sqliteTime{}
+		if err := rows.Scan(&m.ID, &m.ChannelName, &m.HistoryKey, &m.ParentHistoryKey, &m.Sender, &m.SenderID,
+			&m.Body, &m.PlatformMsgID, &m.IsSummary, createdAt, updatedAt,
+			archivedAt, &m.ArchiveReason); err != nil {
+			return nil, err
+		}
+		m.CreatedAt = createdAt.Time
+		m.UpdatedAt = updatedAt.Time
+		m.ArchivedAt = archivedAt.Time
+		result = append(result, m)
+	}
+	return result, rows.Err()
 }
 
 func (s *SQLitePendingMessageStore) ListGroups(ctx context.Context) ([]store.PendingMessageGroup, error) {

@@ -40,6 +40,10 @@ func (s *pendingGroupsStore) Compact(context.Context, []uuid.UUID, *store.Pendin
 func (s *pendingGroupsStore) DeleteStale(context.Context, time.Duration) (int64, error) {
 	return 0, nil
 }
+
+func (s *pendingGroupsStore) ListArchivedByKey(context.Context, string, string, time.Time, int) ([]store.ArchivedMessage, error) {
+	return nil, nil
+}
 func (s *pendingGroupsStore) ListGroups(context.Context) ([]store.PendingMessageGroup, error) {
 	return s.groups, nil
 }

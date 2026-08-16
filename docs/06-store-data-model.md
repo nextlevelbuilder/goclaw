@@ -419,12 +419,26 @@ Offline message queue for group chats. Buffers messages when the bot is not acti
 |--------|---------|
 | `AppendBatch(msgs)` | Insert multiple messages in one query |
 | `ListByKey(channelName, historyKey)` | Retrieve buffered messages for a group |
-| `DeleteByKey(channelName, historyKey)` | Clear messages after processing |
-| `Compact(deleteIDs, summary)` | Atomically delete old messages + insert summary |
-| `DeleteStale(olderThan)` | Prune messages older than duration |
+| `DeleteByKey(channelName, historyKey)` | Clear messages after processing (archives first) |
+| `Compact(deleteIDs, summary)` | Atomically archive + delete old messages, insert summary |
+| `DeleteStale(olderThan)` | Prune messages older than duration (archives first) |
+| `ListArchivedByKey(channelName, historyKey, since, limit)` | Replay archived messages for a group |
 | `ListGroups()` | Return distinct channel+key groups with counts |
 | `CountAll()` | Total pending messages across all groups |
 | `ResolveGroupTitles(groups)` | Look up chat titles from session metadata |
+
+**`channel_pending_messages` is a buffer, not an archive.** Rows leave it on two
+paths: the bot being mentioned hands the buffer to the agent and clears the key,
+and compaction replaces old rows with an LLM summary. Both are deletes, and for
+group capture the buffer is the only place the raw text is stored — a mention or
+a compaction pass used to destroy days of messages that nothing had read yet.
+
+Every row is therefore copied into `channel_message_archive` inside the same
+transaction as the delete, tagged with `archive_reason` (`consumed`, `compacted`,
+`stale`). Archived rows keep their original `id`, so a replayed delete is a
+no-op. Reads go through `ListArchivedByKey`, which is tenant-scoped like every
+other store read. Anything that needs the full group history — digest pipelines,
+exports, audits — must read the archive, not the buffer.
 
 ### KnowledgeGraphStore
 

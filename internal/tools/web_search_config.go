@@ -19,6 +19,8 @@ func buildProviderByName(name, apiKey string, maxResults int) SearchProvider {
 		return newTavilySearchProvider(apiKey, maxResults)
 	case searchProviderBrave:
 		return newBraveSearchProvider(apiKey, maxResults)
+	case searchProviderParallel:
+		return newParallelSearchProvider(maxResults)
 	case searchProviderDuckDuckGo:
 		return newDuckDuckGoSearchProvider(maxResults)
 	default:
@@ -57,7 +59,7 @@ func NormalizeWebSearchProviderOrder(order []string) []string {
 }
 
 func isKnownSearchProvider(id string) bool {
-	return slices.Contains(defaultSearchProviderOrder, id)
+	return id == searchProviderParallel || slices.Contains(defaultSearchProviderOrder, id)
 }
 
 // --- Shared provider helpers ---

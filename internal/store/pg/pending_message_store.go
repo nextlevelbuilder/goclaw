@@ -69,16 +69,56 @@ func (s *PGPendingMessageStore) ListByKey(ctx context.Context, channelName, hist
 	return result, err
 }
 
+// archivedColumns are copied verbatim from the buffer into channel_message_archive.
+const archivedColumns = `id, channel_name, history_key, parent_history_key, sender, sender_id,
+	body, platform_msg_id, is_summary, created_at, updated_at, tenant_id`
+
+// archivedReadColumns omits tenant_id: reads are already tenant-scoped by the
+// WHERE clause and ArchivedMessage carries no tenant field.
+const archivedReadColumns = `id, channel_name, history_key, parent_history_key, sender, sender_id,
+	body, platform_msg_id, is_summary, created_at, updated_at, archived_at, archive_reason`
+
+// archivePending copies every buffer row matching where into the archive. Callers
+// pass the same where/args they are about to DELETE with, so the archive cannot
+// miss a row the delete removes. Replaying is a no-op: archived rows keep their
+// original id.
+func archivePending(ctx context.Context, tx *sql.Tx, where string, args []any, reasonParam int, reason string) error {
+	insertArgs := make([]any, 0, len(args)+1)
+	insertArgs = append(insertArgs, args...)
+	insertArgs = append(insertArgs, reason)
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO channel_message_archive (`+archivedColumns+`, archived_at, archive_reason)
+		 SELECT `+archivedColumns+fmt.Sprintf(", NOW(), $%d", reasonParam)+`
+		 FROM channel_pending_messages `+where+`
+		 ON CONFLICT (id) DO NOTHING`,
+		insertArgs...,
+	); err != nil {
+		return fmt.Errorf("archive pending: %w", err)
+	}
+	return nil
+}
+
 func (s *PGPendingMessageStore) DeleteByKey(ctx context.Context, channelName, historyKey string) error {
-	tClause, tArgs, _, err := scopeClause(ctx, 3)
+	tClause, tArgs, nextParam, err := scopeClause(ctx, 3)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx,
-		`DELETE FROM channel_pending_messages WHERE channel_name = $1 AND history_key = $2`+tClause,
-		append([]any{channelName, historyKey}, tArgs...)...,
-	)
-	return err
+	args := append([]any{channelName, historyKey}, tArgs...)
+	where := `WHERE channel_name = $1 AND history_key = $2` + tClause
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin delete tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	if err := archivePending(ctx, tx, where, args, nextParam, store.ArchiveReasonConsumed); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM channel_pending_messages `+where, args...); err != nil {
+		return fmt.Errorf("delete pending: %w", err)
+	}
+	return tx.Commit()
 }
 
 func (s *PGPendingMessageStore) Compact(ctx context.Context, deleteIDs []uuid.UUID, summary *store.PendingMessage) error {
@@ -100,10 +140,12 @@ func (s *PGPendingMessageStore) Compact(ctx context.Context, deleteIDs []uuid.UU
 		args[i] = id
 	}
 
-	res, err := tx.ExecContext(ctx,
-		fmt.Sprintf("DELETE FROM channel_pending_messages WHERE id IN (%s)", strings.Join(placeholders, ",")),
-		args...,
-	)
+	where := fmt.Sprintf("WHERE id IN (%s)", strings.Join(placeholders, ","))
+	if err := archivePending(ctx, tx, where, args, len(deleteIDs)+1, store.ArchiveReasonCompacted); err != nil {
+		return err
+	}
+
+	res, err := tx.ExecContext(ctx, "DELETE FROM channel_pending_messages "+where, args...)
 	if err != nil {
 		return fmt.Errorf("compact delete: %w", err)
 	}
@@ -133,15 +175,55 @@ func (s *PGPendingMessageStore) Compact(ctx context.Context, deleteIDs []uuid.UU
 
 func (s *PGPendingMessageStore) DeleteStale(ctx context.Context, olderThan time.Duration) (int64, error) {
 	cutoff := time.Now().Add(-olderThan)
-	tid := tenantIDForInsert(ctx)
-	result, err := s.db.ExecContext(ctx,
-		`DELETE FROM channel_pending_messages WHERE updated_at < $1 AND tenant_id = $2`,
-		cutoff, tid,
-	)
+	args := []any{cutoff, tenantIDForInsert(ctx)}
+	where := `WHERE updated_at < $1 AND tenant_id = $2`
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin delete stale tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	if err := archivePending(ctx, tx, where, args, len(args)+1, store.ArchiveReasonStale); err != nil {
+		return 0, err
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM channel_pending_messages `+where, args...)
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected()
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return affected, nil
+}
+
+func (s *PGPendingMessageStore) ListArchivedByKey(ctx context.Context, channelName, historyKey string, since time.Time, limit int) ([]store.ArchivedMessage, error) {
+	tClause, tArgs, nextParam, err := scopeClause(ctx, 3)
+	if err != nil {
+		return nil, err
+	}
+	args := append([]any{channelName, historyKey}, tArgs...)
+	query := `SELECT ` + archivedReadColumns + `
+		 FROM channel_message_archive
+		 WHERE channel_name = $1 AND history_key = $2` + tClause
+	if !since.IsZero() {
+		query += fmt.Sprintf(" AND created_at >= $%d", nextParam)
+		args = append(args, since)
+		nextParam++
+	}
+	query += ` ORDER BY created_at ASC, id ASC`
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT $%d", nextParam)
+		args = append(args, limit)
+	}
+
+	var result []store.ArchivedMessage
+	err = pkgSqlxDB.SelectContext(ctx, &result, query, args...)
+	return result, err
 }
 
 func (s *PGPendingMessageStore) ListGroups(ctx context.Context) ([]store.PendingMessageGroup, error) {
