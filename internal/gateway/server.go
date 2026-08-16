@@ -1057,12 +1057,7 @@ func (s *Server) DisconnectByPairing(senderID, channel string) {
 	}
 }
 
-func (s *Server) registerClient(c *Client) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.clients[c.id] = c
-
-	// payloadSeq extracts the per-run sequence stamped by the agent loop onto an
+// payloadSeq extracts the per-run sequence stamped by the agent loop onto an
 // agent event payload (agent.AgentEvent.Seq). Payload arrives as the struct
 // value (cmd/gateway_managed.go broadcasts `event` directly). Returns ok=false
 // when the payload is not an agent event (or the seq is absent/zero).
@@ -1073,7 +1068,12 @@ func payloadSeq(payload any) (int64, bool) {
 	return 0, false
 }
 
-// Subscribe to bus events with per-user/team filtering.
+func (s *Server) registerClient(c *Client) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.clients[c.id] = c
+
+	// Subscribe to bus events with per-user/team filtering.
 	s.eventPub.Subscribe(c.id, func(event bus.Event) {
 		if clientCanReceiveEvent(c, event) {
 			frame := protocol.NewEvent(event.Name, event.Payload)
