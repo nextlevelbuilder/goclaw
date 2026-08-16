@@ -43,6 +43,14 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		Payload: map[string]any{"message": req.Message},
 	})
 
+	// Durable run record: create agent_runs row + start heartbeat (non-fatal).
+	// The record is finalized on every exit path below (completed/failed/cancelled).
+	runRecord := startRunRecord(ctx, l, req)
+	// Safety net: a panic in runViaPipeline would otherwise leak the heartbeat
+	// goroutine and leave the run record perpetually "running". terminal() is
+	// idempotent, so this cannot conflict with the normal exit path.
+	defer runRecord.terminal(ctx, store.AgentRunStatusFailed, "run record finalized by safety net (likely panic or goroutine leak)")
+
 	// Create trace
 	var traceID uuid.UUID
 	isChildTrace := req.ParentTraceID != uuid.Nil && l.traceCollector != nil
@@ -185,8 +193,10 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 			}
 			if ctx.Err() != nil {
 				emitRun(AgentEvent{Type: protocol.AgentEventRunCancelled, AgentID: l.id, RunID: req.RunID})
+				runRecord.terminal(ctx, store.AgentRunStatusCancelled, "cancelled")
 			} else {
 				emitRun(AgentEvent{Type: protocol.AgentEventRunFailed, AgentID: l.id, RunID: req.RunID, Payload: map[string]string{"error": err.Error()}})
+				runRecord.terminal(ctx, store.AgentRunStatusFailed, err.Error())
 			}
 			if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
 				traceFinalized = true
@@ -241,6 +251,7 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 			completedPayload["media"] = result.Media
 		}
 		emitRun(AgentEvent{Type: protocol.AgentEventRunCompleted, AgentID: l.id, RunID: req.RunID, Payload: completedPayload})
+		runRecord.terminal(ctx, store.AgentRunStatusCompleted, "")
 		if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
 			traceFinalized = true
 			if result != nil {

@@ -275,6 +275,8 @@ func wireExtras(
 		EvolutionMetricsStore:  stores.EvolutionMetrics,
 		DomainBus:              domainBus,
 		HookDispatcher:         hookDispatcher,
+		RunsStore:              stores.Runs,
+		RunHeartbeatInterval:   appCfg.Reliability.Runs.EffectiveHeartbeatInterval(),
 		OnTextUploaded: func(ctx context.Context, path, content string) {
 			if vaultIntc != nil {
 				vaultIntc.AfterWrite(ctx, path, content)

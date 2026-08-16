@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/cron"
+	"github.com/nextlevelbuilder/goclaw/internal/reliability"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
 )
 
@@ -58,11 +59,120 @@ type Config struct {
 	Cron      CronConfig      `json:"cron"`
 	Telemetry TelemetryConfig `json:"telemetry"`
 	Tailscale TailscaleConfig `json:"tailscale"`
+	Reliability ReliabilityConfig `json:"reliability,omitempty"`
 	Bindings  []AgentBinding  `json:"bindings,omitempty"`
 	Hooks     HooksConfig     `json:"hooks"`
 	Packages  PackagesConfig  `json:"packages"` // runtime package mgmt (GitHub updater)
 	Messages  SystemMsgConfig `json:"system_messages,omitempty"`
 	mu        sync.RWMutex
+}
+
+// ReliabilityConfig groups reliability knobs for the gateway. Zero-valued
+// fields fall back to the defaults below.
+type ReliabilityConfig struct {
+	Runs    RunsConfig    `json:"runs,omitempty"`
+	Circuit CircuitConfig `json:"circuit,omitempty"`
+}
+
+// CircuitConfig tunes the shared reliability singleton constructed at gateway
+// startup (internal/reliability). Zero-valued fields fall back to the
+// reliability package defaults (see DefaultCircuitOptions).
+type CircuitConfig struct {
+	FailureThreshold   int `json:"failure_threshold,omitempty"`    // consecutive failures before Healthy→Degraded→Open (default 5)
+	DegradedThreshold  int `json:"degraded_threshold,omitempty"`   // failures after which Healthy becomes Degraded (default 2)
+	CooldownMs         int `json:"cooldown_ms,omitempty"`          // duration the breaker stays Open before HalfOpen (default 30000)
+	HalfOpenMax        int `json:"half_open_max,omitempty"`        // probe requests allowed while HalfOpen (default 1)
+	ProbeTimeoutMs     int `json:"probe_timeout_ms,omitempty"`     // stale half-open probe slot timeout (default 30000)
+	RateLimitMaxPending int `json:"rate_limit_max_pending,omitempty"` // pending waiter cap for the rate-limit coordinator (0 = unlimited)
+}
+
+// RunsConfig tunes the durable agent-run state machine (agent_runs table).
+//
+// HeartbeatIntervalMs is how often a live run's heartbeat_at is advanced
+// (coalesced writes — not one per event). Default 10000 (10s).
+// StaleAfterMs is how long a run heartbeats must lag before the periodic sweep
+// marks it failed. Default 60000 (60s).
+// SweepIntervalMs is how often the stale-run sweep runs. Default 30000 (30s).
+// ExtensionBudgetMs is a per-run execution budget placeholder for a later
+// phase (checkpoint/resume); it is not enforced by the P0 durable-run state
+// machine.
+type RunsConfig struct {
+	HeartbeatIntervalMs int `json:"heartbeat_interval_ms,omitempty"`
+	StaleAfterMs        int `json:"stale_after_ms,omitempty"`
+	SweepIntervalMs     int `json:"sweep_interval_ms,omitempty"`
+	ExtensionBudgetMs   int `json:"extension_budget_ms,omitempty"`
+}
+
+const (
+	DefaultRunsHeartbeatIntervalMs = 10000 // 10s — matches the pre-config default
+	DefaultRunsStaleAfterMs        = 60000 // 60s — stale-run mark-failed threshold
+	DefaultRunsSweepIntervalMs     = 30000 // 30s — periodic sweep cadence
+	DefaultRunsExtensionBudgetMs   = 0     // placeholder, not enforced in P0
+
+	// Default circuit breaker thresholds — mirror reliability.DefaultCircuitOptions.
+	DefaultCircuitFailureThreshold  = 5
+	DefaultCircuitDegradedThreshold = 2
+	DefaultCircuitCooldownMs        = 30000  // 30s
+	DefaultCircuitHalfOpenMax       = 1
+	DefaultCircuitProbeTimeoutMs    = 30000  // 30s
+	DefaultCircuitRateLimitMaxPending = 0    // 0 = unlimited pending waiters
+)
+
+// EffectiveHeartbeatInterval returns the run heartbeat cadence in duration
+// form, falling back to the default when unset or invalid.
+func (r RunsConfig) EffectiveHeartbeatInterval() time.Duration {
+	if r.HeartbeatIntervalMs <= 0 {
+		r.HeartbeatIntervalMs = DefaultRunsHeartbeatIntervalMs
+	}
+	return time.Duration(r.HeartbeatIntervalMs) * time.Millisecond
+}
+
+// EffectiveStaleAfter returns the stale-run threshold in duration form.
+func (r RunsConfig) EffectiveStaleAfter() time.Duration {
+	if r.StaleAfterMs <= 0 {
+		r.StaleAfterMs = DefaultRunsStaleAfterMs
+	}
+	return time.Duration(r.StaleAfterMs) * time.Millisecond
+}
+
+// EffectiveSweepInterval returns the periodic sweep cadence in duration form.
+func (r RunsConfig) EffectiveSweepInterval() time.Duration {
+	if r.SweepIntervalMs <= 0 {
+		r.SweepIntervalMs = DefaultRunsSweepIntervalMs
+	}
+	return time.Duration(r.SweepIntervalMs) * time.Millisecond
+}
+
+// EffectiveCircuit returns the circuit breaker options with defaults applied
+// for any unset or invalid field. The returned options feed
+// reliability.Configure, which applies its own normalizing defaults as well.
+func (c CircuitConfig) EffectiveCircuit() reliability.CircuitOptions {
+	opts := reliability.DefaultCircuitOptions()
+	if c.FailureThreshold > 0 {
+		opts.FailureThreshold = c.FailureThreshold
+	}
+	if c.DegradedThreshold > 0 {
+		opts.DegradedThreshold = c.DegradedThreshold
+	}
+	if c.CooldownMs > 0 {
+		opts.Cooldown = time.Duration(c.CooldownMs) * time.Millisecond
+	}
+	if c.HalfOpenMax > 0 {
+		opts.HalfOpenMax = c.HalfOpenMax
+	}
+	if c.ProbeTimeoutMs > 0 {
+		opts.ProbeTimeout = time.Duration(c.ProbeTimeoutMs) * time.Millisecond
+	}
+	return opts
+}
+
+// EffectiveRateLimitMaxPending returns the rate-limit coordinator pending
+// waiter cap (0 = unlimited), or the default when invalid.
+func (c CircuitConfig) EffectiveRateLimitMaxPending() int {
+	if c.RateLimitMaxPending < 0 {
+		return DefaultCircuitRateLimitMaxPending
+	}
+	return c.RateLimitMaxPending
 }
 
 // BrandingConfig customizes public app metadata and media used by the web UI.
@@ -655,6 +765,7 @@ func (c *Config) ReplaceFrom(src *Config) {
 	c.Cron = src.Cron
 	c.Telemetry = src.Telemetry
 	c.Tailscale = src.Tailscale
+	c.Reliability = src.Reliability
 	c.Bindings = src.Bindings
 	c.Messages = src.Messages.Clone()
 }

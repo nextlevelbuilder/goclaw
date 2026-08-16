@@ -338,6 +338,9 @@ flowchart TD
 | Method | Description |
 |--------|-------------|
 | `logs.tail` | Tail gateway logs |
+| `runs.get` | Get one durable agent run record (backed by `agent_runs`) |
+| `runs.list` | List durable agent runs (filter by session/status) |
+| `runs.events` | Replay run timeline events (cursor after seq, `after=N`) |
 
 ---
 
@@ -452,6 +455,15 @@ All CRUD endpoints require `Authorization: Bearer <token>` and `X-GoClaw-User-Id
 | GET | `/v1/traces` | List traces (filter by agent_id, user_id, status, date range) |
 | GET | `/v1/traces/{id}` | Get trace details with all spans |
 
+**Runs** (`/v1/runs`):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/runs` | List durable agent runs (filter by `session_key`, `status`, pagination) |
+| GET | `/v1/runs/{run_id}` | Get one durable agent run record |
+| GET | `/v1/runs/{run_id}/events` | Replay run timeline events (`after=N` cursor, `limit`, `session_key`) |
+| GET | `/v1/runs/{run_id}/timeline` | Full run timeline items (compat with `run.timeline.get`) |
+
 **Channel Instances** (`/v1/channel-instances`):
 
 | Method | Path | Description |
@@ -533,6 +545,89 @@ All CRUD endpoints require `Authorization: Bearer <token>` and `X-GoClaw-User-Id
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/mcp/bridge` | MCP server bridge (Claude CLI tools) |
+
+---
+
+## 6.1 Durable Run Records
+
+Every agent run is a **durable state machine** recorded in the `agent_runs` table,
+independent of the display-safe `run_timeline_items` journal. A run row is
+created on start (`pending` → `running`), heartbeated while executing, and
+marked terminal (`completed` / `failed` / `cancelled`) on exit. A periodic sweep
+marks runs whose heartbeat has not advanced within `stale_after_ms` as `failed`
+so hung runs cannot linger as "running" forever.
+
+```json5
+{
+  reliability: {
+    runs: {
+      heartbeat_interval_ms: 10000, // how often heartbeat_at advances (coalesced writes)
+      stale_after_ms: 60000,        // heartbeats this old → sweep marks the run failed
+      sweep_interval_ms: 30000,     // how often the stale-run sweep runs
+      extension_budget_ms: 0        // reserved for a later checkpoint/resume phase
+    }
+  }
+}
+```
+
+All fields optional — zero falls back to the defaults above. Run-record writes
+are **non-fatal**: if the DB is unavailable, the run keeps executing and only a
+warning is logged (graceful degradation, D9).
+
+### CLI
+
+```bash
+goclaw run list                      # recent runs (adjustable page size)
+goclaw run get <run-id>              # one run record
+goclaw run events <run-id> --after=N # replay timeline events after a seq cursor
+```
+
+---
+
+## 6.2 Reliability Diagnostics
+
+The gateway keeps a process-wide reliability state per `provider:model`:
+circuit breaker state, health score, attempts/successes, rate-limit cooldown
+and metrics counters. `goclaw health` dumps that state for operators.
+
+### CLI
+
+```bash
+goclaw health              # dump live reliability state (plain text, sorted)
+goclaw health --check      # run in-process regression checks; exit 0 = all pass, 1 = failure
+```
+
+`--check` is a deterministic self-test that does not touch the network or the
+database. It covers the plan §27 regression cases:
+
+| Check | Behavior | PASS when |
+|-------|----------|-----------|
+| Case A | Register a fake 429 on the rate-limit coordinator | cooldown reported for the key |
+| Case B | Simulate a stream disconnect (transport EOF) | classified as a retryable error |
+| Case C | Classify a nil error | `IsRetryable(nil)` returns false (no false-positive retries) |
+
+### Configuration
+
+The reliability layer reads the `reliability` config block (all fields
+optional, zero falls back to the defaults):
+
+```json5
+{
+  reliability: {
+    circuit: {
+      failure_threshold: 5,     // consecutive failures → circuit open (default 5)
+      degraded_threshold: 2,    // consecutive failures → circuit degraded (default 2)
+      cooldown_ms: 30000,       // how long the circuit stays open before half-open (default 30000)
+      half_open_max: 1,         // probe requests allowed while half-open (default 1)
+      probe_timeout_ms: 30000,  // stale-probe guard: re-probe after this silence (default 30000)
+      rate_limit_max_pending: 0 // cap on concurrent waiters per rate-limited key (0 = unlimited)
+    }
+  }
+}
+```
+
+The circuit breaker, health registry, rate-limit coordinator and metrics
+counters shown by `goclaw health` reflect this configuration.
 
 ---
 

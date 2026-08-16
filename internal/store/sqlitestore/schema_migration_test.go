@@ -49,13 +49,37 @@ func TestEnsureSchema_FreshDB(t *testing.T) {
 		}
 	}
 
-	for _, table := range []string{"hooks", "hook_agents"} {
+	for _, table := range []string{"hooks", "hook_agents", "agent_runs"} {
 		var count int
 		if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&count); err != nil {
 			t.Fatalf("lookup %s table: %v", table, err)
 		}
 		if count != 1 {
 			t.Errorf("fresh schema missing %q table", table)
+		}
+	}
+
+	// agent_runs must carry the durable run-state machine columns + unique key.
+	rows, err = db.Query("PRAGMA table_info(agent_runs)")
+	if err != nil {
+		t.Fatalf("PRAGMA agent_runs: %v", err)
+	}
+	defer rows.Close()
+	runCols := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notnull int
+		var dflt *string
+		var pk int
+		if err := rows.Scan(&cid, &name, &typ, &notnull, &dflt, &pk); err != nil {
+			t.Fatalf("scan agent_runs column: %v", err)
+		}
+		runCols[name] = true
+	}
+	for _, want := range []string{"run_id", "session_key", "status", "attempt", "heartbeat_at", "started_at", "completed_at", "updated_at"} {
+		if !runCols[want] {
+			t.Errorf("agent_runs missing column %q", want)
 		}
 	}
 }

@@ -45,6 +45,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/media"
 	"github.com/nextlevelbuilder/goclaw/internal/orchestration"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/reliability"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/security"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
@@ -249,6 +250,21 @@ func runGateway() {
 			slog.Warn("unknown GOCLAW_EDITION, using standard", "value", edName)
 		}
 	}
+
+	// Construct the process-wide reliability singleton (circuit breaker,
+	// health registry, rate-limit coordinator, metrics) from config. Providers
+	// and the agent loop consume it via reliability.Default().
+	relCfg := cfg.Reliability.Circuit
+	relOpts := relCfg.EffectiveCircuit()
+	reliability.Configure(relOpts, relCfg.EffectiveRateLimitMaxPending())
+	slog.Debug("reliability singleton configured",
+		"failure_threshold", relOpts.FailureThreshold,
+		"degraded_threshold", relOpts.DegradedThreshold,
+		"cooldown", relOpts.Cooldown.String(),
+		"half_open_max", relOpts.HalfOpenMax,
+		"probe_timeout", relOpts.ProbeTimeout.String(),
+		"rate_limit_max_pending", relCfg.EffectiveRateLimitMaxPending(),
+	)
 
 	// Create core components
 	msgBus := bus.New()
@@ -751,7 +767,7 @@ func runGateway() {
 	// Register all RPC methods
 	server.SetLogTee(logTee)
 	server.SetRuntimeLogsHandler(httpapi.NewRuntimeLogsHandler(logTee))
-	pairingMethods, heartbeatMethods, chatMethods, cfgPermsMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Tracing, pgStores.RunTimeline, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, pgStores.AgentLinks, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants, pgStores.SkillTenantCfgs, audioMgr, usageCapSvc, providerRegistry, teamWorkEmbedder)
+	pairingMethods, heartbeatMethods, chatMethods, cfgPermsMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Tracing, pgStores.RunTimeline, pgStores.Runs, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, pgStores.AgentLinks, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants, pgStores.SkillTenantCfgs, audioMgr, usageCapSvc, providerRegistry, teamWorkEmbedder)
 
 	// Phase 3: Agent hooks RPC methods (hooks.list/create/update/delete/toggle/test/history).
 	if hs, ok := pgStores.Hooks.(hooks.HookStore); ok && hs != nil {

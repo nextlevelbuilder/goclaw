@@ -43,6 +43,15 @@ func TestDefault_SensibleDefaults(t *testing.T) {
 	if cfg.Channels.Discord.HistoryLimit != 200 {
 		t.Fatalf("default discord history limit: got %d, want 200", cfg.Channels.Discord.HistoryLimit)
 	}
+	if cfg.Reliability.Runs.HeartbeatIntervalMs != DefaultRunsHeartbeatIntervalMs {
+		t.Fatalf("default run heartbeat interval: got %d, want %d", cfg.Reliability.Runs.HeartbeatIntervalMs, DefaultRunsHeartbeatIntervalMs)
+	}
+	if cfg.Reliability.Runs.StaleAfterMs != DefaultRunsStaleAfterMs {
+		t.Fatalf("default run stale-after: got %d, want %d", cfg.Reliability.Runs.StaleAfterMs, DefaultRunsStaleAfterMs)
+	}
+	if cfg.Reliability.Runs.SweepIntervalMs != DefaultRunsSweepIntervalMs {
+		t.Fatalf("default run sweep interval: got %d, want %d", cfg.Reliability.Runs.SweepIntervalMs, DefaultRunsSweepIntervalMs)
+	}
 
 }
 

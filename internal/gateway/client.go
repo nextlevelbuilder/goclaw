@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,10 +50,17 @@ type Client struct {
 	// authenticates — see MethodRouter.handleConnect. Empty when upgrade
 	// request lacked Host headers.
 	upgradeURL string
+
+	// nextSeq is the per-connection monotonic event sequence counter. Every
+	// event frame sent on this connection carries a Seq so clients can resync
+	// after a reconnect by requesting /runs/{id}/events?after=<lastSeq>.
+	// Atomic so concurrent SendEvent/SendResponse callers (bus subscribers,
+	// method handlers, heartbeats) never race on the counter.
+	nextSeq atomic.Int64
 }
 
 func NewClient(conn *websocket.Conn, server *Server, remoteIP string) *Client {
-	return &Client{
+	c := &Client{
 		id:          uuid.NewString(),
 		conn:        conn,
 		server:      server,
@@ -60,6 +68,8 @@ func NewClient(conn *websocket.Conn, server *Server, remoteIP string) *Client {
 		connectedAt: time.Now(),
 		remoteAddr:  remoteIP,
 	}
+	c.nextSeq.Store(0)
+	return c
 }
 
 // setUpgradeURL records the public URL derived from the HTTP upgrade request.
@@ -188,8 +198,12 @@ func (c *Client) SendResponse(resp *protocol.ResponseFrame) {
 	}
 }
 
-// SendEvent sends an event frame to this client.
+// SendEvent sends an event frame to this client. Every event is stamped with
+// the next per-connection sequence number (monotonic, atomic) so a client can
+// later resync: after reconnect it passes its last-seen seq to
+// runs.events / GET /runs/{id}/events?after=N and replays what it missed.
 func (c *Client) SendEvent(event protocol.EventFrame) {
+	event.Seq = c.nextSeq.Add(1)
 	data, err := json.Marshal(event)
 	if err != nil {
 		slog.Error("marshal event failed", "error", err)
@@ -225,6 +239,12 @@ func (c *Client) ConnectedAt() time.Time { return c.connectedAt }
 
 // RemoteAddr returns the peer IP:port.
 func (c *Client) RemoteAddr() string { return c.remoteAddr }
+
+// Seq returns the highest sequence number stamped on any event sent to this
+// client so far. Exposed via the connect response so a freshly connected
+// client can resume a durable-run event stream from where it left off
+// (runs.events / GET /runs/{id}/events?after=Seq).
+func (c *Client) Seq() int64 { return c.nextSeq.Load() }
 
 // TenantID returns the resolved tenant UUID (uuid.Nil means cross-tenant).
 func (c *Client) TenantID() uuid.UUID { return c.tenantID }

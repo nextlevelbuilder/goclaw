@@ -4,6 +4,50 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+## 2026-08-16
+
+### Reliability wiring + `goclaw health` CLI diagnostics
+
+**Features**
+
+- Wired the `internal/reliability` layer (circuit breaker, health registry,
+  rate-limit coordinator, metrics) into provider/config surfaces via a shared
+  process-wide singleton; new `reliability.circuit.*` config block
+  (`failure_threshold`, `degraded_threshold`, `cooldown_ms`, `half_open_max`,
+  `probe_timeout_ms`, `rate_limit_max_pending`).
+- New CLI `goclaw health` dumps live reliability state per `provider:model`
+  (circuit state, health score, attempts/successes, cooldown) plus metrics
+  counters; `goclaw health --check` runs deterministic in-process regression
+  checks (429 cooldown, stream-disconnect retryability, nil-error guard).
+
+**Docs**
+
+- Added reliability diagnostics section and `reliability.circuit.*` config
+  reference to `docs/04-gateway-protocol.md`.
+
+### Durable agent run records (`agent_runs`) + reliability config
+
+**Features**
+
+- Every agent run now writes a durable state-machine record to `agent_runs`
+  (`pending` → `running` → `completed`/`failed`/`cancelled`) regardless of
+  source (chat, cron, channels, heartbeat, delegation). Heartbeat is coalesced;
+  writes are non-fatal (DB outage does not block the run).
+- Periodic stale-run sweep marks hung runs `failed` so they cannot linger as
+  "running" forever after a crash or hang.
+- WS RPC `runs.get` / `runs.list` / `runs.events` + HTTP `GET /v1/runs`,
+  `GET /v1/runs/{id}`, `GET /v1/runs/{id}/events` for run inspect/replay.
+- CLI `goclaw run list|get|events` to inspect run records from the terminal.
+- New `reliability.runs.*` config block (heartbeat/stale/sweep/extension-budget)
+  with backward-compatible defaults; documented in `docs/04-gateway-protocol.md`.
+
+**Docs**
+
+- Added durable-run records section, RPC methods, `/v1/runs` endpoints, and
+  `reliability.runs.*` config reference to `docs/04-gateway-protocol.md`.
+
+---
+
 ## 2026-07-08
 
 ### Passive memory extraction tuning

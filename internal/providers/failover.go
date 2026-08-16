@@ -115,7 +115,15 @@ func RunWithFailover[T any](
 			if cfg.Tracker != nil {
 				cfg.Tracker.RecordSuccess(CooldownKey(candidate.Provider, candidate.Model))
 			}
+			// Reliability layer: healthy completion feeds the success path.
+			observeSuccess(candidate.Provider, candidate.Model)
 			return result, attempts, nil
+		}
+
+		// Reliability layer: failed attempt feeds breaker + health + metrics.
+		observeFailure(candidate.Provider, candidate.Model, err)
+		if isRateLimitedErr(err) {
+			record429Cooldown(candidate.Provider, candidate.Model, rateLimitRetryAfter(err))
 		}
 
 		classification := ClassifyHTTPError(cfg.Classifier, err)

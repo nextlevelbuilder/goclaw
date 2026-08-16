@@ -82,6 +82,7 @@ func init() {
 		MsgAlreadySummoning:       "агент уже вызывается",
 		MsgSummoningUnavailable:   "вызов недоступен",
 		MsgRunTimelineUnavailable: "хронология выполнения недоступна",
+		MsgRunsUnavailable:        "записи запусков недоступны",
 		MsgNoDescription:          "у агента нет описания для повторного вызова",
 		MsgSummonCancelled:        "вызов отменён пользователем",
 		MsgCannotCancel:           "агент не вызывается",

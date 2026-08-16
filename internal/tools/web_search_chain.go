@@ -191,6 +191,16 @@ func BuildChainFromStorage(ctx context.Context, secrets store.ConfigSecretsStore
 		if isDisabled(name) {
 			continue
 		}
+		if name == searchProviderParallel {
+			// Parallel is keyless and intentionally absent from the default
+			// order. Reaching this branch means the tenant explicitly named it.
+			maxResults := defaultSearchCount
+			if po, ok := override.Providers[name]; ok && po.MaxResults > 0 {
+				maxResults = po.MaxResults
+			}
+			chain = append(chain, buildProviderByName(name, "", maxResults))
+			continue
+		}
 
 		key, err := secrets.Get(ctx, "tools.web."+name+".api_key")
 		if err != nil || key == "" {

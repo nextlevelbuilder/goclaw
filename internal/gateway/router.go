@@ -395,6 +395,14 @@ func (r *MethodRouter) sendConnectResponse(ctx context.Context, client *Client, 
 		}
 	}
 
+	// lastSeq exposes the highest per-connection event sequence stamped so far.
+	// A freshly connected client can use it as a resync cursor: after reconnect,
+	// replay events from this connection's event journal with after=lastSeq.
+	// Omitted (0) on first connect since no events have been sent yet.
+	if seq := client.Seq(); seq > 0 {
+		resp["lastSeq"] = seq
+	}
+
 	client.SendResponse(protocol.NewOKResponse(reqID, resp))
 }
 

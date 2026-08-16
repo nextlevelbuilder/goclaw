@@ -2,6 +2,9 @@ package providers
 
 import (
 	"context"
+	"sort"
+
+	"github.com/nextlevelbuilder/goclaw/internal/reliability"
 )
 
 // FallbackCandidate is one runtime provider/model fallback option.
@@ -189,8 +192,56 @@ func (p *ModelFallbackProvider) orderedCandidates(requestModel string) []Fallbac
 		}
 		out = append(out, fallback)
 	}
+	return p.orderByHealth(out)
+}
+
+// orderByHealth re-ranks nonzero fallback candidates by their runtime
+// reliability score. The primary candidate is ALWAYS first — the caller's
+// explicit choice wins over runtime heuristics. For the remaining candidates,
+// those with a meaningful health signal (more than scoreMinAttempts observed
+// attempts) are sorted by descending HealthRegistry.Score; candidates without
+// signal keep their configured order and trail the scored ones. This preserves
+// existing behavior for new deployments (no signal yet → configured order)
+// while steering away from provably flaky fallbacks.
+func (p *ModelFallbackProvider) orderByHealth(candidates []FallbackCandidate) []FallbackCandidate {
+	if len(candidates) < 3 {
+		return candidates
+	}
+	reg := reliability.Default()
+	if reg == nil || reg.Health == nil {
+		return candidates
+	}
+	rest := candidates[1:]
+	scoreOf := func(c FallbackCandidate) (float64, bool) {
+		s := reg.Health.Status(c.ProviderName, c.Model)
+		if s.Attempts <= healthScoreMinAttempts {
+			return 0, false // no signal yet — keep configured position
+		}
+		return reg.Health.Score(c.ProviderName, c.Model), true
+	}
+	var scored, unscored []FallbackCandidate
+	for _, c := range rest {
+		if _, ok := scoreOf(c); ok {
+			scored = append(scored, c)
+		} else {
+			unscored = append(unscored, c)
+		}
+	}
+	sort.SliceStable(scored, func(i, j int) bool {
+		si, _ := scoreOf(scored[i])
+		sj, _ := scoreOf(scored[j])
+		return si > sj
+	})
+	out := make([]FallbackCandidate, 0, len(candidates))
+	out = append(out, candidates[0])
+	out = append(out, scored...)
+	out = append(out, unscored...)
 	return out
 }
+
+// healthScoreMinAttempts is the minimum number of observed attempts before a
+// health score is considered meaningful enough to drive fallback ordering.
+const healthScoreMinAttempts = 5
 
 type noFallbackAfterStreamError struct {
 	err error

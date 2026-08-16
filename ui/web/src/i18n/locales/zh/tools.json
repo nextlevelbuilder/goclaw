@@ -70,7 +70,7 @@
     },
     "searchChain": {
       "title": "网页搜索 Provider 链",
-      "description": "拖动以重新排序搜索 Provider。第一个已启用且具有有效 API Key 的 Provider 将被优先尝试。",
+      "description": "拖动以重新排序搜索 Provider。第一个已启用且可用的 Provider 将被优先尝试。",
       "maxResults": "最大结果数",
       "locked": "始终启用的回退",
       "cancel": "取消",
@@ -80,6 +80,7 @@
         "exa": "Exa",
         "tavily": "Tavily",
         "brave": "Brave Search",
+        "parallel": "Parallel",
         "duckduckgo": "DuckDuckGo"
       },
       "apiKey": "API Key",

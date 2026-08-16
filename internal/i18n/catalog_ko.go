@@ -65,6 +65,7 @@ func init() {
 		MsgAlreadySummoning:      "에이전트가 이미 소환 중입니다",
 		MsgSummoningUnavailable:  "소환을 사용할 수 없습니다",
 		MsgNoDescription:         "에이전트에 재소환할 설명이 없습니다",
+		MsgRunsUnavailable:       "실행 기록을 사용할 수 없습니다",
 		MsgInvalidPath:           "잘못된 경로",
 
 		// Scheduler

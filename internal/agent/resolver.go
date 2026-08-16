@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
@@ -112,6 +113,14 @@ type ResolverDeps struct {
 
 	// V3 evolution metrics store
 	EvolutionMetricsStore store.EvolutionMetricsStore
+
+	// Durable run records: agent_runs state machine. Nil = run-record tracking
+	// disabled (runs still execute; only the durable record is skipped).
+	RunsStore store.RunsStore
+
+	// RunHeartbeatInterval overrides the agent_runs heartbeat cadence. Zero =
+	// default 10s.
+	RunHeartbeatInterval time.Duration
 
 	// Contact store for user identity resolution (channel contacts → tenant users)
 	ContactStore store.ContactStore
@@ -556,6 +565,8 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			SkillEvolutionStore:    deps.SkillEvolutionStore,
 			SkillStore:             deps.SkillStore,
 			UserResolver:           newContactResolver(deps.ContactStore),
+			RunsStore:              deps.RunsStore,
+			RunHeartbeatInterval:   deps.RunHeartbeatInterval,
 		})
 
 		slog.Info("resolved agent from DB", "agent", agentKey, "model", ag.Model, "provider", ag.Provider)

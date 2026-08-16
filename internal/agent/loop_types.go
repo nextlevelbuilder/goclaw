@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -248,6 +249,13 @@ type Loop struct {
 	usageCaps          *usagecaps.Service
 	usageEvents        store.UsageEventStore
 
+	// Durable run records: agent_runs state machine (create on start, terminal
+	// on exit, heartbeat while running). Nil = run-record tracking disabled.
+	runsStore store.RunsStore
+	// runHeartbeatInterval is how often a live run's heartbeat_at is advanced in
+	// agent_runs (coalesced writes). Zero = default 10s.
+	runHeartbeatInterval time.Duration
+
 	// Memory store for extractive memory fallback (writes directly when LLM flush fails)
 	memStore store.MemoryStore
 
@@ -461,6 +469,14 @@ type LoopConfig struct {
 	OrchMode        OrchestrationMode
 	DelegateTargets []DelegateTargetEntry // delegation targets for prompt injection
 
+	// Durable run records: agent_runs state machine. Nil = run-record tracking
+	// disabled (runs still execute; only the durable record is skipped).
+	RunsStore store.RunsStore
+
+	// RunHeartbeatInterval overrides how often a live run's heartbeat_at is
+	// advanced in agent_runs (coalesced writes). Zero = default 10s.
+	RunHeartbeatInterval time.Duration
+
 	// V3 evolution metrics store for recording tool/retrieval/feedback metrics
 	EvolutionMetricsStore store.EvolutionMetricsStore
 
@@ -612,6 +628,8 @@ func NewLoop(cfg LoopConfig) *Loop {
 		skillEvolutionStore:    cfg.SkillEvolutionStore,
 		skillStore:             cfg.SkillStore,
 		userResolver:           cfg.UserResolver,
+		runsStore:              cfg.RunsStore,
+		runHeartbeatInterval:    cfg.RunHeartbeatInterval,
 	}
 }
 

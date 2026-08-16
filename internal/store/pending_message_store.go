@@ -23,6 +23,24 @@ type PendingMessage struct {
 	UpdatedAt        time.Time `json:"updated_at" db:"updated_at"`
 }
 
+// Archive reasons recorded on channel_message_archive rows.
+const (
+	// ArchiveReasonConsumed marks messages dropped because the buffer was handed
+	// to the agent (bot mentioned) or cleared by an operator.
+	ArchiveReasonConsumed = "consumed"
+	// ArchiveReasonCompacted marks messages replaced by an LLM summary row.
+	ArchiveReasonCompacted = "compacted"
+	// ArchiveReasonStale marks messages dropped by TTL cleanup.
+	ArchiveReasonStale = "stale"
+)
+
+// ArchivedMessage is a pending message preserved after it left the live buffer.
+type ArchivedMessage struct {
+	PendingMessage
+	ArchivedAt    time.Time `json:"archived_at" db:"archived_at"`
+	ArchiveReason string    `json:"archive_reason" db:"archive_reason"`
+}
+
 // PendingMessageGroup is a summary row for the grouped overview page.
 type PendingMessageGroup struct {
 	ChannelName      string    `json:"channel_name" db:"channel_name"`
@@ -44,13 +62,21 @@ type PendingMessageStore interface {
 	ListByKey(ctx context.Context, channelName, historyKey string) ([]PendingMessage, error)
 
 	// DeleteByKey removes all pending messages for a channel+historyKey.
+	// Removed rows are copied to the archive first.
 	DeleteByKey(ctx context.Context, channelName, historyKey string) error
 
 	// Compact atomically deletes old messages (by IDs) and inserts a summary row.
+	// Deleted rows are copied to the archive in the same transaction.
 	Compact(ctx context.Context, deleteIDs []uuid.UUID, summary *PendingMessage) error
 
 	// DeleteStale removes messages older than the given duration for inactive groups.
+	// Removed rows are copied to the archive first.
 	DeleteStale(ctx context.Context, olderThan time.Duration) (int64, error)
+
+	// ListArchivedByKey returns archived messages for a channel+historyKey created at
+	// or after `since`, ordered by created_at ASC. A zero `since` returns everything;
+	// limit <= 0 means no limit.
+	ListArchivedByKey(ctx context.Context, channelName, historyKey string, since time.Time, limit int) ([]ArchivedMessage, error)
 
 	// ListGroups returns all distinct channel+historyKey groups with message counts.
 	ListGroups(ctx context.Context) ([]PendingMessageGroup, error)
