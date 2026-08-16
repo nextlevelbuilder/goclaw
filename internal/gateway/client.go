@@ -51,11 +51,12 @@ type Client struct {
 	// request lacked Host headers.
 	upgradeURL string
 
-	// nextSeq is the per-connection monotonic event sequence counter. Every
-	// event frame sent on this connection carries a Seq so clients can resync
-	// after a reconnect by requesting /runs/{id}/events?after=<lastSeq>.
-	// Atomic so concurrent SendEvent/SendResponse callers (bus subscribers,
-	// method handlers, heartbeats) never race on the counter.
+	// nextSeq is the per-connection monotonic event sequence counter. Frames
+	// that carry an explicit per-run seq (agent loop events) keep it; all
+	// other frames are stamped with this counter so clients can resync after
+	// a reconnect by requesting /runs/{id}/events?after=<lastSeq>. Atomic so
+	// concurrent SendEvent/SendResponse callers (bus subscribers, method
+	// handlers, heartbeats) never race on the counter.
 	nextSeq atomic.Int64
 }
 
@@ -198,12 +199,16 @@ func (c *Client) SendResponse(resp *protocol.ResponseFrame) {
 	}
 }
 
-// SendEvent sends an event frame to this client. Every event is stamped with
-// the next per-connection sequence number (monotonic, atomic) so a client can
-// later resync: after reconnect it passes its last-seen seq to
-// runs.events / GET /runs/{id}/events?after=N and replays what it missed.
+// SendEvent sends an event frame to this client. Frames that don't already
+// carry a sequence (e.g. agent-run frames stamped with a per-run seq by the
+// loop emit path) are stamped with the next per-connection sequence number
+// (monotonic, atomic) so a client can later resync: after reconnect it passes
+// its last-seen seq to runs.events / GET /runs/{id}/events?after=N and
+// replays what it missed. Per-run seqs are preserved untouched.
 func (c *Client) SendEvent(event protocol.EventFrame) {
-	event.Seq = c.nextSeq.Add(1)
+	if event.Seq == 0 {
+		event.Seq = c.nextSeq.Add(1)
+	}
 	data, err := json.Marshal(event)
 	if err != nil {
 		slog.Error("marshal event failed", "error", err)

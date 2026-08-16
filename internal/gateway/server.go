@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -1061,10 +1062,28 @@ func (s *Server) registerClient(c *Client) {
 	defer s.mu.Unlock()
 	s.clients[c.id] = c
 
-	// Subscribe to bus events with per-user/team filtering.
+	// payloadSeq extracts the per-run sequence stamped by the agent loop onto an
+// agent event payload (agent.AgentEvent.Seq). Payload arrives as the struct
+// value (cmd/gateway_managed.go broadcasts `event` directly). Returns ok=false
+// when the payload is not an agent event (or the seq is absent/zero).
+func payloadSeq(payload any) (int64, bool) {
+	if ev, ok := payload.(agent.AgentEvent); ok {
+		return ev.Seq, ev.Seq > 0
+	}
+	return 0, false
+}
+
+// Subscribe to bus events with per-user/team filtering.
 	s.eventPub.Subscribe(c.id, func(event bus.Event) {
 		if clientCanReceiveEvent(c, event) {
-			c.SendEvent(*protocol.NewEvent(event.Name, event.Payload))
+			frame := protocol.NewEvent(event.Name, event.Payload)
+			// Frames stamped by the agent loop carry a per-run sequence on the
+			// payload (agent.AgentEvent.Seq); surface it on the frame so WS
+			// clients can dedup on (runId, seq).
+			if seq, ok := payloadSeq(event.Payload); ok {
+				frame.Seq = seq
+			}
+			c.SendEvent(*frame)
 		}
 	})
 
