@@ -83,6 +83,24 @@ func runHealthDump() {
 	fmt.Fprintf(tw, "premature_completions\t%d\n", m.PrematureCompletes)
 	fmt.Fprintf(tw, "loop_detected\t%d\n", m.LoopDetected)
 	tw.Flush()
+
+	// Fallback selection policy (process-wide default; per-agent wrappers may
+	// carry an explicit WithFallbackPolicy that overrides this view).
+	fmt.Println()
+	policy := providers.DefaultFallbackPolicyView()
+	strategy := policy.Strategy
+	if strategy == "" {
+		strategy = providers.FallbackStrategyPriority
+	}
+	minAttempts := policy.MinAttemptsForHealth
+	if minAttempts <= 0 {
+		minAttempts = 5
+	}
+	fmt.Printf("Fallback policy\n")
+	tw = tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(tw, "strategy\t%s\n", strategy)
+	fmt.Fprintf(tw, "min_attempts_for_health\t%d\n", minAttempts)
+	tw.Flush()
 }
 
 func formatCooldown(d time.Duration) string {
