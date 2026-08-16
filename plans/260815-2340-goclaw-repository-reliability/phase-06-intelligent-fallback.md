@@ -1,6 +1,6 @@
 # Phase 06 — Intelligent Fallback: Capability Profile + Fallback Policy + Health-Ranked Routing
 
-> **Status: IN PROGRESS** — 2026-08-17. Branch: `feat/phase6-intelligent-fallback` (tạo từ `dev`). Workstream: agents song song, file-ownership disjoint, **agents KHÔNG commit** — controller commit tuần tự + build/test chung.
+> **Status: DONE** — 2026-08-17. Merged `feat/phase6-intelligent-fallback` → `dev` (fast-forward `3ee4cd79..d4006376`, PR #4, CI 3/3 SUCCESS: go/release-versioning/web). Scope §32 Phase 6 items 1-4 ticked, cost/latency/reliability policy deferred (cần production telemetry).
 > **Scope tickets:** plan §32 Phase 6 (model capability profile, fallback chain, health-based routing, cooldown-aware routing, cost/latency/reliability policy) + §6 + §20.
 
 ## Context (scout 2026-08-17, verified)
