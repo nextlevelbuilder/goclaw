@@ -1473,12 +1473,12 @@ Không nên để provider-specific retry logic rải khắp từng provider.
 
 ## Phase 5 — Weak-model resilience
 
-- [ ] Tool-call repair. (phase-05 in progress — `repairToolCallArgs` + JSON repair)
-- [ ] JSON repair. (phase-05 in progress — strict-safe parse/repair/retry)
-- [ ] Empty output recovery. (phase-05 in progress — wire `ErrModelEmptyOutput` + counter)
-- [ ] Repetition detector. (toolloop.go đã ship Phase P0 — phase-05 wire metrics + classification)
-- [ ] Premature completion detector. (phase-05 in progress — ContinuationGate + `ContinueAfterFinal`)
-- [ ] Completion verifier. (phase-05 in progress — L0/L1 record-only)
+- [x] Tool-call repair. (`repairToolCallArgs` — field-name normalize + LRU-gated schema-verified, 2026-08-17)
+- [x] JSON repair. (`repairJSON` strict-safe, 2026-08-17)
+- [x] Empty output recovery. (`ErrModelEmptyOutput` observe + `RecordLLMEmptyOutput`, 2026-08-17)
+- [x] Repetition detector. (toolloop.go đã ship Phase P0 — metrics + classification wired 2026-08-17)
+- [x] Premature completion detector. (`ContinuationGate` opt-in, 2026-08-17)
+- [x] Completion verifier. (L0/L1 record-only, 2026-08-17)
 
 ## Phase 6 — Intelligent fallback
 
@@ -1653,6 +1653,7 @@ feat(test): add provider chaos and regression suite
 - [x] WS reconnect/resync. (`runs.events` + `afterSeq`, 2026-08-16)
 - [x] Provider/model health. (phase-03, 2026-08-15)
 - [ ] Regression tests cho 429 + stream disconnect + false error. (deferred to future integration)
+- [x] Premature-completion gate. (phase-05, 2026-08-17)
 
 ### P1 — rất nên làm
 

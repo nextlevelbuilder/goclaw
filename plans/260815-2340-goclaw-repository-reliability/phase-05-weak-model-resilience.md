@@ -1,6 +1,6 @@
 # Phase 05 — Weak-Model Resilience: Tool-Call Repair + JSON Repair + Empty Recovery + Premature-Completion Gate + Repetition Wiring + Completion Verifier
 
-> **Status: IN PROGRESS** — 2026-08-16. Scope approved by user: Phase 5 (weak-model resilience) theo `GoClaw_Upgrade_Improvement_Plan.md` §10-11.
+> **Status: DONE** — 2026-08-17. All 6 modules shipped, merged to dev via PR #3 (`ee01e579`), CI green.
 > **Branch:** `feat/phase5-weak-model` (tạo từ `dev`). Workstream: agents song song, file-ownership disjoint, **agents KHÔNG commit** — controller commit tuần tự + build/test chung.
 
 ## Context (scout 2026-08-16, verified)
