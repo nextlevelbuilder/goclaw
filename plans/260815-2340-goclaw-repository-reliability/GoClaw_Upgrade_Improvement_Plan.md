@@ -1473,12 +1473,12 @@ Không nên để provider-specific retry logic rải khắp từng provider.
 
 ## Phase 5 — Weak-model resilience
 
-- [ ] Tool-call repair.
-- [ ] JSON repair.
-- [ ] Empty output recovery.
-- [ ] Repetition detector.
-- [ ] Premature completion detector.
-- [ ] Completion verifier.
+- [ ] Tool-call repair. (phase-05 in progress — `repairToolCallArgs` + JSON repair)
+- [ ] JSON repair. (phase-05 in progress — strict-safe parse/repair/retry)
+- [ ] Empty output recovery. (phase-05 in progress — wire `ErrModelEmptyOutput` + counter)
+- [ ] Repetition detector. (toolloop.go đã ship Phase P0 — phase-05 wire metrics + classification)
+- [ ] Premature completion detector. (phase-05 in progress — ContinuationGate + `ContinueAfterFinal`)
+- [ ] Completion verifier. (phase-05 in progress — L0/L1 record-only)
 
 ## Phase 6 — Intelligent fallback
 
@@ -1505,7 +1505,7 @@ Không nên để provider-specific retry logic rải khắp từng provider.
 
 ## Phase 9 — Testing
 
-- [x] Unit tests. (12 cho reliability layer phase-03 + durable run records phase §7, 2026-08-15/16)
+- [x] Unit tests. (12 cho reliability layer phase-03 + durable run records phase §7 + Phase 5 module tests, 2026-08-15/16)
 - [ ] Integration tests.
 - [ ] Provider simulation.
 - [ ] Chaos tests.
