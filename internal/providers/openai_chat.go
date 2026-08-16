@@ -116,8 +116,32 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 		observeFailure(p.name, model, err)
 		return nil, err
 	}
-	// Wrap respBody so ctx cancellation closes the socket, unblocking bufio.Scanner.
-	cb := NewCtxBody(ctx, respBody)
+	// Stream watchdog: idle timeout between events (reset per event) and an
+	// optional first-byte timeout. Fires -> watchCtx cancelled -> the body
+	// wrapper below closes the socket -> the scanner unwinds with a stall
+	// error. No-op when both timeouts are 0.
+	cfg := streamTimeoutConfigFor(ctx, p.name, model, p.registry)
+	watchCtx, watchReset, watchCancel := streamWatchdogContext(ctx, cfg.idle, cfg.firstByte)
+	stalledReported := false
+	reportStall := func(kind streamWatchdogKind) error {
+		if kind == streamWatchdogNone {
+			return nil
+		}
+		if !stalledReported {
+			stalledReported = true
+			observeStreamStall(p.name, model)
+		}
+		return streamWatchdogError(p.name, model, kind)
+	}
+	defer func() {
+		if watchCancel != nil {
+			watchCancel()
+		}
+	}()
+
+	// Wrap respBody so watchCtx cancellation closes the socket, unblocking
+	// bufio.Scanner. When the watchdog is disabled watchCtx == ctx.
+	cb := NewCtxBody(watchCtx, respBody)
 	defer cb.Close()
 	// Stream-established means the provider accepted the request; the streamed
 	// content is the response. Record success once the connection phase won.
@@ -131,6 +155,14 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 	sse := NewSSEScanner(cb)
 	for sse.Next() {
 		data := sse.Data()
+		// The watchdog shares the read deadline: every parsed event re-arms the
+		// idle timer, and when the watchdog fired we report the stall.
+		if watchReset != nil {
+			watchReset()
+		}
+		if kind, ok := streamWatchdogStalled(watchCtx); ok {
+			return nil, reportStall(kind)
+		}
 
 		var chunk openAIStreamChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
@@ -227,6 +259,11 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 
 	// Check for scanner errors (timeout, connection reset, etc.)
 	if err := sse.Err(); err != nil {
+		// A watchdog fire surfaces through the read path as a closed body; do
+		// not report the stall twice and do not misreport it as a read error.
+		if kind, ok := streamWatchdogStalled(watchCtx); ok {
+			return nil, reportStall(kind)
+		}
 		return result, fmt.Errorf("%s: stream read error: %w", p.name, err)
 	}
 

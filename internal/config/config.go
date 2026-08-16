@@ -72,6 +72,20 @@ type Config struct {
 type ReliabilityConfig struct {
 	Runs    RunsConfig    `json:"runs,omitempty"`
 	Circuit CircuitConfig `json:"circuit,omitempty"`
+	Stream  StreamConfig  `json:"stream,omitempty"`
+}
+
+// StreamConfig tunes the streaming watchdog timeouts applied by the provider
+// adapters (internal/providers). Both fields are disabled (0) by default;
+// operators opt into timeouts explicitly.
+type StreamConfig struct {
+	// IdleTimeoutMs is the max silence between two stream events before the
+	// watchdog cancels the stream (0 = disabled).
+	IdleTimeoutMs int `json:"idle_timeout_ms,omitempty"`
+	// FirstByteTimeoutMs is the max time from request start to the first
+	// stream event before the watchdog cancels (0 = disabled; the transport's
+	// ResponseHeaderTimeout remains the backstop).
+	FirstByteTimeoutMs int `json:"first_byte_timeout_ms,omitempty"`
 }
 
 // CircuitConfig tunes the shared reliability singleton constructed at gateway
@@ -116,6 +130,12 @@ const (
 	DefaultCircuitHalfOpenMax       = 1
 	DefaultCircuitProbeTimeoutMs    = 30000  // 30s
 	DefaultCircuitRateLimitMaxPending = 0    // 0 = unlimited pending waiters
+
+	// Default stream watchdog timeouts (ms). Idle default 60s — the interval
+	// of silence between two stream events; first-byte 0 = disabled (the
+	// transport's ResponseHeaderTimeout remains the backstop).
+	DefaultStreamIdleTimeoutMs       = 60000 // 60s
+	DefaultStreamFirstByteTimeoutMs  = 0     // 0 = disabled
 )
 
 // EffectiveHeartbeatInterval returns the run heartbeat cadence in duration
@@ -173,6 +193,26 @@ func (c CircuitConfig) EffectiveRateLimitMaxPending() int {
 		return DefaultCircuitRateLimitMaxPending
 	}
 	return c.RateLimitMaxPending
+}
+
+// EffectiveStreamIdleTimeout returns the stream idle watchdog timeout in
+// duration form. Values ≤ 0 disable the watchdog (0 = disabled); the
+// recommended idle default is DefaultStreamIdleTimeoutMs (60s).
+func (s StreamConfig) EffectiveStreamIdleTimeout() time.Duration {
+	if s.IdleTimeoutMs <= 0 {
+		return 0
+	}
+	return time.Duration(s.IdleTimeoutMs) * time.Millisecond
+}
+
+// EffectiveStreamFirstByteTimeout returns the first-byte watchdog timeout in
+// duration form. Values ≤ 0 disable the watchdog (0 = disabled); the
+// transport's ResponseHeaderTimeout remains the backstop.
+func (s StreamConfig) EffectiveStreamFirstByteTimeout() time.Duration {
+	if s.FirstByteTimeoutMs <= 0 {
+		return 0
+	}
+	return time.Duration(s.FirstByteTimeoutMs) * time.Millisecond
 }
 
 // BrandingConfig customizes public app metadata and media used by the web UI.

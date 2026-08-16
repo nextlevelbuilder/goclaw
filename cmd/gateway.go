@@ -257,6 +257,13 @@ func runGateway() {
 	relCfg := cfg.Reliability.Circuit
 	relOpts := relCfg.EffectiveCircuit()
 	reliability.Configure(relOpts, relCfg.EffectiveRateLimitMaxPending())
+
+	// Stream watchdog timeouts (0 = disabled) applied by provider adapters.
+	streamCfg := cfg.Reliability.Stream
+	reliability.Default().SetStream(reliability.StreamOptions{
+		IdleTimeout:      streamCfg.EffectiveStreamIdleTimeout(),
+		FirstByteTimeout: streamCfg.EffectiveStreamFirstByteTimeout(),
+	})
 	slog.Debug("reliability singleton configured",
 		"failure_threshold", relOpts.FailureThreshold,
 		"degraded_threshold", relOpts.DegradedThreshold,
@@ -264,6 +271,8 @@ func runGateway() {
 		"half_open_max", relOpts.HalfOpenMax,
 		"probe_timeout", relOpts.ProbeTimeout.String(),
 		"rate_limit_max_pending", relCfg.EffectiveRateLimitMaxPending(),
+		"stream_idle_timeout", streamCfg.EffectiveStreamIdleTimeout().String(),
+		"stream_first_byte_timeout", streamCfg.EffectiveStreamFirstByteTimeout().String(),
 	)
 
 	// Create core components

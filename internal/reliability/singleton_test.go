@@ -96,6 +96,42 @@ func TestConfigureAppliesOptions(t *testing.T) {
 	}
 }
 
+func TestSetStreamSwapsBundleSnapshot(t *testing.T) {
+	Configure(DefaultCircuitOptions(), 0)
+	old := Default()
+	if old.Stream != (StreamOptions{}) {
+		t.Fatalf("fresh bundle must have zero Stream options, got %+v", old.Stream)
+	}
+
+	opts := StreamOptions{IdleTimeout: 60 * time.Second, FirstByteTimeout: 10 * time.Second}
+	old.SetStream(opts)
+
+	cur := Default()
+	if cur.Stream != opts {
+		t.Fatalf("Default().Stream = %+v, want %+v", cur.Stream, opts)
+	}
+	if cur.Breaker != old.Breaker || cur.Health != old.Health ||
+		cur.RateLimit != old.RateLimit || cur.Metrics != old.Metrics {
+		t.Fatal("SetStream must preserve the existing bundle components")
+	}
+
+	// A second swap must install the new options without leaking the old ones.
+	second := StreamOptions{IdleTimeout: 5 * time.Second}
+	cur.SetStream(second)
+	if got := Default().Stream; got != second {
+		t.Fatalf("second SetStream: Default().Stream = %+v, want %+v", got, second)
+	}
+}
+
+func TestDefaultStreamZeroValueIsDisabled(t *testing.T) {
+	// Zero-valued Stream on the default bundle means both watchdogs disabled —
+	// the nil-safe contract consumers rely on (no pointer fields to guard).
+	r := defaultRuntime()
+	if r.Stream != (StreamOptions{}) {
+		t.Fatalf("default runtime Stream = %+v, want zero value", r.Stream)
+	}
+}
+
 func TestDefaultRuntimeBuildsDefaultBundle(t *testing.T) {
 	// defaultRuntime is the bundle Default() lazily constructs when nothing
 	// has been Configure()'d. Testing it directly avoids depending on

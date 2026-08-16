@@ -170,6 +170,13 @@ type Loop struct {
 	// Event callback for broadcasting agent events (run.started, chunk, tool.call, etc.)
 	onEvent func(event AgentEvent)
 
+	// runSeqByRunID tracks the per-run WS event sequence counter for events
+	// emitted through l.emit. Keyed by RunID, incremented atomically so emits
+	// from concurrent goroutines (stream chunks, slow-tool timers) never race.
+	// Entries are cleared when the run's terminal event (completed/failed/
+	// cancelled) is emitted — same cleanup pattern as RunTimelineRecorder.
+	runSeqByRunID sync.Map // RunID → *atomic.Int64
+
 	// Tracing collector (nil if not configured)
 	traceCollector *tracing.Collector
 
@@ -294,6 +301,13 @@ type AgentEvent struct {
 	RunID   string `json:"runId"`
 	RunKind string `json:"runKind,omitempty"` // "delegation", "announce" — omitted for user-initiated runs
 	Payload any    `json:"payload,omitempty"`
+
+	// Seq is the per-run WS event sequence, stamped by the loop emit path for
+	// every event belonging to a run (RunID != ""). Monotonic per run, starting
+	// at 1, and independent of the persisted timeline seq (runs.events) — it
+	// only orders WS frames so clients can dedup on (runId, seq). Zero (absent)
+	// for events that don't belong to a run.
+	Seq int64 `json:"seq,omitempty"`
 
 	// Delegation context (omitempty — only present when agent runs inside a delegation)
 	DelegationID  string `json:"delegationId,omitempty"`

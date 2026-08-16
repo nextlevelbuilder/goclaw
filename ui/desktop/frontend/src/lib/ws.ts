@@ -107,7 +107,7 @@ export class WsClient {
     if (!handlers) return
     for (const h of handlers) {
       try {
-        h(frame.payload)
+        h(frame.payload, frame.seq)
       } catch (err) {
         console.error('[ws] event handler error', frame.event, err)
       }

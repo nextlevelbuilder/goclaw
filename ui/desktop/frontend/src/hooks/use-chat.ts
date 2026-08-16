@@ -7,6 +7,7 @@ import { useSessionStore } from '../stores/session-store'
 import { toFileUrl } from './chat-file-helpers'
 import { useStreamBatcher } from './use-stream-batcher'
 import { mapHistoryMessages } from './chat-history-mapper'
+import { shouldProcessRunEvent, type RunSeqMap } from '../lib/event-seq-dedup'
 import type { AttachedFile } from '../components/chat/InputBar'
 
 export function useChat() {
@@ -26,6 +27,9 @@ export function useChat() {
   const sessionKeyRef = useRef(activeSessionKey)
   sessionKeyRef.current = activeSessionKey
   const currentRunIdRef = useRef<string | null>(null)
+  // Highest seq seen per run key (sessionKey:runId). Duplicate frames are
+  // dropped; frames without seq pass through untouched (old-server compat).
+  const seenSeqRef = useRef<RunSeqMap>(new Map())
 
   const chunkBatcher = useStreamBatcher(
     useCallback((text: string) => appendChunk(text), [appendChunk]),
@@ -38,10 +42,15 @@ export function useChat() {
   useEffect(() => {
     if (!ws) return
 
-    const unsub = ws.on('agent', (raw: unknown) => {
+    const unsub = ws.on('agent', (raw: unknown, seq?: number) => {
       const event = raw as { type: string; runId: string; sessionKey: string; payload: Record<string, unknown> }
       if (sessionKeyRef.current && event.sessionKey !== sessionKeyRef.current) return
       const p = event.payload ?? {}
+
+      // Dedup single gate for all run-scoped frames (chunk/thinking/tool/status).
+      if (!shouldProcessRunEvent(
+        seenSeqRef.current, event.runId, event.sessionKey, event.type, seq, !!currentRunIdRef.current,
+      )) return
 
       switch (event.type) {
         case 'run.started':
@@ -168,6 +177,7 @@ export function useChat() {
     chunkBatcher.flush()
     thinkingBatcher.flush()
     currentRunIdRef.current = null
+    seenSeqRef.current.clear()
 
     if (!activeSessionKey) {
       useChatMessageStore.getState().clear()

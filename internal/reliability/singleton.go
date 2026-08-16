@@ -2,6 +2,7 @@ package reliability
 
 import (
 	"sync"
+	"time"
 )
 
 // Runtime bundles the process-wide reliability components so consumers (agent
@@ -14,6 +15,20 @@ type Runtime struct {
 	Health    *HealthRegistry
 	RateLimit *RateLimitCoordinator
 	Metrics   *Metrics
+
+	// Stream carries the stream watchdog timeouts consumed by the provider
+	// adapters. Zero durations disable the corresponding watchdog. Set via
+	// SetStream at gateway startup after Configure(); Default() returns it as
+	// part of the current bundle snapshot.
+	Stream StreamOptions
+}
+
+// StreamOptions are the streaming watchdog timeouts enforced by provider
+// adapters via reliability.Default().Stream. A zero duration disables that
+// watchdog (0 = disabled); per-model overrides use ModelSpec.StreamTimeoutMs.
+type StreamOptions struct {
+	IdleTimeout      time.Duration // silence between two stream events (0 = disabled)
+	FirstByteTimeout time.Duration // time to first stream event (0 = disabled)
 }
 
 var (
@@ -77,4 +92,24 @@ func Configure(opts CircuitOptions, maxPending int) *Runtime {
 	curRuntime = r
 	mu.Unlock()
 	return r
+}
+
+// SetStream atomically swaps the stream watchdog timeouts on the current
+// bundle (the one Default() returns). Callers that already hold a reference
+// to an older bundle keep their previous snapshot — the swap only affects
+// Default() consumers. 0 durations disable the corresponding watchdog.
+func (r *Runtime) SetStream(opts StreamOptions) {
+	// Rebuild the bundle so Default() readers get one consistent snapshot
+	// rather than observing a half-updated runtime.
+	next := &Runtime{
+		Breaker:   r.Breaker,
+		Health:    r.Health,
+		RateLimit: r.RateLimit,
+		Metrics:   r.Metrics,
+		Stream:    opts,
+	}
+
+	mu.Lock()
+	curRuntime = next
+	mu.Unlock()
 }

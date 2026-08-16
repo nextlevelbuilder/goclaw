@@ -12,6 +12,11 @@ type ModelSpec struct {
 	Vision        bool
 	TokenizerID   string
 	Cost          ModelCost
+
+	// StreamTimeoutMs is the per-model stream idle watchdog override in
+	// milliseconds; 0 inherits the process-wide reliability.Default().Stream
+	// idle timeout (seed default = 0).
+	StreamTimeoutMs int
 }
 
 // ModelCost tracks per-1M-token pricing.
