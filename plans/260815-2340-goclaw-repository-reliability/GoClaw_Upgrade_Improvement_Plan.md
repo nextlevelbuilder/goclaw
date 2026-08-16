@@ -1482,11 +1482,11 @@ Không nên để provider-specific retry logic rải khắp từng provider.
 
 ## Phase 6 — Intelligent fallback
 
-- [ ] Model capability profile.
-- [ ] Fallback chain.
-- [ ] Health-based routing.
-- [ ] Cooldown-aware routing.
-- [ ] Cost/latency/reliability policy.
+- [ ] Model capability profile. (phase-06, 2026-08-17)
+- [ ] Fallback chain. (upstream orderByHealth + phase-06 policy, 2026-08-17)
+- [ ] Health-based routing. (strategy `health_order` + min_attempts_for_health, 2026-08-17)
+- [ ] Cooldown-aware routing. (skip diagnostics + CooldownTracker existing, 2026-08-17)
+- [ ] Cost/latency/reliability policy. (deferred — cần production telemetry, 2026-08-17)
 
 ## Phase 7 — Tool reliability
 
