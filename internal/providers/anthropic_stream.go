@@ -26,8 +26,32 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 	if err != nil {
 		return nil, err
 	}
-	// Wrap respBody so ctx cancellation closes the socket, unblocking bufio.Scanner.
-	cb := NewCtxBody(ctx, respBody)
+	// Stream watchdog: idle timeout between events (reset per event) and an
+	// optional first-byte timeout. Fires -> watchCtx cancelled -> the body
+	// wrapper below closes the socket -> the loop unwinds with a stall error.
+	// No-op when both timeouts are 0.
+	cfg := streamTimeoutConfigFor(ctx, p.name, model, p.registry)
+	watchCtx, watchReset, watchCancel := streamWatchdogContext(ctx, cfg.idle, cfg.firstByte)
+	stalledReported := false
+	reportStall := func(kind streamWatchdogKind) error {
+		if kind == streamWatchdogNone {
+			return nil
+		}
+		if !stalledReported {
+			stalledReported = true
+			observeStreamStall(p.name, model)
+		}
+		return streamWatchdogError(p.name, model, kind)
+	}
+	defer func() {
+		if watchCancel != nil {
+			watchCancel()
+		}
+	}()
+
+	// Wrap respBody so watchCtx cancellation closes the socket, unblocking
+	// bufio.Scanner. When the watchdog is disabled watchCtx == ctx.
+	cb := NewCtxBody(watchCtx, respBody)
 	defer cb.Close()
 
 	result := &ChatResponse{FinishReason: "stop"}
@@ -43,8 +67,18 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 
 	sse := NewSSEScanner(cb)
 	for sse.Next() {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
+		// The watchdog shares the read deadline: every parsed event re-arms the
+		// idle timer, and when the watchdog fired we report the stall.
+		if watchReset != nil {
+			watchReset()
+		}
+		if kind, ok := streamWatchdogStalled(watchCtx); ok {
+			return nil, reportStall(kind)
+		}
+		if watchCtx.Err() != nil {
+			// Parent cancellation (not the watchdog — that fired above) — the
+			// existing early-exit behavior.
+			return nil, watchCtx.Err()
 		}
 		data := sse.Data()
 
@@ -150,6 +184,11 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 	}
 
 	if err := sse.Err(); err != nil {
+		// A watchdog fire surfaces through the read path as a closed body; do
+		// not report the stall twice and do not misreport it as a read error.
+		if kind, ok := streamWatchdogStalled(watchCtx); ok {
+			return nil, reportStall(kind)
+		}
 		return result, fmt.Errorf("anthropic stream read error: %w", err)
 	}
 

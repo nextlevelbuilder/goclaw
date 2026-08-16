@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	ollamaapi "github.com/ollama/ollama/api"
 
@@ -208,62 +209,137 @@ func (p *OllamaProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 		}
 	})
 
-	result := &ChatResponse{FinishReason: "stop"}
+	var lastErr error
+	var lastResult *ChatResponse
+	cfg := p.retryConfig
+	if cfg.Attempts <= 0 {
+		cfg.Attempts = 1
+	}
+	for attempt := 1; attempt <= cfg.Attempts; attempt++ {
+		result, emitted, err := p.chatStreamOnce(ctx, req, model, onChunk)
+		if err == nil {
+			observeSuccess(p.name, model)
+			return result, nil
+		}
+		lastErr = err
+		lastResult = result
 
-	fn := func() (*ChatResponse, error) {
-		acc := &ChatResponse{FinishReason: "stop"}
+		// If any user-visible chunk already escaped, do not replay the run:
+		// retrying could duplicate streamed text/thinking. Only connection-phase
+		// failures (before the first chunk) are safe to retry, matching the
+		// stream semantics of the other providers.
+		if emitted || !IsRetryableError(err) || attempt == cfg.Attempts {
+			observeFailure(p.name, model, err)
+			return result, err
+		}
 
-		streamFn := func(resp ollamaapi.ChatResponse) error {
-			delta := resp.Message.Content
-			if delta != "" {
-				acc.Content += delta
-				onChunk(StreamChunk{Content: delta})
-			}
+		delay := computeDelay(cfg, attempt, err)
+		if hook := retryHookFromContext(ctx); hook != nil {
+			hook(attempt, cfg.Attempts, err)
+		}
+		select {
+		case <-ctx.Done():
+			observeFailure(p.name, model, err)
+			return result, ctx.Err()
+		case <-time.After(delay):
+		}
+	}
 
-			thinking := resp.Message.Thinking
-			if thinking != "" {
-				acc.Thinking += thinking
-				onChunk(StreamChunk{Thinking: thinking})
-			}
+	observeFailure(p.name, model, lastErr)
+	return lastResult, lastErr
+}
 
-			if resp.Done {
-				// Tool calls come in the final response message.
-				for _, tc := range resp.Message.ToolCalls {
-					call := ToolCall{
-						ID:        tc.ID,
-						Name:      tc.Function.Name,
-						Arguments: tc.Function.Arguments.ToMap(),
-					}
-					acc.ToolCalls = append(acc.ToolCalls, call)
-				}
-				acc.FinishReason = mapDoneReason(resp.DoneReason)
-				if len(acc.ToolCalls) > 0 && acc.FinishReason != "length" {
-					acc.FinishReason = "tool_calls"
-				}
-				acc.Usage = &Usage{
-					PromptTokens:     resp.PromptEvalCount,
-					CompletionTokens: resp.EvalCount,
-					TotalTokens:      resp.PromptEvalCount + resp.EvalCount,
-					RequestCount:     1,
-				}
-			}
+// chatStreamOnce performs a single streaming chat attempt against Ollama. It
+// returns the accumulated response, whether any user-visible chunk was
+// emitted, and the attempt error (nil on clean completion).
+func (p *OllamaProvider) chatStreamOnce(ctx context.Context, req ChatRequest, model string, onChunk func(StreamChunk)) (*ChatResponse, bool, error) {
+	acc := &ChatResponse{FinishReason: "stop"}
+	emitted := false
+	wrappedOnChunk := func(chunk StreamChunk) {
+		if chunk.Content != "" || chunk.Thinking != "" {
+			emitted = true
+		}
+		if onChunk != nil {
+			onChunk(chunk)
+		}
+	}
+
+	// Stream watchdog: idle timeout counted from the last received chunk (the
+	// callback granularity Ollama offers). No-op when both timeouts are 0.
+	cfg := streamTimeoutConfigFor(ctx, p.name, model, nil)
+	watchCtx, watchReset, watchCancel := streamWatchdogContext(ctx, cfg.idle, cfg.firstByte)
+	stalledReported := false
+	reportStall := func(kind streamWatchdogKind) error {
+		if kind == streamWatchdogNone {
 			return nil
 		}
-
-		if err := p.client.Chat(ctx, p.buildRequest(ctx, req, true), streamFn); err != nil {
-			return nil, fmt.Errorf("%s: chat stream: %w", p.name, err)
+		if !stalledReported {
+			stalledReported = true
+			observeStreamStall(p.name, model)
 		}
-		return acc, nil
+		return streamWatchdogError(p.name, model, kind)
+	}
+	defer func() {
+		if watchCancel != nil {
+			watchCancel()
+		}
+	}()
+
+	streamFn := func(resp ollamaapi.ChatResponse) error {
+		// Every received chunk re-arms the idle timer; a fire means the stream
+		// went silent and is reported as a stall.
+		if watchReset != nil {
+			watchReset()
+		}
+		if kind, ok := streamWatchdogStalled(watchCtx); ok {
+			return reportStall(kind)
+		}
+
+		delta := resp.Message.Content
+		if delta != "" {
+			acc.Content += delta
+			wrappedOnChunk(StreamChunk{Content: delta})
+		}
+
+		thinking := resp.Message.Thinking
+		if thinking != "" {
+			acc.Thinking += thinking
+			wrappedOnChunk(StreamChunk{Thinking: thinking})
+		}
+
+		if resp.Done {
+			// Tool calls come in the final response message.
+			for _, tc := range resp.Message.ToolCalls {
+				call := ToolCall{
+					ID:        tc.ID,
+					Name:      tc.Function.Name,
+					Arguments: tc.Function.Arguments.ToMap(),
+				}
+				acc.ToolCalls = append(acc.ToolCalls, call)
+			}
+			acc.FinishReason = mapDoneReason(resp.DoneReason)
+			if len(acc.ToolCalls) > 0 && acc.FinishReason != "length" {
+				acc.FinishReason = "tool_calls"
+			}
+			acc.Usage = &Usage{
+				PromptTokens:     resp.PromptEvalCount,
+				CompletionTokens: resp.EvalCount,
+				TotalTokens:      resp.PromptEvalCount + resp.EvalCount,
+				RequestCount:     1,
+			}
+		}
+		return nil
 	}
 
-	var chatErr error
-	result, chatErr = RetryDo(ctx, p.retryConfig, fn)
-	if chatErr != nil {
-		observeFailure(p.name, model, chatErr)
-	} else {
-		observeSuccess(p.name, model)
+	if err := p.client.Chat(watchCtx, p.buildRequest(watchCtx, req, true), streamFn); err != nil {
+		// The watchdog fire reaches us as an error from the client call; report
+		// it as the stall it is, exactly once.
+		if kind, ok := streamWatchdogStalled(watchCtx); ok {
+			return acc, emitted, reportStall(kind)
+		}
+		return acc, emitted, fmt.Errorf("%s: chat stream: %w", p.name, err)
 	}
-	return result, chatErr
+	return acc, emitted, nil
 }
 
 // buildRequest converts a generic ChatRequest into an Ollama-native api.ChatRequest.

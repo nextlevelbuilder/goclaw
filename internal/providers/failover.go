@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -33,6 +34,15 @@ type FailoverAttempt struct {
 type FailoverSummaryError struct {
 	Attempts []FailoverAttempt
 }
+
+// FailoverStreamed is a sentinel the runFn closure may return (wrapped) when
+// the candidate call already delivered user-visible stream chunks before
+// failing. RunWithFailover treats it as terminal: no profile rotation, no
+// model fallback, no summary — the partial output has escaped and replaying
+// it through another candidate would duplicate it.
+type FailoverStreamed struct{}
+
+func (e *FailoverStreamed) Error() string { return "failover: stream already emitted chunks" }
 
 func (e *FailoverSummaryError) Error() string {
 	var b strings.Builder
@@ -118,6 +128,15 @@ func RunWithFailover[T any](
 			// Reliability layer: healthy completion feeds the success path.
 			observeSuccess(candidate.Provider, candidate.Model)
 			return result, attempts, nil
+		}
+
+		// Duplicate-suppression gate: once any chunk of a candidate's stream has
+		// been delivered to the caller, a later error must not trigger fallback —
+		// the next candidate would replay partially delivered output. The runFn
+		// closure reports this by wrapping the error in FailoverStreamed.
+		var streamedErr *FailoverStreamed
+		if errors.As(err, &streamedErr) {
+			return result, attempts, streamedErr
 		}
 
 		// Reliability layer: failed attempt feeds breaker + health + metrics.

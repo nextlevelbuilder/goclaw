@@ -156,7 +156,7 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 
 	var lastErr error
 	for attempt := 1; attempt <= cfg.Attempts; attempt++ {
-		result, emitted, err := p.chatStreamOnce(ctx, req, onChunk)
+		result, emitted, err := p.chatStreamOnce(ctx, req, model, onChunk)
 		if err == nil {
 			observeSuccess(p.name, model)
 			return result, nil
@@ -188,7 +188,7 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 	return nil, lastErr
 }
 
-func (p *CodexProvider) chatStreamOnce(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, bool, error) {
+func (p *CodexProvider) chatStreamOnce(ctx context.Context, req ChatRequest, model string, onChunk func(StreamChunk)) (*ChatResponse, bool, error) {
 	// stripThinking: drop reasoning summaries from ChatResponse.Thinking and
 	// onChunk callbacks. Usage.ThinkingTokens is still populated from the
 	// final response.usage payload (Phase 1 billing accuracy).
@@ -200,8 +200,32 @@ func (p *CodexProvider) chatStreamOnce(ctx context.Context, req ChatRequest, onC
 	if err != nil {
 		return nil, false, err
 	}
-	// Wrap respBody so ctx cancellation closes the socket, unblocking bufio.Scanner.
-	cb := NewCtxBody(ctx, respBody)
+	// Stream watchdog: idle timeout between events (reset per event) and an
+	// optional first-byte timeout. Fires -> watchCtx cancelled -> the body
+	// wrapper below closes the socket -> the read path unwinds with a stall
+	// error. No-op when both timeouts are 0.
+	cfg := streamTimeoutConfigFor(ctx, p.name, model, nil)
+	watchCtx, watchReset, watchCancel := streamWatchdogContext(ctx, cfg.idle, cfg.firstByte)
+	stalledReported := false
+	reportStall := func(kind streamWatchdogKind) error {
+		if kind == streamWatchdogNone {
+			return nil
+		}
+		if !stalledReported {
+			stalledReported = true
+			observeStreamStall(p.name, model)
+		}
+		return streamWatchdogError(p.name, model, kind)
+	}
+	defer func() {
+		if watchCancel != nil {
+			watchCancel()
+		}
+	}()
+
+	// Wrap respBody so watchCtx cancellation closes the socket, unblocking
+	// bufio.Scanner. When the watchdog is disabled watchCtx == ctx.
+	cb := NewCtxBody(watchCtx, respBody)
 	defer cb.Close()
 
 	result := &ChatResponse{FinishReason: "stop"}
@@ -222,6 +246,14 @@ func (p *CodexProvider) chatStreamOnce(ctx context.Context, req ChatRequest, onC
 	sse := NewSSEScanner(cb)
 	for sse.Next() {
 		data := sse.Data()
+		// The watchdog shares the read deadline: every parsed event re-arms the
+		// idle timer, and when the watchdog fired we report the stall.
+		if watchReset != nil {
+			watchReset()
+		}
+		if kind, ok := streamWatchdogStalled(watchCtx); ok {
+			return result, emitted || codexResultHasVisibleOutput(result), reportStall(kind)
+		}
 
 		var event codexSSEEvent
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
@@ -234,6 +266,11 @@ func (p *CodexProvider) chatStreamOnce(ctx context.Context, req ChatRequest, onC
 	}
 
 	if err := sse.Err(); err != nil {
+		// A watchdog fire surfaces through the read path as a closed body; do
+		// not report the stall twice and do not misreport it as a read error.
+		if kind, ok := streamWatchdogStalled(watchCtx); ok {
+			return result, emitted || codexResultHasVisibleOutput(result), reportStall(kind)
+		}
 		return result, emitted || codexResultHasVisibleOutput(result), fmt.Errorf("%s: stream read error: %w", p.name, err)
 	}
 
