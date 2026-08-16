@@ -25,6 +25,10 @@ type Metrics struct {
 	llmServerErrors    atomic.Uint64
 	llmTimeouts        atomic.Uint64
 	llmStreamStalls    atomic.Uint64
+	llmLoop            atomic.Uint64
+	llmRepeatedTool    atomic.Uint64
+	llmEmptyOutput     atomic.Uint64
+	llmPremature       atomic.Uint64
 	agentRecovered     atomic.Uint64
 	agentContinued     atomic.Uint64
 	prematureCompleted atomic.Uint64
@@ -63,6 +67,23 @@ func (m *Metrics) RecordLLMTimeout() { m.llmTimeouts.Add(1) }
 // RecordLLMStreamStall increments the stream-stall counter.
 func (m *Metrics) RecordLLMStreamStall() { m.llmStreamStalls.Add(1) }
 
+// RecordLLMLoop increments the model-looping counter. Called when the tool-loop
+// detector hits the critical level and the run is force-stopped.
+func (m *Metrics) RecordLLMLoop() { m.llmLoop.Add(1) }
+
+// RecordLLMRepeatedToolCall increments the repeated-tool-call counter. Called
+// when the tool-loop detector hits the warning level (repeated same args +
+// same result, or same result with different args).
+func (m *Metrics) RecordLLMRepeatedToolCall() { m.llmRepeatedTool.Add(1) }
+
+// RecordLLMEmptyOutput increments the empty-output counter. Called when the
+// model returns an empty or fallback-only reply after nudges are exhausted.
+func (m *Metrics) RecordLLMEmptyOutput() { m.llmEmptyOutput.Add(1) }
+
+// RecordLLMPrematureCompletion increments the premature-completion counter.
+// Called when the run finishes without a deliverable despite tool usage.
+func (m *Metrics) RecordLLMPrematureCompletion() { m.llmPremature.Add(1) }
+
 // RecordLLMLatency records a request latency. It maintains a running total so
 // a sink can compute averages; callers wanting a real histogram should plug a
 // proper meter into the sink.
@@ -85,37 +106,45 @@ func (m *Metrics) RecordLoopDetected() { m.loopDetected.Add(1) }
 
 // Snapshot is an immutable point-in-time view of the counters.
 type Snapshot struct {
-	LLMRequests        uint64
-	LLMSuccesses       uint64
-	LLMRetries         uint64
-	LLMRateLimited     uint64
-	LLMServerErrors    uint64
-	LLMTimeouts        uint64
-	LLMStreamStalls    uint64
-	LLMLatencyNanos    uint64
-	LLMLatencyCount    uint64
-	AgentRecovered     uint64
-	AgentContinued     uint64
-	PrematureCompleted uint64
-	LoopDetected       uint64
+	LLMRequests             uint64
+	LLMSuccesses            uint64
+	LLMRetries              uint64
+	LLMRateLimited          uint64
+	LLMServerErrors         uint64
+	LLMTimeouts             uint64
+	LLMStreamStalls         uint64
+	LLMLoop                 uint64
+	LLMRepeatedToolCalls    uint64
+	LLMEmptyOutputs         uint64
+	LLMPrematureCompletions uint64
+	LLMLatencyNanos         uint64
+	LLMLatencyCount         uint64
+	AgentRecovered          uint64
+	AgentContinued          uint64
+	PrematureCompleted      uint64
+	LoopDetected            uint64
 }
 
 // Take returns a consistent snapshot of all counters.
 func (m *Metrics) Take() Snapshot {
 	return Snapshot{
-		LLMRequests:        m.llmRequests.Load(),
-		LLMSuccesses:       m.llmSuccesses.Load(),
-		LLMRetries:         m.llmRetries.Load(),
-		LLMRateLimited:     m.llmRateLimited.Load(),
-		LLMServerErrors:    m.llmServerErrors.Load(),
-		LLMTimeouts:        m.llmTimeouts.Load(),
-		LLMStreamStalls:    m.llmStreamStalls.Load(),
-		LLMLatencyNanos:    m.llmLatencyNanos.Load(),
-		LLMLatencyCount:    m.llmLatencyCount.Load(),
-		AgentRecovered:     m.agentRecovered.Load(),
-		AgentContinued:     m.agentContinued.Load(),
-		PrematureCompleted: m.prematureCompleted.Load(),
-		LoopDetected:       m.loopDetected.Load(),
+		LLMRequests:             m.llmRequests.Load(),
+		LLMSuccesses:            m.llmSuccesses.Load(),
+		LLMRetries:              m.llmRetries.Load(),
+		LLMRateLimited:          m.llmRateLimited.Load(),
+		LLMServerErrors:         m.llmServerErrors.Load(),
+		LLMTimeouts:             m.llmTimeouts.Load(),
+		LLMStreamStalls:         m.llmStreamStalls.Load(),
+		LLMLoop:                 m.llmLoop.Load(),
+		LLMRepeatedToolCalls:    m.llmRepeatedTool.Load(),
+		LLMEmptyOutputs:         m.llmEmptyOutput.Load(),
+		LLMPrematureCompletions: m.llmPremature.Load(),
+		LLMLatencyNanos:         m.llmLatencyNanos.Load(),
+		LLMLatencyCount:         m.llmLatencyCount.Load(),
+		AgentRecovered:          m.agentRecovered.Load(),
+		AgentContinued:          m.agentContinued.Load(),
+		PrematureCompleted:      m.prematureCompleted.Load(),
+		LoopDetected:            m.loopDetected.Load(),
 	}
 }
 
@@ -178,6 +207,10 @@ func (m *Metrics) resetInto(s *Snapshot) {
 	s.LLMServerErrors = m.llmServerErrors.Swap(0)
 	s.LLMTimeouts = m.llmTimeouts.Swap(0)
 	s.LLMStreamStalls = m.llmStreamStalls.Swap(0)
+	s.LLMLoop = m.llmLoop.Swap(0)
+	s.LLMRepeatedToolCalls = m.llmRepeatedTool.Swap(0)
+	s.LLMEmptyOutputs = m.llmEmptyOutput.Swap(0)
+	s.LLMPrematureCompletions = m.llmPremature.Swap(0)
 	s.LLMLatencyNanos = m.llmLatencyNanos.Swap(0)
 	s.LLMLatencyCount = m.llmLatencyCount.Swap(0)
 	s.AgentRecovered = m.agentRecovered.Swap(0)

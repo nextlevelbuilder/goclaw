@@ -2,10 +2,12 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"path/filepath"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/reliability"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -168,11 +170,13 @@ func (l *Loop) processToolResult(
 	if level, msg := rs.loopDetector.detect(registryName, argsHash); level != "" {
 		if level == "critical" {
 			slog.Warn("tool loop critical", "agent", l.id, "tool", registryName, "message", msg)
+			l.observeToolLoop(level, registryName, req.RunID)
 			rs.finalContent = "I was unable to complete this task — I got stuck repeatedly calling " + registryName + " without making progress. Please try rephrasing your request."
 			rs.loopKilled = true
 			return toolMsg, nil, toolResultBreak
 		}
 		slog.Warn("tool loop warning", "agent", l.id, "tool", registryName, "message", msg)
+		l.observeToolLoop(level, registryName, req.RunID)
 		warningMsgs = append(warningMsgs, providers.Message{Role: "user", Content: msg})
 		action = toolResultWarning
 	}
@@ -183,10 +187,12 @@ func (l *Loop) processToolResult(
 			if level == "critical" {
 				slog.Warn("tool loop critical: same result",
 					"tool", registryName, "agent", l.id, "run", req.RunID)
+				l.observeToolLoop(level, registryName, req.RunID)
 				rs.finalContent = msg
 				rs.loopKilled = true
 				return toolMsg, nil, toolResultBreak
 			}
+			l.observeToolLoop(level, registryName, req.RunID)
 			warningMsgs = append(warningMsgs, providers.Message{Role: "user", Content: msg})
 			action = toolResultWarning
 		}
@@ -207,12 +213,52 @@ func (l *Loop) checkReadOnlyStreak(rs *runState, req *RunRequest) (warningMsg *p
 			"streak", rs.loopDetector.readOnlyStreak,
 			"unique", rs.loopDetector.readOnlyUnique,
 			"agent", l.id, "run", req.RunID)
+		l.observeToolLoop(level, "read-only", req.RunID)
 		rs.finalContent = msg
 		rs.loopKilled = true
 		return nil, true
 	}
 	slog.Warn("tool loop warning: read-only streak",
 		"streak", rs.loopDetector.readOnlyStreak, "agent", l.id, "run", req.RunID)
+	l.observeToolLoop(level, "read-only", req.RunID)
 	warnMsg := providers.Message{Role: "user", Content: msg}
 	return &warnMsg, false
+}
+
+// observeToolLoop classifies a loop-detector violation into the reliability
+// taxonomy and records it in the process-wide metrics. Critical violations map
+// to ErrModelLooping (non-retryable — the run is force-stopped); warnings map
+// to ErrModelRepeatedToolCall (retryable — a corrective warning is injected).
+//
+// The wiring is observability-only: it never changes the loop detector's
+// thresholds or the run's terminal decision. Nil-safe per the provider-layer
+// pattern so an uninitialized reliability bundle is a no-op, never a panic.
+// Returns the classified reliability error (nil when the level is unknown or
+// the reliability bundle is uninitialized) so callers can surface the canon code.
+func (l *Loop) observeToolLoop(level, tool, runID string) *reliability.ReliabilityError {
+	reg := reliability.Default()
+	if reg == nil {
+		return nil
+	}
+	var code reliability.ErrorCode
+	var record func()
+	switch level {
+	case "critical":
+		code = reliability.ErrModelLooping
+		if reg.Metrics != nil {
+			record = reg.Metrics.RecordLLMLoop
+		}
+	case "warning":
+		code = reliability.ErrModelRepeatedToolCall
+		if reg.Metrics != nil {
+			record = reg.Metrics.RecordLLMRepeatedToolCall
+		}
+	default:
+		return nil
+	}
+	relErr := reliability.Wrap(code, errors.New("tool loop: "+tool)).WithRunContext(runID, "tool_loop", 0)
+	if record != nil {
+		record()
+	}
+	return relErr
 }

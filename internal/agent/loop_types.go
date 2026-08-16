@@ -292,6 +292,13 @@ type Loop struct {
 	// nil the pipeline fast-path skips all hook overhead. Populated from
 	// LoopConfig.HookDispatcher during startup wiring.
 	hookDispatcher hooks.Dispatcher
+
+	// Tool-call repair state (see toolcall_repair.go). repairCacheSet is the
+	// LRU of per (toolName, schemaHash) repair decisions; repairMu guards it.
+	// Lazily initialized on first repair; zero value is safe (repair simply
+	// falls back to the think-stage retry bound when the schema is unknown).
+	repairCacheSet *repairLRUCache
+	repairMu       sync.Mutex
 }
 
 // AgentEvent is emitted during agent execution for WS broadcasting.
@@ -643,7 +650,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		skillStore:             cfg.SkillStore,
 		userResolver:           cfg.UserResolver,
 		runsStore:              cfg.RunsStore,
-		runHeartbeatInterval:    cfg.RunHeartbeatInterval,
+		runHeartbeatInterval:   cfg.RunHeartbeatInterval,
 	}
 }
 
@@ -734,6 +741,21 @@ type RunResult struct {
 	LastBlockReply string                `json:"lastBlockReply,omitempty"` // last block reply content (for dedup)
 	LoopKilled     bool                  `json:"loopKilled,omitempty"`     // true when run was terminated by loop detector
 	Calls          []providers.CallUsage `json:"calls,omitempty"`          // per-call usage breakdown
+
+	// completion is the record-only completion-verification outcome attached
+	// by runViaPipeline before the completed event is emitted. Unexported so
+	// it stays out of the public JSON contract; surfaced via the completed
+	// event payload and trace output only.
+	completion *CompletionResult
+}
+
+// Completion returns the record-only completion-verification outcome of the
+// run, or nil when verification did not run (e.g. legacy run paths).
+func (r *RunResult) Completion() *CompletionResult {
+	if r == nil {
+		return nil
+	}
+	return r.completion
 }
 
 // MediaResult represents a media file produced by a tool during the agent run.

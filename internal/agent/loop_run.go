@@ -250,13 +250,31 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		if result != nil && len(result.Media) > 0 {
 			completedPayload["media"] = result.Media
 		}
+		// Record-only completion verification: attach the verifier outcome to
+		// the completed event so operators can observe weak-model signals
+		// (empty output, missing deliverable). It never changes the terminal
+		// decision below.
+		if result != nil && result.Completion() != nil {
+			completedPayload["completion"] = map[string]any{
+				"complete":   result.Completion().Complete,
+				"confidence": result.Completion().Confidence,
+				"missing":    result.Completion().Missing,
+				"reason":     result.Completion().Reason,
+			}
+		}
 		emitRun(AgentEvent{Type: protocol.AgentEventRunCompleted, AgentID: l.id, RunID: req.RunID, Payload: completedPayload})
 		runRecord.terminal(ctx, store.AgentRunStatusCompleted, "")
 		if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
 			traceFinalized = true
 			if result != nil {
+				// Append the record-only completion verdict to the trace preview so
+				// weak-model signals surface in the trace UI without a schema change.
+				preview := truncateStr(result.Content, l.traceCollector.PreviewMaxLen())
+				if c := result.Completion(); c != nil && !c.Complete {
+					preview += "\n[completion: " + c.Reason + "]"
+				}
 				l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "",
-					tracing.RedactText(ctx, truncateStr(result.Content, l.traceCollector.PreviewMaxLen())))
+					tracing.RedactText(ctx, preview))
 			} else {
 				l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", "")
 			}

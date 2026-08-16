@@ -264,6 +264,13 @@ func runGateway() {
 		IdleTimeout:      streamCfg.EffectiveStreamIdleTimeout(),
 		FirstByteTimeout: streamCfg.EffectiveStreamFirstByteTimeout(),
 	})
+
+	// Opt-in premature-completion gate (0 = disabled): the pipeline's
+	// ContinuationGate reads this via reliability.Default().PrematureCompletion.
+	premCfg := cfg.Reliability.PrematureCompletion
+	reliability.Default().SetPrematureCompletion(reliability.PrematureCompletionOptions{
+		Enabled: premCfg.Enabled,
+	})
 	slog.Debug("reliability singleton configured",
 		"failure_threshold", relOpts.FailureThreshold,
 		"degraded_threshold", relOpts.DegradedThreshold,
@@ -273,6 +280,7 @@ func runGateway() {
 		"rate_limit_max_pending", relCfg.EffectiveRateLimitMaxPending(),
 		"stream_idle_timeout", streamCfg.EffectiveStreamIdleTimeout().String(),
 		"stream_first_byte_timeout", streamCfg.EffectiveStreamFirstByteTimeout().String(),
+		"premature_completion_enabled", premCfg.Enabled,
 	)
 
 	// Create core components

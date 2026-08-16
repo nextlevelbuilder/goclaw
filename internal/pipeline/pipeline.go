@@ -27,7 +27,7 @@ func NewPipeline(setup, iteration, finalize []Stage, deps PipelineDeps) *Pipelin
 }
 
 // NewDefaultPipeline creates the standard 8-stage pipeline.
-// Setup: [ContextStage]. Iteration: [PruneStage, ThinkStage, ToolStage, ObserveStage, CheckpointStage].
+// Setup: [ContextStage]. Iteration: [PruneStage, ThinkStage, ContinuationGate, ToolStage, ObserveStage, CheckpointStage].
 // Finalize: [FinalizeStage].
 func NewDefaultPipeline(deps PipelineDeps) *Pipeline {
 	d := &deps
@@ -39,6 +39,7 @@ func NewDefaultPipeline(deps PipelineDeps) *Pipeline {
 	iteration := []Stage{
 		NewPruneStage(d, memFlush),
 		NewThinkStage(d),
+		NewContinuationGate(d),
 		NewToolStage(d),
 		NewObserveStage(d),
 		NewCheckpointStage(d),

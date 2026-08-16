@@ -117,6 +117,41 @@ func TestHealthScorePenalizesStallAndToolError(t *testing.T) {
 	}
 }
 
+// TestHealthRegistryModelCodesCounters verifies the additive wiring of the
+// weak-model failure codes into the per-provider:model health counters.
+func TestHealthRegistryModelCodesCounters(t *testing.T) {
+	reg := NewHealthRegistry(nil)
+	reg.ObserveFailure("pv", "m", ErrModelEmptyOutput)
+	reg.ObserveFailure("pv", "m", ErrModelMalformedToolCall)
+	reg.ObserveFailure("pv", "m", ErrModelInvalidJSON)
+	reg.ObserveFailure("pv", "m", ErrModelRepeatedToolCall)
+	reg.ObserveFailure("pv", "m", ErrModelPrematureCompletion)
+	reg.ObserveFailure("pv", "m", ErrModelLooping)
+
+	st := reg.Status("pv", "m")
+	if st.EmptyOutputCount != 1 {
+		t.Errorf("empty outputs=%d want 1", st.EmptyOutputCount)
+	}
+	if st.MalformedToolCallCount != 1 {
+		t.Errorf("malformed tool calls=%d want 1", st.MalformedToolCallCount)
+	}
+	if st.InvalidJSONCount != 1 {
+		t.Errorf("invalid JSONs=%d want 1", st.InvalidJSONCount)
+	}
+	if st.RepeatedToolCallCount != 1 {
+		t.Errorf("repeated tool calls=%d want 1", st.RepeatedToolCallCount)
+	}
+	if st.PrematureCompleteCount != 1 {
+		t.Errorf("premature completes=%d want 1", st.PrematureCompleteCount)
+	}
+	if st.LoopingCount != 1 {
+		t.Errorf("loopings=%d want 1", st.LoopingCount)
+	}
+	if st.Attempts != 6 {
+		t.Errorf("attempts=%d want 6", st.Attempts)
+	}
+}
+
 func TestHealthToolErrorRate(t *testing.T) {
 	reg := NewHealthRegistry(nil)
 	reg.ObserveToolResult("pv", "m", true)
@@ -160,6 +195,10 @@ func TestMetricsCountersAndSnapshot(t *testing.T) {
 	m.RecordLLMServerError()
 	m.RecordLLMTimeout()
 	m.RecordLLMStreamStall()
+	m.RecordLLMLoop()
+	m.RecordLLMRepeatedToolCall()
+	m.RecordLLMEmptyOutput()
+	m.RecordLLMPrematureCompletion()
 	m.RecordAgentRecovered()
 	m.RecordAgentContinued()
 	m.RecordPrematureCompletion()
@@ -172,6 +211,9 @@ func TestMetricsCountersAndSnapshot(t *testing.T) {
 	}
 	if s.LLMRateLimited != 1 || s.LLMServerErrors != 1 || s.LLMTimeouts != 1 || s.LLMStreamStalls != 1 {
 		t.Errorf("provider counters mismatch: %+v", s)
+	}
+	if s.LLMLoop != 1 || s.LLMRepeatedToolCalls != 1 || s.LLMEmptyOutputs != 1 || s.LLMPrematureCompletions != 1 {
+		t.Errorf("model counters mismatch: %+v", s)
 	}
 	if s.AgentRecovered != 1 || s.AgentContinued != 1 || s.PrematureCompleted != 1 || s.LoopDetected != 1 {
 		t.Errorf("agent counters mismatch: %+v", s)

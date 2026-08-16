@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/reliability"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -190,13 +191,21 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 		// nudge when another iteration remains; on the last iteration a nudge
 		// would never be answered and would pollute persisted history.
 		maxIter := s.deps.Config.MaxIterations
-		if strings.TrimSpace(resp.Content) == "" &&
-			!s.hasDeliverableOutput(state) &&
+		emptyFinal := strings.TrimSpace(resp.Content) == "" && !s.hasDeliverableOutput(state)
+		if emptyFinal &&
 			state.Think.EmptyReplyRetries < maxEmptyReplyRetries &&
 			state.Iteration+1 < maxIter {
 			state.Think.EmptyReplyRetries++
 			state.Messages.AppendPending(providers.Message{Role: "user", Content: emptyReplyHint, Transient: true})
 			return nil // Continue to next iteration for a real answer
+		}
+		if emptyFinal {
+			// Nudge exhausted or no iteration left: the model produced an empty
+			// final answer. Keep the existing fallback flow (finalize supplies the
+			// placeholder) — this only observes the event for reliability health
+			// and metrics. Guard nil-safe: the reliability runtime may not be
+			// wired in tests or embedded builds.
+			s.observeEmptyOutput(state)
 		}
 		s.result = BreakLoop
 		return nil
@@ -405,6 +414,30 @@ func isRequestBudgetExceededErr(err error) bool {
 		return budgetErr.ContextBudgetExceeded()
 	}
 	return false
+}
+
+// observeEmptyOutput records an exhausted empty-final-reply event in the
+// reliability layer: it observes the failure on the provider:model health
+// registry (emptyOutputs counter, health score) and increments the empty-output
+// metric counter. It is observability only — the nudge/fallback flow above is
+// unchanged. Nil-safe per the reliability_wiring.go pattern: no-op when the
+// runtime, health registry or metrics recorder is not configured.
+func (s *ThinkStage) observeEmptyOutput(state *RunState) {
+	provider, model := "unknown", "unknown"
+	if state.Provider != nil {
+		provider = state.Provider.Name()
+	}
+	if state.Model != "" {
+		model = state.Model
+	}
+	if r := reliability.Default(); r != nil {
+		if r.Health != nil {
+			r.Health.ObserveFailure(provider, model, reliability.ErrModelEmptyOutput)
+		}
+		if r.Metrics != nil {
+			r.Metrics.RecordLLMEmptyOutput()
+		}
+	}
 }
 
 // hasDeliverableOutput reports whether the run already produced non-text output

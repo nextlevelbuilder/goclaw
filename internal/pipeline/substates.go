@@ -83,6 +83,13 @@ type ObserveState struct {
 	// stored without being answered.
 	ContinueAfterFinal bool
 
+	// ContinuationGateFired is set by ContinuationGate the first (and only)
+	// time it asks for another iteration after a premature final answer. The
+	// pipeline clears ContinueAfterFinal after consuming it, so this separate
+	// per-run marker stops the gate from re-firing on every subsequent empty
+	// final answer — one continuation per run, then the run completes.
+	ContinuationGateFired bool
+
 	// AssistantImages accumulates final (non-partial) images from every iteration's
 	// ChatResponse.Images. FinalizeStage persists these to workspace/media/.
 	// Accumulation is required because LastResponse holds only the final iteration's
