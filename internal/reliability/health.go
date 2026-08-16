@@ -1,6 +1,7 @@
 package reliability
 
 import (
+	"sort"
 	"sync"
 	"time"
 )
@@ -172,6 +173,20 @@ func (h *HealthRegistry) Status(provider, model string) ModelHealth {
 		LastFailureAt:       e.lastFailureAt,
 		CircuitState:        state,
 	}
+}
+
+// Keys returns the sorted list of provider:model keys that have observed
+// activity. It lets operator tooling enumerate registry entries without
+// reaching into the internal map.
+func (h *HealthRegistry) Keys() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	keys := make([]string, 0, len(h.entries))
+	for k := range h.entries {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // Score computes a 0..1 runtime reliability score for a provider:model.

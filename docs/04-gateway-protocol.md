@@ -584,6 +584,53 @@ goclaw run events <run-id> --after=N # replay timeline events after a seq cursor
 
 ---
 
+## 6.2 Reliability Diagnostics
+
+The gateway keeps a process-wide reliability state per `provider:model`:
+circuit breaker state, health score, attempts/successes, rate-limit cooldown
+and metrics counters. `goclaw health` dumps that state for operators.
+
+### CLI
+
+```bash
+goclaw health              # dump live reliability state (plain text, sorted)
+goclaw health --check      # run in-process regression checks; exit 0 = all pass, 1 = failure
+```
+
+`--check` is a deterministic self-test that does not touch the network or the
+database. It covers the plan §27 regression cases:
+
+| Check | Behavior | PASS when |
+|-------|----------|-----------|
+| Case A | Register a fake 429 on the rate-limit coordinator | cooldown reported for the key |
+| Case B | Simulate a stream disconnect (transport EOF) | classified as a retryable error |
+| Case C | Classify a nil error | `IsRetryable(nil)` returns false (no false-positive retries) |
+
+### Configuration
+
+The reliability layer reads the `reliability` config block (all fields
+optional, zero falls back to the defaults):
+
+```json5
+{
+  reliability: {
+    circuit: {
+      failure_threshold: 5,     // consecutive failures → circuit open (default 5)
+      degraded_threshold: 2,    // consecutive failures → circuit degraded (default 2)
+      cooldown_ms: 30000,       // how long the circuit stays open before half-open (default 30000)
+      half_open_max: 1,         // probe requests allowed while half-open (default 1)
+      probe_timeout_ms: 30000,  // stale-probe guard: re-probe after this silence (default 30000)
+      rate_limit_max_pending: 0 // cap on concurrent waiters per rate-limited key (0 = unlimited)
+    }
+  }
+}
+```
+
+The circuit breaker, health registry, rate-limit coordinator and metrics
+counters shown by `goclaw health` reflect this configuration.
+
+---
+
 ## 7. Rate Limiting
 
 Token bucket rate limiting per user or IP address. Configured via `gateway.rate_limit_rpm` (0 = disabled, > 0 = enabled).

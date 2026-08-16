@@ -41,6 +41,7 @@ func init() {
 	rootCmd.AddCommand(pairingCmd())
 	rootCmd.AddCommand(agentCmd())
 	rootCmd.AddCommand(doctorCmd())
+	rootCmd.AddCommand(healthCmd())
 	rootCmd.AddCommand(configCmd())
 	rootCmd.AddCommand(providersCmd())
 	rootCmd.AddCommand(channelsCmd())
