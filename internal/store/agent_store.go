@@ -510,6 +510,10 @@ func (a *AgentData) ParseChatGPTOAuthRouting() *ChatGPTOAuthRoutingConfig {
 
 const (
 	ModelFallbackStrategyPriority = "priority_order"
+
+	// ModelFallbackStrategyHealthOrder re-ranks fallbacks by their runtime
+	// health score once enough attempts have been observed.
+	ModelFallbackStrategyHealthOrder = "health_order"
 )
 
 type ModelFallbackCandidate struct {
@@ -523,6 +527,9 @@ type ModelFallbackConfig struct {
 	Candidates      []ModelFallbackCandidate `json:"candidates,omitempty" db:"-"`
 	MaxAttempts     int                      `json:"max_attempts,omitempty" db:"-"`
 	CooldownEnabled *bool                    `json:"cooldown_enabled,omitempty" db:"-"`
+	// MinAttemptsForHealth is the minimum number of observed attempts before a
+	// health score is allowed to drive fallback ordering (health_order).
+	MinAttemptsForHealth int `json:"min_attempts_for_health,omitempty" db:"-"`
 }
 
 func (a *AgentData) ParseModelFallback() *ModelFallbackConfig {
@@ -545,16 +552,25 @@ func NormalizeModelFallbackConfig(cfg *ModelFallbackConfig) *ModelFallbackConfig
 		return nil
 	}
 	out := &ModelFallbackConfig{
-		Enabled:         cfg.Enabled,
-		Strategy:        cfg.Strategy,
-		MaxAttempts:     cfg.MaxAttempts,
-		CooldownEnabled: cfg.CooldownEnabled,
+		Enabled:              cfg.Enabled,
+		Strategy:             cfg.Strategy,
+		MaxAttempts:          cfg.MaxAttempts,
+		CooldownEnabled:      cfg.CooldownEnabled,
+		MinAttemptsForHealth: cfg.MinAttemptsForHealth,
 	}
 	if out.Strategy == "" {
 		out.Strategy = ModelFallbackStrategyPriority
 	}
-	if out.Strategy != ModelFallbackStrategyPriority {
+	switch out.Strategy {
+	case ModelFallbackStrategyPriority, ModelFallbackStrategyHealthOrder:
+		// accepted strategies pass through
+	default:
+		// unknown strategies (including legacy values and typos) fall back to
+		// the priority-order default, preserving backward compatibility.
 		out.Strategy = ModelFallbackStrategyPriority
+	}
+	if out.MinAttemptsForHealth <= 0 {
+		out.MinAttemptsForHealth = 5
 	}
 	seen := make(map[string]bool, len(cfg.Candidates))
 	for _, c := range cfg.Candidates {

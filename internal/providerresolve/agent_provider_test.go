@@ -260,3 +260,79 @@ func TestResolveAgentProviderWrapsModelFallback(t *testing.T) {
 		t.Fatalf("PrimaryProvider() = %T, want original base provider", fallback.PrimaryProvider())
 	}
 }
+
+func TestResolveAgentProviderAppliesFallbackPolicy(t *testing.T) {
+	tenantID := uuid.New()
+	registry := providers.NewRegistry(nil)
+	base := &stubProvider{name: "primary", model: "primary-model"}
+	backup := &stubProvider{name: "backup", model: "backup-default"}
+	registry.RegisterForTenant(tenantID, base)
+	registry.RegisterForTenant(tenantID, backup)
+
+	agent := &store.AgentData{
+		TenantID: tenantID,
+		Provider: "primary",
+		Model:    "primary-model",
+		ModelFallback: json.RawMessage(`{
+			"enabled": true,
+			"strategy": "health_order",
+			"candidates": [
+				{"provider": "backup", "model": "m2"}
+			],
+			"min_attempts_for_health": 3
+		}`),
+	}
+
+	resolved, err := ResolveAgentProvider(registry, agent)
+	if err != nil {
+		t.Fatalf("ResolveAgentProvider() error = %v", err)
+	}
+	fallback, ok := resolved.(*providers.ModelFallbackProvider)
+	if !ok {
+		t.Fatalf("ResolveAgentProvider() returned %T, want *providers.ModelFallbackProvider", resolved)
+	}
+	policy := fallback.Policy()
+	if policy.Strategy != store.ModelFallbackStrategyHealthOrder {
+		t.Errorf("Policy().Strategy = %q, want %q", policy.Strategy, store.ModelFallbackStrategyHealthOrder)
+	}
+	if policy.MinAttemptsForHealth != 3 {
+		t.Errorf("Policy().MinAttemptsForHealth = %d, want 3", policy.MinAttemptsForHealth)
+	}
+}
+
+func TestResolveAgentProviderAppliesDefaultPolicyWhenStrategyEmpty(t *testing.T) {
+	tenantID := uuid.New()
+	registry := providers.NewRegistry(nil)
+	base := &stubProvider{name: "primary", model: "primary-model"}
+	backup := &stubProvider{name: "backup", model: "backup-default"}
+	registry.RegisterForTenant(tenantID, base)
+	registry.RegisterForTenant(tenantID, backup)
+
+	agent := &store.AgentData{
+		TenantID: tenantID,
+		Provider: "primary",
+		Model:    "primary-model",
+		ModelFallback: json.RawMessage(`{
+			"enabled": true,
+			"candidates": [
+				{"provider": "backup", "model": "backup-model"}
+			]
+		}`),
+	}
+
+	resolved, err := ResolveAgentProvider(registry, agent)
+	if err != nil {
+		t.Fatalf("ResolveAgentProvider() error = %v", err)
+	}
+	fallback, ok := resolved.(*providers.ModelFallbackProvider)
+	if !ok {
+		t.Fatalf("ResolveAgentProvider() returned %T, want *providers.ModelFallbackProvider", resolved)
+	}
+	policy := fallback.Policy()
+	if policy.Strategy != store.ModelFallbackStrategyPriority {
+		t.Errorf("Policy().Strategy = %q, want default %q", policy.Strategy, store.ModelFallbackStrategyPriority)
+	}
+	if policy.MinAttemptsForHealth != 5 {
+		t.Errorf("Policy().MinAttemptsForHealth = %d, want default 5", policy.MinAttemptsForHealth)
+	}
+}

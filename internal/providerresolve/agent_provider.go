@@ -82,9 +82,15 @@ func ResolveAgentProvider(registry *providers.Registry, agent *store.AgentData) 
 	if fallbackCfg.CooldownEnabled != nil {
 		cooldownEnabled = *fallbackCfg.CooldownEnabled
 	}
-	return providers.NewModelFallbackProvider(providers.FallbackCandidate{
+	wrapper := providers.NewModelFallbackProvider(providers.FallbackCandidate{
 		ProviderName: agent.Provider,
 		Model:        agent.Model,
 		Provider:     baseProvider,
-	}, candidates, fallbackCfg.MaxAttempts, cooldownEnabled), nil
+	}, candidates, fallbackCfg.MaxAttempts, cooldownEnabled)
+	// An empty strategy yields the zero-value policy, which keeps the
+	// provider's default priority behavior.
+	return wrapper.WithFallbackPolicy(providers.FallbackPolicy{
+		Strategy:             fallbackCfg.Strategy,
+		MinAttemptsForHealth: fallbackCfg.MinAttemptsForHealth,
+	}), nil
 }

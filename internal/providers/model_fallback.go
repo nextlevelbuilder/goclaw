@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"sort"
+	"sync"
 
 	"github.com/nextlevelbuilder/goclaw/internal/reliability"
 )
@@ -14,6 +15,16 @@ type FallbackCandidate struct {
 	Provider     Provider
 }
 
+// FallbackPolicy is the per-agent policy applied to fallback selection.
+// Strategy "" means the provider default (priority order); known strategies
+// are the "priority_order" / "health_order" values normalized by the store
+// layer. MinAttemptsForHealth is the minimum number of observed attempts
+// before a health score is allowed to drive re-ordering (0 = provider default).
+type FallbackPolicy struct {
+	Strategy            string
+	MinAttemptsForHealth int
+}
+
 // ModelFallbackProvider wraps a primary provider with ordered fallback
 // provider/model candidates. The primary candidate is always tried first.
 type ModelFallbackProvider struct {
@@ -22,6 +33,46 @@ type ModelFallbackProvider struct {
 	classifier  ErrorClassifier
 	tracker     *CooldownTracker
 	maxAttempts int
+	policy      FallbackPolicy
+	// diagnostics records every candidate decision made by runOrdered (tried or
+	// skipped) for operator visibility. Best-effort: populated under an internal
+	// mutex so concurrent runs never race, but a snapshot may interleave two
+	// concurrent runs' entries. Single-run use (the common case) is exact.
+	diagnostics   []attemptDiagnostic
+	diagnosticsMu sync.Mutex
+}
+
+// attemptDiagnostic records one decision runOrdered made for a candidate.
+// Skipped candidates were not tried; SkipReason says why ("cooldown").
+// HealthScore is the candidate's runtime reliability score at ordering time,
+// or -1 when no health registry is available.
+type attemptDiagnostic struct {
+	Candidate   FallbackCandidate
+	Skipped     bool
+	SkipReason  string
+	HealthScore float64
+}
+
+// healthScoreUnknown marks a diagnostic whose health score was not available
+// at ordering time (registry absent or nil).
+const healthScoreUnknown = -1
+
+// LastAttempts returns a copy of the decisions recorded by the most recent
+// runOrdered execution. The copy makes it safe to hold onto while another run
+// mutates the provider. Entries interleave across concurrent runs; single-run
+// callers see an exact per-run record.
+func (p *ModelFallbackProvider) LastAttempts() []attemptDiagnostic {
+	p.diagnosticsMu.Lock()
+	defer p.diagnosticsMu.Unlock()
+	out := make([]attemptDiagnostic, len(p.diagnostics))
+	copy(out, p.diagnostics)
+	return out
+}
+
+func (p *ModelFallbackProvider) recordDiagnostic(d attemptDiagnostic) {
+	p.diagnosticsMu.Lock()
+	defer p.diagnosticsMu.Unlock()
+	p.diagnostics = append(p.diagnostics, d)
 }
 
 type FallbackCallInfo struct {
@@ -43,6 +94,24 @@ func NewModelFallbackProvider(primary FallbackCandidate, fallbacks []FallbackCan
 		tracker:     tracker,
 		maxAttempts: maxAttempts,
 	}
+}
+
+// WithFallbackPolicy attaches the fallback selection policy to the provider.
+// It returns p for chaining and is nil-safe.
+func (p *ModelFallbackProvider) WithFallbackPolicy(policy FallbackPolicy) *ModelFallbackProvider {
+	if p == nil {
+		return nil
+	}
+	p.policy = policy
+	return p
+}
+
+// Policy returns the fallback policy currently attached to the provider.
+func (p *ModelFallbackProvider) Policy() FallbackPolicy {
+	if p == nil {
+		return FallbackPolicy{}
+	}
+	return p.policy
 }
 
 func (p *ModelFallbackProvider) PrimaryProvider() Provider {
@@ -149,8 +218,18 @@ func (p *ModelFallbackProvider) runOrdered(
 		}
 		key := CooldownKey(entry.ProviderName, entry.Model)
 		if p.tracker != nil && !p.tracker.IsAvailable(key) && !p.tracker.ShouldProbe(key) {
+			p.recordDiagnostic(attemptDiagnostic{
+				Candidate:   entry,
+				Skipped:     true,
+				SkipReason:  "cooldown",
+				HealthScore: healthScoreFor(entry),
+			})
 			continue
 		}
+		p.recordDiagnostic(attemptDiagnostic{
+			Candidate:   entry,
+			HealthScore: healthScoreFor(entry),
+		})
 		resp, err := call(ctx, entry, req)
 		if err == nil {
 			if p.tracker != nil {
@@ -195,14 +274,28 @@ func (p *ModelFallbackProvider) orderedCandidates(requestModel string) []Fallbac
 	return p.orderByHealth(out)
 }
 
+// minHealthAttemptsFor returns the attempt threshold that qualifies a
+// candidate's health score for re-ordering. Under the health_order policy an
+// explicit threshold wins; the package default applies otherwise (and all
+// non-health_order strategies keep the provider default exactly).
+func (p *ModelFallbackProvider) minHealthAttemptsFor() int {
+	if p.policy.Strategy == FallbackStrategyHealth && p.policy.MinAttemptsForHealth > 0 {
+		return p.policy.MinAttemptsForHealth
+	}
+	return healthScoreMinAttempts
+}
+
 // orderByHealth re-ranks nonzero fallback candidates by their runtime
 // reliability score. The primary candidate is ALWAYS first — the caller's
 // explicit choice wins over runtime heuristics. For the remaining candidates,
-// those with a meaningful health signal (more than scoreMinAttempts observed
-// attempts) are sorted by descending HealthRegistry.Score; candidates without
-// signal keep their configured order and trail the scored ones. This preserves
-// existing behavior for new deployments (no signal yet → configured order)
-// while steering away from provably flaky fallbacks.
+// those with a meaningful health signal (at least minHealthAttemptsFor
+// observed attempts) are sorted by descending HealthRegistry.Score; candidates
+// without signal keep their configured order and trail the scored ones. With
+// the "health_order" policy, the same ranking is applied but candidates below
+// the attempt threshold — regardless of their provisional score — keep
+// configured order after the qualified ones. This preserves existing behavior
+// for new deployments (no signal yet → configured order) while steering away
+// from provably flaky fallbacks.
 func (p *ModelFallbackProvider) orderByHealth(candidates []FallbackCandidate) []FallbackCandidate {
 	if len(candidates) < 3 {
 		return candidates
@@ -212,9 +305,12 @@ func (p *ModelFallbackProvider) orderByHealth(candidates []FallbackCandidate) []
 		return candidates
 	}
 	rest := candidates[1:]
+	minAttempts := p.minHealthAttemptsFor()
+	qualified := func(c FallbackCandidate) bool {
+		return reg.Health.Status(c.ProviderName, c.Model).Attempts >= minAttempts
+	}
 	scoreOf := func(c FallbackCandidate) (float64, bool) {
-		s := reg.Health.Status(c.ProviderName, c.Model)
-		if s.Attempts <= healthScoreMinAttempts {
+		if !qualified(c) {
 			return 0, false // no signal yet — keep configured position
 		}
 		return reg.Health.Score(c.ProviderName, c.Model), true
@@ -239,9 +335,46 @@ func (p *ModelFallbackProvider) orderByHealth(candidates []FallbackCandidate) []
 	return out
 }
 
-// healthScoreMinAttempts is the minimum number of observed attempts before a
-// health score is considered meaningful enough to drive fallback ordering.
+// healthScoreMinAttempts is the package-default minimum number of observed
+// attempts before a health score is considered meaningful enough to drive
+// fallback ordering. A FallbackPolicy.MinAttemptsForHealth > 0 overrides it.
 const healthScoreMinAttempts = 5
+
+// healthScoreFor returns the candidate's runtime reliability score, or
+// healthScoreUnknown when no registry is available (fresh process).
+func healthScoreFor(c FallbackCandidate) float64 {
+	reg := reliability.Default()
+	if reg == nil || reg.Health == nil {
+		return healthScoreUnknown
+	}
+	return reg.Health.Score(c.ProviderName, c.Model)
+}
+
+// defaultFallbackPolicy is the process-wide fallback policy used by operators
+// that build wrappers without an explicit WithFallbackPolicy. Read-only view
+// via DefaultFallbackPolicyView; SetDefaultFallbackPolicy replaces it. The
+// zero value keeps the provider default (priority order, 5 attempts).
+var defaultFallbackPolicy FallbackPolicy
+
+// SetDefaultFallbackPolicy replaces the process-wide fallback policy for
+// wrappers that carry no explicit policy.
+func SetDefaultFallbackPolicy(p FallbackPolicy) {
+	defaultFallbackPolicy = p
+}
+
+// DefaultFallbackPolicyView returns a copy of the process-wide fallback policy,
+// nil-safe and safe to mutate by the caller.
+func DefaultFallbackPolicyView() FallbackPolicy {
+	return defaultFallbackPolicy
+}
+
+// Known normalized fallback strategy values.
+const (
+	// FallbackStrategyPriority keeps configured order, trailing scored ones.
+	FallbackStrategyPriority = "priority_order"
+	// FallbackStrategyHealth ranks qualified candidates by health score.
+	FallbackStrategyHealth = "health_order"
+)
 
 type noFallbackAfterStreamError struct {
 	err error
