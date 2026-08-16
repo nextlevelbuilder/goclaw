@@ -10,6 +10,8 @@ import (
 	"sync"
 
 	ollamaapi "github.com/ollama/ollama/api"
+
+	"github.com/nextlevelbuilder/goclaw/internal/reliability"
 )
 
 // OllamaProvider implements Provider using the official Ollama Go client.
@@ -142,6 +144,22 @@ func (p *OllamaProvider) Capabilities() ProviderCapabilities {
 
 // Chat sends a non-streaming chat request to Ollama and returns the full response.
 func (p *OllamaProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
+	model := req.Model
+	if model == "" {
+		model = p.defaultModel
+	}
+	if err := circuitAllow(p.name, model); err != nil {
+		return nil, err
+	}
+	if err := waitRateLimit(ctx, p.name, model); err != nil {
+		return nil, err
+	}
+	safeRecord(func() {
+		if reg := reliability.Default(); reg != nil && reg.Metrics != nil {
+			reg.Metrics.RecordLLMRequest()
+		}
+	})
+
 	var result *ChatResponse
 	var chatErr error
 
@@ -163,12 +181,33 @@ func (p *OllamaProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRespon
 	}
 
 	result, chatErr = RetryDo(ctx, p.retryConfig, fn)
+	if chatErr != nil {
+		observeFailure(p.name, model, chatErr)
+	} else {
+		observeSuccess(p.name, model)
+	}
 	return result, chatErr
 }
 
 // ChatStream sends a streaming chat request to Ollama, calling onChunk for each
 // content delta, and returns the accumulated final response.
 func (p *OllamaProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
+	model := req.Model
+	if model == "" {
+		model = p.defaultModel
+	}
+	if err := circuitAllow(p.name, model); err != nil {
+		return nil, err
+	}
+	if err := waitRateLimit(ctx, p.name, model); err != nil {
+		return nil, err
+	}
+	safeRecord(func() {
+		if reg := reliability.Default(); reg != nil && reg.Metrics != nil {
+			reg.Metrics.RecordLLMRequest()
+		}
+	})
+
 	result := &ChatResponse{FinishReason: "stop"}
 
 	fn := func() (*ChatResponse, error) {
@@ -219,6 +258,11 @@ func (p *OllamaProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 
 	var chatErr error
 	result, chatErr = RetryDo(ctx, p.retryConfig, fn)
+	if chatErr != nil {
+		observeFailure(p.name, model, chatErr)
+	} else {
+		observeSuccess(p.name, model)
+	}
 	return result, chatErr
 }
 

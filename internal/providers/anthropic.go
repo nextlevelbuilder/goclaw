@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/nextlevelbuilder/goclaw/internal/reliability"
 )
 
 const (
@@ -135,9 +137,21 @@ func (p *AnthropicProvider) middlewareConfig(model string, req ChatRequest) Midd
 func (p *AnthropicProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
 	model := resolveAnthropicModel(req.Model, p.defaultModel, p.registry)
 
+	if err := circuitAllow(p.name, model); err != nil {
+		return nil, err
+	}
+	if err := waitRateLimit(ctx, p.name, model); err != nil {
+		return nil, err
+	}
+
 	body := p.buildRequestBody(model, req, false)
 	body = ApplyMiddlewares(body, p.middlewares, p.middlewareConfig(model, req))
 
+	safeRecord(func() {
+		if reg := reliability.Default(); reg != nil && reg.Metrics != nil {
+			reg.Metrics.RecordLLMRequest()
+		}
+	})
 	resp, err := RetryDo(ctx, p.retryConfig, func() (*ChatResponse, error) {
 		respBody, err := p.doRequest(ctx, body)
 		if err != nil {
@@ -152,6 +166,12 @@ func (p *AnthropicProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRes
 
 		return p.parseResponse(&parsed), nil
 	})
+	// Reliability observation after the full retry cycle settles.
+	if err != nil {
+		observeFailure(p.name, model, err)
+	} else {
+		observeSuccess(p.name, model)
+	}
 	// Drop user-visible reasoning after parsing for models flagged as leakers.
 	// Usage.ThinkingTokens and RawAssistantContent remain intact so billing
 	// and Anthropic tool-use thinking passback continue to work.

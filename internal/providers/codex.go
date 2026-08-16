@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/reliability"
 )
 
 type CodexRoutingDefaults struct {
@@ -131,6 +133,22 @@ func (p *CodexProvider) middlewareConfig(req ChatRequest) MiddlewareConfig {
 }
 
 func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
+	model := req.Model
+	if model == "" {
+		model = p.defaultModel
+	}
+	if err := circuitAllow(p.name, model); err != nil {
+		return nil, err
+	}
+	if err := waitRateLimit(ctx, p.name, model); err != nil {
+		return nil, err
+	}
+	safeRecord(func() {
+		if reg := reliability.Default(); reg != nil && reg.Metrics != nil {
+			reg.Metrics.RecordLLMRequest()
+		}
+	})
+
 	cfg := p.retryConfig
 	if cfg.Attempts <= 0 {
 		cfg.Attempts = 1
@@ -140,6 +158,7 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 	for attempt := 1; attempt <= cfg.Attempts; attempt++ {
 		result, emitted, err := p.chatStreamOnce(ctx, req, onChunk)
 		if err == nil {
+			observeSuccess(p.name, model)
 			return result, nil
 		}
 		lastErr = err
@@ -149,6 +168,7 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 		// failures (e.g. response.failed: "processing your request…retry") are safe
 		// to retry here and are exactly the flaky 429-ish case this guard targets.
 		if emitted || !IsRetryableError(err) || attempt == cfg.Attempts {
+			observeFailure(p.name, model, err)
 			return result, err
 		}
 
@@ -158,11 +178,13 @@ func (p *CodexProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk
 		}
 		select {
 		case <-ctx.Done():
+			observeFailure(p.name, model, err)
 			return result, ctx.Err()
 		case <-time.After(delay):
 		}
 	}
 
+	observeFailure(p.name, model, lastErr)
 	return nil, lastErr
 }
 

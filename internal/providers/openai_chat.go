@@ -9,15 +9,28 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+
+	"github.com/nextlevelbuilder/goclaw/internal/reliability"
 )
 
 func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, error) {
 	model := p.resolveModel(req.Model)
+	if err := circuitAllow(p.name, model); err != nil {
+		return nil, err
+	}
+	if err := waitRateLimit(ctx, p.name, model); err != nil {
+		return nil, err
+	}
 	body := p.buildRequestBody(model, req, false)
 	body = ApplyMiddlewares(body, p.middlewares, p.middlewareConfig(model, req))
 
 	chatFn := p.chatRequestFn(ctx, body, req.Tools)
 
+	safeRecord(func() {
+		if reg := reliability.Default(); reg != nil && reg.Metrics != nil {
+			reg.Metrics.RecordLLMRequest()
+		}
+	})
 	resp, err := RetryDo(ctx, p.retryConfig, chatFn)
 
 	// Auto-clamp max_tokens and retry once if the model rejects the value
@@ -26,6 +39,13 @@ func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRespon
 			slog.Info("max_tokens clamped, retrying", "model", model, "limit", clampedLimit(body))
 			resp, err = RetryDo(ctx, p.retryConfig, chatFn)
 		}
+	}
+
+	// Reliability observation after the full retry cycle settles.
+	if err != nil {
+		observeFailure(p.name, model, err)
+	} else {
+		observeSuccess(p.name, model)
 	}
 
 	// Drop user-visible reasoning for models flagged as leakers (e.g. Kimi,
@@ -61,12 +81,23 @@ func (p *OpenAIProvider) chatRequestFn(ctx context.Context, body map[string]any,
 
 func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
 	model := p.resolveModel(req.Model)
+	if err := circuitAllow(p.name, model); err != nil {
+		return nil, err
+	}
+	if err := waitRateLimit(ctx, p.name, model); err != nil {
+		return nil, err
+	}
 	// stripThinking suppresses user-visible reasoning while leaving
 	// Usage.ThinkingTokens untouched (the usage chunk below still records it).
 	stripThinking, _ := req.Options[OptStripThinking].(bool)
 	body := p.buildRequestBody(model, req, true)
 	body = ApplyMiddlewares(body, p.middlewares, p.middlewareConfig(model, req))
 
+	safeRecord(func() {
+		if reg := reliability.Default(); reg != nil && reg.Metrics != nil {
+			reg.Metrics.RecordLLMRequest()
+		}
+	})
 	// Retry only the connection phase; once streaming starts, no retry.
 	respBody, err := RetryDo(ctx, p.retryConfig, func() (io.ReadCloser, error) {
 		return p.doRequest(ctx, body)
@@ -82,11 +113,15 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 		}
 	}
 	if err != nil {
+		observeFailure(p.name, model, err)
 		return nil, err
 	}
 	// Wrap respBody so ctx cancellation closes the socket, unblocking bufio.Scanner.
 	cb := NewCtxBody(ctx, respBody)
 	defer cb.Close()
+	// Stream-established means the provider accepted the request; the streamed
+	// content is the response. Record success once the connection phase won.
+	observeSuccess(p.name, model)
 
 	result := &ChatResponse{FinishReason: "stop"}
 	accumulators := make(map[int]*toolCallAccumulator)

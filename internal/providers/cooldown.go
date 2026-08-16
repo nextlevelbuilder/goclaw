@@ -1,8 +1,11 @@
 package providers
 
 import (
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/reliability"
 )
 
 // CooldownTracker tracks per-provider:model failure state with decay and probe intervals.
@@ -11,8 +14,9 @@ type CooldownTracker struct {
 	mu          sync.Mutex
 	entries     map[string]*cooldownEntry
 	maxKeys     int
-	lastCleanup time.Time             // amortize TTL cleanup
-	nowFn       func() time.Time      // for testing; defaults to time.Now
+	lastCleanup time.Time        // amortize TTL cleanup
+	nowFn       func() time.Time // for testing; defaults to time.Now
+	bridge      bool             // share rate-limit cooldowns with the process-wide coordinator
 }
 
 type cooldownEntry struct {
@@ -53,7 +57,26 @@ func NewCooldownTracker(maxKeys int) *CooldownTracker {
 		entries: make(map[string]*cooldownEntry),
 		maxKeys: maxKeys,
 		nowFn:   time.Now,
+		bridge:  true,
 	}
+}
+
+// WithLocalBridge toggles whether RecordFailure bridges rate-limit cooldowns
+// to the process-wide RateLimitCoordinator. It returns the tracker for
+// chaining. Tests that need isolation from the shared coordinator (and the
+// coordinator's real 30s default cooldown) should call t.WithLocalBridge(false).
+func (t *CooldownTracker) WithLocalBridge(enabled bool) *CooldownTracker {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.bridge = enabled
+	return t
+}
+
+// bridgeEnabled reports whether coordinator bridging is on.
+func (t *CooldownTracker) bridgeEnabled() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.bridge
 }
 
 // CooldownKey builds a cooldown lookup key from provider and model.
@@ -63,6 +86,17 @@ func CooldownKey(provider, model string) string {
 
 // RecordFailure records a provider error and enters cooldown with reason-appropriate duration.
 func (t *CooldownTracker) RecordFailure(key string, reason FailoverReason) {
+	if t.bridgeEnabled() {
+		t.bridgeToRateLimitCoordinator(key, reason)
+	}
+	t.recordFailureLocal(key, reason)
+}
+
+// recordFailureLocal is the original RecordFailure body without the
+// coordinator bridge. Split so the bridge can be skipped — the coordinator is
+// a process-wide side channel, and a tracker that should stay local (e.g.
+// per-agent tests) must not leak cooldowns into the shared runtime.
+func (t *CooldownTracker) recordFailureLocal(key string, reason FailoverReason) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -145,6 +179,44 @@ func (t *CooldownTracker) RecordSuccess(key string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	delete(t.entries, key)
+	prov, model := splitCooldownKey(key)
+	if prov != "" && model != "" {
+		if reg := reliability.Default(); reg != nil && reg.RateLimit != nil {
+			reg.RateLimit.ClearCooldown(prov, model)
+		}
+	}
+}
+
+// keySeparator is the separator used by CooldownKey. It is a package constant
+// so the bridge logic below can split keys without importing the reliability
+// package's (unexported) key builder.
+const keySeparator = ":"
+
+// splitCooldownKey splits a CooldownKey into provider and model. An empty
+// provider or model yields empty parts (keys without a separator are left
+// untouched, so callers that use free-form keys still work).
+func splitCooldownKey(key string) (string, string) {
+	prov, model, ok := strings.Cut(key, keySeparator)
+	if !ok || prov == "" || model == "" {
+		return "", ""
+	}
+	return prov, model
+}
+
+// bridgeToRateLimitCoordinator shares a rate-limit cooldown with the process-wide
+// RateLimitCoordinator so concurrent runs for the same provider:model wait
+// together instead of retry-storming. It only bridges rate-limit failures (and
+// overloaded failures, which providers surface as 429 too); other reasons stay
+// local to this tracker.
+func (t *CooldownTracker) bridgeToRateLimitCoordinator(key string, reason FailoverReason) {
+	if reason != FailoverRateLimit && reason != FailoverOverloaded {
+		return
+	}
+	prov, model := splitCooldownKey(key)
+	if prov == "" || model == "" {
+		return
+	}
+	record429Cooldown(prov, model, 0)
 }
 
 // cleanupLocked removes entries older than stateTTL. Must hold mu.

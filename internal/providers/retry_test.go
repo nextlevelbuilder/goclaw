@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/reliability"
 )
 
 // --- IsRetryableError ---
@@ -317,6 +319,65 @@ func TestRetryDo_ZeroAttempts_DefaultsToOne(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("zero attempts should default to 1: got %d calls", calls)
+	}
+}
+
+// --- Reliability metrics integration ---
+
+// TestRetryDo_RecordsRetryMetric verifies that each retryable error in RetryDo
+// increments the reliability retry counter (and the rate-limit counter for 429s).
+func TestRetryDo_RecordsRetryMetric(t *testing.T) {
+	reg := reliability.Default()
+	if reg == nil || reg.Metrics == nil {
+		t.Fatal("reliability singleton metrics unavailable")
+	}
+	reg.Metrics.Flush() // zero the counters
+
+	cfg := RetryConfig{Attempts: 3, MinDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
+	var calls int
+	_, err := RetryDo(context.Background(), cfg, func() (string, error) {
+		calls++
+		return "", &HTTPError{Status: 500, Body: "server error"}
+	})
+	if err == nil {
+		t.Fatal("expected error after exhausting retries")
+	}
+	if calls != 3 {
+		t.Fatalf("expected 3 attempts, got %d", calls)
+	}
+
+	s := reg.Metrics.Take()
+	if s.LLMRetries != 2 {
+		t.Errorf("LLMRetries = %d, want 2 (attempts 1 and 2 each trigger one retry)", s.LLMRetries)
+	}
+	if s.LLMRateLimited != 0 {
+		t.Errorf("LLMRateLimited = %d, want 0 for non-429 errors", s.LLMRateLimited)
+	}
+}
+
+// TestRetryDo_RecordsRateLimitMetricOn429 verifies that a 429 retryable error
+// also increments the rate-limit counter.
+func TestRetryDo_RecordsRateLimitMetricOn429(t *testing.T) {
+	reg := reliability.Default()
+	if reg == nil || reg.Metrics == nil {
+		t.Fatal("reliability singleton metrics unavailable")
+	}
+	reg.Metrics.Flush() // zero the counters
+
+	cfg := RetryConfig{Attempts: 2, MinDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
+	_, err := RetryDo(context.Background(), cfg, func() (string, error) {
+		return "", &HTTPError{Status: 429, Body: "slow down"}
+	})
+	if err == nil {
+		t.Fatal("expected error after exhausting retries")
+	}
+
+	s := reg.Metrics.Take()
+	if s.LLMRetries != 1 {
+		t.Errorf("LLMRetries = %d, want 1", s.LLMRetries)
+	}
+	if s.LLMRateLimited != 1 {
+		t.Errorf("LLMRateLimited = %d, want 1 for a 429", s.LLMRateLimited)
 	}
 }
 

@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/reliability"
 )
 
 // RetryConfig configures retry behavior for provider requests.
@@ -124,6 +126,18 @@ func RetryDo[T any](ctx context.Context, cfg RetryConfig, fn func() (T, error)) 
 		if !IsRetryableError(err) || attempt == cfg.Attempts {
 			return zero, err
 		}
+
+		// Reliability metrics (nil-safe): one retry counter per retry, plus a
+		// rate-limit counter when the provider signaled a 429 so the ops layer
+		// can spot retry storms.
+		safeRecord(func() {
+			if reg := reliability.Default(); reg != nil && reg.Metrics != nil {
+				reg.Metrics.RecordLLMRetry()
+				if isRateLimitedErr(err) {
+					reg.Metrics.RecordLLMRateLimited()
+				}
+			}
+		})
 
 		// Compute delay
 		delay := computeDelay(cfg, attempt, err)
