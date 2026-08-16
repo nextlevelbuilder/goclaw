@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -17,7 +18,28 @@ import (
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 )
 
+// emit delivers an agent event to the configured callback (bus broadcast +
+// timeline record). Every event belonging to a run (RunID != "") gets a
+// per-run monotonic sequence starting at 1, stamped here so all emit paths
+// (stream chunks, tool events, status events, activity timers) share one
+// ordering domain. The counter is per-run and atomic — emits may arrive from
+// concurrent goroutines — and is released when the run's terminal event is
+// emitted so each run restarts at 1. Events without a RunID carry no seq.
 func (l *Loop) emit(event AgentEvent) {
+	if event.RunID != "" {
+		var ctr *atomic.Int64
+		if v, ok := l.runSeqByRunID.Load(event.RunID); ok {
+			ctr = v.(*atomic.Int64)
+		} else {
+			ctr = &atomic.Int64{}
+			loaded, _ := l.runSeqByRunID.LoadOrStore(event.RunID, ctr)
+			ctr = loaded.(*atomic.Int64)
+		}
+		event.Seq = ctr.Add(1)
+		if isTerminalRunTimelineEvent(event.Type) {
+			l.runSeqByRunID.Delete(event.RunID)
+		}
+	}
 	if l.onEvent != nil {
 		l.onEvent(event)
 	}
