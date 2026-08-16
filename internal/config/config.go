@@ -73,6 +73,16 @@ type ReliabilityConfig struct {
 	Runs    RunsConfig    `json:"runs,omitempty"`
 	Circuit CircuitConfig `json:"circuit,omitempty"`
 	Stream  StreamConfig  `json:"stream,omitempty"`
+	// PrematureCompletion gates the continuation stage that asks a weak model
+	// for one more iteration when it finishes before doing any work. Disabled
+	// by default — opt in via reliability.premature_completion.enabled.
+	PrematureCompletion PrematureCompletionConfig `json:"premature_completion,omitempty"`
+}
+
+// PrematureCompletionConfig tunes the opt-in premature-completion gate
+// (internal/pipeline ContinuationGate). A zero value keeps the gate disabled.
+type PrematureCompletionConfig struct {
+	Enabled bool `json:"enabled,omitempty"` // when true, the gate may request one extra iteration per run
 }
 
 // StreamConfig tunes the streaming watchdog timeouts applied by the provider
