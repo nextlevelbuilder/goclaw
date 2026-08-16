@@ -21,6 +21,17 @@ type Runtime struct {
 	// SetStream at gateway startup after Configure(); Default() returns it as
 	// part of the current bundle snapshot.
 	Stream StreamOptions
+
+	// PrematureCompletion carries the opt-in premature-completion gate
+	// configuration consumed by the pipeline's continuation gate. Disabled by
+	// default (zero value) so the gate is off unless the operator enables it.
+	PrematureCompletion PrematureCompletionOptions
+}
+
+// PrematureCompletionOptions configures the premature-completion gate that
+// runs after the think stage. A zero value keeps the gate disabled.
+type PrematureCompletionOptions struct {
+	Enabled bool
 }
 
 // StreamOptions are the streaming watchdog timeouts enforced by provider
@@ -102,11 +113,31 @@ func (r *Runtime) SetStream(opts StreamOptions) {
 	// Rebuild the bundle so Default() readers get one consistent snapshot
 	// rather than observing a half-updated runtime.
 	next := &Runtime{
-		Breaker:   r.Breaker,
-		Health:    r.Health,
-		RateLimit: r.RateLimit,
-		Metrics:   r.Metrics,
-		Stream:    opts,
+		Breaker:             r.Breaker,
+		Health:              r.Health,
+		RateLimit:           r.RateLimit,
+		Metrics:             r.Metrics,
+		Stream:              opts,
+		PrematureCompletion: r.PrematureCompletion,
+	}
+
+	mu.Lock()
+	curRuntime = next
+	mu.Unlock()
+}
+
+// SetPrematureCompletion atomically swaps the premature-completion gate
+// options on the current bundle. Consumers read the gate via
+// reliability.Default().PrematureCompletion.Enabled; a zero value (or a
+// bundle never touched by this method) keeps the gate disabled.
+func (r *Runtime) SetPrematureCompletion(opts PrematureCompletionOptions) {
+	next := &Runtime{
+		Breaker:             r.Breaker,
+		Health:              r.Health,
+		RateLimit:           r.RateLimit,
+		Metrics:             r.Metrics,
+		Stream:              r.Stream,
+		PrematureCompletion: opts,
 	}
 
 	mu.Lock()

@@ -132,6 +132,46 @@ func TestDefaultStreamZeroValueIsDisabled(t *testing.T) {
 	}
 }
 
+// TestPrematureCompletionOptionsDefaultDisabled verifies the opt-in gate is
+// disabled by default so product behavior is unchanged until an operator
+// enables it (nil-safe zero value, like StreamOptions).
+func TestPrematureCompletionOptionsDefaultDisabled(t *testing.T) {
+	r := defaultRuntime()
+	if r.PrematureCompletion != (PrematureCompletionOptions{}) {
+		t.Fatalf("default runtime PrematureCompletion = %+v, want zero value", r.PrematureCompletion)
+	}
+	if r.PrematureCompletion.Enabled {
+		t.Fatal("premature-completion gate must default to disabled")
+	}
+}
+
+// TestPrematureCompletionOptionsSetFlow exercises the F-agent contract: the
+// gate reads reliability.Default().PrematureCompletion.Enabled. Set via
+// SetPrematureCompletion so Default() sees the new options atomically.
+func TestPrematureCompletionOptionsSetFlow(t *testing.T) {
+	Configure(DefaultCircuitOptions(), 0)
+	r := Default()
+	if r.PrematureCompletion.Enabled {
+		t.Fatal("fresh bundle must have the gate disabled")
+	}
+
+	r.SetPrematureCompletion(PrematureCompletionOptions{Enabled: true})
+
+	if got := Default().PrematureCompletion.Enabled; !got {
+		t.Fatal("PrematureCompletion.Enabled = false, want true after set")
+	}
+	// Other components must be preserved across the swap.
+	cur := Default()
+	if cur.Breaker != r.Breaker || cur.Health != r.Health || cur.Metrics != r.Metrics {
+		t.Fatal("bundle swap must preserve existing components")
+	}
+	// A second swap back to disabled must install the new options cleanly.
+	r.SetPrematureCompletion(PrematureCompletionOptions{})
+	if got := Default().PrematureCompletion.Enabled; got {
+		t.Fatal("PrematureCompletion.Enabled = true, want false after disable")
+	}
+}
+
 func TestDefaultRuntimeBuildsDefaultBundle(t *testing.T) {
 	// defaultRuntime is the bundle Default() lazily constructs when nothing
 	// has been Configure()'d. Testing it directly avoids depending on

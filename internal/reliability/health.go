@@ -11,46 +11,54 @@ import (
 // reliably the combination has behaved recently at the transport / tool-call
 // level.
 type ModelHealth struct {
-	Provider           string
-	Model              string
-	ConsecutiveFailures int
-	RateLimitUntil     time.Time
-	TimeoutCount       int
-	StreamStallCount   int
-	ToolErrorRate      float64 // 0..1 over recent tool calls
-	ToolCalls          int     // total tool calls observed
-	ToolErrors         int
-	EmptyOutputCount   int
+	Provider               string
+	Model                  string
+	ConsecutiveFailures    int
+	RateLimitUntil         time.Time
+	TimeoutCount           int
+	StreamStallCount       int
+	ToolErrorRate          float64 // 0..1 over recent tool calls
+	ToolCalls              int     // total tool calls observed
+	ToolErrors             int
+	EmptyOutputCount       int
+	MalformedToolCallCount int
+	InvalidJSONCount       int
+	RepeatedToolCallCount  int
+	LoopingCount           int
 	PrematureCompleteCount int
-	Attempts           int
-	Successes          int
-	LastSuccessAt      time.Time
-	LastFailureAt      time.Time
-	CircuitState       CircuitState
+	Attempts               int
+	Successes              int
+	LastSuccessAt          time.Time
+	LastFailureAt          time.Time
+	CircuitState           CircuitState
 }
 
 // HealthRegistry tracks per-key health and computes a runtime reliability
 // score. It shares a CircuitBreaker for state transitions.
 type HealthRegistry struct {
-	mu       sync.Mutex
-	breaker  *CircuitBreaker
-	entries  map[string]*modelHealthEntry
-	nowFn    func() time.Time
+	mu      sync.Mutex
+	breaker *CircuitBreaker
+	entries map[string]*modelHealthEntry
+	nowFn   func() time.Time
 }
 
 type modelHealthEntry struct {
-	attempts       int
-	successes      int
-	timeouts       int
-	streamStalls   int
-	emptyOutputs   int
+	attempts           int
+	successes          int
+	timeouts           int
+	streamStalls       int
+	emptyOutputs       int
+	malformedToolCalls int
+	invalidJSONs       int
+	repeatedToolCalls  int
+	loopings           int
 	prematureCompletes int
-	toolCalls      int
-	toolErrors     int
-	rateLimitUntil time.Time
-	consecutiveFails int
-	lastSuccessAt  time.Time
-	lastFailureAt  time.Time
+	toolCalls          int
+	toolErrors         int
+	rateLimitUntil     time.Time
+	consecutiveFails   int
+	lastSuccessAt      time.Time
+	lastFailureAt      time.Time
 }
 
 // NewHealthRegistry builds a registry sharing the given circuit breaker.
@@ -103,8 +111,16 @@ func (h *HealthRegistry) ObserveFailure(provider, model string, code ErrorCode) 
 		e.timeouts++
 	case ErrModelEmptyOutput:
 		e.emptyOutputs++
+	case ErrModelMalformedToolCall:
+		e.malformedToolCalls++
+	case ErrModelInvalidJSON:
+		e.invalidJSONs++
+	case ErrModelRepeatedToolCall:
+		e.repeatedToolCalls++
 	case ErrModelPrematureCompletion:
 		e.prematureCompletes++
+	case ErrModelLooping:
+		e.loopings++
 	}
 }
 
@@ -156,22 +172,26 @@ func (h *HealthRegistry) Status(provider, model string) ModelHealth {
 	}
 
 	return ModelHealth{
-		Provider:            provider,
-		Model:               model,
-		ConsecutiveFailures: e.consecutiveFails,
-		RateLimitUntil:      e.rateLimitUntil,
-		TimeoutCount:        e.timeouts,
-		StreamStallCount:    e.streamStalls,
-		ToolErrorRate:       toolErrorRate(e),
-		ToolCalls:           e.toolCalls,
-		ToolErrors:          e.toolErrors,
-		EmptyOutputCount:    e.emptyOutputs,
+		Provider:               provider,
+		Model:                  model,
+		ConsecutiveFailures:    e.consecutiveFails,
+		RateLimitUntil:         e.rateLimitUntil,
+		TimeoutCount:           e.timeouts,
+		StreamStallCount:       e.streamStalls,
+		ToolErrorRate:          toolErrorRate(e),
+		ToolCalls:              e.toolCalls,
+		ToolErrors:             e.toolErrors,
+		EmptyOutputCount:       e.emptyOutputs,
+		MalformedToolCallCount: e.malformedToolCalls,
+		InvalidJSONCount:       e.invalidJSONs,
+		RepeatedToolCallCount:  e.repeatedToolCalls,
+		LoopingCount:           e.loopings,
 		PrematureCompleteCount: e.prematureCompletes,
-		Attempts:            e.attempts,
-		Successes:           e.successes,
-		LastSuccessAt:       e.lastSuccessAt,
-		LastFailureAt:       e.lastFailureAt,
-		CircuitState:        state,
+		Attempts:               e.attempts,
+		Successes:              e.successes,
+		LastSuccessAt:          e.lastSuccessAt,
+		LastFailureAt:          e.lastFailureAt,
+		CircuitState:           state,
 	}
 }
 

@@ -45,7 +45,14 @@ func (l *Loop) runViaPipeline(ctx context.Context, req RunRequest) (*RunResult, 
 	if err != nil {
 		return nil, err
 	}
-	return redactDelegationRunResult(&req, convertRunResult(pResult)), nil
+	result := convertRunResult(pResult)
+	// Completion verification (record-only): inspect the finished run state for
+	// L0 (content/deliverable) and L1 (tool-call completion) signals and attach
+	// the outcome to the result so the completed event + trace can surface it.
+	// The verifier never alters the pipeline result or the terminal decision.
+	completion := verifyCompletion(result, state)
+	result.completion = &completion
+	return redactDelegationRunResult(&req, result), nil
 }
 
 // buildPipelineDeps maps Loop fields + methods to PipelineDeps callbacks.
