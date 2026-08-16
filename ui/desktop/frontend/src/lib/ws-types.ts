@@ -32,7 +32,7 @@ export interface EventFrame {
 
 export type Frame = RequestFrame | ResponseFrame | EventFrame
 
-export type EventHandler = (payload: unknown) => void
+export type EventHandler = (payload: unknown, seq?: number) => void
 
 export interface PendingRequest {
   resolve: (payload: unknown) => void

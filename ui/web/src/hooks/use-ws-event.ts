@@ -8,15 +8,15 @@ import { useWs } from "./use-ws";
  */
 export function useWsEvent(
   event: string,
-  handler: (payload: unknown) => void,
+  handler: (payload: unknown, seq?: number) => void,
 ): void {
   const ws = useWs();
   const handlerRef = useRef(handler);
   handlerRef.current = handler;
 
   useEffect(() => {
-    const unsubscribe = ws.on(event, (payload: unknown) => {
-      handlerRef.current(payload);
+    const unsubscribe = ws.on(event, (payload: unknown, seq?: number) => {
+      handlerRef.current(payload, seq);
     });
     return unsubscribe;
   }, [ws, event]);

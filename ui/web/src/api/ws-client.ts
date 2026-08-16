@@ -3,7 +3,7 @@ import type { ErrorShape, EventFrame, ResponseFrame } from "./protocol";
 import { PROTOCOL_VERSION } from "./protocol";
 import { ApiError } from "./errors";
 
-type EventListener = (payload: unknown) => void;
+type EventListener = (payload: unknown, seq?: number) => void;
 
 interface PendingRequest {
   resolve: (payload: unknown) => void;
@@ -314,7 +314,7 @@ export class WsClient {
     if (listeners) {
       for (const fn of listeners) {
         try {
-          fn(frame.payload);
+          fn(frame.payload, frame.seq);
         } catch {
           // Don't let one listener crash others
         }

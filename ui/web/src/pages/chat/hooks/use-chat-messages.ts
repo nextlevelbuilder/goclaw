@@ -9,6 +9,7 @@ import { transformHistoryMessages } from "@/adapters/chat-message.adapter";
 import { useChatTeamTasks } from "./use-chat-team-tasks";
 import { useChatMessagesStore } from "@/stores/use-chat-messages-store";
 import { appendFilteredThinkingChunk, createThinkTagStreamFilterState } from "@/lib/think-tag-stream";
+import { shouldProcessRunEvent, type RunSeqMap } from "@/lib/event-seq-dedup";
 
 // Stable empty array — avoids creating a new reference on every render inside
 // Zustand selectors, which would trigger an infinite re-render loop (React #185).
@@ -39,6 +40,9 @@ export function useChatMessages(sessionKey: string, agentId: string) {
 
   // Refs for values accessed inside event handler to avoid stale closures
   const runIdRef = useRef<string | null>(null);
+  // Highest seq seen per run (sessionKey:runId); duplicate frames (reconnect
+  // replay) are dropped, frames without seq pass through untouched.
+  const seenSeqRef = useRef<RunSeqMap>(new Map());
   const expectingRunRef = useRef(false);
   const streamRef = useRef("");
   const thinkingRef = useRef("");
@@ -95,6 +99,7 @@ export function useChatMessages(sessionKey: string, agentId: string) {
     setBlockReplies([]);
     setTeamTasks([]);
     runIdRef.current = null;
+    seenSeqRef.current.clear();
     expectingRunRef.current = false;
     streamRef.current = "";
     thinkingRef.current = "";
@@ -144,11 +149,17 @@ export function useChatMessages(sessionKey: string, agentId: string) {
 
   // Agent event handler
   const handleAgentEvent = useCallback(
-    (payload: unknown) => {
+    (payload: unknown, seq?: number) => {
       const event = payload as AgentEventPayload;
       if (!event) return;
       if (event.channel && event.channel !== "ws" && !event.runKind) return;
       if (event.sessionKey && event.sessionKey !== sessionKeyRef.current) return;
+
+      // Dedup single gate for all run-scoped frames (chunk/thinking/tool/status).
+      if (!shouldProcessRunEvent(
+        seenSeqRef.current, event.runId, event.sessionKey ?? sessionKeyRef.current,
+        event.type, seq, !!runIdRef.current,
+      )) return;
 
       // Capture run.started
       if (event.type === "run.started" && event.agentId === agentIdRef.current) {
