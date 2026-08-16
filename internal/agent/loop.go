@@ -60,7 +60,17 @@ func (l *Loop) parallelEligibleToolCall(tc providers.ToolCall) bool {
 // as `exec` with `{action:"mcp_xxx", code|command:"..."}`.
 // We recover the intended MCP tool name from `action` and map payload to MCP
 // schema (`code`) before registry lookup.
+//
+// repairToolCallArgs runs first in the chain: it repairs stray field names
+// ("arg"/"args" → "arguments", nested flatten) and truncated raw arguments
+// (strict-safe JSON repair) BEFORE the arguments are consumed — by the time a
+// ToolCall reaches tool execution, wrong field names have already been dropped
+// into map[string]any. The ToolCall struct shape is unchanged.
 func (l *Loop) normalizeToolCall(tc providers.ToolCall) providers.ToolCall {
+	if l.repairToolCallArgs(&tc) {
+		slog.Debug("tool call repaired before normalization",
+			"agent", l.id, "tool", tc.Name, "call_id", tc.ID)
+	}
 	if tc.Name != "exec" || len(tc.Arguments) == 0 {
 		return tc
 	}
