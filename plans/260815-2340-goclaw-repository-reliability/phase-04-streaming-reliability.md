@@ -1,6 +1,6 @@
 # Phase 04 — Streaming Reliability: Stream Watchdog + Adaptive Timeouts + WS Event Seq Dedup + Duplicate Suppression
 
-> **Status: IN PROGRESS** — 2026-08-16. Scope approved by user: 4 modules, partial-stream recovery deferred.
+> **Status: DONE** — 2026-08-16. All 4 modules shipped, merged to dev via PR #2 (`e048a421`), CI green.
 > **Branch:** `feat/phase4-streaming` (tạo từ `dev`). Worktree: 4 agents song song, file-ownership disjoint, **agents KHÔNG commit** — controller commit tuần tự + build/test chung.
 
 ## Context

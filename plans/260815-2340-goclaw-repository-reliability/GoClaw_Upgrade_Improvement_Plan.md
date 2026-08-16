@@ -1465,11 +1465,11 @@ Không nên để provider-specific retry logic rải khắp từng provider.
 
 ## Phase 4 — Streaming reliability
 
-- [ ] Adaptive timeout.
-- [ ] Stream watchdog.
-- [ ] Partial-stream recovery.
-- [ ] WS reconnect/resync.
-- [ ] Duplicate suppression.
+- [x] Adaptive timeout. (`reliability.stream.*` + `ModelSpec.StreamTimeoutMs`, 2026-08-16)
+- [x] Stream watchdog. (idle/first-byte per-event reset, 2026-08-16)
+- [ ] Partial-stream recovery. (deferred — cần checkpoint/resume từ Phase 3 trước)
+- [x] WS reconnect/resync. (`runs.events` + `afterSeq`, merged Phase 3, 2026-08-16)
+- [x] Duplicate suppression. (`FailoverStreamed` + `emitted` guards + UI seq dedup, 2026-08-16)
 
 ## Phase 5 — Weak-model resilience
 
@@ -1649,7 +1649,7 @@ feat(test): add provider chaos and regression suite
 - [x] Error taxonomy. (phase-02, 2026-08-15)
 - [x] Retry/Retry-After/rate-limit coordinator. (phase-03, 2026-08-15)
 - [x] Circuit breaker. (phase-03, 2026-08-15)
-- [ ] Stream timeout/watchdog. (deferred)
+- [x] Stream timeout/watchdog. (phase-04, 2026-08-16)
 - [x] WS reconnect/resync. (`runs.events` + `afterSeq`, 2026-08-16)
 - [x] Provider/model health. (phase-03, 2026-08-15)
 - [ ] Regression tests cho 429 + stream disconnect + false error. (deferred to future integration)
