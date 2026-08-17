@@ -10,4 +10,7 @@ const (
 	DefaultMaxIterations   = 30
 	DefaultTemperature     = 0.7
 	DefaultHistoryShare    = 0.85
+	// DefaultMaxCompactionsPerSession bounds LLM compactions per session.
+	// Zero disables the cap (unlimited legacy behaviour).
+	DefaultMaxCompactionsPerSession = 12
 )

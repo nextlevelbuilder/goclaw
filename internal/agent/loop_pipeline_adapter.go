@@ -324,10 +324,17 @@ func convertRunResult(pr *pipeline.RunResult) *RunResult {
 // Returns nil if autoInjector is not configured (v3 retrieval disabled or no episodic store).
 // Phase 9: plumbs recentContext through to enrich vector search queries for
 // context-aware recall.
+//
+// The L0 budget (MaxTokens/MaxEntries) is sourced from RetrievalConfig defaults
+// so the assembled memory section is always capped — a single oversized abstract
+// can no longer balloon the system prompt beyond the fixed overhead pool.
+// Per-agent RetrievalConfig overrides are not plumbed into Loop yet; when they
+// are, resolve them here and map MaxL0Tokens/MaxL0Items into InjectParams.
 func (l *Loop) makeAutoInjectCallback(req *RunRequest) func(ctx context.Context, userMessage, userID, recentContext string) (string, error) {
 	if l.autoInjector == nil {
 		return nil
 	}
+	rc := DefaultRetrievalConfig()
 	return func(ctx context.Context, userMessage, userID, recentContext string) (string, error) {
 		result, err := l.autoInjector.Inject(ctx, memory.InjectParams{
 			AgentID:       l.agentUUID.String(),
@@ -335,6 +342,9 @@ func (l *Loop) makeAutoInjectCallback(req *RunRequest) func(ctx context.Context,
 			TenantID:      store.TenantIDFromContext(ctx).String(),
 			UserMessage:   userMessage,
 			RecentContext: recentContext,
+			MaxEntries:    rc.MaxL0Items,
+			MaxTokens:     rc.MaxL0Tokens,
+			Threshold:     rc.RelevanceThreshold,
 		})
 		if err != nil || result == nil {
 			return "", err

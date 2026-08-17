@@ -143,3 +143,102 @@ func roleList(msgs []providers.Message) []string {
 	}
 	return roles
 }
+
+// contentCounter counts tokens from content length (fallback-style chars/4), so
+// appending the memory section to the system prompt changes the count — unlike
+// spyTokenCounter, which is per-message and would mask the reorder regression.
+// It also records the exact system content it counted so the test can prove the
+// counter observed the post-mutation system prompt.
+type contentCounter struct {
+	systemSeen string // system content observed at count time
+	toolFixed  int    // tokens per tool schema
+	toolsSeen  int    // number of tool schemas observed
+}
+
+func (c *contentCounter) Count(_ string, text string) int { return len(text)/4 + 1 }
+func (c *contentCounter) CountMessages(_ string, msgs []providers.Message) int {
+	total := 0
+	for _, m := range msgs {
+		total += len(m.Content)/4 + 1
+		if m.Role == "system" {
+			c.systemSeen = m.Content
+		}
+	}
+	return total
+}
+func (c *contentCounter) CountToolSchemas(_ string, tools []providers.ToolDefinition) int {
+	c.toolsSeen = len(tools)
+	return len(tools) * c.toolFixed
+}
+func (c *contentCounter) ModelContextWindow(_ string) int { return 200_000 }
+
+// contentTokens approximates what contentCounter.CountMessages would return for
+// the given content string (the /4+1 heuristic used above).
+func contentTokens(s string) int { return len(s)/4 + 1 }
+
+// TestContextStage_OverheadIncludesMemoryAndReminders verifies the reordered
+// overhead computation (Gap A): OverheadTokens is counted AFTER InjectReminders
+// and AutoInject, so the L0 memory section appended to the system prompt is
+// included in the fixed (overhead) pool rather than leaking into the history
+// budget, and reminders are present in the history PruneStage counts.
+func TestContextStage_OverheadIncludesMemoryAndReminders(t *testing.T) {
+	t.Parallel()
+
+	cc := &contentCounter{}
+	const bareSystem = "You are a helpful assistant with many capabilities."
+	const memorySection = "## Memory Context\n\nRelevant memories:\n- user prefers Go\n- user lives in Hanoi\n"
+
+	deps := &PipelineDeps{
+		TokenCounter: cc,
+		BuildMessages: func(_ context.Context, _ *RunInput, _ []providers.Message, _ string) ([]providers.Message, error) {
+			return []providers.Message{
+				{Role: "system", Content: bareSystem},
+				{Role: "user", Content: "Hello"},
+			}, nil
+		},
+		InjectReminders: func(_ context.Context, _ *RunInput, msgs []providers.Message) []providers.Message {
+			// Prepend a reminder as a user message so its tokens land in history.
+			reminder := providers.Message{Role: "user", Content: "Reminder: team task T-1 is due today."}
+			return append([]providers.Message{reminder}, msgs...)
+		},
+		AutoInject: func(_ context.Context, _, _, _ string) (string, error) {
+			return memorySection, nil
+		},
+	}
+
+	stage := NewContextStage(deps)
+	state := defaultState()
+	state.Input.SessionKey = "sess-a"
+	state.Input.Message = "What should I build next?"
+
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+
+	if state.Context.MemorySection == "" {
+		t.Fatalf("MemorySection empty after Execute with AutoInject configured")
+	}
+
+	// OverheadTokens must reflect the FINAL system prompt: bare system content
+	// plus the appended memory section. Counted after AutoInject, the overhead
+	// equals contentTokens(bareSystem + "\n\n" + memorySection) + tool schemas (0).
+	expectSystem := bareSystem + "\n\n" + memorySection
+	want := contentTokens(expectSystem)
+	if state.Context.OverheadTokens != want {
+		t.Errorf("OverheadTokens = %d, want %d (final system prompt incl. memory section)",
+			state.Context.OverheadTokens, want)
+	}
+
+	// The bare system content alone must be strictly smaller — proving the memory
+	// section is included in the count.
+	if want <= contentTokens(bareSystem) {
+		t.Fatalf("test fixture invalid: memory section must add tokens (bare=%d, with-memory=%d)",
+			contentTokens(bareSystem), want)
+	}
+
+	// Reminder must be present in history after injection.
+	hist := state.Messages.History()
+	if len(hist) < 2 || hist[0].Role != "user" || hist[0].Content != "Reminder: team task T-1 is due today." {
+		t.Errorf("reminder not injected correctly: history[0] = %#v", hist[0])
+	}
+}

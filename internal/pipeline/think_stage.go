@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/reliability"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -69,6 +70,13 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 	// context budget before any provider call is attempted.
 	req, estimate, err := s.prepareFinalRequest(ctx, state, toolDefs)
 	if err != nil {
+		// Pre-transport budget abort (Gap D): emit failure-context telemetry when
+		// the request could not be brought under the hard cap. The estimate is the
+		// one that drove the reduction ladder — even when it was executed against
+		// the pre-guard request state, it is the closest pre-abort snapshot.
+		if isFinalRequestBudgetErr(err) {
+			s.emitBudgetExceeded(state, estimate, true)
+		}
 		return err
 	}
 
@@ -86,6 +94,7 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 		// the guard already guaranteed zero transport calls were made.
 		if isRequestBudgetExceededErr(err) {
 			if state.Think.OverflowRetries >= maxBudgetReductionRetries {
+				s.emitBudgetExceeded(state, estimate, true)
 				return fmt.Errorf("request context budget exceeded after reduction: %w", err)
 			}
 			if s.reduceForBudgetExceeded(ctx, state) {
@@ -97,6 +106,7 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 				state.Think.LastResponse = nil
 				return nil // Retry this iteration (Continue result) with reduced context.
 			}
+			s.emitBudgetExceeded(state, estimate, true)
 			return fmt.Errorf("request context budget exceeded, reduction exhausted: %w", err)
 		}
 		// Issue 958: Check for context overflow — attempt emergency compaction + retry
@@ -267,6 +277,60 @@ func finalContextActualLevel(estimate FinalRequestEstimate, actualInput int) (sl
 	return slog.LevelDebug, ""
 }
 
+// stateNudgeEndOfContextBudget appends a one-shot transparent user nudge when the
+// session has exhausted its compaction budget but the context is still over the
+// request budget. Mirrors the PruneStage cap message so users see a consistent
+// explainer across both compaction paths (Phase 08, Gap C).
+func (s *ThinkStage) stateNudgeEndOfContextBudget(state *RunState) {
+	state.Messages.AppendPending(providers.Message{
+		Role:      "user",
+		Content:   "[System] This session has used up its compaction budget. Start a new session or request a manual summary to continue with full context.",
+		Transient: true,
+	})
+}
+
+// emitBudgetExceeded publishes the failure-context telemetry (Gap D) when a run
+// aborts because the final request could not be brought under the context
+// budget. Counts only — no raw content. Also logs the abort at Warn so the
+// event is observable even without an event-bus subscriber.
+func (s *ThinkStage) emitBudgetExceeded(state *RunState, estimate FinalRequestEstimate, exhausted bool) {
+	payload := &eventbus.ContextBudgetExceededPayload{
+		SessionKey:         state.Input.SessionKey,
+		RunID:              state.RunID,
+		MessageTokens:      estimate.MessageTokens,
+		ToolTokens:         estimate.ToolTokens,
+		InputTokens:        estimate.InputTokens,
+		OutputReserve:      estimate.OutputReserveTokens,
+		HardInputCap:       estimate.HardInputCapTokens,
+		CompactTarget:      estimate.CompactTargetTokens,
+		ContextWindow:      estimate.ContextWindow,
+		MaxRequestShare:    estimate.MaxRequestShare,
+		OverflowRetries:    state.Think.OverflowRetries,
+		ReductionExhausted: exhausted,
+	}
+	if s.deps.EventBus != nil {
+		s.deps.EventBus.Publish(eventbus.DomainEvent{
+			Type:     eventbus.EventContextBudgetExceeded,
+			SourceID: state.RunID,
+			Payload:  payload,
+		})
+	}
+	slog.Warn("context.budget_exceeded",
+		"session_key", state.Input.SessionKey,
+		"run_id", state.RunID,
+		"message_tokens", estimate.MessageTokens,
+		"tool_tokens", estimate.ToolTokens,
+		"input_tokens", estimate.InputTokens,
+		"output_reserve", estimate.OutputReserveTokens,
+		"hard_input_cap", estimate.HardInputCapTokens,
+		"compact_target", estimate.CompactTargetTokens,
+		"context_window", estimate.ContextWindow,
+		"max_request_share", estimate.MaxRequestShare,
+		"overflow_retries", state.Think.OverflowRetries,
+		"reduction_exhausted", exhausted,
+	)
+}
+
 func (s *ThinkStage) tryEmergencyCompaction(ctx context.Context, state *RunState, reason string) bool {
 	state.Think.OverflowRetries++
 	if s.deps.CompactMessages == nil {
@@ -414,6 +478,18 @@ func isRequestBudgetExceededErr(err error) bool {
 		return budgetErr.ContextBudgetExceeded()
 	}
 	return false
+}
+
+// isFinalRequestBudgetErr reports whether err is the pre-transport budget abort
+// produced by prepareFinalRequest ("final request context budget exceeded") or
+// the invalid-budget guard failure. Both mean the run cannot proceed without
+// exceeding the context budget.
+func isFinalRequestBudgetErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "final request context budget exceeded") ||
+		strings.Contains(err.Error(), "final request context budget unavailable")
 }
 
 // observeEmptyOutput records an exhausted empty-final-reply event in the

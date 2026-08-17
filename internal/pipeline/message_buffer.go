@@ -44,6 +44,12 @@ func (mb *MessageBuffer) AppendPending(msg providers.Message) {
 // Pending returns pending messages (read-only view).
 func (mb *MessageBuffer) Pending() []providers.Message { return mb.pending }
 
+// SetPending replaces the pending buffer wholesale. Used by the fresh tool-result
+// cap to swap in trimmed copies without aliasing the previous slice.
+func (mb *MessageBuffer) SetPending(msgs []providers.Message) {
+	mb.pending = msgs
+}
+
 // FlushPending moves pending messages to history and returns them.
 func (mb *MessageBuffer) FlushPending() []providers.Message {
 	flushed := mb.pending

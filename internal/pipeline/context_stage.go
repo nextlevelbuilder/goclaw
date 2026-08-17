@@ -141,17 +141,7 @@ func (s *ContextStage) Execute(ctx context.Context, state *RunState) error {
 		}
 	}
 
-	// 5. Compute overhead tokens via TokenCounter (replaces heuristic estimateOverhead).
-	// Includes both system-prompt tokens and tool-schema tokens so PruneStage
-	// budget shrinks correctly when tools are large.
-	if s.deps.TokenCounter != nil {
-		system := state.Messages.System()
-		overhead := s.deps.TokenCounter.CountMessages(state.Model, []providers.Message{system})
-		overhead += s.deps.TokenCounter.CountToolSchemas(state.Model, state.Think.Tools)
-		state.Context.OverheadTokens = overhead
-	}
-
-	// 6. Enrich input media (resolve refs, inline descriptions).
+	// 5. Enrich input media (resolve refs, inline descriptions).
 	// Receives full RunState so it can access MessageBuffer for in-place enrichment.
 	if s.deps.EnrichMedia != nil {
 		if err := s.deps.EnrichMedia(ctx, state); err != nil {
@@ -159,13 +149,13 @@ func (s *ContextStage) Execute(ctx context.Context, state *RunState) error {
 		}
 	}
 
-	// 7. Inject team task reminders into messages
+	// 6. Inject team task reminders into messages
 	if s.deps.InjectReminders != nil {
 		updated := s.deps.InjectReminders(ctx, state.Input, state.Messages.History())
 		state.Messages.SetHistory(updated)
 	}
 
-	// 8. Auto-inject L0 memory context into system prompt.
+	// 7. Auto-inject L0 memory context into system prompt.
 	// V3RetrievalEnabled check removed — auto-inject runs whenever AutoInject is available.
 	// Phase 9: pass recent conversation context so vector search can resolve
 	// pronouns and implicit references in follow-up questions.
@@ -178,6 +168,21 @@ func (s *ContextStage) Execute(ctx context.Context, state *RunState) error {
 			sys.Content += "\n\n" + section
 			state.Messages.SetSystem(sys)
 		}
+	}
+
+	// 8. Compute overhead tokens via TokenCounter (replaces heuristic estimateOverhead).
+	// Runs LAST — AFTER EnrichMedia, InjectReminders, and AutoInject — so the count
+	// reflects the FINAL system prompt, including the L0 memory section appended by
+	// AutoInject. Counting before AutoInject under-counts OverheadTokens and lets
+	// PruneStage budget overestimate available history capacity. Reminders land in
+	// history (not the system prompt), so PruneStage's history counter accounts for
+	// them separately against the history budget. Includes system-prompt tokens +
+	// tool-schema tokens so the budget shrinks correctly when tools are large.
+	if s.deps.TokenCounter != nil {
+		system := state.Messages.System()
+		overhead := s.deps.TokenCounter.CountMessages(state.Model, []providers.Message{system})
+		overhead += s.deps.TokenCounter.CountToolSchemas(state.Model, state.Think.Tools)
+		state.Context.OverheadTokens = overhead
 	}
 
 	return nil

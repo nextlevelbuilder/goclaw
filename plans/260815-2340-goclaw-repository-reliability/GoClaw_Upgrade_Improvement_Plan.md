@@ -1498,10 +1498,10 @@ Không nên để provider-specific retry logic rải khắp từng provider.
 
 ## Phase 8 — Context optimization
 
-- [ ] Per-section token budgets.
-- [ ] Tool-output compaction.
-- [ ] Failure context compression.
-- [ ] Long-session stabilization.
+- [ ] Per-section token budgets. (phase-08, in progress 2026-08-17; overhead accuracy + L0 cap enforcement)
+- [ ] Tool-output compaction. (phase-08, in progress 2026-08-17; fresh-result cap + IterationProgress adaptive)
+- [ ] Failure context compression. (phase-08, in progress 2026-08-17; telemetry + characterization tests, logic đã có)
+- [ ] Long-session stabilization. (phase-08, in progress 2026-08-17; compaction cap + linger budget, Phase 3 deferred items)
 
 ## Phase 9 — Testing
 

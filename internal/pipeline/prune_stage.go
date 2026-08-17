@@ -187,6 +187,33 @@ func (s *PruneStage) Execute(ctx context.Context, state *RunState) error {
 		state.Compact.MemoryFlushedThisCycle = true
 	}
 
+	// Long-session compaction cap: when the session has already compacted
+	// MaxCompactionsPerSession times (cap > 0), stop compacting. The run may still
+	// continue — if still over budget after memory flush we surface a nudge warning
+	// instead of aborting, and never add further compaction passes that would
+	// degrade the session's original context. 0 (unset) keeps legacy behaviour.
+	maxCompactions := 0
+	if s.deps.Config.Compaction != nil {
+		maxCompactions = s.deps.Config.Compaction.MaxCompactionsPerSession
+	}
+	if maxCompactions > 0 && state.Compact.CompactionCount >= maxCompactions {
+		if historyTokens > budget {
+			slog.Info("prune: compaction cap reached, skipping LLM compaction",
+				"session_key", sessionKey,
+				"compaction_count", state.Compact.CompactionCount,
+				"max_compactions", maxCompactions,
+				"history_tokens", historyTokens,
+				"budget", budget,
+			)
+			state.Messages.AppendPending(providers.Message{
+				Role:      "user",
+				Content:   "[System] This session has used up its compaction budget. Start a new session or request a manual summary to continue with full context.",
+				Transient: true,
+			})
+		}
+		return nil // Continue — never AbortRun purely due to the cap
+	}
+
 	if s.deps.CompactMessages == nil {
 		return nil // no compaction available
 	}

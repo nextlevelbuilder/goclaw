@@ -489,12 +489,16 @@ type AgentDefaults struct {
 // CompactionConfig configures session compaction behaviour.
 // Matching TS agents.defaults.compaction.
 type CompactionConfig struct {
-	ReserveTokensFloor int                `json:"reserveTokensFloor,omitempty"` // min reserve tokens (default 20000)
-	MaxHistoryShare    float64            `json:"maxHistoryShare,omitempty"`    // max share of context for history-only post-turn compaction (default 0.85)
-	MaxRequestShare    float64            `json:"maxRequestShare,omitempty"`    // max share of context for the final request sent to the model (default 0.85)
-	KeepLastMessages   int                `json:"keepLastMessages,omitempty"`   // messages to keep after compaction (default 4)
-	TimeoutSeconds     int                `json:"timeoutSeconds,omitempty"`     // summarization timeout in seconds (default 120)
-	MemoryFlush        *MemoryFlushConfig `json:"memoryFlush,omitempty"`        // pre-compaction flush
+	ReserveTokensFloor       int                `json:"reserveTokensFloor,omitempty"`       // min reserve tokens (default 20000)
+	MaxHistoryShare          float64            `json:"maxHistoryShare,omitempty"`          // max share of context for history-only post-turn compaction (default 0.85)
+	MaxRequestShare          float64            `json:"maxRequestShare,omitempty"`          // max share of context for the final request sent to the model (default 0.85)
+	KeepLastMessages         int                `json:"keepLastMessages,omitempty"`         // messages to keep after compaction (default 4)
+	TimeoutSeconds           int                `json:"timeoutSeconds,omitempty"`           // summarization timeout in seconds (default 120)
+	MemoryFlush              *MemoryFlushConfig `json:"memoryFlush,omitempty"`              // pre-compaction flush
+	// MaxCompactionsPerSession caps how many LLM compactions a single session may
+	// run before the pipeline stops compacting and nudges the user instead.
+	// Default 12; 0 = unlimited (legacy behavior unchanged).
+	MaxCompactionsPerSession int                `json:"maxCompactionsPerSession,omitempty"`
 }
 
 // MemoryFlushConfig configures the pre-compaction memory flush.
@@ -520,6 +524,10 @@ type ContextPruningConfig struct {
 	SoftTrimRatio        float64                  `json:"softTrimRatio,omitempty"`        // start soft trim at this % of window (default 0.3)
 	HardClearRatio       float64                  `json:"hardClearRatio,omitempty"`       // start hard clear at this % (default 0.5)
 	MinPrunableToolChars int                      `json:"minPrunableToolChars,omitempty"` // min chars in prunable tools before acting (default 50000)
+	// FreshResultCapTokens caps per-result token budget for fresh (current-turn)
+	// tool results held in pending messages. 0 (default) = disabled. Consumed by
+	// the fresh tool-result cap in the final request guard.
+	FreshResultCapTokens int                      `json:"freshResultCapTokens,omitempty"`
 	SoftTrim             *ContextPruningSoftTrim  `json:"softTrim,omitempty"`
 	HardClear            *ContextPruningHardClear `json:"hardClear,omitempty"`
 }

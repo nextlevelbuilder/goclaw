@@ -18,6 +18,9 @@ const (
 
 	// Context pruning observability (Phase 05)
 	EventContextPruned EventType = "context.pruned"
+	// Final request could not fit the context budget even after the reduction
+	// ladder — the run aborts. Telemetry for the failure-context lens (Phase 08).
+	EventContextBudgetExceeded EventType = "context.budget_exceeded"
 
 	// Vault events (v3 enrichment pipeline)
 	EventVaultDocUpserted EventType = "vault.doc_upserted"
@@ -119,6 +122,24 @@ type DelegateFailedPayload struct {
 	FromAgent    string
 	ToAgent      string
 	Error        string
+}
+
+// ContextBudgetExceededPayload is emitted when the final request could not be
+// brought under the context budget and the run aborts. Counts only — no raw
+// message content, mirroring ContextPrunedPayload.
+type ContextBudgetExceededPayload struct {
+	SessionKey          string
+	RunID               string
+	MessageTokens       int
+	ToolTokens          int
+	InputTokens         int
+	OutputReserve       int
+	HardInputCap        int
+	CompactTarget       int
+	ContextWindow       int
+	MaxRequestShare     float64
+	OverflowRetries     int // reduction attempts already made this run
+	ReductionExhausted  bool // true when the ladder returned no further change
 }
 
 // ContextPrunedPayload is emitted when pruning mutates context messages.

@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tokencount"
 )
 
 // pgAutoInjector implements AutoInjector backed by EpisodicStore + FTS search.
@@ -35,6 +36,15 @@ func (a *pgAutoInjector) Inject(ctx context.Context, params InjectParams) (*Inje
 	maxEntries := params.MaxEntries
 	if maxEntries <= 0 {
 		maxEntries = 5
+	}
+	// Token budget caps the assembled L0 section (Gap E). Mirrors maxEntries:
+	// 0 (unset by caller) falls back to the documented default of 200 tokens so
+	// a single oversized abstract can't blow the system prompt beyond the fixed
+	// overhead pool. A positive value overrides the budget; the legacy behavior
+	// (count-only cap) is what <= 0 defaulted to, so nothing regresses.
+	maxTokens := params.MaxTokens
+	if maxTokens <= 0 {
+		maxTokens = 200
 	}
 	threshold := params.Threshold
 	if threshold <= 0 {
@@ -67,6 +77,14 @@ func (a *pgAutoInjector) Inject(ctx context.Context, params InjectParams) (*Inje
 	var sb strings.Builder
 	sb.WriteString("## Memory Context\n\nRelevant memories from past sessions (use memory_search for details):\n")
 
+	// Token-budget enforcement: the section is capped at MaxTokens (default 200).
+	// This keeps the L0 auto-inject from ballooning the system prompt beyond the
+	// fixed overhead pool. Counter is shared across a run so a single blown
+	// entry is clipped without breaking subsequent injections.
+	counter := tokencount.NewBudgetCounter()
+	prefix := sb.String()
+	sectionTokens, _ := counter.CountText(prefix)
+
 	injected := 0
 	var topScore float64
 	for _, r := range results {
@@ -76,9 +94,34 @@ func (a *pgAutoInjector) Inject(ctx context.Context, params InjectParams) (*Inje
 		if r.L0Abstract == "" {
 			continue
 		}
-		sb.WriteString("- ")
-		sb.WriteString(r.L0Abstract)
-		sb.WriteString("\n")
+		entry := "- " + r.L0Abstract + "\n"
+		if maxTokens > 0 {
+			entryTokens, err := counter.CountText(entry)
+			if err == nil && sectionTokens+entryTokens > maxTokens {
+				remaining := maxTokens - sectionTokens
+				if remaining > 0 {
+					// The entry is too big to fit whole. If nothing is injected yet,
+					// the top-relevant hit is preserved by clipping it to the budget
+					// (plan: "keep the most relevant entries, then clip to budget").
+					// Otherwise skip it and keep looking for a smaller entry.
+					if injected > 0 {
+						continue
+					}
+					// Clip with 1-token headroom: the counter counts the entry in
+					// isolation, but the assembled section tokenizes it adjacent to
+					// the prefix, which can drift by a token at the boundary.
+					entry = clipEntryToBudget(entry, remaining-1, counter)
+					entryTokens, _ = counter.CountText(entry)
+					if entryTokens <= 0 {
+						continue // clip produced no usable text
+					}
+				} else {
+					continue
+				}
+			}
+			sectionTokens += entryTokens
+		}
+		sb.WriteString(entry)
 		injected++
 		if r.Score > topScore {
 			topScore = r.Score
@@ -100,6 +143,36 @@ func (a *pgAutoInjector) Inject(ctx context.Context, params InjectParams) (*Inje
 	a.recordRetrievalMetric(params, result)
 
 	return result, nil
+}
+
+// clipEntryToBudget rune-clips a bullet entry so it fits within budgetTokens.
+// It trims the bullet prefix ("- ") plus as many runes as fit, keeping the
+// head of the abstract (the topic is front-loaded in L0 abstracts). The result
+// always ends with a newline so a subsequent entry starts on a fresh line.
+// Returns "" when not even a bare bullet fits. The caller recounts the result.
+func clipEntryToBudget(entry string, budgetTokens int, counter tokencount.BudgetCounter) string {
+	// Account for the bullet prefix once, then binary-search the longest prefix
+	// whose token count stays within budget. Rune-based so multi-byte
+	// vi/zh abstracts are never split mid-character.
+	const bullet = "- "
+	body := strings.TrimSuffix(strings.TrimPrefix(entry, bullet), "\n")
+	runes := []rune(body)
+
+	lo, hi := 0, len(runes)
+	for lo < hi {
+		mid := (lo + hi + 1) / 2
+		candidate := bullet + string(runes[:mid])
+		n, err := counter.CountText(candidate)
+		if err == nil && n <= budgetTokens {
+			lo = mid
+		} else {
+			hi = mid - 1
+		}
+	}
+	if lo == 0 {
+		return "" // not even a bare bullet fits — caller skips the entry
+	}
+	return bullet + string(runes[:lo]) + "\n"
 }
 
 // recordRetrievalMetric records an auto-inject retrieval metric in a background goroutine.

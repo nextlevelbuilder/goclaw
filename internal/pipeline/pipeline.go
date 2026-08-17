@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // Pipeline orchestrates stage execution for a single agent run.
@@ -70,8 +72,16 @@ func (p *Pipeline) Run(ctx context.Context, state *RunState) (*RunResult, error)
 	// capture FinalContent), then exit the outer loop.
 	// AbortRun: exit inner loop immediately (unrecoverable, e.g. over budget after compaction).
 	for state.Iteration = 0; state.Iteration < p.Deps.Config.MaxIterations; state.Iteration++ {
+		// Phase 08 (Gap F): carry per-iteration progress into the tools so adaptive
+		// output caps (web_fetch 20K/10K scaling by iteration) start working again.
+		// The ToolStage dispatches tool calls with this context, so tools observe
+		// the current iteration and can shrink their output as the budget runs low.
+		iterCtx := tools.WithIterationProgress(ctx, tools.IterationProgress{
+			Current: state.Iteration + 1,
+			Max:     p.Deps.Config.MaxIterations,
+		})
 		for _, stage := range p.iteration {
-			if err := stage.Execute(ctx, state); err != nil {
+			if err := stage.Execute(iterCtx, state); err != nil {
 				return nil, fmt.Errorf("iter %d %s: %w", state.Iteration, stage.Name(), err)
 			}
 			// AbortRun exits inner loop immediately — skip remaining stages.

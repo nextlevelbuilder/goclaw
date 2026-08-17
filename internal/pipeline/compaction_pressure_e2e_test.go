@@ -2,8 +2,10 @@ package pipeline
 
 import (
 	"context"
+	"strings"
 	"testing"
 
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
@@ -101,6 +103,90 @@ func TestPipelineE2E_MidLoopCompaction_PropagatesPressureToMaybeSummarize(t *tes
 	if !gotFlag {
 		t.Error("MaybeSummarize received midLoopCompacted=false, want true — " +
 			"mid-loop compaction would not be persisted, re-introducing the re-compaction loop")
+	}
+}
+
+// A full pipeline run where the session has already hit the compaction cap must
+// not compact again and must not abort — instead it emits a nudge and continues.
+func TestPipelineE2E_CompactionCapReached_RunCompletesWithNudge(t *testing.T) {
+	t.Parallel()
+	// Count the real callbacks (pressureE2EDeps counts MaybeSummarize under the
+	// "gotCalls" name, which is what made this assertion vacuous before).
+	compactCalls := 0
+	summarizeCalls := 0
+	var gotFlag bool
+	deps := PipelineDeps{
+		Config: PipelineConfig{
+			MaxIterations: 2,
+			ContextWindow: 1000,
+			MaxTokens:     100,
+			// Session already at the cap: the pipeline must stop compacting even
+			// though the history blows way past the budget.
+			Compaction: &config.CompactionConfig{MaxCompactionsPerSession: 1},
+		},
+		TokenCounter: &mockTokenCounter{countPerMessage: 100},
+		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
+			return &providers.ChatResponse{Content: "final answer", FinishReason: "stop"}, nil
+		},
+		MaybeSummarize: func(_ context.Context, _ string, midLoopCompacted bool) {
+			summarizeCalls++
+			gotFlag = midLoopCompacted
+		},
+		PruneMessages: func(msgs []providers.Message, _ int) ([]providers.Message, PruneStats) {
+			return msgs, PruneStats{} // no reduction — force the compaction path
+		},
+		CompactMessages: func(_ context.Context, _ []providers.Message, _ string) ([]providers.Message, error) {
+			compactCalls++
+			return []providers.Message{{Role: "user", Content: "[compacted summary]"}}, nil
+		},
+	}
+	state := pressureE2EState(50) // 5000 tokens >> budget 900
+	state.Compact.CompactionCount = 1
+
+	if _, err := NewDefaultPipeline(deps).Run(context.Background(), state); err != nil {
+		t.Fatalf("pipeline Run() error: %v", err)
+	}
+
+	if state.ExitCode == AbortRun {
+		t.Fatal("ExitCode = AbortRun, want non-abort (cap must never abort the run)")
+	}
+	if compactCalls != 0 {
+		t.Errorf("CompactMessages called %d times, want 0 (cap reached)", compactCalls)
+	}
+	if summarizeCalls != 1 {
+		t.Errorf("MaybeSummarize called %d times, want 1", summarizeCalls)
+	}
+	if state.Compact.CompactionCount != 1 {
+		t.Errorf("CompactionCount = %d, want 1 (unchanged)", state.Compact.CompactionCount)
+	}
+	if state.Prune.MidLoopCompacted {
+		t.Error("MidLoopCompacted should be false — no compaction ran")
+	}
+	if gotFlag {
+		t.Error("MaybeSummarize received midLoopCompacted=true on a cap-reached run — " +
+			"would lower the summarize threshold and over-compact")
+	}
+	// The nudge is appended as pending during prune but FlushPending (checkpoint/
+	// finalize) moves it into history by the end of the run. It must still be
+	// flagged Transient so it is never persisted to the session store.
+	found := false
+	nudgedTransient := false
+	search := append(append([]providers.Message{}, state.Messages.History()...), state.Messages.Pending()...)
+	for _, msg := range search {
+		if msg.Role == "user" && strings.Contains(msg.Content, "compaction budget") {
+			found = true
+			nudgedTransient = msg.Transient
+			break
+		}
+	}
+	if !found {
+		for i, msg := range search {
+			t.Logf("msg[%d] role=%s transient=%v content=%q", i, msg.Role, msg.Transient, msg.Content)
+		}
+		t.Error("expected a compaction-cap nudge among messages")
+	}
+	if found && !nudgedTransient {
+		t.Error("nudge must be Transient so it is never persisted to the session store")
 	}
 }
 

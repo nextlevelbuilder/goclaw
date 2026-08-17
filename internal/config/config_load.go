@@ -91,6 +91,9 @@ func Default() *Config {
 					MaxConcurrent: 20,
 					MaxSpawnDepth: 1,
 				},
+				Compaction: &CompactionConfig{
+					MaxCompactionsPerSession: DefaultMaxCompactionsPerSession,
+				},
 			},
 		},
 		Channels: ChannelsConfig{
