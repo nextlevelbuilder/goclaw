@@ -1,6 +1,6 @@
 # Phase 07 — Tool Reliability: Retry Classes + Deadlines + Progress Events + Idempotency/Side-Effect Safety
 
-> **Status: IN PROGRESS** — 2026-08-17. Branch: TBD (tạo từ `dev`). Workstream: agents song song, file-ownership disjoint, **agents KHÔNG commit** — controller commit tuần tự + build/test chung.
+> **Status: DONE** — 2026-08-17. Branch `feat/phase7-tool-reliability` → PR #5 → merge dev (`83eef032`). Workstream: agents song song, file-ownership disjoint, **agents KHÔNG commit** — controller commit tuần tự + build/test chung.
 > **Scope tickets:** plan §32 Phase 7 (tool retry classes, tool deadlines, tool progress, idempotency, side-effect safety) + §13.1/13.2/13.3 + §9.4 + §7.5.
 
 ## Context (scout 2026-08-17, verified directly against code)

@@ -1490,11 +1490,11 @@ Không nên để provider-specific retry logic rải khắp từng provider.
 
 ## Phase 7 — Tool reliability
 
-- [ ] Tool retry classes. (phase-07, in progress, 2026-08-17)
-- [ ] Tool deadlines. (phase-07, in progress, 2026-08-17)
-- [ ] Tool progress. (phase-07, in progress, 2026-08-17)
-- [ ] Idempotency. (phase-07, in progress 2026-08-17; metric-based classification gate, key-chain deferred)
-- [ ] Side-effect safety. (phase-07, in progress 2026-08-17; classification gate, no auto-retry on destructive)
+- [x] Tool retry classes. (`ToolExecutionSpec.Retry` Never/Auto/Repair + retryable classifier, PR #5 merged, 2026-08-17)
+- [x] Tool deadlines. (`SoftTimeout`/`HardTimeout` per-attempt WithTimeout, PR #5 merged, 2026-08-17)
+- [x] Tool progress. (`tool.started`/`tool.progress`/`tool.log`/`tool.completed` agent-frame events + UI phase `running`, PR #5 merged, 2026-08-17)
+- [x] Idempotency. (metric-based classification gate + no auto-retry on Destructive, key-chain deferred, PR #5 merged, 2026-08-17)
+- [x] Side-effect safety. (classification gate + `Destructive` blocks auto-retry, PR #5 merged, 2026-08-17)
 
 ## Phase 8 — Context optimization
 
