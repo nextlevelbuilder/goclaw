@@ -2,7 +2,7 @@ VERSION ?= $(shell git describe --tags --abbrev=0 --match "v[0-9]*" 2>/dev/null 
 LDFLAGS  = -s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=$(VERSION)
 BINARY   = goclaw
 
-.PHONY: build build-full build-tui run clean version up up-build down logs reset test vet check-web dev migrate setup ci desktop-dev desktop-build desktop-dmg test-hooks test-hooks-unit test-hooks-e2e test-hooks-chaos test-hooks-rbac test-hooks-tracing
+.PHONY: build build-full build-tui run clean version up up-build down logs reset test vet check-web dev migrate setup ci desktop-dev desktop-build desktop-dmg test-hooks test-hooks-unit test-hooks-e2e test-hooks-chaos test-hooks-rbac test-hooks-tracing test-providers-chaos test-pipeline-chaos test-reliability-e2e test-phase9
 
 # Build backend only (API-only, no embedded web UI)
 build:
@@ -127,6 +127,26 @@ test-hooks-tracing:
 
 # Full hook test suite (unit + integration)
 test-hooks: test-hooks-unit test-hooks-e2e test-hooks-chaos test-hooks-rbac test-hooks-tracing
+
+# ── Reliability chaos tests (phase 9) ──
+# Pure Go unit tests — no DB, no integration tag. Drive RetryDo/failover/stream
+# watchdog through a REAL httptest fake-LLM server (429 storms, Retry-After,
+# 5xx series, slow first token, mid-stream close, long-reasoning no-false-stall).
+test-providers-chaos:
+	go test -race -timeout=120s ./internal/providers/ -run "TestRetryDo_HTTP|TestWatchdog_Thinking|TestFailover_HTTP"
+
+# Weak-model failure scenarios through the REAL pipeline loop (malformed tool
+# call, invalid JSON, empty output, premature completion, repeated tool loop).
+test-pipeline-chaos:
+	go test -race -timeout=120s ./internal/pipeline/ -run "TestWeakModel"
+
+# PG-backed run-lifecycle chaos (stream disconnect does not FAIL the run;
+# stale heartbeat runs are recovered by RecoverStaleRuns). Requires
+# TEST_DATABASE_URL pointing at a pgvector:pg18 container on :5433.
+test-reliability-e2e:
+	go test -race -timeout=180s -tags integration -run "TestProviderStreamDisconnect|TestStaleRun" ./tests/integration/
+
+test-phase9: test-providers-chaos test-pipeline-chaos
 
 vet:
 	go vet ./...

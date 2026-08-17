@@ -76,6 +76,12 @@ jobs:
       # completes in <3s against a warm DB.
       - name: Integration tests
         run: go test -race -timeout=180s -tags integration ./tests/integration/
+      # Reliability chaos tests (Phase 9) — pure-Go unit suites that drive
+      # RetryDo/failover/stream watchdog through a real httptest fake-LLM server
+      # and weak-model scenarios through the real pipeline loop. No DB needed.
+      # -run scoping + bounded -timeout keeps the step fast.
+      - name: Reliability chaos tests (Phase 9)
+        run: make test-phase9
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tail -1
 

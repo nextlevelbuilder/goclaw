@@ -1506,11 +1506,11 @@ Không nên để provider-specific retry logic rải khắp từng provider.
 ## Phase 9 — Testing
 
 - [x] Unit tests. (12 cho reliability layer phase-03 + durable run records phase §7 + Phase 5 module tests, 2026-08-15/16)
-- [ ] Integration tests.
-- [ ] Provider simulation.
-- [ ] Chaos tests.
-- [ ] Load tests.
-- [ ] Regression tests.
+- [ ] Integration tests. (phase-09, in progress 2026-08-17; run-lifecycle + stale-recovery + stream-disconnect PG-backed)
+- [ ] Provider simulation. (phase-09, in progress 2026-08-17; fake-LLM HTTP chaos harness)
+- [ ] Chaos tests. (phase-09, in progress 2026-08-17; provider chaos + weak-model pipeline chaos + Case E reasoning regression)
+- [ ] Load tests. (deferred — CLAUDE.md bỏ load/stress/benchmark trên CI runner shared)
+- [ ] Regression tests. (phase-09, in progress 2026-08-17; Case A 429-storm, Case B stream disconnect, Case E long reasoning)
 
 ## Phase 10 — Production hardening
 
