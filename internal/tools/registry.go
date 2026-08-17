@@ -247,13 +247,16 @@ func (r *Registry) ExecuteWithContext(ctx context.Context, name string, args map
 	return result
 }
 
-// safeExecute runs tool.Execute with panic recovery. A panicking tool returns
-// an error result instead of crashing the process.
+// safeExecute runs tool.Execute through ExecuteWithSpec — applying the tool's
+// ToolExecutionSpec (deadline + retry) when one is declared — with panic
+// recovery. A panicking tool returns an error result instead of crashing the
+// process. Runs after the rate limiter so Phase 7 spec behavior (deadline
+// wrap) never reorders the existing hook chain.
 func safeExecute(tool Tool, ctx context.Context, args map[string]any) (result *Result) {
 	defer safego.Recover(func(v any) {
 		result = ErrorResult(fmt.Sprintf("tool %q panicked: %v", tool.Name(), v))
 	}, "tool", tool.Name())
-	return tool.Execute(ctx, args)
+	return ExecuteWithSpec(ctx, tool, args, SpecFor(tool))
 }
 
 // ProviderDefs returns tool definitions for LLM provider APIs.

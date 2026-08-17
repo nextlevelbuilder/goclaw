@@ -50,6 +50,11 @@ func (l *Loop) makeExecuteToolCall(req *RunRequest, bridgeRS *runState) func(ctx
 			Payload: map[string]any{"name": tc.Name, "id": tc.ID, "arguments": tc.Arguments},
 		})
 
+		// Phase 7 C4: when the tool's spec opts into progress events, emit
+		// tool.started before execution and tool.completed after it returns.
+		prog := buildToolProgressEmitter(l, emitRun, state.RunID, registryName, tc.Name, tc.ID, tc.Arguments)
+		prog.started()
+
 		// Emit tool span start for tracing. Parent the tool span to the current
 		// LLM-call span so the trace tree nests tool calls under the model turn.
 		toolStart := time.Now().UTC()
@@ -84,6 +89,10 @@ func (l *Loop) makeExecuteToolCall(req *RunRequest, bridgeRS *runState) func(ctx
 		result := l.executeToolForActor(ctx, registryName, tc.Arguments,
 			req.Channel, req.ChatID, req.PeerKind, req.SessionKey, actorUserID)
 		toolDuration := time.Since(toolStart)
+
+		// Phase 7 C4: emit tool.completed before post-processing so long-running
+		// tool lifecycles resolve promptly. No-op unless progress was opted in.
+		prog.completed(result)
 
 		l.emitToolSpanEnd(ctx, toolSpanID, toolStart, result)
 		l.recordToolCallUsage(ctx, state, registryName, result)
@@ -136,6 +145,12 @@ func (l *Loop) makeExecuteToolRaw(req *RunRequest) func(ctx context.Context, tc 
 			Payload: map[string]any{"name": tc.Name, "id": tc.ID, "arguments": tc.Arguments},
 		})
 
+		// Phase 7 C4: progress events on the parallel path too. The emitter is
+		// goroutine-safe (loop.emit is channel-backed), so concurrent tool
+		// executions each carry their own toolCallId.
+		prog := buildToolProgressEmitter(l, emitRun, req.RunID, registryName, tc.Name, tc.ID, tc.Arguments)
+		prog.started()
+
 		// Emit tool span start (goroutine-safe: channel send only).
 		start := time.Now().UTC()
 		spanID := l.emitToolSpanStart(ctx, start, registryName, tc.ID, string(argsJSON))
@@ -160,6 +175,10 @@ func (l *Loop) makeExecuteToolRaw(req *RunRequest) func(ctx context.Context, tc 
 		result := l.executeToolForActor(ctx, registryName, tc.Arguments,
 			req.Channel, req.ChatID, req.PeerKind, req.SessionKey, actorUserID)
 		dur := time.Since(start)
+
+		// Phase 7 C4: emit tool.completed on the parallel path. No-op unless the
+		// tool's spec opted into progress events.
+		prog.completed(result)
 
 		// Emit tool span end inside goroutine to prevent orphaned spans on ctx cancellation.
 		l.emitToolSpanEnd(ctx, spanID, start, result)

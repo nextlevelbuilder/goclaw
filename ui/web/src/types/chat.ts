@@ -72,6 +72,10 @@ export interface AgentEventPayload {
     // run.retrying event fields
     attempt?: number;
     maxAttempts?: number;
+    // tool.progress heartbeat message
+    message?: string;
+    // tool.completed status ("ok" | "error")
+    status?: string;
     // run.completed media files
     media?: { path: string; content_type?: string; size?: number }[];
   };
@@ -82,10 +86,12 @@ export interface ToolStreamEntry {
   toolCallId: string;
   runId: string;
   name: string;
-  phase: "calling" | "completed" | "error";
+  phase: "calling" | "running" | "completed" | "error";
   arguments?: Record<string, unknown>;
   result?: string;
   errorContent?: string;
+  /** Accumulated tool.log / tool.progress output shown while phase === "running". */
+  output?: string;
   startedAt: number;
   updatedAt: number;
 }

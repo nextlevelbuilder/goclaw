@@ -219,6 +219,44 @@ export function useChatMessages(sessionKey: string, agentId: string) {
           setToolStream(toolStreamRef.current);
           break;
         }
+        case "tool.started": {
+          // Phase 7 C4: a tool opted into progress events published tool.started.
+          // Keep the entry in "running" so the UI shows execution progress (per
+          // tool.progress / tool.log) instead of a bare "calling" label.
+          const startedId = event.payload?.id;
+          const now = Date.now();
+          toolStreamRef.current = toolStreamRef.current.map((t) =>
+            t.toolCallId === startedId ? { ...t, phase: "running" as const, updatedAt: now } : t,
+          );
+          setToolStream(toolStreamRef.current);
+          break;
+        }
+        case "tool.progress":
+        case "tool.log": {
+          const logId = event.payload?.id;
+          if (!logId) break;
+          const content = event.payload?.content ?? event.payload?.message ?? "";
+          const now = Date.now();
+          toolStreamRef.current = toolStreamRef.current.map((t) => {
+            if (t.toolCallId !== logId) return t;
+            const previous = t.output ?? "";
+            const next = previous ? previous + "\n" + content : content;
+            return { ...t, phase: "running" as const, output: next, updatedAt: now };
+          });
+          setToolStream(toolStreamRef.current);
+          break;
+        }
+        case "tool.completed": {
+          const completedId = event.payload?.id;
+          const now = Date.now();
+          toolStreamRef.current = toolStreamRef.current.map((t) =>
+            t.toolCallId === completedId
+              ? { ...t, phase: event.payload?.is_error ? ("error" as const) : ("completed" as const), errorContent: event.payload?.is_error ? event.payload?.status : undefined, updatedAt: now }
+              : t,
+          );
+          setToolStream(toolStreamRef.current);
+          break;
+        }
         case "tool.result": {
           const isError = event.payload?.is_error;
           const resultId = event.payload?.id;

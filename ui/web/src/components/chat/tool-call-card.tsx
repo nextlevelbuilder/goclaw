@@ -22,7 +22,7 @@ interface ToolCallCardProps {
 
 export function ToolCallCard({ entry, compact }: ToolCallCardProps) {
   const { t } = useTranslation("common");
-  const hasDetails = entry.arguments || entry.result;
+  const hasDetails = entry.arguments || entry.result || !!entry.output;
   const hasError = entry.phase === "error" && !!entry.errorContent;
   const canExpand = hasDetails || hasError;
   const [expanded, setExpanded] = useState(false);
@@ -69,6 +69,14 @@ export function ToolCallCard({ entry, compact }: ToolCallCardProps) {
               </pre>
             </div>
           )}
+          {entry.output && (
+            <div>
+              <div className="text-2xs font-semibold uppercase text-muted-foreground mb-0.5">{t("toolOutput")}</div>
+              <pre className="whitespace-pre-wrap text-xs-plus font-mono bg-background rounded p-1.5 max-h-40 overflow-y-auto text-muted-foreground">
+                {entry.output}
+              </pre>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -96,10 +104,11 @@ function ToolIcon({ phase, isSkill }: { phase: ToolStreamEntry["phase"]; isSkill
 function PhaseLabel({ phase, isSkill }: { phase: ToolStreamEntry["phase"]; isSkill?: boolean }) {
   const { t } = useTranslation("common");
   const labels: Record<string, string> = isSkill
-    ? { calling: t("skillActivating"), completed: t("skillActivated"), error: t("toolFailed") }
-    : { calling: t("toolRunning"), completed: t("toolDone"), error: t("toolFailed") };
+    ? { calling: t("skillActivating"), running: t("toolExecuting"), completed: t("skillActivated"), error: t("toolFailed") }
+    : { calling: t("toolRunning"), running: t("toolExecuting"), completed: t("toolDone"), error: t("toolFailed") };
   const colors: Record<string, string> = {
     calling: "text-blue-500",
+    running: "text-amber-500",
     completed: "text-blue-500",
     error: "text-red-500",
   };

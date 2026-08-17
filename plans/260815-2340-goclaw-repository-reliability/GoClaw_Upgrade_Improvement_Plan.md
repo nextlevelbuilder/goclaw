@@ -1490,11 +1490,11 @@ Không nên để provider-specific retry logic rải khắp từng provider.
 
 ## Phase 7 — Tool reliability
 
-- [ ] Tool retry classes.
-- [ ] Tool deadlines.
-- [ ] Tool progress.
-- [ ] Idempotency.
-- [ ] Side-effect safety.
+- [ ] Tool retry classes. (phase-07, in progress, 2026-08-17)
+- [ ] Tool deadlines. (phase-07, in progress, 2026-08-17)
+- [ ] Tool progress. (phase-07, in progress, 2026-08-17)
+- [ ] Idempotency. (phase-07, in progress 2026-08-17; metric-based classification gate, key-chain deferred)
+- [ ] Side-effect safety. (phase-07, in progress 2026-08-17; classification gate, no auto-retry on destructive)
 
 ## Phase 8 — Context optimization
 

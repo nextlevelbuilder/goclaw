@@ -331,7 +331,10 @@ func (l *Loop) executeToolForActor(
 				if pa, ok := t.(tools.PeerKindAware); ok {
 					pa.SetPeerKind(peerKind)
 				}
-				return t.Execute(ctx, args)
+				// Per-user MCP tools execute outside the shared registry, so the
+				// tool reliability spec (deadline + retry) must be applied here
+				// too. Tools without a SpecProvider pass through untouched.
+				return tools.ExecuteWithSpec(ctx, t, args, tools.SpecFor(t))
 			}
 		}
 	}

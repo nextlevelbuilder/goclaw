@@ -136,6 +136,10 @@ const (
 	AgentEventRunRetrying  = "run.retrying"
 	AgentEventToolCall     = "tool.call"
 	AgentEventToolResult   = "tool.result"
+	AgentEventToolStarted  = "tool.started"
+	AgentEventToolProgress = "tool.progress"
+	AgentEventToolLog      = "tool.log"
+	AgentEventToolComplete = "tool.completed"
 	AgentEventBlockReply   = "block.reply"
 	AgentEventActivity     = "activity" // agent phase transitions: thinking, tool_exec, compacting
 )
