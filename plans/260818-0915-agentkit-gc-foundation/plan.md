@@ -5,7 +5,7 @@ Nguồn vision: `plans/260815-2340-goclaw-repository-reliability/GoClaw_AgentKit
 
 ## Status
 
-- **Phase 1 (`/gc:` Foundation):** `[ ]` — plan approved, implementation pending.
+- **Phase 1 (`/gc:` Foundation):** `[x]` — SHIPPED via PR #8 (`20139893523930ac5cb1b5d7dfc647e13c2e1afd`), CI green post-merge (go/web/release-versioning success), merged vào `dev` 2026-08-18.
 - Phase 2–7: deferred (không trong scope repo này).
 
 ## Quyết định đã chốt (user)
@@ -20,18 +20,18 @@ Nguồn vision: `plans/260815-2340-goclaw-repository-reliability/GoClaw_AgentKit
 
 | Phase | Nội dung | Files chính | Deps | Trạng thái |
 |-------|----------|-------------|------|------------|
-| 1 | `/gc:` Foundation | `internal/commands/gc/`, `internal/skills` (metadata), `skills/go-claw-engineer/` | — | `[ ]` |
+| 1 | `/gc:` Foundation | `internal/commands/gc/`, `internal/skills` (metadata), `skills/{plan,fix,cook,review}/` | — | `[x]` PR #8 |
 
 ## Acceptance criteria (Phase 1)
 
-- [ ] `/gc:plan|fix|cook|review <input>` chạy native (không shell-out `ak`), qua agent loop.
-- [ ] Skill là first-class: metadata có `inputs/outputs/allowed-tools/quality-gates`, registry liệt kê được.
-- [ ] Built-in engineer kit (4 skill `plan/fix/cook/review`, dir phẳng `skills/<slug>/SKILL.md`) được seed tự động qua `Seeder.Seed` (auto-walk `bundledDir`, không cần sửa seeder).
-- [ ] `/gc:plan` tạo artifact `plans/<timestamp>-<slug>.md` với đủ 12 mục §6.
-- [ ] `/gc:fix` buộc Root Cause Analysis (reproduce → evidence → hypothesis → fix → regression test).
-- [ ] `/gc:review` trả severity BLOCKER/CRITICAL/HIGH/MEDIUM/LOW/INFO, ghi `review-report.md`.
-- [ ] `/gc:cook` instruction-driven: đọc plan → modify → test → repair → verify.
-- [ ] Regression: `go build ./...`, `go vet ./...`, `go test ./internal/...` xanh.
+- [x] `/gc:plan|fix|cook|review <input>` chạy native (không shell-out `ak`), qua agent loop.
+- [x] Skill là first-class: metadata có `inputs/outputs/allowed-tools/quality-gates`, registry liệt kê được.
+- [x] Built-in engineer kit (4 skill `plan/fix/cook/review`, dir phẳng `skills/<slug>/SKILL.md`) được seed tự động qua `Seeder.Seed` (auto-walk `bundledDir`, không cần sửa seeder).
+- [x] `/gc:plan` tạo artifact `plans/<timestamp>-<slug>.md` với đủ 12 mục §6.
+- [x] `/gc:fix` buộc Root Cause Analysis (reproduce → evidence → hypothesis → fix → regression test).
+- [x] `/gc:review` trả severity BLOCKER/CRITICAL/HIGH/MEDIUM/LOW/INFO, ghi `review-report.md`.
+- [x] `/gc:cook` instruction-driven: đọc plan → modify → test → repair → verify.
+- [x] Regression: `go build ./...`, `go vet ./...`, `go test ./internal/...` xanh.
 
 ## Execution detail
 
