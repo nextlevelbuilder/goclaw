@@ -16,6 +16,11 @@ func TestParse_RecognizedKinds(t *testing.T) {
 		{"/gc:fix the flaky test", KindFix, "the flaky test", nil},
 		{"/gc:cook implement the plan", KindCook, "implement the plan", nil},
 		{"/gc:review the PR", KindReview, "the PR", nil},
+		{"/gc:test the parser", KindTest, "the parser", nil},
+		{"/gc:debug the timezone bug", KindDebug, "the timezone bug", nil},
+		{"/gc:docs update the contract", KindDocs, "update the contract", nil},
+		{"/gc:architect the new store", KindArchitect, "the new store", nil},
+		{"/gc:uiux review the chat screen", KindUIUX, "review the chat screen", nil},
 	}
 	for _, tc := range cases {
 		cmd, ok := Parse(tc.message)
@@ -54,6 +59,28 @@ func TestParse_CaseInsensitivePrefixAndKind(t *testing.T) {
 		t.Errorf("kind = %q, want fix", cmd.Kind)
 	}
 	if cmd.Input != "repair the build" {
+		t.Errorf("input = %q", cmd.Input)
+	}
+
+	cmd, ok = Parse("/GC:UIUX review the chat screen")
+	if !ok {
+		t.Fatal("expected uppercase /GC:UIUX to be recognized")
+	}
+	if cmd.Kind != KindUIUX {
+		t.Errorf("kind = %q, want uiux", cmd.Kind)
+	}
+	if cmd.Input != "review the chat screen" {
+		t.Errorf("input = %q", cmd.Input)
+	}
+
+	cmd, ok = Parse("/Gc:Architect the new store")
+	if !ok {
+		t.Fatal("expected mixed-case /Gc:Architect to be recognized")
+	}
+	if cmd.Kind != KindArchitect {
+		t.Errorf("kind = %q, want architect", cmd.Kind)
+	}
+	if cmd.Input != "the new store" {
 		t.Errorf("input = %q", cmd.Input)
 	}
 }

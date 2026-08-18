@@ -1,7 +1,8 @@
 // Package gc implements the parser, registry, and executor for /gc: commands
-// (plan, fix, cook, review). The commands run natively through the agent loop —
-// they are intercepted by Workstream B — while this package owns the command
-// parser, skill registry, and system-prompt executor.
+// (plan, fix, cook, review, test, debug, docs, architect, uiux). The commands
+// run natively through the agent loop — they are intercepted by Workstream B —
+// while this package owns the command parser, skill registry, and
+// system-prompt executor.
 //
 // Command kinds map one-to-one to skill slugs in the go-claw-engineer kit.
 // The prefix is /gc: (case-insensitive); flags (--deep, --fast, --hard, --strict)
@@ -16,18 +17,26 @@ import (
 // gcPrefix is the /gc: command prefix, matched case-insensitively.
 const gcPrefix = "/gc:"
 
-// CommandKind identifies the four /gc: command kinds.
+// CommandKind identifies the recognized /gc: command kinds.
 type CommandKind string
 
 const (
-	KindPlan   CommandKind = "plan"
-	KindFix    CommandKind = "fix"
-	KindCook   CommandKind = "cook"
-	KindReview CommandKind = "review"
+	KindPlan      CommandKind = "plan"
+	KindFix       CommandKind = "fix"
+	KindCook      CommandKind = "cook"
+	KindReview    CommandKind = "review"
+	KindTest      CommandKind = "test"
+	KindDebug     CommandKind = "debug"
+	KindDocs      CommandKind = "docs"
+	KindArchitect CommandKind = "architect"
+	KindUIUX      CommandKind = "uiux"
 )
 
 // knownKinds lists the recognized command kinds in a stable order.
-var knownKinds = []CommandKind{KindPlan, KindFix, KindCook, KindReview}
+var knownKinds = []CommandKind{
+	KindPlan, KindFix, KindCook, KindReview,
+	KindTest, KindDebug, KindDocs, KindArchitect, KindUIUX,
+}
 
 // gcFlagSet is the set of flags extracted from the input. Flags are surfaced
 // to the executor and downstream stages but are not interpreted by the parser.

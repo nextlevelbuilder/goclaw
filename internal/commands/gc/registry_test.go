@@ -20,6 +20,32 @@ func TestRegistry_RegisterLookup(t *testing.T) {
 	}
 }
 
+func TestRegistry_RegisterLookupNewKinds(t *testing.T) {
+	r := NewRegistry()
+	for kind, slug := range map[CommandKind]string{
+		KindTest:      "test",
+		KindDebug:     "debug",
+		KindDocs:      "docs",
+		KindArchitect: "architect",
+		KindUIUX:      "ui-ux-pro-max",
+	} {
+		r.Register(kind, slug)
+	}
+
+	for kind, wantSlug := range map[CommandKind]string{
+		KindTest:      "test",
+		KindDebug:     "debug",
+		KindDocs:      "docs",
+		KindArchitect: "architect",
+		KindUIUX:      "ui-ux-pro-max",
+	} {
+		slug, ok := r.Lookup(kind)
+		if !ok || slug != wantSlug {
+			t.Errorf("Lookup(%s) = %q, %v; want %q, true", kind, slug, ok, wantSlug)
+		}
+	}
+}
+
 func TestRegistry_LookupUnknown(t *testing.T) {
 	r := NewRegistry()
 	if _, ok := r.Lookup(KindReview); ok {
@@ -41,9 +67,14 @@ func TestRegistry_KnownKinds(t *testing.T) {
 	r.Register(KindReview, "review")
 	r.Register(KindCook, "cook")
 	r.Register(KindFix, "fix")
+	r.Register(KindTest, "test")
+	r.Register(KindDebug, "debug")
+	r.Register(KindDocs, "docs")
+	r.Register(KindArchitect, "architect")
+	r.Register(KindUIUX, "ui-ux-pro-max")
 
 	got := r.KnownKinds()
-	want := []CommandKind{KindPlan, KindFix, KindCook, KindReview}
+	want := []CommandKind{KindPlan, KindFix, KindCook, KindReview, KindTest, KindDebug, KindDocs, KindArchitect, KindUIUX}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("KnownKinds = %v, want %v", got, want)
 	}
