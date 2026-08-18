@@ -37,8 +37,21 @@ func TestPGRunStoreUpdateCheckpointRoundtrip(t *testing.T) {
 	if got.Status != store.AgentRunStatusCompacting {
 		t.Fatalf("status = %s, want compacting", got.Status)
 	}
-	if string(got.Checkpoint) != string(cp) {
-		t.Fatalf("checkpoint = %s, want %s", got.Checkpoint, cp)
+	// JSONB does not guarantee key order, so compare semantically rather than
+	// byte-for-byte (the stored text is normalized by Postgres).
+	var gotCP, wantCP struct {
+		Version   int    `json:"version"`
+		RunID     string `json:"run_id"`
+		Iteration int    `json:"iteration"`
+	}
+	if err := json.Unmarshal(got.Checkpoint, &gotCP); err != nil {
+		t.Fatalf("unmarshal stored checkpoint: %v", err)
+	}
+	if err := json.Unmarshal(cp, &wantCP); err != nil {
+		t.Fatalf("unmarshal want checkpoint: %v", err)
+	}
+	if gotCP != wantCP {
+		t.Fatalf("checkpoint = %+v, want %+v", gotCP, wantCP)
 	}
 }
 
