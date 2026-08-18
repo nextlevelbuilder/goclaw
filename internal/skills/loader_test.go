@@ -510,6 +510,105 @@ func TestParseMetadata_FileNotFound(t *testing.T) {
 	}
 }
 
+// TestParseMetadata_ExtendedFields proves the first-class skill metadata keys
+// (version, inputs, outputs, allowed-tools, quality-gates) parse from SKILL.md
+// frontmatter into the extended Metadata struct.
+func TestParseMetadata_ExtendedFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "SKILL.md")
+	content := `---
+name: Fix Skill
+description: Root-cause analysis workflow
+version: "1.2.0"
+inputs:
+  - issue
+  - logs
+outputs:
+  - diagnosis
+  - patch
+allowed-tools:
+  - shell
+  - filesystem
+  - search
+quality-gates:
+  - regression-tests-pass
+  - no-untested-changes
+---
+# Fix Skill
+`
+	os.WriteFile(path, []byte(content), 0644)
+
+	meta := parseMetadata(path)
+	if meta == nil {
+		t.Fatal("expected non-nil metadata")
+	}
+	if meta.Name != "Fix Skill" {
+		t.Errorf("name: got %q", meta.Name)
+	}
+	if meta.Description != "Root-cause analysis workflow" {
+		t.Errorf("description: got %q", meta.Description)
+	}
+	if meta.Version != "1.2.0" {
+		t.Errorf("version: got %q, want 1.2.0", meta.Version)
+	}
+	assertStringSlicesEqual(t, "inputs", meta.Inputs, []string{"issue", "logs"})
+	assertStringSlicesEqual(t, "outputs", meta.Outputs, []string{"diagnosis", "patch"})
+	assertStringSlicesEqual(t, "allowed-tools", meta.AllowedTools, []string{"shell", "filesystem", "search"})
+	assertStringSlicesEqual(t, "quality-gates", meta.QualityGates, []string{"regression-tests-pass", "no-untested-changes"})
+}
+
+// TestParseMetadata_ExtendedFieldsScalarInputs proves inputs/outputs accept a
+// scalar comma-separated fallback form in addition to block lists.
+func TestParseMetadata_ExtendedFieldsScalarInputs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "SKILL.md")
+	os.WriteFile(path, []byte("---\nname: Scalar Skill\ninputs: issue, summary\noutputs: diagnosis\n---\n"), 0644)
+
+	meta := parseMetadata(path)
+	if meta == nil {
+		t.Fatal("expected non-nil metadata")
+	}
+	assertStringSlicesEqual(t, "inputs", meta.Inputs, []string{"issue", "summary"})
+	assertStringSlicesEqual(t, "outputs", meta.Outputs, []string{"diagnosis"})
+}
+
+// TestParseMetadata_ExtendedFieldsZeroValue proves backward compatibility:
+// skills that omit the new keys parse without error and keep zero values.
+func TestParseMetadata_ExtendedFieldsZeroValue(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "SKILL.md")
+	os.WriteFile(path, []byte("---\nname: Legacy Skill\ndescription: old skill without new keys\n---\n# Body"), 0644)
+
+	meta := parseMetadata(path)
+	if meta == nil {
+		t.Fatal("expected non-nil metadata")
+	}
+	if meta.Name != "Legacy Skill" || meta.Description != "old skill without new keys" {
+		t.Errorf("name/description regressed: %q / %q", meta.Name, meta.Description)
+	}
+	if meta.Version != "" {
+		t.Errorf("version should be zero value, got %q", meta.Version)
+	}
+	if len(meta.Inputs) != 0 || len(meta.Outputs) != 0 {
+		t.Errorf("inputs/outputs should be zero value: inputs=%v outputs=%v", meta.Inputs, meta.Outputs)
+	}
+	if len(meta.AllowedTools) != 0 || len(meta.QualityGates) != 0 {
+		t.Errorf("allowed-tools/quality-gates should be zero value: tools=%v gates=%v", meta.AllowedTools, meta.QualityGates)
+	}
+}
+
+func assertStringSlicesEqual(t *testing.T, field string, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("%s: len = %d, want %d; got=%v", field, len(got), len(want), got)
+	}
+	for i, v := range got {
+		if v != want[i] {
+			t.Errorf("%s[%d] = %q, want %q", field, i, v, want[i])
+		}
+	}
+}
+
 // --- normalizeLineEndings ---
 
 func TestNormalizeLineEndings(t *testing.T) {

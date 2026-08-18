@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/commands/gc"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
@@ -93,6 +94,7 @@ type ResolverDeps struct {
 	SkillStore          store.SkillStore
 	SkillEvolutionStore store.SkillEvolutionStore
 	SkillSlashCommands  config.SkillSlashCommandConfig
+	GCDispatcher        gc.CommandDispatcher // /gc: command dispatcher (nil = passthrough)
 
 	// Config permission store for group file writer checks
 	ConfigPermStore store.ConfigPermissionStore
@@ -511,6 +513,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			SkillsLoader:           deps.Skills,
 			SkillAllowList:         skillAllowList,
 			SkillSlashCommands:     deps.SkillSlashCommands,
+			GCDispatcher:           deps.GCDispatcher,
 			HasMemory:              hasMemory,
 			ContextFiles:           contextFiles,
 			EnsureUserProfile:      deps.EnsureUserProfile,
