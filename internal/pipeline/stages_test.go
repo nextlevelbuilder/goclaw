@@ -2439,6 +2439,88 @@ func TestCheckpointStage_DefaultInterval5(t *testing.T) {
 	}
 }
 
+func TestCheckpointStage_WritesDurableAtInterval(t *testing.T) {
+	t.Parallel()
+	var checkpointCalls []int
+	deps := &PipelineDeps{
+		Config: PipelineConfig{
+			CheckpointInterval:          5,
+			DurableCheckpointInterval:   3,
+		},
+		FlushMessages: func(_ context.Context, _ string, _ []providers.Message) error { return nil },
+		WriteCheckpoint: func(_ context.Context, state *RunState) error {
+			checkpointCalls = append(checkpointCalls, state.Iteration)
+			return nil
+		},
+	}
+	stage := NewCheckpointStage(deps)
+	state := defaultState()
+
+	// Iteration 3: durable interval hits (3%3==0), message flush interval does not (3%5!=0).
+	state.Iteration = 3
+	state.Messages.AppendPending(providers.Message{Role: "user", Content: "m"})
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute(3): %v", err)
+	}
+	if len(checkpointCalls) != 1 || checkpointCalls[0] != 3 {
+		t.Fatalf("checkpoint calls = %v, want [3]", checkpointCalls)
+	}
+
+	// Iteration 6: both hit — flush happens, then durable write.
+	state.Iteration = 6
+	state.Messages.AppendPending(providers.Message{Role: "user", Content: "m2"})
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute(6): %v", err)
+	}
+	if len(checkpointCalls) != 2 || checkpointCalls[1] != 6 {
+		t.Fatalf("checkpoint calls = %v, want [3 6]", checkpointCalls)
+	}
+}
+
+func TestCheckpointStage_DurableDisabledByDefault(t *testing.T) {
+	t.Parallel()
+	called := false
+	deps := &PipelineDeps{
+		Config: PipelineConfig{CheckpointInterval: 5}, // DurableCheckpointInterval=0
+		FlushMessages: func(_ context.Context, _ string, _ []providers.Message) error { return nil },
+		WriteCheckpoint: func(_ context.Context, _ *RunState) error {
+			called = true
+			return nil
+		},
+	}
+	stage := NewCheckpointStage(deps)
+	state := defaultState()
+	state.Iteration = 5
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if called {
+		t.Fatal("WriteCheckpoint called with DurableCheckpointInterval=0")
+	}
+}
+
+func TestCheckpointStage_DurableErrorNonFatal(t *testing.T) {
+	t.Parallel()
+	deps := &PipelineDeps{
+		Config: PipelineConfig{
+			CheckpointInterval:        5,
+			DurableCheckpointInterval: 5,
+		},
+		FlushMessages:  func(_ context.Context, _ string, _ []providers.Message) error { return nil },
+		WriteCheckpoint: func(_ context.Context, _ *RunState) error {
+			return errors.New("db unavailable")
+		},
+	}
+	stage := NewCheckpointStage(deps)
+	state := defaultState()
+	state.Iteration = 5
+	state.Messages.AppendPending(providers.Message{Role: "user", Content: "m"})
+	// Error must be swallowed (non-fatal): the run continues even if resume is lost.
+	if err := stage.Execute(context.Background(), state); err != nil {
+		t.Fatalf("Execute() should swallow durable write error, got: %v", err)
+	}
+}
+
 func TestCheckpointStage_SkipsNonIntervalIteration(t *testing.T) {
 	t.Parallel()
 	flushCalled := false

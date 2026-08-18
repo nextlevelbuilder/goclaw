@@ -56,10 +56,15 @@ func NewDefaultPipeline(deps PipelineDeps) *Pipeline {
 func (p *Pipeline) Run(ctx context.Context, state *RunState) (*RunResult, error) {
 	start := time.Now()
 
-	// 1. Setup (once)
-	for _, stage := range p.setup {
-		if err := stage.Execute(ctx, state); err != nil {
-			return nil, fmt.Errorf("setup %s: %w", stage.Name(), err)
+	// 1. Setup (once). A checkpoint-restored state (Resuming) skips the setup
+	// stages: ContextStage would rebuild messages/workspace/context from scratch
+	// and wipe the substate + in-flight messages restored from the checkpoint.
+	// The enriched ctx is still carried so downstream stages keep working.
+	if !state.Resuming() {
+		for _, stage := range p.setup {
+			if err := stage.Execute(ctx, state); err != nil {
+				return nil, fmt.Errorf("setup %s: %w", stage.Name(), err)
+			}
 		}
 	}
 	// Propagate enriched context from setup stages (ContextStage injects agent/user/workspace values).
@@ -71,7 +76,11 @@ func (p *Pipeline) Run(ctx context.Context, state *RunState) (*RunResult, error)
 	// BreakLoop: complete all remaining stages in this iteration (ObserveStage must
 	// capture FinalContent), then exit the outer loop.
 	// AbortRun: exit inner loop immediately (unrecoverable, e.g. over budget after compaction).
-	for state.Iteration = 0; state.Iteration < p.Deps.Config.MaxIterations; state.Iteration++ {
+	// A resumed run starts from the checkpoint's iteration instead of 0.
+	if !state.Resuming() {
+		state.Iteration = 0
+	}
+	for ; state.Iteration < p.Deps.Config.MaxIterations; state.Iteration++ {
 		// Phase 08 (Gap F): carry per-iteration progress into the tools so adaptive
 		// output caps (web_fetch 20K/10K scaling by iteration) start working again.
 		// The ToolStage dispatches tool calls with this context, so tools observe

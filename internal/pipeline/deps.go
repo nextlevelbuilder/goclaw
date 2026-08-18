@@ -109,6 +109,12 @@ type PipelineDeps struct {
 	// Checkpoint callbacks (CheckpointStage)
 	FlushMessages func(ctx context.Context, sessionKey string, msgs []providers.Message) error
 
+	// WriteCheckpoint persists a durable pipeline checkpoint for the run. It is
+	// invoked by CheckpointStage at DurableCheckpointInterval iterations (after
+	// the session-message flush) so a crashed or restarted gateway can resume the
+	// run from this point. nil = durable checkpointing disabled.
+	WriteCheckpoint func(ctx context.Context, state *RunState) error
+
 	// Finalize callbacks (FinalizeStage)
 	// PersistAssistantImages writes final (non-partial) images from the assistant
 	// response to workspace disk, appends MediaRefs, and clears inline base64.
@@ -150,9 +156,14 @@ type PipelineConfig struct {
 	MaxIterations      int
 	MaxToolCalls       int
 	CheckpointInterval int // flush every N iterations (default 5)
-	ContextWindow      int
-	MaxTokens          int
-	Compaction         *config.CompactionConfig
+	// DurableCheckpointInterval writes a durable pipeline checkpoint every N
+	// iterations, independent of the session-message flush above. 0 = disabled.
+	// Intentionally distinct: message flushing and checkpoint persistence serve
+	// different recovery goals (session archive vs run resume).
+	DurableCheckpointInterval int
+	ContextWindow             int
+	MaxTokens                 int
+	Compaction                *config.CompactionConfig
 
 	// ReserveTokens is a safety buffer subtracted from the history budget so
 	// PruneStage compacts slightly before the hard limit. Prevents edge cases
