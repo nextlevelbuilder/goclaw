@@ -2427,3 +2427,30 @@ CREATE UNIQUE INDEX IF NOT EXISTS mcp_oauth_tokens_global_uq
 CREATE UNIQUE INDEX IF NOT EXISTS mcp_oauth_tokens_user_uq
     ON mcp_oauth_tokens (server_id, tenant_id, user_id) WHERE user_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_mcp_oauth_tokens_server_tenant ON mcp_oauth_tokens (server_id, tenant_id);
+
+-- ============================================================
+-- Table: artifacts
+-- First-class persisted objects an agent produces (plan, patch, code, report,
+-- review, research, architecture, ADR, test report, deployment plan). One row
+-- per version; parent_id self-FK links a revision to its predecessor so the
+-- version chain can be walked. Content stored inline with a SHA-256 checksum.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS artifacts (
+    id           TEXT NOT NULL PRIMARY KEY,
+    tenant_id    TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    run_id       TEXT,
+    version      INT NOT NULL DEFAULT 1,
+    author_agent TEXT,
+    type         VARCHAR(40) NOT NULL,
+    status       VARCHAR(40) NOT NULL DEFAULT 'draft',
+    checksum     TEXT,
+    parent_id    TEXT REFERENCES artifacts(id) ON DELETE SET NULL,
+    title        TEXT,
+    content      TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_artifacts_tenant_created ON artifacts(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_artifacts_run ON artifacts(run_id);
+CREATE INDEX IF NOT EXISTS idx_artifacts_tenant_parent ON artifacts(tenant_id, parent_id);
