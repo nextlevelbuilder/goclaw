@@ -2454,3 +2454,24 @@ CREATE TABLE IF NOT EXISTS artifacts (
 CREATE INDEX IF NOT EXISTS idx_artifacts_tenant_created ON artifacts(tenant_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_artifacts_run ON artifacts(run_id);
 CREATE INDEX IF NOT EXISTS idx_artifacts_tenant_parent ON artifacts(tenant_id, parent_id);
+
+-- ============================================================
+-- Table: multi_agent_records
+-- Durable multi-agent collaboration records (handoff, jury, competition,
+-- negotiation). One row per collaboration event; body stores the full
+-- JSON-encoded contract plus verdicts/counter-proposals as TEXT.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS multi_agent_records (
+    id         TEXT NOT NULL PRIMARY KEY,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    run_id     TEXT,
+    kind       VARCHAR(40) NOT NULL,
+    body       TEXT NOT NULL DEFAULT '{}',
+    status     VARCHAR(40) NOT NULL DEFAULT 'draft',
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_multi_agent_records_tenant_created ON multi_agent_records(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_multi_agent_records_run ON multi_agent_records(run_id);
+CREATE INDEX IF NOT EXISTS idx_multi_agent_records_tenant_kind ON multi_agent_records(tenant_id, kind);
