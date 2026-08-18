@@ -135,11 +135,12 @@ Files (exclusive):
 
 ## Implementation steps
 
-1. **Dispatch SERIAL (không song song):** WS-B (Time Travel) TRƯỚC; merge; sau đó WS-A (Hibernation), merge; sau đó WS-C (Mission), merge. Lý do: cả 3 cùng chạm `cmd/gateway_methods.go` + `cmd/gateway.go` + `permissions/policy.go` + `pkg/protocol/methods.go` + `internal/i18n`. Serial đảm bảo mỗi PR CI-green độc lập, đúng ràng buộc "tránh parallel edits cùng file".
-2. Thứ tự serial cũng chốt migration numbering: B (101) → A (no schema) → C (102).
-3. Mỗi WS: implement → Docker gate (build/vet/sqliteonly/unit) → self-review → PR → theo dõi CI → controller review → merge.
-4. Final verify: full `go build ./...` + `go vet ./...` + `-tags sqliteonly` + unit + integration.
-5. Plan tick + report.
+1. **Dispatch Stage 1 = A+B song song (worktree-isolated):** mỗi WS chạy trong **git worktree riêng** + branch riêng từ origin/dev → không hai agent nào chạm cùng working copy (đúng ràng buộc "tránh parallel edits cùng file"). File bị cả hai chạm ở tầng peripheral (đã nêu trên) sẽ được controller giải quyết ở bước merge tuần tự.
+2. **Controller merge tuần tự:** merge WS-B PR TRƯỚC, rồi rebase WS-A lên dev mới + resolve conflict (`gateway_methods.go`/`gateway.go`/permissions/protocol/i18n) — precedent Phase 5 WS-D (`c5c743c6`).
+3. **Dispatch Stage 2 = WS-C** sau khi A+B merged (base đã có `000101`/101/64) → dùng `000102_missions` + `RequiredSchemaVersion` 102 + SQLite path 64→65/`SchemaVersion` 65. Mọi WS-A/WS-B gateway changes đã nằm trong base → WS-C không conflict.
+4. Mỗi WS: implement → Docker gate (build/vet/sqliteonly/unit) → self-review → PR → theo dõi CI → controller review → merge.
+5. Final verify: full `go build ./...` + `go vet ./...` + `-tags sqliteonly` + unit + integration.
+6. Plan tick + report.
 
 ## Validation
 
