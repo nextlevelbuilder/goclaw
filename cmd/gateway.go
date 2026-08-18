@@ -726,6 +726,12 @@ func runGateway() {
 	exportTokenStore := httpapi.InitExportTokenStore()
 	defer exportTokenStore.Stop()
 	agentsH, skillsH, tracesH, mcpH, channelInstancesH, providersH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH, secureCLIGrantH, mcpUserCredsH := wireHTTP(pgStores, cfg.Agents.Defaults.Workspace, dataDir, bundledSkillsDir, msgBus, domainBus, toolsReg, providerRegistry, modelReg, permPE.IsOwner, gatewayAddr, mcpToolLister, usageCapSvc, cfg, cfg.Skills)
+	// Wire the resume entrypoint so POST /v1/runs/{runID}/resume drives the
+	// owning agent's Loop.ResumeRun. Nil-safe: when the runs store is absent the
+	// handler reports unavailable, matching the WS runs.resume guard.
+	if tracesH != nil && pgStores != nil {
+		tracesH.SetResumer(makeRunResumer(agentRouter, pgStores.Runs))
+	}
 
 	// Wire dependencies for system prompt preview parity.
 	if agentsH != nil {

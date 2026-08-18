@@ -1454,6 +1454,7 @@ LLM call tracing and cost analysis.
 | `GET` | `/v1/traces/{traceID}` | Get trace with spans |
 | `GET` | `/v1/traces/{traceID}/export` | Export trace tree (gzipped JSON) |
 | `GET` | `/v1/runs/{runID}/timeline` | Get persisted run archive timeline items |
+| `POST` | `/v1/runs/{runID}/resume` | Resume a checkpointed durable run (sync) |
 
 `GET /v1/traces` query params:
 
@@ -1543,6 +1544,33 @@ Example:
   }],
   "limit": 200,
   "offset": 0
+}
+```
+
+### Run Resume
+
+`POST /v1/runs/{runID}/resume` resumes a checkpointed durable run synchronously.
+The request body is unused (the run replays its recorded checkpoint). Returns the
+fresh run record plus the final result. Non-admin callers may only resume runs
+they own (`X-GoClaw-User-Id`); a not-owned or missing run returns 404.
+
+Example:
+
+```json
+{
+  "run": {
+    "run_id": "run-123",
+    "status": "completed",
+    "attempt": 1,
+    "started_at": "2026-08-18T10:00:00Z",
+    "completed_at": "2026-08-18T10:00:12Z"
+  },
+  "result": {
+    "content": "resumed answer",
+    "thinking": "reasoned",
+    "runId": "run-123",
+    "iterations": 3
+  }
 }
 ```
 
