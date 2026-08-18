@@ -22,6 +22,12 @@ const AlertKeyProviderError = "alert.background.provider_error"
 type AlertDeps struct {
 	SystemConfigs store.SystemConfigStore
 	MsgBus        bus.EventPublisher
+
+	// WebhookURL, when set, receives a best-effort HTTP POST for each alertable
+	// provider error (see SendWebhook). MinIntervalSeconds throttles webhook
+	// sends to at most one per interval; 0 disables the cooldown.
+	WebhookURL         string
+	MinIntervalSeconds int
 }
 
 // ProviderErrorPayload is stored in system_configs and sent via WS event.
@@ -92,6 +98,11 @@ func ReportProviderError(ctx context.Context, deps AlertDeps, workerName string,
 			TenantID: tenantID,
 			Payload:  payload,
 		})
+	}
+
+	// Out-of-band webhook alerting (best-effort, never blocks the caller).
+	if deps.WebhookURL != "" {
+		SendWebhook(ctx, deps, workerName, string(reason), err)
 	}
 }
 
