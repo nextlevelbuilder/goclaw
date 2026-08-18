@@ -35,6 +35,17 @@ func (s *PGRunTimelineStore) AppendRunTimelineItem(ctx context.Context, item *st
 	if len(metadata) == 0 {
 		metadata = []byte(`{}`)
 	}
+	// contentKeeper types persist their full content so stream replay (chunk/
+	// thinking) and tool-start detail survive; the legacy types stay preview-only.
+	contentKeeper := store.RunTimelineItemContentPersisted(item.ItemType)
+	contentValue := ""
+	if contentKeeper {
+		contentValue = item.Content
+	}
+	contentCol := "content = ''"
+	if contentKeeper {
+		contentCol = "content = EXCLUDED.content"
+	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO run_timeline_items
 		 (id, tenant_id, run_id, session_key, agent_id, user_id, channel, chat_id, seq,
@@ -52,7 +63,7 @@ func (s *PGRunTimelineStore) AppendRunTimelineItem(ctx context.Context, item *st
 		  status = EXCLUDED.status,
 		  title = EXCLUDED.title,
 		  preview = EXCLUDED.preview,
-		  content = '',
+		  ` + contentCol + `,
 		  tool_name = EXCLUDED.tool_name,
 		  tool_call_id = EXCLUDED.tool_call_id,
 		  trace_id = EXCLUDED.trace_id,
@@ -61,10 +72,10 @@ func (s *PGRunTimelineStore) AppendRunTimelineItem(ctx context.Context, item *st
 		  created_at = EXCLUDED.created_at`,
 		item.ID, tenantID, item.RunID, item.SessionKey, nilUUID(item.AgentID), nilStr(item.UserID),
 		nilStr(item.Channel), nilStr(item.ChatID), item.Seq, item.ItemType, nilStr(item.Status),
-		nilStr(item.Title), nilStr(item.Preview), "", nilStr(item.ToolName), nilStr(item.ToolCallID),
+		nilStr(item.Title), nilStr(item.Preview), contentValue, nilStr(item.ToolName), nilStr(item.ToolCallID),
 		nilUUID(item.TraceID), nilUUID(item.SpanID), jsonOrEmpty(metadata), item.CreatedAt,
 	)
-	if err == nil {
+	if err == nil && !contentKeeper {
 		item.Content = ""
 	}
 	return err
@@ -254,6 +265,24 @@ func (s *PGRunStore) UpdateRunStatus(ctx context.Context, runID, status string) 
 	return err
 }
 
+// UpdateRunCheckpoint writes a durable pipeline checkpoint and transitions the
+// run's status in one statement. Callers treat failures as non-fatal (a missed
+// checkpoint only forfeits resume capability).
+func (s *PGRunStore) UpdateRunCheckpoint(ctx context.Context, runID, status string, checkpoint json.RawMessage) error {
+	tid, err := requireTenantID(ctx)
+	if err != nil {
+		return err
+	}
+	if len(checkpoint) == 0 {
+		checkpoint = nil
+	}
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE agent_runs SET checkpoint = $3, status = $4, updated_at = $5
+		 WHERE run_id = $1 AND tenant_id = $2`,
+		runID, tid, checkpoint, status, time.Now())
+	return err
+}
+
 func (s *PGRunStore) UpdateRunTerminal(ctx context.Context, runID, status, errMsg string, completedAt time.Time) error {
 	tid, err := requireTenantID(ctx)
 	if err != nil {
@@ -317,15 +346,36 @@ func (s *PGRunStore) ListRuns(ctx context.Context, opts store.RunListOpts) ([]st
 }
 
 // RecoverStaleRuns marks runs whose heartbeat has not advanced within staleAfter
-// as failed. Cross-tenant (startup + periodic).
+// as failed, unless the run carries a valid checkpoint — such runs are paused
+// (resumable) instead of terminal-failed. Cross-tenant (startup + periodic).
 func (s *PGRunStore) RecoverStaleRuns(ctx context.Context, staleAfter time.Duration) (int64, error) {
 	deadline := time.Now().Add(-staleAfter)
+	// Paused (resumable) runs keep completed_at NULL — only terminal-failed runs
+	// get it stamped so the run record reads as recoverable. checkpoint is a
+	// JSONB column: NULL means no checkpoint, an empty checkpoint is normalized
+	// to NULL at write time (see UpdateRunCheckpoint).
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE agent_runs SET status = $1, error = $2,
-		        completed_at = COALESCE(completed_at, $3), updated_at = $3
+		`UPDATE agent_runs
+		 SET status = CASE
+		         WHEN checkpoint IS NOT NULL THEN $1
+		         ELSE $2
+		       END,
+		     error = CASE
+		         WHEN checkpoint IS NOT NULL THEN $3
+		         ELSE $4
+		       END,
+		     completed_at = CASE
+		         WHEN checkpoint IS NOT NULL THEN completed_at
+		         ELSE COALESCE(completed_at, $5)
+		       END,
+		     updated_at = $5
 		 WHERE status IN ('pending', 'running', 'compacting')
-		   AND heartbeat_at < $4`,
-		store.AgentRunStatusFailed, "run stalled: heartbeat expired", deadline, deadline)
+		   AND heartbeat_at < $6`,
+		store.RunTimelineStatusPaused,
+		store.AgentRunStatusFailed,
+		"run paused: heartbeat expired, checkpoint available",
+		"run stalled: heartbeat expired",
+		deadline, deadline)
 	if err != nil {
 		return 0, fmt.Errorf("recover stale runs: %w", err)
 	}
@@ -444,22 +494,34 @@ var interruptedRunMetadata = json.RawMessage(`{"event_type":"run.failed","interr
 
 const interruptedRunPreview = "interrupted: gateway stopped while this run was in progress"
 
-// RecoverInterruptedRuns appends a terminal failed run.status item to every run
-// that has a "started" run.status but no terminal sibling — i.e. runs killed
+// interruptedPausedMetadata marks a backfilled resumable status so it is
+// distinguishable from a genuine agent failure in the timeline.
+var interruptedPausedMetadata = json.RawMessage(`{"event_type":"run.paused","interrupted":true,"reason":"server_restart"}`)
+
+const interruptedPausedPreview = "interrupted: gateway stopped, checkpoint available for resume"
+
+// RecoverInterruptedRuns appends a run.status item to every run that has a
+// "started" run.status but no terminal/blocking sibling — i.e. runs killed
 // mid-execution by a previous gateway stop, which would otherwise stay
-// "running" forever. Cross-tenant (startup reconciliation); see the interface doc.
+// "running" forever. Runs with a valid agent_runs.checkpoint are paused
+// (resumable); runs without one are terminal-failed. A previously-appended
+// "paused" item counts as terminal so a second pass is a no-op.
+// Cross-tenant (startup reconciliation); see the interface doc.
 func (s *PGRunTimelineStore) RecoverInterruptedRuns(ctx context.Context) (int64, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT st.tenant_id, st.run_id, st.session_key, st.agent_id, st.user_id, st.channel, st.chat_id, agg.max_seq
+		SELECT st.tenant_id, st.run_id, st.session_key, st.agent_id, st.user_id, st.channel, st.chat_id, agg.max_seq,
+		       (ar.checkpoint IS NOT NULL) AS has_checkpoint
 		FROM (
 			SELECT run_id, MAX(seq) AS max_seq,
 			       bool_or(item_type = 'run.status' AND status = 'started') AS has_start,
-			       bool_or(item_type = 'run.status' AND status IN ('completed', 'failed', 'cancelled')) AS has_term
+			       bool_or(item_type = 'run.status' AND status IN ('completed', 'failed', 'cancelled', 'paused')) AS has_term
 			FROM run_timeline_items
 			GROUP BY run_id
 		) agg
 		JOIN run_timeline_items st
 		  ON st.run_id = agg.run_id AND st.item_type = 'run.status' AND st.status = 'started'
+		LEFT JOIN agent_runs ar
+		  ON ar.run_id = st.run_id AND ar.tenant_id = st.tenant_id
 		WHERE agg.has_start AND NOT agg.has_term`)
 	if err != nil {
 		return 0, fmt.Errorf("list interrupted runs: %w", err)
@@ -473,16 +535,17 @@ func (s *PGRunTimelineStore) RecoverInterruptedRuns(ctx context.Context) (int64,
 	for i := range orphans {
 		item := &orphans[i]
 		if err := s.AppendRunTimelineItem(store.WithTenantID(ctx, item.TenantID), item); err != nil {
-			return recovered, fmt.Errorf("append interrupted terminal for run %s: %w", item.RunID, err)
+			return recovered, fmt.Errorf("append interrupted status for run %s: %w", item.RunID, err)
 		}
 		recovered++
 	}
 	return recovered, nil
 }
 
-// scanInterruptedRuns reads orphaned-run rows and pre-builds the terminal failed
-// item to append for each. Rows are fully drained and closed before returning so
-// the caller can issue inserts on the same pool without cursor contention.
+// scanInterruptedRuns reads orphaned-run rows and pre-builds the run.status item
+// to append for each: paused for runs with a valid checkpoint, failed otherwise.
+// Rows are fully drained and closed before returning so the caller can issue
+// inserts on the same pool without cursor contention.
 func scanInterruptedRuns(rows *sql.Rows) ([]store.RunTimelineItem, error) {
 	defer rows.Close()
 	var items []store.RunTimelineItem
@@ -493,8 +556,9 @@ func scanInterruptedRuns(rows *sql.Rows) ([]store.RunTimelineItem, error) {
 			agentID                 uuid.NullUUID
 			userID, channel, chatID sql.NullString
 			maxSeq                  int
+			hasCheckpoint           sql.NullBool
 		)
-		if err := rows.Scan(&tenantID, &runID, &sessionKey, &agentID, &userID, &channel, &chatID, &maxSeq); err != nil {
+		if err := rows.Scan(&tenantID, &runID, &sessionKey, &agentID, &userID, &channel, &chatID, &maxSeq, &hasCheckpoint); err != nil {
 			return nil, fmt.Errorf("scan interrupted run: %w", err)
 		}
 		item := store.RunTimelineItem{
@@ -506,10 +570,17 @@ func scanInterruptedRuns(rows *sql.Rows) ([]store.RunTimelineItem, error) {
 			ChatID:     chatID.String,
 			Seq:        maxSeq + 1,
 			ItemType:   store.RunTimelineItemTypeRunStatus,
-			Status:     store.RunTimelineStatusFailed,
-			Title:      "Run failed",
-			Preview:    interruptedRunPreview,
-			Metadata:   interruptedRunMetadata,
+		}
+		if hasCheckpoint.Valid && hasCheckpoint.Bool {
+			item.Status = store.RunTimelineStatusPaused
+			item.Title = "Run paused"
+			item.Preview = interruptedPausedPreview
+			item.Metadata = interruptedPausedMetadata
+		} else {
+			item.Status = store.RunTimelineStatusFailed
+			item.Title = "Run failed"
+			item.Preview = interruptedRunPreview
+			item.Metadata = interruptedRunMetadata
 		}
 		if agentID.Valid {
 			id := agentID.UUID

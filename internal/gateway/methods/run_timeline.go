@@ -3,8 +3,10 @@ package methods
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 
+	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
@@ -17,6 +19,10 @@ type RunTimelineMethods struct {
 	timeline store.RunTimelineStore
 	runs     store.RunsStore
 	cfg      *config.Config
+
+	// resumer resumes a checkpointed run (wired to agent.Loop.ResumeRun by cmd).
+	// Nil = runs.resume reports unavailable.
+	resumer func(ctx context.Context, runID string) (*agent.RunResult, error)
 }
 
 func NewRunTimelineMethods(timeline store.RunTimelineStore, cfg *config.Config) *RunTimelineMethods {
@@ -28,11 +34,18 @@ func NewRunTimelineMethods(timeline store.RunTimelineStore, cfg *config.Config) 
 // unavailable error when the store is not wired.
 func (m *RunTimelineMethods) SetRunsStore(runs store.RunsStore) { m.runs = runs }
 
+// SetResumer wires the resume entrypoint for runs.resume. Nil-safe: the method
+// reports unavailable until the loop is attached.
+func (m *RunTimelineMethods) SetResumer(resume func(ctx context.Context, runID string) (*agent.RunResult, error)) {
+	m.resumer = resume
+}
+
 func (m *RunTimelineMethods) Register(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodRunTimelineGet, m.handleGet)
 	router.Register(protocol.MethodRunsGet, m.handleRunsGet)
 	router.Register(protocol.MethodRunsList, m.handleRunsList)
 	router.Register(protocol.MethodRunsEvents, m.handleRunsEvents)
+	router.Register(protocol.MethodRunsResume, m.handleRunsResume)
 }
 
 type runTimelineGetParams struct {
@@ -271,4 +284,72 @@ func nextAfterSeq(items []store.RunTimelineItem, after int) int {
 		return last
 	}
 	return after
+}
+
+// handleRunsResume resumes a checkpointed durable run (runs.resume). Runs
+// synchronously and returns the fresh run record + final result. The resumed
+// run finalizes itself (completed/compacting/failed); this handler only reports
+// the outcome.
+func (m *RunTimelineMethods) handleRunsResume(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
+	locale := store.LocaleFromContext(ctx)
+	if m.resumer == nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnavailable, i18n.T(locale, i18n.MsgRunsUnavailable)))
+		return
+	}
+	var params struct {
+		RunID string `json:"runId"`
+	}
+	if req.Params != nil {
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidJSON)))
+			return
+		}
+	}
+	if params.RunID == "" {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "runId")))
+		return
+	}
+	// Viewer-role clients may only resume their own runs (parity with runs.get).
+	// The store is consulted for the ownership check, then the resumer is invoked.
+	if !canSeeAll(client.Role(), m.cfg.Gateway.OwnerIDs, client.UserID()) {
+		if m.runs == nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnavailable, i18n.T(locale, i18n.MsgRunsUnavailable)))
+			return
+		}
+		run, err := m.runs.GetRun(ctx, params.RunID)
+		if err != nil {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "run", params.RunID)))
+			return
+		}
+		if run.UserID != client.UserID() {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "run", params.RunID)))
+			return
+		}
+	}
+	result, err := m.resumer(ctx, params.RunID)
+	if err != nil {
+		slog.Warn("runs.resume_failed", "run_id", params.RunID, "error", err)
+		if errors.Is(err, agent.ErrRunResumeNotFound) {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "run", params.RunID)))
+			return
+		}
+		if errors.Is(err, agent.ErrRunResumeUnavailable) {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnavailable, i18n.T(locale, i18n.MsgRunsUnavailable)))
+			return
+		}
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "resume run")))
+		return
+	}
+	var run *store.AgentRun
+	if m.runs != nil {
+		if run, err = m.runs.GetRun(ctx, params.RunID); err != nil {
+			slog.Warn("runs.resume_refetch_failed", "run_id", params.RunID, "error", err)
+			run = nil
+		}
+	}
+	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+		"runId":  params.RunID,
+		"run":    run,
+		"result": result,
+	}))
 }

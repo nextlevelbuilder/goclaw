@@ -30,6 +30,10 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 	methods.NewSessionsMethods(sessStore, msgBus, cfg).Register(router)
 	runMethods := methods.NewRunTimelineMethods(runTimeline, cfg)
 	runMethods.SetRunsStore(runsStore)
+	// Wire the resume entrypoint so runs.resume drives the owning agent's
+	// Loop.ResumeRun. Nil when the store/router is absent — the handler then
+	// reports unavailable, keeping the surface safe before wiring.
+	runMethods.SetResumer(makeRunResumer(agents, runsStore))
 	runMethods.Register(router)
 	configMethods := methods.NewConfigMethods(cfg, cfgPath, configSecretsStore, msgBus)
 	if sysConfigStore != nil {

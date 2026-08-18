@@ -28,6 +28,15 @@ func (s *ContextStage) Name() string { return "context" }
 
 // Execute populates RunState with workspace, context files, system prompt, and overhead tokens.
 func (s *ContextStage) Execute(ctx context.Context, state *RunState) error {
+	// A checkpoint-restored run skips rebuilding messages/workspace/context —
+	// all of that was captured at checkpoint time and must survive a resume.
+	// ContextStage's only job then is to hand the enriched ctx downstream so
+	// tool/hook scoping values keep flowing through state.Ctx.
+	if state.Resuming() {
+		state.Ctx = ctx
+		return nil
+	}
+
 	// Seed per-turn prompt-hook invocation counter exactly once per user turn.
 	// This ctx is then propagated to every downstream FireHook call (including
 	// PreToolUse in ToolStage via state.Ctx), making the per-turn cap (L2)

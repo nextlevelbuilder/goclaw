@@ -49,6 +49,7 @@ const (
 	MethodRunsGet    = "runs.get"
 	MethodRunsList   = "runs.list"
 	MethodRunsEvents = "runs.events"
+	MethodRunsResume = "runs.resume"
 
 	// System
 	MethodConnect = "connect"

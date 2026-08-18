@@ -5,6 +5,7 @@ package sqlitestore
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -36,6 +37,17 @@ func (s *SQLiteRunTimelineStore) AppendRunTimelineItem(ctx context.Context, item
 	if len(metadata) == 0 {
 		metadata = []byte(`{}`)
 	}
+	// contentKeeper types persist their full content so stream replay (chunk/
+	// thinking) and tool-start detail survive; the legacy types stay preview-only.
+	contentKeeper := store.RunTimelineItemContentPersisted(item.ItemType)
+	contentValue := ""
+	if contentKeeper {
+		contentValue = item.Content
+	}
+	contentCol := "content = ''"
+	if contentKeeper {
+		contentCol = "content = excluded.content"
+	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO run_timeline_items
 		 (id, tenant_id, run_id, session_key, agent_id, user_id, channel, chat_id, seq,
@@ -52,7 +64,7 @@ func (s *SQLiteRunTimelineStore) AppendRunTimelineItem(ctx context.Context, item
 		  status = excluded.status,
 		  title = excluded.title,
 		  preview = excluded.preview,
-		  content = '',
+		  ` + contentCol + `,
 		  tool_name = excluded.tool_name,
 		  tool_call_id = excluded.tool_call_id,
 		  trace_id = excluded.trace_id,
@@ -61,10 +73,10 @@ func (s *SQLiteRunTimelineStore) AppendRunTimelineItem(ctx context.Context, item
 		  created_at = excluded.created_at`,
 		item.ID, tenantID, item.RunID, item.SessionKey, nilUUID(item.AgentID), nilStr(item.UserID),
 		nilStr(item.Channel), nilStr(item.ChatID), item.Seq, item.ItemType, nilStr(item.Status),
-		nilStr(item.Title), nilStr(item.Preview), "", nilStr(item.ToolName), nilStr(item.ToolCallID),
+		nilStr(item.Title), nilStr(item.Preview), contentValue, nilStr(item.ToolName), nilStr(item.ToolCallID),
 		nilUUID(item.TraceID), nilUUID(item.SpanID), string(metadata), item.CreatedAt,
 	)
-	if err == nil {
+	if err == nil && !contentKeeper {
 		item.Content = ""
 	}
 	return err
@@ -243,6 +255,24 @@ func (s *SQLiteRunStore) UpdateRunStatus(ctx context.Context, runID, status stri
 	return err
 }
 
+// UpdateRunCheckpoint writes a durable pipeline checkpoint and transitions the
+// run's status in one statement. Callers treat failures as non-fatal (a missed
+// checkpoint only forfeits resume capability).
+func (s *SQLiteRunStore) UpdateRunCheckpoint(ctx context.Context, runID, status string, checkpoint json.RawMessage) error {
+	tid, err := requireTenantID(ctx)
+	if err != nil {
+		return err
+	}
+	if len(checkpoint) == 0 {
+		checkpoint = nil
+	}
+	_, err = s.db.ExecContext(ctx,
+		`UPDATE agent_runs SET checkpoint = ?, status = ?, updated_at = ?
+		 WHERE run_id = ? AND tenant_id = ?`,
+		checkpoint, status, time.Now(), runID, tid)
+	return err
+}
+
 func (s *SQLiteRunStore) UpdateRunTerminal(ctx context.Context, runID, status, errMsg string, completedAt time.Time) error {
 	tid, err := requireTenantID(ctx)
 	if err != nil {
@@ -329,15 +359,34 @@ func scanAgentRunRow(scan func(dest ...any) error, r *agentRunRow) error {
 }
 
 // RecoverStaleRuns marks runs whose heartbeat has not advanced within staleAfter
-// as failed. Cross-tenant (startup + periodic).
+// as failed, unless the run carries a valid checkpoint — such runs are paused
+// (resumable) instead of terminal-failed. Cross-tenant (startup + periodic).
 func (s *SQLiteRunStore) RecoverStaleRuns(ctx context.Context, staleAfter time.Duration) (int64, error) {
 	deadline := time.Now().Add(-staleAfter)
+	// Paused (resumable) runs keep completed_at NULL — only terminal-failed runs
+	// get it stamped so the run record reads as recoverable.
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE agent_runs SET status = ?, error = ?,
-		        completed_at = COALESCE(completed_at, ?), updated_at = ?
+		`UPDATE agent_runs
+		 SET status = CASE
+		         WHEN checkpoint IS NOT NULL THEN ?
+		         ELSE ?
+		       END,
+		     error = CASE
+		         WHEN checkpoint IS NOT NULL THEN ?
+		         ELSE ?
+		       END,
+		     completed_at = CASE
+		         WHEN checkpoint IS NOT NULL THEN completed_at
+		         ELSE COALESCE(completed_at, ?)
+		       END,
+		     updated_at = ?
 		 WHERE status IN ('pending', 'running', 'compacting')
 		   AND heartbeat_at < ?`,
-		store.AgentRunStatusFailed, "run stalled: heartbeat expired", deadline, deadline, deadline)
+		store.RunTimelineStatusPaused,
+		store.AgentRunStatusFailed,
+		"run paused: heartbeat expired, checkpoint available",
+		"run stalled: heartbeat expired",
+		deadline, deadline, deadline)
 	if err != nil {
 		return 0, fmt.Errorf("recover stale runs: %w", err)
 	}
@@ -403,22 +452,34 @@ const interruptedRunPreview = "interrupted: gateway stopped while this run was i
 // distinguishable from a genuine agent failure in the timeline.
 var interruptedRunMetadata = []byte(`{"event_type":"run.failed","interrupted":true,"reason":"server_restart"}`)
 
-// RecoverInterruptedRuns appends a terminal failed run.status item to every run
-// that has a "started" run.status but no terminal sibling — i.e. runs killed
+// interruptedPausedMetadata marks a backfilled resumable status so it is
+// distinguishable from a genuine agent failure in the timeline.
+var interruptedPausedMetadata = []byte(`{"event_type":"run.paused","interrupted":true,"reason":"server_restart"}`)
+
+const interruptedPausedPreview = "interrupted: gateway stopped, checkpoint available for resume"
+
+// RecoverInterruptedRuns appends a run.status item to every run that has a
+// "started" run.status but no terminal/blocking sibling — i.e. runs killed
 // mid-execution by a previous gateway stop, which would otherwise stay
-// "running" forever. Cross-tenant (startup reconciliation); see the interface doc.
+// "running" forever. Runs with a valid agent_runs.checkpoint are paused
+// (resumable); runs without one are terminal-failed. A previously-appended
+// "paused" item counts as terminal so a second pass is a no-op.
+// Cross-tenant (startup reconciliation); see the interface doc.
 func (s *SQLiteRunTimelineStore) RecoverInterruptedRuns(ctx context.Context) (int64, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT st.tenant_id, st.run_id, st.session_key, st.agent_id, st.user_id, st.channel, st.chat_id, agg.max_seq
+		SELECT st.tenant_id, st.run_id, st.session_key, st.agent_id, st.user_id, st.channel, st.chat_id, agg.max_seq,
+		       CASE WHEN ar.checkpoint IS NOT NULL AND ar.checkpoint != '' THEN 1 ELSE 0 END AS has_checkpoint
 		FROM (
 			SELECT run_id, MAX(seq) AS max_seq,
 			       MAX(item_type = 'run.status' AND status = 'started') AS has_start,
-			       MAX(item_type = 'run.status' AND status IN ('completed', 'failed', 'cancelled')) AS has_term
+			       MAX(item_type = 'run.status' AND status IN ('completed', 'failed', 'cancelled', 'paused')) AS has_term
 			FROM run_timeline_items
 			GROUP BY run_id
 		) agg
 		JOIN run_timeline_items st
 		  ON st.run_id = agg.run_id AND st.item_type = 'run.status' AND st.status = 'started'
+		LEFT JOIN agent_runs ar
+		  ON ar.run_id = st.run_id AND ar.tenant_id = st.tenant_id
 		WHERE agg.has_start = 1 AND IFNULL(agg.has_term, 0) = 0`)
 	if err != nil {
 		return 0, fmt.Errorf("list interrupted runs: %w", err)
@@ -432,16 +493,17 @@ func (s *SQLiteRunTimelineStore) RecoverInterruptedRuns(ctx context.Context) (in
 	for i := range orphans {
 		item := &orphans[i]
 		if err := s.AppendRunTimelineItem(store.WithTenantID(ctx, item.TenantID), item); err != nil {
-			return recovered, fmt.Errorf("append interrupted terminal for run %s: %w", item.RunID, err)
+			return recovered, fmt.Errorf("append interrupted status for run %s: %w", item.RunID, err)
 		}
 		recovered++
 	}
 	return recovered, nil
 }
 
-// scanInterruptedRuns reads orphaned-run rows and pre-builds the terminal failed
-// item to append for each. Rows are fully drained and closed before returning so
-// the caller can issue inserts on the same connection without cursor contention.
+// scanInterruptedRuns reads orphaned-run rows and pre-builds the run.status item
+// to append for each: paused for runs with a valid checkpoint, failed otherwise.
+// Rows are fully drained and closed before returning so the caller can issue
+// inserts on the same connection without cursor contention.
 func scanInterruptedRuns(rows *sql.Rows) ([]store.RunTimelineItem, error) {
 	defer rows.Close()
 	var items []store.RunTimelineItem
@@ -452,8 +514,9 @@ func scanInterruptedRuns(rows *sql.Rows) ([]store.RunTimelineItem, error) {
 			agentID                 uuid.NullUUID
 			userID, channel, chatID sql.NullString
 			maxSeq                  int
+			hasCheckpoint           bool
 		)
-		if err := rows.Scan(&tenantID, &runID, &sessionKey, &agentID, &userID, &channel, &chatID, &maxSeq); err != nil {
+		if err := rows.Scan(&tenantID, &runID, &sessionKey, &agentID, &userID, &channel, &chatID, &maxSeq, &hasCheckpoint); err != nil {
 			return nil, fmt.Errorf("scan interrupted run: %w", err)
 		}
 		item := store.RunTimelineItem{
@@ -465,10 +528,17 @@ func scanInterruptedRuns(rows *sql.Rows) ([]store.RunTimelineItem, error) {
 			ChatID:     chatID.String,
 			Seq:        maxSeq + 1,
 			ItemType:   store.RunTimelineItemTypeRunStatus,
-			Status:     store.RunTimelineStatusFailed,
-			Title:      "Run failed",
-			Preview:    interruptedRunPreview,
-			Metadata:   interruptedRunMetadata,
+		}
+		if hasCheckpoint {
+			item.Status = store.RunTimelineStatusPaused
+			item.Title = "Run paused"
+			item.Preview = interruptedPausedPreview
+			item.Metadata = interruptedPausedMetadata
+		} else {
+			item.Status = store.RunTimelineStatusFailed
+			item.Title = "Run failed"
+			item.Preview = interruptedRunPreview
+			item.Metadata = interruptedRunMetadata
 		}
 		if agentID.Valid {
 			id := agentID.UUID

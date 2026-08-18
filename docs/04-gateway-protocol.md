@@ -341,6 +341,7 @@ flowchart TD
 | `runs.get` | Get one durable agent run record (backed by `agent_runs`) |
 | `runs.list` | List durable agent runs (filter by session/status) |
 | `runs.events` | Replay run timeline events (cursor after seq, `after=N`) |
+| `runs.resume` | Resume a checkpointed durable run (restores checkpoint, runs sync, returns fresh record + result) |
 
 ---
 
@@ -463,6 +464,7 @@ All CRUD endpoints require `Authorization: Bearer <token>` and `X-GoClaw-User-Id
 | GET | `/v1/runs/{run_id}` | Get one durable agent run record |
 | GET | `/v1/runs/{run_id}/events` | Replay run timeline events (`after=N` cursor, `limit`, `session_key`) |
 | GET | `/v1/runs/{run_id}/timeline` | Full run timeline items (compat with `run.timeline.get`) |
+| POST | `/v1/runs/{run_id}/resume` | Resume a checkpointed durable run (sync, returns fresh record + result) |
 
 **Channel Instances** (`/v1/channel-instances`):
 
@@ -557,6 +559,13 @@ marked terminal (`completed` / `failed` / `cancelled`) on exit. A periodic sweep
 marks runs whose heartbeat has not advanced within `stale_after_ms` as `failed`
 so hung runs cannot linger as "running" forever.
 
+Runs are resumable: the pipeline persists a durable checkpoint
+(`agent_runs.checkpoint`) and an interrupted run that has a valid checkpoint is
+marked `paused` (resumable) instead of terminal-`failed` when the gateway
+reconciles at startup — only runs with no usable checkpoint are failed as
+before. A checkpointed run can be resumed through `runs.resume` (WS) or
+`POST /v1/runs/{run_id}/resume` (HTTP).
+
 ```json5
 {
   reliability: {
@@ -564,7 +573,7 @@ so hung runs cannot linger as "running" forever.
       heartbeat_interval_ms: 10000, // how often heartbeat_at advances (coalesced writes)
       stale_after_ms: 60000,        // heartbeats this old → sweep marks the run failed
       sweep_interval_ms: 30000,     // how often the stale-run sweep runs
-      extension_budget_ms: 0        // reserved for a later checkpoint/resume phase
+      extension_budget_ms: 0        // unused (checkpoint/resume implemented via agent_runs.checkpoint)
     }
   }
 }

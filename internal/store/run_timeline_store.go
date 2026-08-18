@@ -14,7 +14,26 @@ const (
 	RunTimelineItemTypeToolCall         = "tool.call"
 	RunTimelineItemTypeToolResult       = "tool.result"
 	RunTimelineItemTypeRunStatus        = "run.status"
+
+	// RunTimelineItemTypeChunk persists streamed content chunks so a reconnecting
+	// client can replay the raw stream. Unlike legacy types, chunk/thinking/
+	// tool.started items keep their full content (no preview-only strip).
+	RunTimelineItemTypeChunk        = "chunk"
+	RunTimelineItemTypeThinking     = "thinking"
+	RunTimelineItemTypeToolStarted  = "tool.started"
 )
+
+// RunTimelineItemContentPersisted reports whether a timeline item type carries
+// full content in the content column instead of being a display-only preview
+// archive. Stream replay types (chunk/thinking) and tool-start detail persist
+// their content intact; legacy types strip content to keep the timeline slim.
+func RunTimelineItemContentPersisted(itemType string) bool {
+	switch itemType {
+	case RunTimelineItemTypeChunk, RunTimelineItemTypeThinking, RunTimelineItemTypeToolStarted:
+		return true
+	}
+	return false
+}
 
 const (
 	RunTimelineStatusStarted   = "started"
@@ -22,6 +41,16 @@ const (
 	RunTimelineStatusCompleted = "completed"
 	RunTimelineStatusFailed    = "failed"
 	RunTimelineStatusCancelled = "cancelled"
+
+	// RunTimelineStatusThinking/WaitingTool/Verifying are per-phase statuses a
+	// running agent transitions through (persisted on run.status timeline items
+	// and/or agent_runs.status when a run is mid-pipeline).
+	RunTimelineStatusThinking    = "thinking"
+	RunTimelineStatusWaitingTool = "waiting_tool"
+	RunTimelineStatusVerifying   = "verifying"
+	// RunTimelineStatusPaused marks a run interrupted with a valid checkpoint:
+	// not terminal-failed, but resumable on the next gateway start or resume call.
+	RunTimelineStatusPaused = "paused"
 )
 
 // RunTimelineItem is a persisted, display-safe archive entry for one agent run.
@@ -83,7 +112,8 @@ func AgentRunTerminal(s string) bool {
 func ValidAgentRunStatus(s string) bool {
 	switch s {
 	case AgentRunStatusPending, AgentRunStatusRunning, AgentRunStatusCompacting,
-		AgentRunStatusCompleted, AgentRunStatusFailed, AgentRunStatusCancelled:
+		AgentRunStatusCompleted, AgentRunStatusFailed, AgentRunStatusCancelled,
+		RunTimelineStatusPaused:
 		return true
 	}
 	return false
@@ -102,7 +132,7 @@ type AgentRun struct {
 	ChatID      string          `json:"chat_id,omitempty" db:"chat_id"`
 	Status      string          `json:"status" db:"status"`
 	Attempt     int             `json:"attempt" db:"attempt"`
-	Checkpoint  json.RawMessage `json:"checkpoint,omitempty" db:"checkpoint"` // placeholder (resume = future phase)
+	Checkpoint  json.RawMessage `json:"checkpoint,omitempty" db:"checkpoint"` // durable pipeline checkpoint, written each N iterations (enable=resume from here)
 	HeartbeatAt time.Time       `json:"heartbeat_at" db:"heartbeat_at"`
 	StartedAt   time.Time       `json:"started_at" db:"started_at"`
 	CompletedAt *time.Time      `json:"completed_at,omitempty" db:"completed_at"`
@@ -132,6 +162,12 @@ type RunsStore interface {
 	// UpdateRunStatus transitions a run to a non-terminal state (running/compacting).
 	// Where clause scopes to tenant_id + run_id. Updates updated_at automatically.
 	UpdateRunStatus(ctx context.Context, runID string, status string) error
+	// UpdateRunCheckpoint writes a durable pipeline checkpoint and transitions the
+	// run's status in the same statement (status is typically "running", or
+	// "compacting"/"paused" when the checkpoint is written just before a retry or
+	// resume is expected). Where clause scopes to tenant_id + run_id. Non-fatal in
+	// callers: a checkpoint that fails to persist merely loses resume capability.
+	UpdateRunCheckpoint(ctx context.Context, runID string, status string, checkpoint json.RawMessage) error
 	// UpdateRunTerminal transitions a run to a terminal state (completed/failed/cancelled),
 	// stamping completed_at. Where clause scopes to tenant_id + run_id.
 	UpdateRunTerminal(ctx context.Context, runID string, status, errMsg string, completedAt time.Time) error

@@ -132,6 +132,10 @@ func (s *stubRunsStore) CreateRun(_ context.Context, _ *store.AgentRun) error { 
 
 func (s *stubRunsStore) UpdateRunStatus(context.Context, string, string) error { return s.err }
 
+func (s *stubRunsStore) UpdateRunCheckpoint(context.Context, string, string, json.RawMessage) error {
+	return s.err
+}
+
 func (s *stubRunsStore) UpdateRunTerminal(context.Context, string, string, string, time.Time) error {
 	return s.err
 }

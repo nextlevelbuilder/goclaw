@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -99,6 +100,10 @@ type stubHTTPRunsStore struct {
 func (s *stubHTTPRunsStore) CreateRun(context.Context, *store.AgentRun) error { return s.err }
 
 func (s *stubHTTPRunsStore) UpdateRunStatus(context.Context, string, string) error { return s.err }
+
+func (s *stubHTTPRunsStore) UpdateRunCheckpoint(context.Context, string, string, json.RawMessage) error {
+	return s.err
+}
 
 func (s *stubHTTPRunsStore) UpdateRunTerminal(context.Context, string, string, string, time.Time) error {
 	return s.err
@@ -269,5 +274,95 @@ func TestRunEventsHTTPRejectsInvalidAfter(t *testing.T) {
 	}
 	if len(timeline.opts) != 0 {
 		t.Fatalf("List calls = %d, want 0", len(timeline.opts))
+	}
+}
+
+func setupResumeWriteToken(t *testing.T, ownerID string) string {
+	t.Helper()
+	token := "resume-write-key"
+	setupTestCache(t, map[string]*store.APIKeyData{
+		crypto.HashAPIKey(token): {
+			ID:      uuid.New(),
+			Scopes:  []string{"operator.write"},
+			OwnerID: ownerID,
+		},
+	})
+	return token
+}
+
+func TestRunResumeHTTPUnavailableWithoutResumer(t *testing.T) {
+	token := setupResumeWriteToken(t, "caller")
+	mux := http.NewServeMux()
+	NewTracesHandler(&mockTracingStore{}, &stubRunTimelineStore{}).RegisterRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/runs/run-1/resume", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRunResumeHTTPSuccess(t *testing.T) {
+	token := setupResumeWriteToken(t, "caller")
+	runs := &stubHTTPRunsStore{run: &store.AgentRun{RunID: "run-1", UserID: "caller", Status: store.AgentRunStatusRunning}}
+	h := NewTracesHandler(&mockTracingStore{}, &stubRunTimelineStore{})
+	h.SetRunsStore(runs)
+	h.SetResumer(func(context.Context, string) (*agent.RunResult, error) {
+		return &agent.RunResult{Content: "resumed answer", Thinking: "reasoned"}, nil
+	})
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/runs/run-1/resume", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Run    store.AgentRun   `json:"run"`
+		Result *agent.RunResult `json:"result"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if body.Run.Status != store.AgentRunStatusRunning {
+		t.Fatalf("run status = %q, want running", body.Run.Status)
+	}
+	if body.Result == nil || body.Result.Content != "resumed answer" {
+		t.Fatalf("result = %+v", body.Result)
+	}
+	// The handler must refetch the fresh run record after the resume completes.
+	if len(runs.calls) != 2 {
+		t.Fatalf("GetRun calls = %d, want 2 (ownership + refetch)", len(runs.calls))
+	}
+}
+
+func TestRunResumeHTTPViewerDeniedForOtherUser(t *testing.T) {
+	token := setupResumeWriteToken(t, "caller")
+	runs := &stubHTTPRunsStore{run: &store.AgentRun{RunID: "run-1", UserID: "other", Status: store.AgentRunStatusCompacting}}
+	h := NewTracesHandler(&mockTracingStore{}, &stubRunTimelineStore{})
+	h.SetRunsStore(runs)
+	h.SetResumer(func(context.Context, string) (*agent.RunResult, error) {
+		return &agent.RunResult{Content: "should not run"}, nil
+	})
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/runs/run-1/resume", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body=%s", rec.Code, rec.Body.String())
+	}
+	if len(runs.calls) != 1 {
+		t.Fatalf("GetRun calls = %d, want 1 (ownership check only)", len(runs.calls))
 	}
 }

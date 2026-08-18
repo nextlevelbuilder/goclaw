@@ -75,18 +75,39 @@ func TestRunTimelineItemFromEventScrubsToolArguments(t *testing.T) {
 	}
 }
 
-func TestRunTimelineItemFromEventDropsUnsupportedAndThinking(t *testing.T) {
+func TestRunTimelineItemFromEventDropsUnsupportedAndStreamsArchived(t *testing.T) {
 	tenantID := uuid.Must(uuid.NewV7())
+
+	// Unsupported event types (tool.log) are not archived.
 	if _, ok := runTimelineItemFromEvent(AgentEvent{
-		Type:       protocol.ChatEventThinking,
+		Type:       protocol.AgentEventToolLog,
 		RunID:      "run-1",
 		SessionKey: "session-1",
 		TenantID:   tenantID,
 	}, 1); ok {
-		t.Fatal("thinking event should not be archived")
+		t.Fatal("tool.log event should not be archived")
 	}
 
-	item, ok := runTimelineItemFromEvent(AgentEvent{
+	// Thinking events (G4) are now archived with type=thinking/status=thinking
+	// and full content persisted for stream replay.
+	thinking, ok := runTimelineItemFromEvent(AgentEvent{
+		Type:       protocol.ChatEventThinking,
+		RunID:      "run-1",
+		SessionKey: "session-1",
+		TenantID:   tenantID,
+		Payload:    map[string]string{"content": "reasoning trace"},
+	}, 2)
+	if !ok {
+		t.Fatal("thinking event should be archived")
+	}
+	if thinking.ItemType != store.RunTimelineItemTypeThinking || thinking.Status != store.RunTimelineStatusThinking {
+		t.Fatalf("thinking item = %q/%q", thinking.ItemType, thinking.Status)
+	}
+	if thinking.Content != "reasoning trace" {
+		t.Fatalf("thinking content = %q", thinking.Content)
+	}
+
+	completed, ok := runTimelineItemFromEvent(AgentEvent{
 		Type:       protocol.AgentEventRunCompleted,
 		RunID:      "run-1",
 		SessionKey: "session-1",
@@ -95,15 +116,56 @@ func TestRunTimelineItemFromEventDropsUnsupportedAndThinking(t *testing.T) {
 			"content":  "visible <thinking>hidden chain</thinking> done",
 			"thinking": "raw hidden chain",
 		},
-	}, 1)
+	}, 3)
 	if !ok {
 		t.Fatal("expected completed item")
 	}
-	if strings.Contains(item.Preview, "hidden chain") || strings.Contains(item.Preview, "raw hidden") {
-		t.Fatalf("preview leaked thinking: %q", item.Preview)
+	if strings.Contains(completed.Preview, "hidden chain") || strings.Contains(completed.Preview, "raw hidden") {
+		t.Fatalf("preview leaked thinking: %q", completed.Preview)
 	}
-	if item.Preview != "visible  done" {
-		t.Fatalf("Preview = %q", item.Preview)
+	if completed.Preview != "visible  done" {
+		t.Fatalf("Preview = %q", completed.Preview)
+	}
+}
+
+func TestRunTimelineItemArchivesStreamChunkAndToolStarted(t *testing.T) {
+	tenantID := uuid.Must(uuid.NewV7())
+
+	chunk, ok := runTimelineItemFromEvent(AgentEvent{
+		Type:       protocol.ChatEventChunk,
+		RunID:      "run-1",
+		SessionKey: "session-1",
+		TenantID:   tenantID,
+		Payload:    map[string]string{"content": "streamed delta"},
+	}, 4)
+	if !ok {
+		t.Fatal("chunk event should be archived")
+	}
+	if chunk.ItemType != store.RunTimelineItemTypeChunk || chunk.Status != store.RunTimelineStatusRunning {
+		t.Fatalf("chunk item = %q/%q", chunk.ItemType, chunk.Status)
+	}
+	if chunk.Content != "streamed delta" {
+		t.Fatalf("chunk content = %q", chunk.Content)
+	}
+
+	started, ok := runTimelineItemFromEvent(AgentEvent{
+		Type:       protocol.AgentEventToolStarted,
+		RunID:      "run-1",
+		SessionKey: "session-1",
+		TenantID:   tenantID,
+		Payload:    map[string]any{"name": "read_file", "id": "tool-1", "rawName": "read_file"},
+	}, 5)
+	if !ok {
+		t.Fatal("tool.started event should be archived")
+	}
+	if started.ItemType != store.RunTimelineItemTypeToolStarted || started.Status != store.RunTimelineStatusWaitingTool {
+		t.Fatalf("tool.started item = %q/%q", started.ItemType, started.Status)
+	}
+	if started.ToolName != "read_file" || started.ToolCallID != "tool-1" {
+		t.Fatalf("tool identity = %q/%q", started.ToolName, started.ToolCallID)
+	}
+	if !strings.Contains(started.Content, "read_file") {
+		t.Fatalf("tool.started content = %q", started.Content)
 	}
 }
 
@@ -138,7 +200,8 @@ func TestRunTimelineRecorderOnlyTracksSupportedActiveRuns(t *testing.T) {
 		TenantID:   tenantID,
 	}
 
-	recorder.Record(AgentEvent{Type: protocol.ChatEventThinking, RunID: base.RunID, SessionKey: base.SessionKey, TenantID: base.TenantID})
+	// Unsupported event (tool.log) does not create a seq track.
+	recorder.Record(AgentEvent{Type: protocol.AgentEventToolLog, RunID: base.RunID, SessionKey: base.SessionKey, TenantID: base.TenantID})
 	if got := recorderTrackedRuns(recorder); got != 0 {
 		t.Fatalf("tracked runs after unsupported event = %d, want 0", got)
 	}
@@ -151,9 +214,10 @@ func TestRunTimelineRecorderOnlyTracksSupportedActiveRuns(t *testing.T) {
 		t.Fatalf("seq after first supported event = %d, want 1", seq)
 	}
 
+	// G4: thinking is now a supported stream item — it archives and advances seq.
 	recorder.Record(AgentEvent{Type: protocol.ChatEventThinking, RunID: base.RunID, SessionKey: base.SessionKey, TenantID: base.TenantID})
-	if seq := recorderSeq(recorder, base.RunID); seq != 1 {
-		t.Fatalf("seq after unsupported event = %d, want 1", seq)
+	if seq := recorderSeq(recorder, base.RunID); seq != 2 {
+		t.Fatalf("seq after thinking event = %d, want 2", seq)
 	}
 
 	recorder.Record(AgentEvent{Type: protocol.AgentEventRunCompleted, RunID: base.RunID, SessionKey: base.SessionKey, TenantID: base.TenantID})

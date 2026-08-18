@@ -14,8 +14,12 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
-// runViaPipeline delegates a run to the v3 pipeline.
-func (l *Loop) runViaPipeline(ctx context.Context, req RunRequest) (*RunResult, error) {
+// runViaPipeline delegates a run to the v3 pipeline. resume, when non-nil, is a
+// checkpoint-restored RunState: the pipeline skips its setup stages and resumes
+// the iteration loop from the checkpoint's iteration. checkpoint, when non-nil,
+// is wired into PipelineDeps.WriteCheckpoint so CheckpointStage can persist a
+// durable checkpoint to agent_runs.checkpoint at the configured cadence.
+func (l *Loop) runViaPipeline(ctx context.Context, req RunRequest, resume *pipeline.RunState, checkpoint func(ctx context.Context, state *pipeline.RunState) error) (*RunResult, error) {
 	input := convertRunInput(&req)
 	// Bridge runState shares loop detection state between pipeline and agent.
 	bridgeRS := &runState{}
@@ -36,10 +40,20 @@ func (l *Loop) runViaPipeline(ctx context.Context, req RunRequest) (*RunResult, 
 		}
 	}
 
-	deps := l.buildPipelineDeps(&req, bridgeRS)
+	deps := l.buildPipelineDeps(&req, bridgeRS, checkpoint)
 
 	p := pipeline.NewDefaultPipeline(deps)
-	state := pipeline.NewRunState(input, nil, model, provider)
+	var state *pipeline.RunState
+	if resume != nil {
+		// A restored state carries its own Messages/Workspace/substates/progress;
+		// the request resolves identity (input/model/provider) from the caller.
+		state = resume
+		state.Input = input
+		state.Model = model
+		state.Provider = provider
+	} else {
+		state = pipeline.NewRunState(input, nil, model, provider)
+	}
 
 	pResult, err := p.Run(ctx, state)
 	if err != nil {
@@ -59,7 +73,7 @@ func (l *Loop) runViaPipeline(ctx context.Context, req RunRequest) (*RunResult, 
 // effProvider/effModel are the resolved provider+model for THIS run (after any
 // ModelOverride/ProviderOverride) so reasoning-effort resolution matches the
 // request the pipeline will actually send.
-func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.PipelineDeps {
+func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState, checkpoint func(ctx context.Context, state *pipeline.RunState) error) pipeline.PipelineDeps {
 	maxIter := l.maxIterations
 	if req.MaxIterations > 0 && req.MaxIterations < maxIter {
 		maxIter = req.MaxIterations
@@ -89,13 +103,14 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 		EventBus:      l.domainBus,
 		Hooks:         l.hookDispatcher,
 		Config: pipeline.PipelineConfig{
-			MaxIterations:      maxIter,
-			MaxToolCalls:       l.maxToolCalls,
-			CheckpointInterval: 5,
-			ContextWindow:      l.contextWindow,
-			MaxTokens:          l.effectiveMaxTokens(),
-			ReserveTokens:      l.resolveReserveTokens(),
-			Compaction:         l.compactionCfg,
+			MaxIterations:             maxIter,
+			MaxToolCalls:              l.maxToolCalls,
+			CheckpointInterval:        5,
+			DurableCheckpointInterval: 5,
+			ContextWindow:             l.contextWindow,
+			MaxTokens:                 l.effectiveMaxTokens(),
+			ReserveTokens:             l.resolveReserveTokens(),
+			Compaction:                l.compactionCfg,
 			// V3 memory/retrieval flags removed — always true at runtime.
 		},
 		ResolveContextWindow: l.resolveEffectiveContextWindow,
@@ -181,7 +196,8 @@ func (l *Loop) buildPipelineDeps(req *RunRequest, bridgeRS *runState) pipeline.P
 		},
 
 		// Checkpoint + Finalize
-		FlushMessages:          cb.flushMessages,
+		FlushMessages:   cb.flushMessages,
+		WriteCheckpoint: checkpoint,
 		PersistAssistantImages: persistAssistantImages,
 		SkillPostscript:        l.makeSkillPostscript(),
 		SanitizeContent:        cb.sanitizeContent,

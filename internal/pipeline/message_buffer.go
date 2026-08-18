@@ -50,6 +50,27 @@ func (mb *MessageBuffer) SetPending(msgs []providers.Message) {
 	mb.pending = msgs
 }
 
+// Restore rebuilds the buffer from a checkpoint-shaped flat slice laid out as
+// [system, ...history, ...pending] — exactly the shape MarshalCheckpoint writes
+// from All(). The pending tail is preserved so an interrupted iteration's
+// in-flight messages survive a resume. A nil/empty slice leaves the system
+// message empty; callers are expected to restore identity elsewhere.
+func (mb *MessageBuffer) Restore(msgs []providers.Message) {
+	if len(msgs) == 0 {
+		mb.system = providers.Message{}
+		mb.history = nil
+		mb.pending = nil
+		return
+	}
+	// First message is the system prompt; everything else is history.
+	// Pending is intentionally empty: CheckpointStage flushes pending into
+	// history before persisting, and resume reruns iteration from state.Iteration.
+	mb.system = msgs[0]
+	mb.history = make([]providers.Message, 0, len(msgs)-1)
+	mb.history = append(mb.history, msgs[1:]...)
+	mb.pending = nil
+}
+
 // FlushPending moves pending messages to history and returns them.
 func (mb *MessageBuffer) FlushPending() []providers.Message {
 	flushed := mb.pending
