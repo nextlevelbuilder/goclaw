@@ -5,7 +5,7 @@ Nguồn vision: `plans/260815-2340-goclaw-repository-reliability/GoClaw_AgentKit
 
 ## Status
 
-- **Phase 5 (Multi-Agent):** `[ ]` — IN PROGRESS (2026-08-18).
+- **Phase 5 (Multi-Agent):** `[x]` — SHIPPED (2026-08-19, PR #15–18).
 - Phase 1 `/gc:` Foundation `[x]` SHIPPED (PR #8). Phase 2 Durable Runtime `[x]` (PR #10). Phase 3 Native Layer `[x]` (PR #11-14). Phase 4 Reliability = trùng reliability plan `[x]` (không làm lại).
 
 ## Quyết định đã chốt (controller scout, 2026-08-18)
@@ -23,20 +23,20 @@ Nguồn vision: `plans/260815-2340-goclaw-repository-reliability/GoClaw_AgentKit
 
 | Phase | Nội dung | Trạng thái |
 |-------|----------|------------|
-| 5 | Multi-Agent (handoff contract + competitive/jury + negotiation + dynamic formation) | `[ ]` |
+| 5 | Multi-Agent (handoff contract + competitive/jury + negotiation + dynamic formation) | `[x]` SHIPPED (PR #15-18) |
 
 ## Acceptance criteria (Phase 5)
 
-- [ ] **Handoff contract** (WS-A): `Contract` type có task/context/constraints/artifacts/acceptance_criteria/deadline/budget; validator; `NewContract`/`RenderContract` helper. Test pass.
-- [ ] **Competitive fan-out + judge** (WS-A): `parallel.go` — chạy N strategy song song qua `DelegateRunFunc`, thu `[]ChildResult`, judge chọn best theo scoring criteria (correctness/perf/complexity/security). Test pass.
-- [ ] **Jury/consensus** (WS-A): `Verdict` type (approve/reject/revise + score + reason + votes); consensus aggregation (≥2/3 match). Test pass.
-- [ ] **Negotiation** (WS-A): proposal/counter-proposal/critique/vote round model, bounded rounds (max 5), quit khi đạt consensus. Test pass.
-- [ ] **Contract store** (WS-B): bảng `multi_agent_records` (id/tenant_id/run_id/kind/body JSONB/status/created_at) PG+SQLite, migration `000100` + `RequiredSchemaVersion` 100 + SQLite patch 62→63 + `SchemaVersion` 63. Test roundtrip + tenant scope.
-- [ ] **Verdict/negotiate tools** (WS-C): tools `jury` + `negotiate` đăng ký gateway; chạy qua `teamworkclassify`/directive; test.
-- [ ] **Dynamic formation** (WS-D): teamworkclassify mở rộng `Mode`/`Result` thêm formation (debugger-only / planner+coder+tester / architect+... ); gateway wiring; protocol events. Test.
-- [ ] Dual-DB lockstep: PG migration + bump; SQLite schema.sql + patch + bump.
-- [ ] Mỗi workstream: test → tự review → PR riêng → CI green.
-- [ ] Regression: `go build ./...`, `go vet ./...`, `go build -tags sqliteonly ./...`, unit + integration xanh.
+- [x] **Handoff contract** (WS-A): `Contract` type có task/context/constraints/artifacts/acceptance_criteria/deadline/budget; validator; `NewContract`/`RenderContract` helper. Test pass.
+- [x] **Competitive fan-out + judge** (WS-A): `parallel.go` — chạy N strategy song song qua `DelegateRunFunc`, thu `[]ChildResult`, judge chọn best theo scoring criteria (correctness/perf/complexity/security). Test pass.
+- [x] **Jury/consensus** (WS-A): `Verdict` type (approve/reject/revise + score + reason + votes); consensus aggregation (≥2/3 match). Test pass.
+- [x] **Negotiation** (WS-A): proposal/counter-proposal/critique/vote round model, bounded rounds (max 5), quit khi đạt consensus. Test pass.
+- [x] **Contract store** (WS-B): bảng `multi_agent_records` (id/tenant_id/run_id/kind/body JSONB/status/created_at) PG+SQLite, migration `000100` + `RequiredSchemaVersion` 100 + SQLite patch 62→63 + `SchemaVersion` 63. Test roundtrip + tenant scope.
+- [x] **Verdict/negotiate tools** (WS-C): tools `jury` + `negotiate` đăng ký gateway; chạy qua `teamworkclassify`/directive; test.
+- [x] **Dynamic formation** (WS-D): teamworkclassify mở rộng `Mode`/`Result` thêm formation (debugger-only / planner+coder+tester / architect+... ); gateway wiring; protocol events. Test.
+- [x] Dual-DB lockstep: PG migration + bump; SQLite schema.sql + patch + bump.
+- [x] Mỗi workstream: test → tự review → PR riêng → CI green.
+- [x] Regression: `go build ./...`, `go vet ./...`, `go build -tags sqliteonly ./...`, unit + integration xanh.
 
 ## Workstreams (disjoint, 2-stage)
 
