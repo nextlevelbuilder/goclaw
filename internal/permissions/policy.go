@@ -360,6 +360,9 @@ func isWriteMethod(method string) bool {
 		// TTS synthesis — invokes provider API (quota/credentials).
 		protocol.MethodTTSConvert,
 
+		// Durable run resume — re-drives an agent loop (provider calls).
+		protocol.MethodRunsResume,
+
 		// Browser automation — performs side-effecting actions.
 		protocol.MethodBrowserAct,
 

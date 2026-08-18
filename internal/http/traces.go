@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -23,6 +25,10 @@ type TracesHandler struct {
 	tracing     store.TracingStore
 	runTimeline store.RunTimelineStore
 	runs        store.RunsStore
+
+	// resumer resumes a checkpointed run (wired to agent.Loop.ResumeRun by cmd).
+	// Nil = POST /v1/runs/{runID}/resume reports unavailable.
+	resumer func(ctx context.Context, runID string) (*agent.RunResult, error)
 }
 
 // NewTracesHandler creates a handler for trace management endpoints.
@@ -39,6 +45,12 @@ func NewTracesHandler(tracing store.TracingStore, timelines ...store.RunTimeline
 // those endpoints report an unavailable error when the store is not wired.
 func (h *TracesHandler) SetRunsStore(runs store.RunsStore) { h.runs = runs }
 
+// SetResumer wires the resume entrypoint for POST /v1/runs/{runID}/resume.
+// Nil-safe: the endpoint reports unavailable until the loop is attached.
+func (h *TracesHandler) SetResumer(resume func(ctx context.Context, runID string) (*agent.RunResult, error)) {
+	h.resumer = resume
+}
+
 // RegisterRoutes registers trace routes on the given mux.
 func (h *TracesHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/traces", h.authMiddleware(h.handleList))
@@ -51,6 +63,7 @@ func (h *TracesHandler) RegisterRoutes(mux *http.ServeMux) {
 	// paths, so GET /v1/runs/{runID} matches run records only.
 	mux.HandleFunc("GET /v1/runs/{runID}", h.authMiddleware(h.handleRunGet))
 	mux.HandleFunc("GET /v1/runs/{runID}/events", h.authMiddleware(h.handleRunEvents))
+	mux.HandleFunc("POST /v1/runs/{runID}/resume", h.authMiddleware(h.handleRunResume))
 	mux.HandleFunc("GET /v1/costs/summary", h.authMiddleware(h.handleCostSummary))
 }
 
@@ -501,6 +514,62 @@ func filterTimelineItemsByUser(items []store.RunTimelineItem, userID string) []s
 		}
 	}
 	return filtered
+}
+
+// handleRunResume serves POST /v1/runs/{runID}/resume: resumes a checkpointed
+// durable run synchronously. Body is unused (resume replays the recorded
+// checkpoint). Returns the fresh run record + final result.
+func (h *TracesHandler) handleRunResume(w http.ResponseWriter, r *http.Request) {
+	locale := store.LocaleFromContext(r.Context())
+	if h.resumer == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": i18n.T(locale, i18n.MsgRunsUnavailable)})
+		return
+	}
+	runID := r.PathValue("runID")
+	if strings.TrimSpace(runID) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgRequired, "run_id")})
+		return
+	}
+	// Non-admin callers may only resume their own runs (parity with handleRunGet).
+	auth := resolveAuth(r)
+	if !permissions.HasMinRole(auth.Role, permissions.RoleAdmin) {
+		if h.runs == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": i18n.T(locale, i18n.MsgRunsUnavailable)})
+			return
+		}
+		run, err := h.runs.GetRun(r.Context(), runID)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "run", runID)})
+			return
+		}
+		callerID := store.UserIDFromContext(r.Context())
+		if run.UserID != callerID {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "run", runID)})
+			return
+		}
+	}
+	result, err := h.resumer(r.Context(), runID)
+	if err != nil {
+		slog.Warn("runs.resume_failed", "run_id", runID, "error", err)
+		if errors.Is(err, agent.ErrRunResumeNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "run", runID)})
+			return
+		}
+		if errors.Is(err, agent.ErrRunResumeUnavailable) {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": i18n.T(locale, i18n.MsgRunsUnavailable)})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": i18n.T(locale, i18n.MsgInternalError, "resume run")})
+		return
+	}
+	var run *store.AgentRun
+	if h.runs != nil {
+		if run, err = h.runs.GetRun(r.Context(), runID); err != nil {
+			slog.Warn("runs.resume_refetch_failed", "run_id", runID, "error", err)
+			run = nil
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"run": run, "result": result})
 }
 
 // traceExportEntry is a trace with its spans and recursive sub-traces.
