@@ -280,6 +280,9 @@ const (
 	MsgToolAnnouncementSingle = "progress.tool_announcement.single" // "I'll use %s to handle the next step."
 	MsgToolAnnouncementMulti  = "progress.tool_announcement.multi"  // "I'll use %s to handle the next step."
 
+	// --- Multi-agent ---
+	MsgMultiAgentStoreUnavailable = "multiagent.store_unavailable" // "%s records are not available on this gateway"
+
 	// --- Tenants ---
 	MsgInvalidRole = "error.invalid_role" // "invalid role: allowed values are owner, admin, operator, member, viewer"
 

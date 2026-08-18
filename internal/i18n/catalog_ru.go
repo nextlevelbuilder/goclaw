@@ -235,7 +235,8 @@ func init() {
 		MsgSkillNudge70Pct:      "[Система] Вы использовали 70% бюджета итераций. Подумайте, могут ли какие-либо шаблоны из этой сессии стать хорошим навыком.",
 		MsgSkillNudge90Pct:      "[Система] Вы использовали 90% бюджета итераций. Если эта сессия включала повторно используемые шаблоны, подумайте о сохранении их как навыка до завершения.",
 
-		MsgInvalidRole: "неверная роль: допустимые значения — owner, admin, operator, member, viewer",
+		MsgInvalidRole:                 "неверная роль: допустимые значения — owner, admin, operator, member, viewer",
+		MsgMultiAgentStoreUnavailable: "записи %s недоступны на этом шлюзе",
 
 		MsgContactIDsRequired:  "требуется contact_ids",
 		MsgMergeTargetRequired: "требуется ровно одно из tenant_user_id или create_user",

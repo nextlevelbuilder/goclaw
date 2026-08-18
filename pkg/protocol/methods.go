@@ -261,3 +261,13 @@ const (
 	MethodBitrixPortalsGetInstallURL = "bitrix.portals.get_install_url"
 	MethodBitrixPortalsDelete        = "bitrix.portals.delete"
 )
+
+// Multi-agent (dynamic team formation, jury verdict history, negotiation
+// history). Execution of jury/negotiate rounds happens through the
+// jury/negotiate tools in the agent loop; these RPC methods expose formation
+// routing and read-only persistence windows.
+const (
+	MethodMultiAgentFormation = "multiagent.formation"
+	MethodMultiAgentJury      = "multiagent.jury"
+	MethodMultiAgentNegotiate = "multiagent.negotiate"
+)

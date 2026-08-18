@@ -125,6 +125,13 @@ const (
 	// MCP OAuth flow completion — fired after callback token exchange succeeds or fails.
 	// Payload: MCPOAuthCompletePayload.
 	EventMCPOAuthComplete = "mcp.oauth_complete"
+
+	// Multi-agent collaboration events (jury verdicts, negotiation state,
+	// formation routing). Payloads: MultiAgentEventPayload variants in
+	// pkg/protocol/team_events.go.
+	EventMultiAgentVerdict           = "multiagent.verdict"
+	EventMultiAgentNegotiationState  = "multiagent.negotiation_state"
+	EventMultiAgentFormationSelected = "multiagent.formation_selected"
 )
 
 // Agent event subtypes (in payload.type)

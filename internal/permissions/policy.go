@@ -372,6 +372,11 @@ func isWriteMethod(method string) bool {
 
 		// Workstations — connection test invokes SSH side-effects.
 		protocol.MethodWorkstationsTest,
+
+		// Multi-agent formation routing — returns a team directive and emits a
+		// formation_selected event; requires operator so viewers cannot trigger
+		// routing events.
+		protocol.MethodMultiAgentFormation,
 	}
 	return slices.Contains(writeExact, method)
 }
@@ -483,6 +488,10 @@ func isReadMethod(method string) bool {
 		protocol.MethodWorkstationsGet,
 		protocol.MethodWorkstationsPermList,
 		protocol.MethodWorkstationsListActivity,
+
+		// Multi-agent read-only history (jury verdicts, negotiation records).
+		protocol.MethodMultiAgentJury,
+		protocol.MethodMultiAgentNegotiate,
 	}
 	return slices.Contains(readMethods, method)
 }

@@ -236,7 +236,8 @@ func init() {
 		MsgSkillNudge90Pct:      "[System] Bạn đã dùng 90% ngân sách vòng lặp. Nếu phiên này có quy trình tái sử dụng, hãy cân nhắc lưu thành kỹ năng trước khi hoàn thành.",
 		MsgEmptyReplyFallback:   "⚠️ Agent không thể tạo phản hồi. Lưu ý: một số thao tác công cụ có thể đã được thực hiện — vui lòng kiểm tra trước khi thử lại",
 
-		MsgInvalidRole: "vai trò không hợp lệ: giá trị cho phép là owner, admin, operator, member, viewer",
+		MsgInvalidRole:                 "vai trò không hợp lệ: giá trị cho phép là owner, admin, operator, member, viewer",
+		MsgMultiAgentStoreUnavailable: "bản ghi %s không khả dụng trên gateway này",
 
 		MsgContactIDsRequired:  "contact_ids là bắt buộc",
 		MsgMergeTargetRequired: "cần chính xác một trong tenant_user_id hoặc create_user",

@@ -204,3 +204,43 @@ type AgentLinkDeletedPayload struct {
 	SourceAgentKey string `json:"source_agent_key"`
 	TargetAgentKey string `json:"target_agent_key"`
 }
+
+// MultiAgentFormationPayload is emitted when a task is routed to a dynamic
+// team formation (multiagent.formation_selected). It is a routing directive:
+// Agents are role names, not resolved agent IDs.
+type MultiAgentFormationPayload struct {
+	Task       string   `json:"task"`
+	Formation  string   `json:"formation"`
+	Agents     []string `json:"agents"`
+	Pipeline   []string `json:"pipeline"`
+	Complexity string   `json:"complexity,omitempty"`
+	Category   string   `json:"category,omitempty"`
+	// Override records whether an explicit formation name was requested.
+	Override bool `json:"override,omitempty"`
+}
+
+// MultiAgentVerdictPayload is emitted when a jury round produces a verdict
+// (multiagent.verdict). RunID ties the verdict to its durable contract record
+// when one exists.
+type MultiAgentVerdictPayload struct {
+	RunID     string  `json:"run_id,omitempty"`
+	Task      string  `json:"task,omitempty"`
+	Decision  string  `json:"decision"` // approve|reject|revise
+	Contender string  `json:"contender_id,omitempty"`
+	Score     float64 `json:"score"`
+	Reason    string  `json:"reason,omitempty"`
+	Votes     int     `json:"votes,omitempty"`
+	Judge     string  `json:"judge_agent,omitempty"`
+}
+
+// MultiAgentNegotiationPayload is emitted when a negotiation round changes
+// state (multiagent.negotiation_state). Status is one of proposing,
+// counter_proposal, voting, consensus, exhausted, or failed.
+type MultiAgentNegotiationPayload struct {
+	RunID   string `json:"run_id,omitempty"`
+	Task    string `json:"task,omitempty"`
+	Round   int    `json:"round"`
+	Status  string `json:"status"`
+	Actor   string `json:"actor,omitempty"`
+	Summary string `json:"summary,omitempty"`
+}

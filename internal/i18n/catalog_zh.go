@@ -236,7 +236,8 @@ func init() {
 		MsgSkillNudge90Pct:      "[System] 您已使用 90% 的迭代预算。如果本次会话涉及可重用的模式，请考虑在完成前将其保存为技能。",
 		MsgEmptyReplyFallback:   "⚠️ 代理无法生成响应。注意：部分工具操作可能已经执行 — 请先确认后再重试",
 
-		MsgInvalidRole: "无效角色：允许的值为 owner、admin、operator、member、viewer",
+		MsgInvalidRole:                 "无效角色：允许的值为 owner、admin、operator、member、viewer",
+		MsgMultiAgentStoreUnavailable: "此网关无法使用%s记录",
 
 		MsgContactIDsRequired:  "contact_ids 为必填项",
 		MsgMergeTargetRequired: "必须提供 tenant_user_id 或 create_user 其中之一",

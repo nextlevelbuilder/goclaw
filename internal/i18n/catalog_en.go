@@ -236,7 +236,8 @@ func init() {
 		MsgSkillNudge90Pct:      "[System] You are at 90% of your iteration budget. If this session involved reusable patterns, consider saving them as a skill before completing.",
 		MsgEmptyReplyFallback:   "⚠️ Agent couldn't generate a response. Note: some tool actions may have already been executed — please verify before retrying",
 
-		MsgInvalidRole: "invalid role: allowed values are owner, admin, operator, member, viewer",
+		MsgInvalidRole:                 "invalid role: allowed values are owner, admin, operator, member, viewer",
+		MsgMultiAgentStoreUnavailable: "%s records are not available on this gateway",
 
 		MsgContactIDsRequired:  "contact_ids is required",
 		MsgMergeTargetRequired: "exactly one of tenant_user_id or create_user is required",

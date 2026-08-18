@@ -177,7 +177,8 @@ func init() {
 		MsgSkillNudge70Pct:      "[System] 반복 예산의 70%에 도달했습니다. 이 세션의 패턴 중 좋은 스킬이 될 수 있는 것이 있는지 고려해보세요.",
 		MsgSkillNudge90Pct:      "[System] 반복 예산의 90%에 도달했습니다. 이 세션에 재사용 가능한 패턴이 포함되어 있다면 완료하기 전에 스킬로 저장하는 것을 고려해보세요.",
 
-		MsgInvalidRole: "잘못된 역할: 허용되는 값은 owner, admin, operator, member, viewer입니다",
+		MsgInvalidRole:                 "잘못된 역할: 허용되는 값은 owner, admin, operator, member, viewer입니다",
+		MsgMultiAgentStoreUnavailable: "%s 기록은 이 게이트웨이에서 사용할 수 없습니다",
 
 		MsgContactIDsRequired:  "contact_ids가 필요합니다",
 		MsgMergeTargetRequired: "tenant_user_id 또는 create_user 중 정확히 하나가 필요합니다",
