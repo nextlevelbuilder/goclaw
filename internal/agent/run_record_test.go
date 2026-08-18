@@ -2,9 +2,12 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -34,6 +37,10 @@ func (s *recordingRunsStore) CreateRun(_ context.Context, run *store.AgentRun) e
 }
 
 func (s *recordingRunsStore) UpdateRunStatus(context.Context, string, string) error {
+	return nil
+}
+
+func (s *recordingRunsStore) UpdateRunCheckpoint(context.Context, string, string, json.RawMessage) error {
 	return nil
 }
 
@@ -199,5 +206,47 @@ func TestRunRecordHeartbeatFailureNonFatal(t *testing.T) {
 	// Heartbeat failure is non-fatal: the updater must still reach terminal.
 	if _, _, n := s.counts(); n != 0 {
 		t.Fatalf("terminal called before terminal(), want 0")
+	}
+}
+
+func TestNewRunRecordUpdaterSkipsCreateRun(t *testing.T) {
+	// Resume must preserve the stored checkpoint: newRunRecordUpdater must NOT
+	// call CreateRun (whose upsert would clobber checkpoint with NULL) yet still
+	// heartbeat and reach terminal.
+	s := &recordingRunsStore{}
+	l := &Loop{runsStore: s, runHeartbeatInterval: time.Millisecond}
+
+	ctx := store.WithTenantID(context.Background(), uuid.Must(uuid.NewV7()))
+	u := newRunRecordUpdater(ctx, l, "run-1")
+	if u == nil {
+		t.Fatal("expected updater")
+	}
+
+	if n, _, _ := s.counts(); n != 0 {
+		t.Fatalf("CreateRun called %d times, want 0 (no upsert on resume)", n)
+	}
+
+	// Heartbeat goroutine advances heartbeat_at.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		_, hb, _ := s.counts()
+		if hb >= 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("heartbeat not advanced: got %d, want >= 1", hb)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	u.terminal(ctx, store.AgentRunStatusCompleted, "")
+	if _, _, tn := s.counts(); tn != 1 {
+		t.Fatalf("terminal calls = %d, want 1", tn)
+	}
+}
+
+func TestNewRunRecordUpdaterNilWithoutStore(t *testing.T) {
+	if u := newRunRecordUpdater(context.Background(), &Loop{}, "run-1"); u != nil {
+		t.Fatal("expected nil updater when runsStore is nil")
 	}
 }

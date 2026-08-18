@@ -54,6 +54,14 @@ func (r *RunTimelineRecorder) Record(event AgentEvent) {
 	if isTerminalRunTimelineEvent(event.Type) {
 		defer r.forgetRun(event.RunID)
 	}
+	if item.ItemType == store.RunTimelineItemTypeChunk || item.ItemType == store.RunTimelineItemTypeThinking {
+		// Stream items are persisted one row per emitted delta. A long LLM stream
+		// can emit hundreds of chunk deltas, so per-delta rows are a DB-write
+		// amplification risk for large streams. Phase 2 keeps the stream durable
+		// (replay consumers exist), and deferred coalescing (batch-merge per
+		// iteration or interval) is tracked as follow-up to bound row counts.
+		slog.Debug("run_timeline.persist_stream_item", "run_id", event.RunID, "item_type", item.ItemType)
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
 		defer cancel()
@@ -119,6 +127,10 @@ func runTimelineItemFromEvent(event AgentEvent, seq int) (store.RunTimelineItem,
 		SpanID:     spanID,
 		Metadata:   mustJSON(metadata),
 	}
+	// Content-carrying types (chunk/thinking/tool.started) persist their full
+	// payload so stream replay reconstructs the raw stream. Legacy types leave
+	// Content empty; the store strips it to '' on write.
+	item.Content = timelineContent(event, itemType)
 	return item, true
 }
 
@@ -143,6 +155,12 @@ func timelineKindForEvent(event AgentEvent) (string, string, bool) {
 			return store.RunTimelineItemTypeToolResult, store.RunTimelineStatusFailed, true
 		}
 		return store.RunTimelineItemTypeToolResult, store.RunTimelineStatusCompleted, true
+	case protocol.AgentEventToolStarted:
+		return store.RunTimelineItemTypeToolStarted, store.RunTimelineStatusWaitingTool, true
+	case protocol.ChatEventThinking:
+		return store.RunTimelineItemTypeThinking, store.RunTimelineStatusThinking, true
+	case protocol.ChatEventChunk:
+		return store.RunTimelineItemTypeChunk, store.RunTimelineStatusRunning, true
 	default:
 		return "", "", false
 	}
@@ -165,6 +183,15 @@ func timelineTitle(event AgentEvent) string {
 		return "Assistant message"
 	case protocol.AgentEventActivity:
 		return "Activity"
+	case protocol.AgentEventToolStarted:
+		if name := payloadString(event.Payload, "name"); name != "" {
+			return name
+		}
+		return "Tool started"
+	case protocol.ChatEventThinking:
+		return "Thinking"
+	case protocol.ChatEventChunk:
+		return "Stream"
 	default:
 		return event.Type
 	}
@@ -187,9 +214,46 @@ func timelinePreview(event AgentEvent) string {
 			return sanitizeTimelinePreview(result)
 		}
 		return sanitizeTimelinePreview(payloadString(event.Payload, "content"))
+	case protocol.AgentEventToolStarted:
+		return "" // tool identity lives in ToolName/ToolCallID; no preview needed
+	case protocol.ChatEventThinking:
+		return sanitizeTimelinePreview(payloadString(event.Payload, "content"))
+	case protocol.ChatEventChunk:
+		return sanitizeTimelinePreview(payloadString(event.Payload, "content"))
 	default:
 		return ""
 	}
+}
+
+// timelineContent returns the full content persisted for content-carrying
+// timeline types. Chunk/thinking persist the streamed text deltas; tool.started
+// persists a compact JSON description of the tool + call id so replay clients
+// can render what began executing. Non-carrying types return "" (preview-only).
+func timelineContent(event AgentEvent, itemType string) string {
+	if !store.RunTimelineItemContentPersisted(itemType) {
+		return ""
+	}
+	switch event.Type {
+	case protocol.ChatEventThinking, protocol.ChatEventChunk:
+		return payloadString(event.Payload, "content")
+	case protocol.AgentEventToolStarted:
+		entry := map[string]any{}
+		if name := payloadString(event.Payload, "name"); name != "" {
+			entry["name"] = name
+		}
+		if rawName := payloadString(event.Payload, "rawName"); rawName != "" {
+			entry["raw_name"] = rawName
+		}
+		if id := payloadString(event.Payload, "id"); id != "" {
+			entry["id"] = id
+		}
+		if len(entry) == 0 {
+			return ""
+		}
+		raw, _ := json.Marshal(entry)
+		return string(raw)
+	}
+	return ""
 }
 
 func sanitizeTimelinePreview(value string) string {

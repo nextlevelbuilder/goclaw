@@ -2,11 +2,14 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
@@ -174,7 +177,23 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 
 	// V3 pipeline path (always enabled)
 	{
-		result, err := l.runViaPipeline(ctx, req)
+		// Durable checkpoint writer: wired into PipelineDeps.WriteCheckpoint so
+		// CheckpointStage persists a resumable snapshot at the configured cadence.
+		// Non-fatal; nil when the run record is disabled (store not wired).
+		// checkpointWritten flips true once a checkpoint has landed in the DB, so
+		// the error path can decide between "compacting (resumable)" and "failed".
+		var checkpointWriter func(ctx context.Context, state *pipeline.RunState) error
+		var checkpointWritten bool
+		if runRecord != nil {
+			checkpointWriter = func(ctx context.Context, state *pipeline.RunState) error {
+				if err := runRecord.checkpoint(ctx, store.AgentRunStatusRunning, state); err != nil {
+					return err
+				}
+				checkpointWritten = true
+				return nil
+			}
+		}
+		result, err := l.runViaPipeline(ctx, req, nil, checkpointWriter)
 		// Tracing + events handled below via the same finalize path
 		if err != nil {
 			if agentSpanID != uuid.Nil {
@@ -195,8 +214,17 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 				emitRun(AgentEvent{Type: protocol.AgentEventRunCancelled, AgentID: l.id, RunID: req.RunID})
 				runRecord.terminal(ctx, store.AgentRunStatusCancelled, "cancelled")
 			} else {
+				// G3: on a transient (non-cancel) failure, keep the run resumable
+				// when at least one durable checkpoint landed before the error. The
+				// run record transitions to compacting (not failed) so ResumeRun
+				// can pick it up; the WS event still reports the failure.
 				emitRun(AgentEvent{Type: protocol.AgentEventRunFailed, AgentID: l.id, RunID: req.RunID, Payload: map[string]string{"error": err.Error()}})
-				runRecord.terminal(ctx, store.AgentRunStatusFailed, err.Error())
+				if runRecord != nil && checkpointWritten {
+					slog.Warn("run compacted, resumable", "run_id", req.RunID, "error", err)
+					runRecord.terminal(ctx, store.AgentRunStatusCompacting, err.Error())
+				} else {
+					runRecord.terminal(ctx, store.AgentRunStatusFailed, err.Error())
+				}
 			}
 			if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
 				traceFinalized = true
@@ -281,4 +309,159 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		}
 		return result, nil
 	}
+}
+
+// ErrRunResumeUnavailable is returned by ResumeRun when durable run records are
+// not wired (runsStore nil). Distinct from any transient store error so callers
+// can surface "resume not supported" cleanly.
+var ErrRunResumeUnavailable = errors.New("run resume unavailable: durable run records not wired")
+
+// ErrRunResumeNotFound is returned by ResumeRun when the run record does not
+// exist or belongs to no resumable checkpoint.
+var ErrRunResumeNotFound = errors.New("run resume failed: run not found or not resumable")
+
+// ResumeRun restores a checkpointed run and drives it through the pipeline
+// again without re-running setup stages. It reads the run record, restores the
+// pipeline state from the stored checkpoint, rebuilds the RunRequest from the
+// record + checkpoint input, and runs the pipeline from the checkpoint's
+// iteration. A corrupt/unparseable checkpoint falls back to starting the run
+// from scratch (fresh RunState) so resume never hard-fails on old data.
+func (l *Loop) ResumeRun(ctx context.Context, runID string) (*RunResult, error) {
+	if l.runsStore == nil {
+		return nil, ErrRunResumeUnavailable
+	}
+	if runID == "" {
+		return nil, errors.New("resume run: run_id required")
+	}
+	run, err := l.runsStore.GetRun(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	if run == nil {
+		return nil, ErrRunResumeNotFound
+	}
+
+	// Restore the pipeline state. Failing here (corrupt/empty checkpoint) is not
+	// fatal: the run starts fresh, losing only its in-flight progress.
+	var state *pipeline.RunState
+	var savedInput *pipeline.RunInput
+	if len(run.Checkpoint) > 0 {
+		// RestoreCheckpoint intentionally does NOT restore Input (the caller
+		// resolves it); the checkpoint JSON still carries it, so extract it to
+		// rebuild the RunRequest's message/channel identity for callbacks.
+		savedInput = checkpointRunInput(run.Checkpoint)
+		state, err = pipeline.RestoreCheckpoint(run.Checkpoint)
+		if err != nil {
+			slog.Warn("runs.resume_restore_failed", "run_id", runID, "error", err)
+			state = nil // fall through to fresh start
+		}
+	}
+
+	req := runRequestFromRunRecord(run, savedInput)
+	// Resume keeps the existing run row alive with a heartbeat WITHOUT recreating
+	// it: CreateRun's ON CONFLICT upsert would clobber the stored checkpoint with
+	// NULL. newRunRecordUpdater only starts the heartbeat goroutine. nil when the
+	// store is not wired (then checkpoints are also disabled).
+	resumeRecord := newRunRecordUpdater(ctx, l, runID)
+	defer resumeRecord.terminal(ctx, store.AgentRunStatusFailed, "resume finalized by safety net (likely panic or goroutine leak)")
+
+	// Durable checkpoint writer for the resumed execution: continue updating the
+	// same run checkpoint so a re-failure stays resumable. checkpointWritten
+	// tracks whether a checkpoint landed during this resume so the error path can
+	// decide between compacting (still resumable) and terminal-failed.
+	var checkpointWriter func(ctx context.Context, s *pipeline.RunState) error
+	var checkpointWritten bool
+	if l.runsStore != nil {
+		runsStoreSnapshot := l.runsStore
+		checkpointWriter = func(ctx context.Context, s *pipeline.RunState) error {
+			raw, err := s.MarshalCheckpoint()
+			if err != nil {
+				slog.Warn("runs.resume_checkpoint_marshal_failed", "run_id", runID, "error", err)
+				return err
+			}
+			if err := runsStoreSnapshot.UpdateRunCheckpoint(ctx, runID, store.AgentRunStatusRunning, raw); err != nil {
+				return err
+			}
+			checkpointWritten = true
+			return nil
+		}
+	}
+	result, err := l.runViaPipeline(ctx, req, state, checkpointWriter)
+	if err != nil {
+		// Finalize the resumed run: a re-failure that still holds a checkpoint
+		// stays resumable (compacting), otherwise it is terminal-failed.
+		if checkpointWritten {
+			slog.Warn("resumed run compacted, resumable", "run_id", runID, "error", err)
+			resumeRecord.terminal(ctx, store.AgentRunStatusCompacting, err.Error())
+		} else {
+			resumeRecord.terminal(ctx, store.AgentRunStatusFailed, err.Error())
+		}
+		return nil, err
+	}
+	resumeRecord.terminal(ctx, store.AgentRunStatusCompleted, "")
+	return result, nil
+}
+
+// runRequestFromRunRecord rebuilds a RunRequest from a stored run record plus,
+// when available, the checkpoint's saved input (message/channel/media identity).
+// Identity fields the record persists (session, user, channel, chat) are taken
+// from the record; fields the checkpoint tracks (message, run kind, workspace
+// scope) come from the saved input.
+func runRequestFromRunRecord(run *store.AgentRun, savedInput *pipeline.RunInput) RunRequest {
+	req := RunRequest{
+		RunID:      run.RunID,
+		SessionKey: run.SessionKey,
+		UserID:     run.UserID,
+		Channel:    run.Channel,
+		ChatID:     run.ChatID,
+	}
+	// state.Input may be nil after RestoreCheckpoint (Input is not restored);
+	// savedInput carries it directly from the checkpoint JSON.
+	if savedInput != nil {
+		in := savedInput
+		req.Message = in.Message
+		req.Media = in.Media
+		req.ForwardMedia = in.ForwardMedia
+		req.ChannelType = in.ChannelType
+		req.BitrixPortalDomain = in.BitrixPortalDomain
+		req.ChatTitle = in.ChatTitle
+		req.PeerKind = in.PeerKind
+		req.SenderID = in.SenderID
+		req.SenderName = in.SenderName
+		req.Stream = in.Stream
+		req.ExtraSystemPrompt = in.ExtraSystemPrompt
+		req.SkillFilter = in.SkillFilter
+		req.HistoryLimit = in.HistoryLimit
+		req.ToolAllow = in.ToolAllow
+		req.TelegramManagerPermissions = in.TelegramManagerPermissions
+		req.LightContext = in.LightContext
+		req.RunKind = in.RunKind
+		req.DelegationID = in.DelegationID
+		req.TeamID = in.TeamID
+		req.TeamTaskID = in.TeamTaskID
+		req.ParentAgentID = in.ParentAgentID
+		req.MaxIterations = in.MaxIterations
+		req.ModelOverride = in.ModelOverride
+		req.HideInput = in.HideInput
+		req.ContentSuffix = in.ContentSuffix
+		req.LeaderAgentID = in.LeaderAgentID
+		req.WorkspaceChannel = in.WorkspaceChannel
+		req.WorkspaceChatID = in.WorkspaceChatID
+		req.TeamWorkspace = in.TeamWorkspace
+	}
+	return req
+}
+
+// checkpointRunInput extracts the saved pipeline input from a checkpoint JSON
+// blob. RestoreCheckpoint deliberately drops Input; the serialized checkpoint
+// still carries it under "input". Returns nil when absent/unparseable so
+// callers fall back to identity-only requests.
+func checkpointRunInput(raw json.RawMessage) *pipeline.RunInput {
+	var wrapper struct {
+		Input *pipeline.RunInput `json:"input"`
+	}
+	if err := json.Unmarshal(raw, &wrapper); err != nil {
+		return nil
+	}
+	return wrapper.Input
 }
