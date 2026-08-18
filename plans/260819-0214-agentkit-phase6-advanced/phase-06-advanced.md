@@ -28,6 +28,7 @@ Scope: `§16` hibernation, `§17-18` event-sourced runtime + time travel, `§65-
 - `internal/upgrade/version.go:5` `RequiredSchemaVersion uint = 100`.
 - `internal/store/sqlitestore/schema.go:19` `SchemaVersion = 63`; `migrations` map key `62:` → 63 (multi_agent_records) tại `:121`.
 - Latest PG migration file: `migrations/000100_multi_agent_records.up.sql`.
+- **Migration numbering (đã chốt sau verify gateway surface):** dispatch SERIAL → không race. WS-B sở hữu `000101_run_checkpoint_snapshots`.up/.down + `RequiredSchemaVersion` 101 + SQLite patch 63→64/`SchemaVersion` 64. WS-C merge sau (base đã có 101) → dùng `000102_missions` + `RequiredSchemaVersion` 102 + SQLite patch 64→65/`SchemaVersion` 65. WS-A không cần migration.
 
 ## 3 Workstream (disjoint, backend-only, 1 stage dispatch)
 
@@ -128,19 +129,17 @@ Files (exclusive):
 
 - **WS-A** sở hữu `internal/agent/hibernate.go` + `internal/gateway/methods/hibernate.go` + `cmd/gateway_hibernate.go` + `pkg/protocol` (pause/wake methods/events) + `permissions` + `i18n`.
 - **WS-B** sở hữu `internal/store/checkpoint_snapshot*.go` + `internal/store/{pg,sqlitestore}/checkpoint_snapshot*.go` + `migrations/000101_*` + `version.go` + `schema.go`/`schema.sql` (snapshots) + `internal/gateway/methods/time_travel.go` + `internal/agent/replay.go`.
-- **WS-C** sở hữu `internal/store/mission_store.go` + `internal/store/{pg,sqlitestore}/mission*.go` + `migrations/000102_*` (nếu cần) + `internal/commands/gc/parser.go` (add KindMission) + `cmd/gateway_managed.go` (register mission skill) + `internal/gateway/methods/mission.go` + `cmd/gateway_mission.go` + `cmd/gateway_cron.go` (mission branch) + `internal/store/cron_store.go` (add kind const + field).
-- **WS-C sửa `cmd/gateway_methods.go` + `cmd/gateway.go`** để wire mission store/methods — shared file với WS-A (nếu WS-A cũng sửa signature). **Controller điều phối: WS-A và WS-C đều chạm `cmd/gateway_methods.go` + `cmd/gateway.go`. NẾU dispatcher song song cả 3 → file conflict. Vì vậy: dispatch WS-A + WS-B song song (disjoint), WS-C SAU (A/B merged) — hoặc WS-C hạn chế chỉ thêm method + store field khác nhau (giữ KISS). Đề xuất: dispatch A+B song song, C sau khi 1 trong 2 merged → tránh conflict gateway file.**
+- **WS-C** sở hữu `internal/store/mission_store.go` + `internal/store/{pg,sqlitestore}/mission*.go` + `migrations/000102_*` + `internal/commands/gc/parser.go` (add KindMission) + `cmd/gateway_managed.go` (register mission skill) + `internal/gateway/methods/mission.go` + `cmd/gateway_mission.go` + `cmd/gateway_cron.go` (mission branch) + `internal/store/cron_store.go` (add kind const + field).
+- **SHARED gateway surface (MUST be edit-sequentially, KHÔNG parallel):**
+  `cmd/gateway_methods.go` (`registerAllMethods` signature `:21` + body calls), `cmd/gateway.go` (call site `:829` — 31 positional args), `internal/permissions/policy.go` (`isWriteMethod`/`isReadMethod` fail-closed slices), `pkg/protocol/methods.go` + `events.go`, `internal/i18n/keys.go` + 5 catalog files. CẢ 3 WS đều chạm peripheral files này (consts/keys/permissions), không chỉ WS-C. → **Không thể song song bất kỳ 2 WS nào mà không conflict.**
 
 ## Implementation steps
 
-1. **Dispatch Stage 1:** WS-A + WS-B song song (disjoint — A runtime/protocol, B store/migration). WS-C đứng sau (chạm gateway shared files).
-2. Stage 1 mỗi WS: implement → Docker gate (build/vet/sqliteonly/unit) → self-review → PR.
-3. Controller review Stage 1 (2 PR) → merge.
-4. **Dispatch Stage 2:** WS-C (mission, sau khi B merged → biết migration numbering).
-5. Stage 2 WS-C: implement → Docker gate → self-review → PR.
-6. Controller review Stage 2 → merge.
-7. Final verify: full `go build ./...` + `go vet ./...` + `-tags sqliteonly` + unit + integration.
-8. Plan tick + report.
+1. **Dispatch SERIAL (không song song):** WS-B (Time Travel) TRƯỚC; merge; sau đó WS-A (Hibernation), merge; sau đó WS-C (Mission), merge. Lý do: cả 3 cùng chạm `cmd/gateway_methods.go` + `cmd/gateway.go` + `permissions/policy.go` + `pkg/protocol/methods.go` + `internal/i18n`. Serial đảm bảo mỗi PR CI-green độc lập, đúng ràng buộc "tránh parallel edits cùng file".
+2. Thứ tự serial cũng chốt migration numbering: B (101) → A (no schema) → C (102).
+3. Mỗi WS: implement → Docker gate (build/vet/sqliteonly/unit) → self-review → PR → theo dõi CI → controller review → merge.
+4. Final verify: full `go build ./...` + `go vet ./...` + `-tags sqliteonly` + unit + integration.
+5. Plan tick + report.
 
 ## Validation
 
