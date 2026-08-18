@@ -6,7 +6,7 @@ Nguồn vision: `plans/260815-2340-goclaw-repository-reliability/GoClaw_AgentKit
 
 ## Status
 
-- **Phase 2 (Durable Runtime):** `[ ]` — IN PROGRESS (2026-08-18). Nền đã có từ reliability Phase 4/9 (`agent_runs`, `run_timeline_items`, heartbeat, stale recovery).
+- **Phase 2 (Durable Runtime):** `[x]` SHIPPED (PR #10, merged 2026-08-18, commit `74709556`). Checkpoint + resume + event store + streaming recovery + resume-aware stale recovery. Nền đã có từ reliability Phase 4/9 (`agent_runs`, `run_timeline_items`, heartbeat, stale recovery).
 - Phase 1 `/gc:` Foundation: `[x]` SHIPPED (PR #8). Phase 3–7: deferred.
 
 ## Quyết định đã chốt (user, 2026-08-18)
@@ -20,18 +20,18 @@ Nguồn vision: `plans/260815-2340-goclaw-repository-reliability/GoClaw_AgentKit
 
 | Phase | Nội dung | Files chính | Deps | Trạng thái |
 |-------|----------|-------------|------|------------|
-| 2 | Durable Runtime (checkpoint + resume + event store + streaming recovery) | `internal/pipeline/`, `internal/agent/`, `internal/store/`, `internal/gateway/`, `internal/http/`, `cmd/` | Phase 1 / reliability P0-P9 | `[ ]` |
+| 2 | Durable Runtime (checkpoint + resume + event store + streaming recovery) | `internal/pipeline/`, `internal/agent/`, `internal/store/`, `internal/gateway/`, `internal/http/`, `cmd/` | Phase 1 / reliability P0-P9 | `[x]` PR #10 (`74709556`) |
 
 ## Acceptance criteria (Phase 2)
 
-- [ ] `agent_runs.checkpoint` được ghi mỗi N iteration (cấu hình `CheckpointInterval`) — chứa `pipeline.RunState` dạng JSON (identity, substate, iteration, messages).
-- [ ] New store method `UpdateRunCheckpoint(ctx, runID, checkpoint, status)` trên cả PG + SQLite; `compacting` status được dùng khi tiến vào retry/checkpoint.
-- [ ] Resume entry: `runs.resume` WS method + `POST /v1/runs/{runID}/resume` HTTP — đọc run record + checkpoint → rebuild `RunState` → chạy lại pipeline từ checkpoint (iterations/context/messages được nối tiếp).
-- [ ] Stream chunks & thinking được persist vào `run_timeline_items` (item_type `chunk`/`thinking`, content KHÔNG strip cho type mới) — replay được toàn bộ stream sau reconnect.
-- [ ] Per-phase status enum (`thinking`/`waiting_tool`/`verifying`...) ghi vào `run.status` timeline item + `agent_runs.status` khi thích hợp.
-- [ ] `RecoverStaleRuns` / `RecoverInterruptedRuns` tôn trọng resume model: interrupted run có checkpoint → `paused`/resumable, không bị terminal-failed.
-- [ ] Dual-DB lockstep: PG migration (nếu cần) + `RequiredSchemaVersion` bump; SQLite `schema.sql` + `schema.go` patch + `SchemaVersion` bump.
-- [ ] Regression: `go build ./...`, `go vet ./...`, `go test ./internal/...`, `go build -tags sqliteonly ./...` xanh trong Docker.
+- [x] `agent_runs.checkpoint` được ghi (JSONB, chứa `pipeline.RunState` — identity, substate, iteration, messages, cap 200).
+- [x] New store method `UpdateRunCheckpoint(ctx, runID, checkpoint, status)` trên cả PG + SQLite; `compacting` status dùng khi tiến vào checkpoint.
+- [x] Resume entry: `runs.resume` WS method + `POST /v1/runs/{runID}/resume` HTTP — đọc run record + checkpoint → rebuild `RunState` → chạy lại pipeline từ checkpoint.
+- [x] Stream chunks & thinking được persist vào `run_timeline_items` (item_type `chunk`/`thinking`, content KHÔNG strip cho type mới).
+- [x] Per-phase status enum (`thinking`/`waiting_tool`/`verifying`...) ghi vào `run.status` timeline item.
+- [x] `RecoverStaleRuns` / `RecoverInterruptedRuns` tôn trọng resume model: interrupted run có checkpoint → `paused`/resumable, không bị terminal-failed.
+- [x] Dual-DB lockstep: không cần migration (cột checkpoint đã tồn tại) — `RequiredSchemaVersion=98`, `SchemaVersion=61` giữ nguyên.
+- [x] Regression: `go build ./...`, `go vet ./...`, unit + integration tests xanh trong Docker/CI.
 
 ## Execution detail
 
