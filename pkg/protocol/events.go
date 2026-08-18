@@ -140,6 +140,12 @@ const (
 	AgentEventRunCompleted = "run.completed"
 	AgentEventRunFailed    = "run.failed"
 	AgentEventRunCancelled = "run.cancelled"
+	// AgentEventRunPaused/AgentEventRunWoken are emitted by the intentional
+	// hibernation path (runs.pause / runs.wake). They are distinct agent-stream
+	// subtypes of the "agent" WS event; their typed payloads live in
+	// pkg/protocol/run_events.go.
+	AgentEventRunPaused = "run.paused"
+	AgentEventRunWoken  = "run.woken"
 	AgentEventRunRetrying  = "run.retrying"
 	AgentEventToolCall     = "tool.call"
 	AgentEventToolResult   = "tool.result"

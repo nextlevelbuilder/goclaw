@@ -36,6 +36,16 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 	// reports unavailable, keeping the surface safe before wiring.
 	runMethods.SetResumer(makeRunResumer(agents, runsStore))
 	runMethods.Register(router)
+	// Intentional suspend/wake (hibernation): runs.pause writes a checkpoint +
+	// transitions to paused; runs.wake reuses the same resume closure above.
+	// Both closures come nil when the store/router is absent — the handlers
+	// then report unavailable, mirroring runs.resume's nil-safety.
+	hibMethods := methods.NewHibernateMethods(cfg)
+	hibMethods.SetRunsStore(runsStore)
+	suspend, wake := makeRunSuspendResumer(agents, runsStore)
+	hibMethods.SetSuspendFn(suspend)
+	hibMethods.SetResumer(wake)
+	hibMethods.Register(router)
 	configMethods := methods.NewConfigMethods(cfg, cfgPath, configSecretsStore, msgBus)
 	if sysConfigStore != nil {
 		configMethods.SetSystemConfigSync(func(ctx context.Context, c *config.Config) {

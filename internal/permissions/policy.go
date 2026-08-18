@@ -363,9 +363,14 @@ func isWriteMethod(method string) bool {
 		// Durable run resume — re-drives an agent loop (provider calls).
 		protocol.MethodRunsResume,
 
-		// Replay — rewinds a paused run to an earlier checkpoint and re-drives
+// Replay — rewinds a paused run to an earlier checkpoint and re-drives
 		// the agent loop from that snapshot (provider calls).
 		protocol.MethodRunsReplay,
+
+		// Hibernation — intentional suspend writes a checkpoint + paused status,
+		// wake re-drives the run through the same loop path as resume.
+		protocol.MethodRunsPause,
+		protocol.MethodRunsWake,
 
 		// Browser automation — performs side-effecting actions.
 		protocol.MethodBrowserAct,

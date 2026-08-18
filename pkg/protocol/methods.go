@@ -53,6 +53,13 @@ const (
 	MethodRunsCheckpointsList = "runs.checkpoints.list"
 	MethodRunsReplay          = "runs.replay"
 
+	// Intentional suspend/wake (hibernation): runs.pause writes the run's
+	// latest durable checkpoint and transitions the record to paused;
+	// runs.wake reuses the existing resume path. Handlers live in
+	// internal/gateway/methods/hibernate.go.
+	MethodRunsPause = "runs.pause"
+	MethodRunsWake  = "runs.wake"
+
 	// System
 	MethodConnect = "connect"
 	MethodHealth  = "health"

@@ -69,7 +69,7 @@ const (
 	MsgSenderIDRequired      = "error.sender_id_required"      // "sender_id is required"
 
 	// --- HTTP API ---
-	MsgInvalidAuth                = "error.invalid_auth"               // "invalid authentication"
+MsgInvalidAuth                = "error.invalid_auth"               // "invalid authentication"
 	MsgMsgsRequired               = "error.messages_required"          // "messages is required"
 	MsgUserIDHeader               = "error.user_id_header"             // "X-GoClaw-User-Id header is required"
 	MsgFileTooLarge               = "error.file_too_large"             // "file too large or invalid multipart form"
@@ -86,7 +86,8 @@ const (
 	MsgRunsUnavailable            = "error.runs_unavailable"           // "run records not available"
 	MsgRunsCheckpointsUnavailable = "error.runs_checkpoints_unavailable" // "checkpoint history not available"
 	MsgRunsReplayUnavailable      = "error.runs_replay_unavailable"      // "replay not available"
-	MsgRunsPauseUnavailable       = "error.runs_pause_unavailable"       // "pause not available"
+	MsgRunsPauseUnavailable       = "error.runs_pause_unavailable"       // "run suspend is not available"
+	MsgRunsWakeUnavailable        = "error.runs_wake_unavailable"        // "run wake is not available"
 	MsgNoDescription              = "error.no_description"               // "agent has no description to resummon from"
 	MsgSummonCancelled            = "info.summon_cancelled"              // "summon cancelled by user"
 	MsgCannotCancel               = "error.cannot_cancel_summon"         // "agent is not being summoned"
