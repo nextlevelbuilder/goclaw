@@ -363,6 +363,10 @@ func isWriteMethod(method string) bool {
 		// Durable run resume — re-drives an agent loop (provider calls).
 		protocol.MethodRunsResume,
 
+		// Replay — rewinds a paused run to an earlier checkpoint and re-drives
+		// the agent loop from that snapshot (provider calls).
+		protocol.MethodRunsReplay,
+
 		// Browser automation — performs side-effecting actions.
 		protocol.MethodBrowserAct,
 
@@ -408,6 +412,7 @@ func isReadMethod(method string) bool {
 		protocol.MethodRunsGet,
 		protocol.MethodRunsList,
 		protocol.MethodRunsEvents,
+		protocol.MethodRunsCheckpointsList,
 
 		// Skills read
 		protocol.MethodSkillsList,

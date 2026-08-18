@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 63
+const SchemaVersion = 64
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -95,6 +95,24 @@ BEGIN
 END;`
 
 var migrations = map[int]string{
+	// Version 63 → 64: append-only checkpoint-snapshot history for durable agent
+	// runs. One row per versioned pipeline checkpoint so a paused run can be
+	// replayed ("time travel") from any earlier snapshot seq; the store layer
+	// treats snapshot as opaque JSON text.
+	63: `CREATE TABLE IF NOT EXISTS run_checkpoint_snapshots (
+		id         TEXT NOT NULL PRIMARY KEY,
+		tenant_id  TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+		run_id     TEXT NOT NULL,
+		seq        INT NOT NULL,
+		snapshot   TEXT NOT NULL DEFAULT '{}',
+		status     VARCHAR(40) NOT NULL DEFAULT 'paused',
+		iteration  INT NOT NULL DEFAULT 0,
+		created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+	);
+	CREATE INDEX IF NOT EXISTS idx_run_checkpoint_snapshots_tenant_run_seq
+		ON run_checkpoint_snapshots(tenant_id, run_id, seq DESC);
+	CREATE INDEX IF NOT EXISTS idx_run_checkpoint_snapshots_tenant_created
+		ON run_checkpoint_snapshots(tenant_id, created_at DESC);`,
 	// Version 61 → 62: first-class persisted agent artifacts (plan, patch, code,
 	// report, review, research, architecture, ADR, test report, deployment plan).
 	// One row per version; parent_id self-FK links a revision to its predecessor.

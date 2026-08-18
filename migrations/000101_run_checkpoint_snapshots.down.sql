@@ -1,0 +1,1 @@
+DROP TABLE run_checkpoint_snapshots;

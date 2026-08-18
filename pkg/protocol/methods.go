@@ -46,10 +46,12 @@ const (
 	// Durable run records (agent_runs state machine). Follow the naming
 	// pattern of run.timeline.get; handlers live in
 	// internal/gateway/methods/run_timeline.go.
-	MethodRunsGet    = "runs.get"
-	MethodRunsList   = "runs.list"
-	MethodRunsEvents = "runs.events"
-	MethodRunsResume = "runs.resume"
+	MethodRunsGet             = "runs.get"
+	MethodRunsList            = "runs.list"
+	MethodRunsEvents          = "runs.events"
+	MethodRunsResume          = "runs.resume"
+	MethodRunsCheckpointsList = "runs.checkpoints.list"
+	MethodRunsReplay          = "runs.replay"
 
 	// System
 	MethodConnect = "connect"

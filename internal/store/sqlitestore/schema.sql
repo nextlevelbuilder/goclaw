@@ -2475,3 +2475,27 @@ CREATE TABLE IF NOT EXISTS multi_agent_records (
 CREATE INDEX IF NOT EXISTS idx_multi_agent_records_tenant_created ON multi_agent_records(tenant_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_multi_agent_records_run ON multi_agent_records(run_id);
 CREATE INDEX IF NOT EXISTS idx_multi_agent_records_tenant_kind ON multi_agent_records(tenant_id, kind);
+
+-- ============================================================
+-- Table: run_checkpoint_snapshots
+-- Append-only checkpoint-snapshot history for durable agent runs. One row per
+-- versioned pipeline checkpoint so a paused run can be replayed ("time
+-- travel") from any earlier snapshot seq; snapshot stores MarshalCheckpoint
+-- output as opaque JSON text.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS run_checkpoint_snapshots (
+    id         TEXT NOT NULL PRIMARY KEY,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    run_id     TEXT NOT NULL,
+    seq        INT NOT NULL,
+    snapshot   TEXT NOT NULL DEFAULT '{}',
+    status     VARCHAR(40) NOT NULL DEFAULT 'paused',
+    iteration  INT NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_run_checkpoint_snapshots_tenant_run_seq
+    ON run_checkpoint_snapshots(tenant_id, run_id, seq DESC);
+CREATE INDEX IF NOT EXISTS idx_run_checkpoint_snapshots_tenant_created
+    ON run_checkpoint_snapshots(tenant_id, created_at DESC);

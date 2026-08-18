@@ -78,6 +78,7 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 		UsageCaps:              NewPGUsageCapStore(db),
 		Contracts:              NewPGContractStore(db),
 		Artifacts:              NewPGArtifactStore(db),
+		CheckpointSnapshots:    NewPGCheckpointSnapshotStore(db),
 	}
 	// Wire permStore into WorkstationStore so Create seeds allowlist atomically (H5 fix).
 	// Must happen after both stores are constructed.

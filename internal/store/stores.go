@@ -56,6 +56,9 @@ type Stores struct {
 	Contracts ContractStore
 	// Artifacts persists agent-produced artifacts with a version graph.
 	Artifacts ArtifactStore
+	// CheckpointSnapshots persists append-only checkpoint history so a paused
+	// run can be replayed from any earlier snapshot.
+	CheckpointSnapshots CheckpointSnapshotStore
 
 	Webhooks     WebhookStore
 	WebhookCalls WebhookCallStore
