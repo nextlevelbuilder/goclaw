@@ -230,6 +230,11 @@ func wireExtras(
 		gcRegistry.Register(gc.KindFix, "fix")
 		gcRegistry.Register(gc.KindCook, "cook")
 		gcRegistry.Register(gc.KindReview, "review")
+		gcRegistry.Register(gc.KindTest, "test")
+		gcRegistry.Register(gc.KindDebug, "debug")
+		gcRegistry.Register(gc.KindDocs, "docs")
+		gcRegistry.Register(gc.KindArchitect, "architect")
+		gcRegistry.Register(gc.KindUIUX, "ui-ux-pro-max")
 		gcDispatcher = gc.NewExecutor(skillsLoader, gcRegistry)
 	}
 

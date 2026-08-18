@@ -32,12 +32,22 @@ func newTestExecutor(t *testing.T) (*Executor, *Registry) {
 	writeSkill(t, root, "fix", "Fix", "Fix bugs.", "Reproduce, evidence, hypothesis, fix, regression.")
 	writeSkill(t, root, "cook", "Cook", "Implement plans.", "Read plan, modify, test, repair, verify.")
 	writeSkill(t, root, "review", "Review", "Review code.", "Review dimensions, severity, report.")
+	writeSkill(t, root, "test", "Test", "Structured testing.", "Narrowest first, Docker gate, chaos.")
+	writeSkill(t, root, "debug", "Debug", "Bug investigation.", "Frame, scout, diagnose, prove, fix, test.")
+	writeSkill(t, root, "docs", "Docs", "Documentation management.", "Update on contract change, verify claims.")
+	writeSkill(t, root, "architect", "Architect", "Architecture proposals.", "Goal, context, risks, rollback, acceptance.")
+	writeSkill(t, root, "ui-ux-pro-max", "UIUX", "UI/UX mobile rules.", "h-dvh, touch targets, safe areas, dialogs.")
 
 	reg := NewRegistry()
 	reg.Register(KindPlan, "plan")
 	reg.Register(KindFix, "fix")
 	reg.Register(KindCook, "cook")
 	reg.Register(KindReview, "review")
+	reg.Register(KindTest, "test")
+	reg.Register(KindDebug, "debug")
+	reg.Register(KindDocs, "docs")
+	reg.Register(KindArchitect, "architect")
+	reg.Register(KindUIUX, "ui-ux-pro-max")
 
 	exec := NewExecutor(skills.NewLoader("", root, ""), reg)
 	return exec, reg
@@ -60,6 +70,37 @@ func TestExecutor_Resolve(t *testing.T) {
 	}
 	if d.Remaining != "build a feature" {
 		t.Errorf("Remaining = %q, want %q", d.Remaining, "build a feature")
+	}
+}
+
+func TestExecutor_ResolveNewKinds(t *testing.T) {
+	exec, _ := newTestExecutor(t)
+	cases := []struct {
+		message string
+		kind    CommandKind
+		slug    string
+		body    string
+	}{
+		{"/gc:test the parser", KindTest, "test", "Narrowest first, Docker gate, chaos."},
+		{"/gc:debug the timezone bug", KindDebug, "debug", "Frame, scout, diagnose, prove, fix, test."},
+		{"/gc:docs update the contract", KindDocs, "docs", "Update on contract change, verify claims."},
+		{"/gc:architect the new store", KindArchitect, "architect", "Goal, context, risks, rollback, acceptance."},
+		{"/gc:uiux review the chat screen", KindUIUX, "ui-ux-pro-max", "h-dvh, touch targets, safe areas, dialogs."},
+	}
+	for _, tc := range cases {
+		d, ok := exec.Resolve(context.Background(), tc.message)
+		if !ok {
+			t.Fatalf("%q: expected Resolve to return a Dispatch", tc.message)
+		}
+		if d.Kind != tc.kind {
+			t.Errorf("%q: Kind = %q, want %q", tc.message, d.Kind, tc.kind)
+		}
+		if d.Skill != tc.slug {
+			t.Errorf("%q: Skill = %q, want %q", tc.message, d.Skill, tc.slug)
+		}
+		if !strings.Contains(d.Content, tc.body) {
+			t.Errorf("%q: Content does not include loaded SKILL.md body: %q", tc.message, d.Content)
+		}
 	}
 }
 

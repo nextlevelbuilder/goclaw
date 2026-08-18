@@ -36,7 +36,8 @@ func (r *Registry) Lookup(kind CommandKind) (string, bool) {
 }
 
 // KnownKinds returns the command kinds that currently have a registered slug.
-// Order is deterministic (plan, fix, cook, review) for stable listings.
+// Order is deterministic (plan, fix, cook, review, test, debug, docs, architect, uiux)
+// for stable listings.
 func (r *Registry) KnownKinds() []CommandKind {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
