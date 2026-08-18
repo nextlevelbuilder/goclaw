@@ -132,6 +132,13 @@ func Default() *Config {
 				StaleAfterMs:        DefaultRunsStaleAfterMs,
 				SweepIntervalMs:     DefaultRunsSweepIntervalMs,
 			},
+			SLO: SLOConfig{
+				TargetPercent: DefaultSLOTargetPercent,
+				WindowSeconds: DefaultSLOWindowSeconds,
+			},
+			Alerts: AlertingConfig{
+				MinIntervalSeconds: DefaultAlertMinIntervalSeconds,
+			},
 		},
 	}
 }

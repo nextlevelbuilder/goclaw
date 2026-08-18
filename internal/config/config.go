@@ -77,6 +77,27 @@ type ReliabilityConfig struct {
 	// for one more iteration when it finishes before doing any work. Disabled
 	// by default — opt in via reliability.premature_completion.enabled.
 	PrematureCompletion PrematureCompletionConfig `json:"premature_completion,omitempty"`
+	// SLO tunes the config-driven reliability SLO (error budget). The evaluator
+	// in internal/reliability computes a rolling success-rate over a FIFO window
+	// of snapshot deltas; zero-valued fields fall back to the defaults below.
+	SLO SLOConfig `json:"slo,omitempty"`
+	// Alerts tunes webhook alerting for SLO burn-rate and provider errors. When
+	// disabled, all alerting is a no-op.
+	Alerts AlertingConfig `json:"alerts,omitempty"`
+}
+
+// SLOConfig tunes the config-driven reliability SLO (error budget).
+type SLOConfig struct {
+	Enabled       bool    `json:"enabled,omitempty"`
+	TargetPercent float64 `json:"target_percent,omitempty"` // success-rate target, default 0.99
+	WindowSeconds int     `json:"window_seconds,omitempty"` // rolling window, default 3600
+}
+
+// AlertingConfig tunes webhook alerting for SLO burn-rate + provider errors.
+type AlertingConfig struct {
+	Enabled            bool   `json:"enabled,omitempty"`
+	WebhookURL         string `json:"webhook_url,omitempty"`          // may contain secrets → loaded from env override too
+	MinIntervalSeconds int    `json:"min_interval_seconds,omitempty"` // min between webhook sends, default 60
 }
 
 // PrematureCompletionConfig tunes the opt-in premature-completion gate
@@ -146,6 +167,14 @@ const (
 	// transport's ResponseHeaderTimeout remains the backstop).
 	DefaultStreamIdleTimeoutMs       = 60000 // 60s
 	DefaultStreamFirstByteTimeoutMs  = 0     // 0 = disabled
+
+	// Default SLO target: 99% success rate over the rolling window.
+	DefaultSLOTargetPercent = 0.99
+	// DefaultSLOWindowSeconds is the rolling success-rate window (1h).
+	DefaultSLOWindowSeconds = 3600
+	// DefaultAlertMinIntervalSeconds is the minimum interval between webhook
+	// sends, throttling burn-rate/provider-error alert storms.
+	DefaultAlertMinIntervalSeconds = 60
 )
 
 // EffectiveHeartbeatInterval returns the run heartbeat cadence in duration
@@ -223,6 +252,33 @@ func (s StreamConfig) EffectiveStreamFirstByteTimeout() time.Duration {
 		return 0
 	}
 	return time.Duration(s.FirstByteTimeoutMs) * time.Millisecond
+}
+
+// EffectiveSLOTarget returns the SLO success-rate target, falling back to the
+// default when unset or invalid (≤ 0 or > 1).
+func (s SLOConfig) EffectiveSLOTarget() float64 {
+	if s.TargetPercent <= 0 || s.TargetPercent > 1 {
+		return DefaultSLOTargetPercent
+	}
+	return s.TargetPercent
+}
+
+// EffectiveSLOWindow returns the rolling success-rate window in duration form,
+// falling back to the default when unset or invalid.
+func (s SLOConfig) EffectiveSLOWindow() time.Duration {
+	if s.WindowSeconds <= 0 {
+		return time.Duration(DefaultSLOWindowSeconds) * time.Second
+	}
+	return time.Duration(s.WindowSeconds) * time.Second
+}
+
+// EffectiveAlertMinInterval returns the minimum interval between webhook sends
+// in duration form, falling back to the default when unset or invalid.
+func (a AlertingConfig) EffectiveAlertMinInterval() time.Duration {
+	if a.MinIntervalSeconds <= 0 {
+		return time.Duration(DefaultAlertMinIntervalSeconds) * time.Second
+	}
+	return time.Duration(a.MinIntervalSeconds) * time.Second
 }
 
 // BrandingConfig customizes public app metadata and media used by the web UI.
