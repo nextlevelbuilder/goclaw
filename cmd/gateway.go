@@ -61,6 +61,16 @@ import (
 	_ "github.com/nextlevelbuilder/goclaw/internal/workstation/backends"
 )
 
+// effectiveAlertWebhookURL returns the configured alert webhook URL only when
+// reliability alerts are enabled. With alerts disabled the URL is dropped so
+// the bgalert sender never fires even if a URL is present in config.
+func effectiveAlertWebhookURL(cfg *config.Config) string {
+	if cfg == nil || !cfg.Reliability.Alerts.Enabled {
+		return ""
+	}
+	return cfg.Reliability.Alerts.WebhookURL
+}
+
 func gatewayLogOutput() io.Writer {
 	logFile := strings.TrimSpace(os.Getenv("GOCLAW_LOG_FILE"))
 	if logFile == "" {
@@ -257,6 +267,18 @@ func runGateway() {
 	relCfg := cfg.Reliability.Circuit
 	relOpts := relCfg.EffectiveCircuit()
 	reliability.Configure(relOpts, relCfg.EffectiveRateLimitMaxPending())
+
+	// Wire reliability counters to the OTel metrics sink (build-tag otel).
+	// Starts a 5s flush loop draining reliability.Default().Metrics; stop is
+	// invoked on graceful shutdown. No-op when telemetry is disabled or the
+	// binary is built without -tags otel.
+	stopReliabilityMetrics, err := wireReliabilityMetrics(context.Background(), cfg)
+	if err != nil {
+		slog.Warn("reliability OTel metrics disabled", "error", err)
+	}
+	if stopReliabilityMetrics != nil {
+		defer stopReliabilityMetrics()
+	}
 
 	// Stream watchdog timeouts (0 = disabled) applied by provider adapters.
 	streamCfg := cfg.Reliability.Stream
@@ -475,9 +497,16 @@ func runGateway() {
 				SystemConfigs: pgStores.SystemConfigs,
 				Registry:      providerRegistry,
 				Extractor:     kgExtractor,
-				AlertDeps:     bgalert.AlertDeps{SystemConfigs: pgStores.SystemConfigs, MsgBus: msgBus},
-				UsageCaps:     usageCapSvc,
-				AgentStore:    pgStores.Agents,
+				AlertDeps: bgalert.AlertDeps{
+					SystemConfigs:    pgStores.SystemConfigs,
+					MsgBus:           msgBus,
+					WebhookURL:       effectiveAlertWebhookURL(cfg),
+					MinIntervalSeconds: int(
+						cfg.Reliability.Alerts.EffectiveAlertMinInterval() / time.Second,
+					),
+				},
+				UsageCaps:  usageCapSvc,
+				AgentStore: pgStores.Agents,
 			})
 			defer cleanupConsolidation()
 			slog.Info("consolidation pipeline registered", "provider", bgProvider.Name(), "model", bgModel)
@@ -506,8 +535,15 @@ func runGateway() {
 			EventBus:      domainBus,
 			MsgBus:        msgBus,
 			TeamStore:     pgStores.Teams,
-			AlertDeps:     bgalert.AlertDeps{SystemConfigs: pgStores.SystemConfigs, MsgBus: msgBus},
-			UsageCaps:     usageCapSvc,
+			AlertDeps: bgalert.AlertDeps{
+				SystemConfigs:    pgStores.SystemConfigs,
+				MsgBus:           msgBus,
+				WebhookURL:       effectiveAlertWebhookURL(cfg),
+				MinIntervalSeconds: int(
+					cfg.Reliability.Alerts.EffectiveAlertMinInterval() / time.Second,
+				),
+			},
+			UsageCaps: usageCapSvc,
 		})
 		enrichProgress = ep
 		enrichWorker = ew

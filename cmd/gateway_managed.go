@@ -659,6 +659,16 @@ func wireExtras(
 		go runEvolutionCron(stores, sugEngine)
 	}
 
+	// Automatic stale-run recovery parity (Phase 10): mark agent_runs whose
+	// heartbeat has not advanced within staleAfter as failed. Cross-tenant.
+	if stores.Runs != nil {
+		go runStaleRunsSweep(
+			stores.Runs,
+			appCfg.Reliability.Runs.EffectiveStaleAfter(),
+			appCfg.Reliability.Runs.EffectiveSweepInterval(),
+		)
+	}
+
 	// Register team tools (team_tasks + workspace interceptor) if team store is available.
 	var postTurn tools.PostTurnProcessor
 	if stores.Teams != nil && stores.Agents != nil {

@@ -24,6 +24,13 @@ Ngoài NATURAL: retry (đã có), failover (đã có), cooldown (đã có), erro
 - [x] [phase-01-repo-setup.md](phase-01-repo-setup.md) — repo public + goclaw-mod + upstream
 - [x] [phase-02-error-taxonomy.md](phase-02-error-taxonomy.md) — error taxonomy thống nhất
 - [x] [phase-03-reliability-layer.md](phase-03-reliability-layer.md) — circuit breaker + health registry + rate-limit coordinator + metrics
+- [x] phase-04-streaming-reliability.md — streaming watchdog + disconnect recovery
+- [x] phase-05-weak-model-resilience.md — malformed output + tool-loop detection + repair
+- [x] phase-06-intelligent-fallback.md — capability profiles + health_order policy + diagnostics
+- [x] phase-07-tool-reliability.md — tool retry/cooldown + loop detection
+- [x] phase-08-context-optimization.md — token budgets + compaction + budget telemetry
+- [x] phase-09-testing-suite.md — provider chaos + weak-model chaos + run-lifecycle PG tests
+- [ ] [phase-10-production-hardening.md](phase-10-production-hardening.md) — SLOs, Alerts, dashboards, Runbook, managed stale-run sweep, migration docs
 
 ## Dependencies
 
