@@ -1,0 +1,63 @@
+﻿PR15-pending=2 PR16-pending=2
+PR15-pending=1 PR16-pending=1
+PR15-pending=1 PR16-pending=1
+PR15-pending=1 PR16-pending=1
+PR15-pending=1 PR16-pending=1
+PR15-pending=1 PR16-pending=1
+PR15-pending=1 PR16-pending=1
+PR15-pending=1 PR16-pending=1
+PR15-pending=1 PR16-pending=1
+PR15-pending=1 PR16-pending=1
+PR15-pending=1 PR16-pending=1
+PR15-pending=1 PR16-pending=1
+PR15-pending=1 PR16-pending=1
+PR15-pending=0 PR16-pending=0
+CI_COMPLETE
+PR17-pending=1 PR18-pending=2
+PR17-pending=1 PR18-pending=2
+PR17-pending=1 PR18-pending=1
+PR17-pending=1 PR18-pending=0
+PR17-pending=1 PR18-pending=0
+PR17-pending=1 PR18-pending=0
+PR17-pending=1 PR18-pending=0
+PR17-pending=1 PR18-pending=0
+PR17-pending=1 PR18-pending=0
+PR17-pending=1 PR18-pending=0
+PR17-pending=1 PR18-pending=0
+PR17-pending=1 PR18-pending=0
+PR17-pending=1 PR18-pending=0
+PR17-pending=1 PR18-pending=0
+PR17-pending=1 PR18-pending=0
+PR17-pending=1 PR18-pending=0
+PR17-pending=1 PR18-pending=0
+PR17-pending=1 PR18-pending=0
+PR17-pending=1 PR18-pending=0
+PR17-pending=1 PR18-pending=0
+PR17-pending=1 PR18-pending=0
+PR17-pending=1 PR18-pending=0
+PR17-pending=0 PR18-pending=0
+PR18-pending=1 PR18-fail=0
+PR18-pending=1 PR18-fail=0
+PR18-pending=1 PR18-fail=0
+PR18-pending=0 PR18-fail=1
+PR18-recheck-pending=2 PR18-fail=0
+PR18-recheck-pending=2 PR18-fail=0
+PR18-recheck-pending=1 PR18-fail=0
+PR18-recheck-pending=1 PR18-fail=0
+PR18-recheck-pending=1 PR18-fail=0
+PR18-recheck-pending=1 PR18-fail=0
+PR18-recheck-pending=1 PR18-fail=0
+PR18-recheck-pending=1 PR18-fail=0
+PR18-recheck-pending=1 PR18-fail=0
+PR18-recheck-pending=1 PR18-fail=0
+PR18-recheck-pending=1 PR18-fail=0
+PR18-recheck-pending=1 PR18-fail=0
+PR18-recheck-pending=1 PR18-fail=0
+PR18-recheck-pending=1 PR18-fail=0
+PR18-recheck-pending=1 PR18-fail=0
+PR18-recheck-pending=0 PR18-fail=0
+PR18-final-check
+PR18-final-check
+PR18-final-check
+PR18-final-check
+PR18-final-check
