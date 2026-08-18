@@ -368,15 +368,15 @@ func (s *SQLiteRunStore) RecoverStaleRuns(ctx context.Context, staleAfter time.D
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE agent_runs
 		 SET status = CASE
-		         WHEN checkpoint IS NOT NULL AND checkpoint != '' THEN ?
+		         WHEN checkpoint IS NOT NULL THEN ?
 		         ELSE ?
 		       END,
 		     error = CASE
-		         WHEN checkpoint IS NOT NULL AND checkpoint != '' THEN ?
+		         WHEN checkpoint IS NOT NULL THEN ?
 		         ELSE ?
 		       END,
 		     completed_at = CASE
-		         WHEN checkpoint IS NOT NULL AND checkpoint != '' THEN completed_at
+		         WHEN checkpoint IS NOT NULL THEN completed_at
 		         ELSE COALESCE(completed_at, ?)
 		       END,
 		     updated_at = ?

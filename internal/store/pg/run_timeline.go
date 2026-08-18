@@ -351,19 +351,21 @@ func (s *PGRunStore) ListRuns(ctx context.Context, opts store.RunListOpts) ([]st
 func (s *PGRunStore) RecoverStaleRuns(ctx context.Context, staleAfter time.Duration) (int64, error) {
 	deadline := time.Now().Add(-staleAfter)
 	// Paused (resumable) runs keep completed_at NULL — only terminal-failed runs
-	// get it stamped so the run record reads as recoverable.
+	// get it stamped so the run record reads as recoverable. checkpoint is a
+	// JSONB column: NULL means no checkpoint, an empty checkpoint is normalized
+	// to NULL at write time (see UpdateRunCheckpoint).
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE agent_runs
 		 SET status = CASE
-		         WHEN checkpoint IS NOT NULL AND checkpoint <> '' THEN $1
+		         WHEN checkpoint IS NOT NULL THEN $1
 		         ELSE $2
 		       END,
 		     error = CASE
-		         WHEN checkpoint IS NOT NULL AND checkpoint <> '' THEN $3
+		         WHEN checkpoint IS NOT NULL THEN $3
 		         ELSE $4
 		       END,
 		     completed_at = CASE
-		         WHEN checkpoint IS NOT NULL AND checkpoint <> '' THEN completed_at
+		         WHEN checkpoint IS NOT NULL THEN completed_at
 		         ELSE COALESCE(completed_at, $5)
 		       END,
 		     updated_at = $5
@@ -508,7 +510,7 @@ const interruptedPausedPreview = "interrupted: gateway stopped, checkpoint avail
 func (s *PGRunTimelineStore) RecoverInterruptedRuns(ctx context.Context) (int64, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT st.tenant_id, st.run_id, st.session_key, st.agent_id, st.user_id, st.channel, st.chat_id, agg.max_seq,
-		       (ar.checkpoint IS NOT NULL AND ar.checkpoint <> '') AS has_checkpoint
+		       (ar.checkpoint IS NOT NULL) AS has_checkpoint
 		FROM (
 			SELECT run_id, MAX(seq) AS max_seq,
 			       bool_or(item_type = 'run.status' AND status = 'started') AS has_start,
