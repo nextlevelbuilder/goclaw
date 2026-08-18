@@ -32,18 +32,28 @@ import (
 
 // Metadata holds parsed SKILL.md frontmatter.
 type Metadata struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	Version      string   `json:"version,omitempty"`
+	Inputs       []string `json:"inputs,omitempty"`
+	Outputs      []string `json:"outputs,omitempty"`
+	AllowedTools []string `json:"allowedTools,omitempty"`
+	QualityGates []string `json:"qualityGates,omitempty"`
 }
 
 // Info describes a discovered skill.
 type Info struct {
-	Name        string `json:"name"`
-	Slug        string `json:"slug"`    // directory name (unique identifier)
-	Path        string `json:"path"`    // absolute path to SKILL.md
-	BaseDir     string `json:"baseDir"` // skill directory (parent of SKILL.md)
-	Source      string `json:"source"`  // "workspace", "global", "builtin"
-	Description string `json:"description"`
+	Name         string   `json:"name"`
+	Slug         string   `json:"slug"`    // directory name (unique identifier)
+	Path         string   `json:"path"`    // absolute path to SKILL.md
+	BaseDir      string   `json:"baseDir"` // skill directory (parent of SKILL.md)
+	Source       string   `json:"source"`  // "workspace", "global", "builtin"
+	Description  string   `json:"description"`
+	Version      string   `json:"version,omitempty"`
+	Inputs       []string `json:"inputs,omitempty"`
+	Outputs      []string `json:"outputs,omitempty"`
+	AllowedTools []string `json:"allowedTools,omitempty"`
+	QualityGates []string `json:"qualityGates,omitempty"`
 }
 
 // Loader discovers and loads SKILL.md files from multiple directories.
@@ -189,10 +199,7 @@ func (l *Loader) ListSkills(ctx context.Context) []Info {
 				Source:  src.source,
 			}
 			if meta := parseMetadata(skillFile); meta != nil {
-				info.Description = meta.Description
-				if meta.Name != "" {
-					info.Name = meta.Name
-				}
+				applyMetadata(&info, meta)
 			}
 			skills = append(skills, info)
 			seen[d.Name()] = true
@@ -233,10 +240,7 @@ func (l *Loader) ListSkills(ctx context.Context) []Info {
 					Source:  "builtin",
 				}
 				if meta := parseMetadata(skillFile); meta != nil {
-					info.Description = meta.Description
-					if meta.Name != "" {
-						info.Name = meta.Name
-					}
+					applyMetadata(&info, meta)
 				}
 				skills = append(skills, info)
 				seen[d.Name()] = true
@@ -284,10 +288,7 @@ func (l *Loader) listManagedSkills(managedDir string) []Info {
 			Source:  "managed",
 		}
 		if meta := parseMetadata(skillFile); meta != nil {
-			info.Description = meta.Description
-			if meta.Name != "" {
-				info.Name = meta.Name
-			}
+			applyMetadata(&info, meta)
 		}
 		skills = append(skills, info)
 	}
@@ -619,10 +620,66 @@ func parseMetadata(path string) *Metadata {
 
 	// Fall back to simple YAML key: value
 	kv := parseSimpleYAML(fm)
-	return &Metadata{
-		Name:        kv["name"],
-		Description: kv["description"],
+	lists := parseSimpleYAMLLists(fm)
+	meta := &Metadata{
+		Name:         kv["name"],
+		Description:  kv["description"],
+		Version:      kv["version"],
+		AllowedTools: lists["allowed-tools"],
+		QualityGates: lists["quality-gates"],
 	}
+	// inputs/outputs double as scalar keys (comma-separated) and block lists.
+	// Prefer the block-list form when present, else fall back to scalar values.
+	if len(lists["inputs"]) > 0 {
+		meta.Inputs = lists["inputs"]
+	} else if kv["inputs"] != "" {
+		meta.Inputs = splitListValue(kv["inputs"])
+	}
+	if len(lists["outputs"]) > 0 {
+		meta.Outputs = lists["outputs"]
+	} else if kv["outputs"] != "" {
+		meta.Outputs = splitListValue(kv["outputs"])
+	}
+	return meta
+}
+
+// applyMetadata copies parsed frontmatter metadata onto a skill Info,
+// preserving the long-standing behavior that a non-empty frontmatter name
+// overrides the directory-derived name, and adding the first-class metadata
+// fields (version, inputs, outputs, allowed-tools, quality-gates).
+func applyMetadata(info *Info, meta *Metadata) {
+	if meta == nil {
+		return
+	}
+	info.Description = meta.Description
+	if meta.Name != "" {
+		info.Name = meta.Name
+	}
+	info.Version = meta.Version
+	info.Inputs = meta.Inputs
+	info.Outputs = meta.Outputs
+	info.AllowedTools = meta.AllowedTools
+	info.QualityGates = meta.QualityGates
+}
+
+// splitListValue splits a comma- or space-separated scalar list value into
+// trimmed entries, dropping empties. Used for the scalar fallback form of
+// inputs/outputs (e.g. "inputs: issue, summary").
+func splitListValue(v string) []string {
+	if strings.TrimSpace(v) == "" {
+		return nil
+	}
+	parts := strings.FieldsFunc(v, func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\t'
+	})
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.Trim(strings.TrimSpace(p), "\"'")
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // normalizeLineEndings converts \r\n and bare \r to \n so frontmatter regex matches
