@@ -14,6 +14,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/commands/gc"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
@@ -219,6 +220,19 @@ func wireExtras(
 		}
 	}
 
+	// /gc: command dispatcher (Workstream A's executor) wired into the agent
+	// loop. The registry maps each command kind to its engineer-kit skill slug;
+	// slugs match the skills.Loader directory names so LoadSkill resolves them.
+	var gcDispatcher gc.CommandDispatcher
+	if skillsLoader != nil {
+		gcRegistry := gc.NewRegistry()
+		gcRegistry.Register(gc.KindPlan, "plan")
+		gcRegistry.Register(gc.KindFix, "fix")
+		gcRegistry.Register(gc.KindCook, "cook")
+		gcRegistry.Register(gc.KindReview, "review")
+		gcDispatcher = gc.NewExecutor(skillsLoader, gcRegistry)
+	}
+
 	resolver := agent.NewManagedResolver(agent.ResolverDeps{
 		AgentStore:             stores.Agents,
 		ProviderStore:          stores.Providers,
@@ -229,6 +243,7 @@ func wireExtras(
 		Tools:                  toolsReg,
 		ToolPolicy:             toolPE,
 		Skills:                 skillsLoader,
+		GCDispatcher:           gcDispatcher,
 		SkillStore:             stores.Skills,
 		SkillAccessStore:       skillAccessStore,
 		SkillEvolutionStore:    stores.SkillEvolution,

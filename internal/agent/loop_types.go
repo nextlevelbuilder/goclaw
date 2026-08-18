@@ -11,6 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/commands/gc"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
@@ -127,6 +128,7 @@ type Loop struct {
 	skillsLoader       *skills.Loader
 	skillAllowList     []string // nil = all, [] = none, ["x","y"] = filter
 	skillSlashCommands config.SkillSlashCommandConfig
+	gcDispatcher       gc.CommandDispatcher // /gc: command dispatcher (nil = passthrough)
 	hasMemory          bool
 	contextFiles       []bootstrap.ContextFile
 
@@ -373,6 +375,7 @@ type LoopConfig struct {
 	SkillsLoader       *skills.Loader
 	SkillAllowList     []string // nil = all, [] = none, ["x","y"] = filter
 	SkillSlashCommands config.SkillSlashCommandConfig
+	GCDispatcher       gc.CommandDispatcher // /gc: command dispatcher (nil = passthrough)
 	HasMemory          bool
 	ContextFiles       []bootstrap.ContextFile
 
@@ -592,6 +595,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		skillsLoader:           cfg.SkillsLoader,
 		skillAllowList:         cfg.SkillAllowList,
 		skillSlashCommands:     cfg.SkillSlashCommands,
+		gcDispatcher:           cfg.GCDispatcher,
 		hasMemory:              cfg.HasMemory,
 		contextFiles:           cfg.ContextFiles,
 		defaultTimezone:        cfg.DefaultTimezone,
