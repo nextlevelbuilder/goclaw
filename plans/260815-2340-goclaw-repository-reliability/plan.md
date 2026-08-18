@@ -1,7 +1,7 @@
 # Plan: goclaw repo setup + Phase 0-2 Reliability Upgrade
 
 **Created:** 2026-08-15
-**Status:** ✅ DONE — Phase 01-03 all implemented, code-reviewed (1 critical + 4 major fixed, 12 tests), race clean, docs updated. Code có trong repo public `qkhalk/goclaw`, pushed lên `dev` (commits `5100087d`, `def1a9e6`), source đã un-nest về repo root, CI/CD disabled qua `.github.disabled`. Plan được lưu tại `plans/260815-2340-goclaw-repository-reliability/`.
+**Status:** ✅ DONE — Toàn bộ 10 phase implemented, code-reviewed, tests pass, CI green. Phase 10 (production hardening) shipped qua PR #9 merge `d6724cdb` (2026-08-18). Code trong repo public `qkhalk/goclaw`, pushed lên `dev`. Plan được lưu tại `plans/260815-2340-goclaw-repository-reliability/`.
 **Broken ground by:** scout của codebase hiện tại (đã xác nhận nhiều cơ chế đã tồn tại sẵn trong code).
 
 ## Mục tiêu
@@ -30,7 +30,7 @@ Ngoài NATURAL: retry (đã có), failover (đã có), cooldown (đã có), erro
 - [x] phase-07-tool-reliability.md — tool retry/cooldown + loop detection
 - [x] phase-08-context-optimization.md — token budgets + compaction + budget telemetry
 - [x] phase-09-testing-suite.md — provider chaos + weak-model chaos + run-lifecycle PG tests
-- [ ] [phase-10-production-hardening.md](phase-10-production-hardening.md) — SLOs, Alerts, dashboards, Runbook, managed stale-run sweep, migration docs
+- [x] [phase-10-production-hardening.md](phase-10-production-hardening.md) — SLOs, Alerts, dashboards, Runbook, managed stale-run sweep, migration docs — PR #9 merge `d6724cdb`
 
 ## Dependencies
 
