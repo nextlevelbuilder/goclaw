@@ -52,6 +52,11 @@ type Stores struct {
 	// Callers: type-assert to hooks.HookStore before use.
 	Hooks any
 
+	// Contracts persists durable multi-agent collaboration records.
+	Contracts ContractStore
+	// Artifacts persists agent-produced artifacts with a version graph.
+	Artifacts ArtifactStore
+
 	Webhooks     WebhookStore
 	WebhookCalls WebhookCallStore
 

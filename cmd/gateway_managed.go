@@ -502,6 +502,15 @@ func wireExtras(
 		delegateTool.SetHookDispatcher(hookDispatcher)
 		toolsReg.Register(delegateTool)
 		slog.Info("delegate tool wired")
+
+		// Wire jury + negotiate contract tools. The delegate runner is shared
+		// with the delegate tool so contenders run through the same agent-link
+		// loop with child-run admission.
+		juryTool := tools.NewJuryTool(delegateRunFn, stores.Contracts, stores.Artifacts)
+		toolsReg.Register(juryTool)
+		negTool := tools.NewNegotiateTool(stores.Contracts)
+		toolsReg.Register(negTool)
+		slog.Info("contract tools wired", "tools", "jury,negotiate")
 	}
 
 	// --- Cache invalidation event subscribers ---
