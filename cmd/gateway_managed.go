@@ -235,6 +235,7 @@ func wireExtras(
 		gcRegistry.Register(gc.KindDocs, "docs")
 		gcRegistry.Register(gc.KindArchitect, "architect")
 		gcRegistry.Register(gc.KindUIUX, "ui-ux-pro-max")
+		gcRegistry.Register(gc.KindMission, "mission")
 		gcDispatcher = gc.NewExecutor(skillsLoader, gcRegistry)
 	}
 

@@ -46,6 +46,7 @@ func TestCronJobHandlerInjectsPayloadCredentialUserID(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 
 	result, err := handler(&store.CronJob{
@@ -88,7 +89,7 @@ func TestCronJobHandlerResolvesGroupDisplayTitle(t *testing.T) {
 	manager := channels.NewManager(nil)
 	manager.RegisterChannel("discord-main", cronDisplayTitleChannel{consumerTestChannel: consumerTestChannel{name: "discord-main", channelType: channels.TypeDiscord}, title: "launch-thread / product-planning"})
 
-	handler := makeCronJobHandler(sched, msgBus, &config.Config{}, manager, nil, nil, nil, nil, nil)
+	handler := makeCronJobHandler(sched, msgBus, &config.Config{}, manager, nil, nil, nil, nil, nil, nil)
 	if _, err := handler(&store.CronJob{
 		ID:             uuid.NewString(),
 		TenantID:       uuid.New(),
@@ -192,6 +193,7 @@ func TestCronJobHandlerSuppressesNoReplyDelivery(t *testing.T) {
 				nil,
 				nil,
 				nil,
+				nil,
 			)
 
 			result, err := handler(&store.CronJob{
@@ -281,7 +283,7 @@ func TestCronJobHandler_StatelessResetsSession(t *testing.T) {
 			)
 			defer sched.Stop()
 
-			handler := makeCronJobHandler(sched, nil, &config.Config{}, nil, fakeStore, nil, nil, nil, nil)
+			handler := makeCronJobHandler(sched, nil, &config.Config{}, nil, fakeStore, nil, nil, nil, nil, nil)
 
 			if _, err := handler(&store.CronJob{
 				ID:        uuid.NewString(),

@@ -59,6 +59,8 @@ type Stores struct {
 	// CheckpointSnapshots persists append-only checkpoint history so a paused
 	// run can be replayed from any earlier snapshot.
 	CheckpointSnapshots CheckpointSnapshotStore
+	// Missions persists durable mission records (Mission Mode).
+	Missions MissionStore
 
 	Webhooks     WebhookStore
 	WebhookCalls WebhookCallStore

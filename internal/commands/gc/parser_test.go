@@ -21,6 +21,7 @@ func TestParse_RecognizedKinds(t *testing.T) {
 		{"/gc:docs update the contract", KindDocs, "update the contract", nil},
 		{"/gc:architect the new store", KindArchitect, "the new store", nil},
 		{"/gc:uiux review the chat screen", KindUIUX, "review the chat screen", nil},
+		{"/gc:mission drive the rollout", KindMission, "drive the rollout", nil},
 	}
 	for _, tc := range cases {
 		cmd, ok := Parse(tc.message)

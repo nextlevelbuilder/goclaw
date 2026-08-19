@@ -363,7 +363,7 @@ func isWriteMethod(method string) bool {
 		// Durable run resume — re-drives an agent loop (provider calls).
 		protocol.MethodRunsResume,
 
-// Replay — rewinds a paused run to an earlier checkpoint and re-drives
+		// Replay — rewinds a paused run to an earlier checkpoint and re-drives
 		// the agent loop from that snapshot (provider calls).
 		protocol.MethodRunsReplay,
 
@@ -386,6 +386,13 @@ func isWriteMethod(method string) bool {
 		// formation_selected event; requires operator so viewers cannot trigger
 		// routing events.
 		protocol.MethodMultiAgentFormation,
+
+		// Mission Mode mutations — writing a mission record or re-driving the
+		// owning agent's run has model/provider side effects.
+		protocol.MethodMissionCreate,
+		protocol.MethodMissionPause,
+		protocol.MethodMissionResume,
+		protocol.MethodMissionDelete,
 	}
 	return slices.Contains(writeExact, method)
 }
@@ -502,6 +509,10 @@ func isReadMethod(method string) bool {
 		// Multi-agent read-only history (jury verdicts, negotiation records).
 		protocol.MethodMultiAgentJury,
 		protocol.MethodMultiAgentNegotiate,
+
+		// Mission Mode read-only (single mission + list).
+		protocol.MethodMissionGet,
+		protocol.MethodMissionList,
 	}
 	return slices.Contains(readMethods, method)
 }

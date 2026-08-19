@@ -30,12 +30,13 @@ const (
 	KindDocs      CommandKind = "docs"
 	KindArchitect CommandKind = "architect"
 	KindUIUX      CommandKind = "uiux"
+	KindMission   CommandKind = "mission"
 )
 
 // knownKinds lists the recognized command kinds in a stable order.
 var knownKinds = []CommandKind{
 	KindPlan, KindFix, KindCook, KindReview,
-	KindTest, KindDebug, KindDocs, KindArchitect, KindUIUX,
+	KindTest, KindDebug, KindDocs, KindArchitect, KindUIUX, KindMission,
 }
 
 // gcFlagSet is the set of flags extracted from the input. Flags are surfaced

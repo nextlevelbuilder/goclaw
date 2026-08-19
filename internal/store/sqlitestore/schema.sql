@@ -2499,3 +2499,32 @@ CREATE INDEX IF NOT EXISTS idx_run_checkpoint_snapshots_tenant_run_seq
     ON run_checkpoint_snapshots(tenant_id, run_id, seq DESC);
 CREATE INDEX IF NOT EXISTS idx_run_checkpoint_snapshots_tenant_created
     ON run_checkpoint_snapshots(tenant_id, created_at DESC);
+
+-- ============================================================
+-- Table: missions
+-- Durable missions (Mission Mode). A mission is a named objective with goals,
+-- milestones, and acceptance criteria, tied to an owning agent and a session.
+-- checkpoint_seq links to the latest durable run checkpoint snapshot seq so a
+-- paused mission can resume from where it left off.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS missions (
+    id            TEXT NOT NULL PRIMARY KEY,
+    tenant_id     TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name          TEXT NOT NULL,
+    goals         TEXT NOT NULL DEFAULT '[]',
+    milestones    TEXT NOT NULL DEFAULT '[]',
+    acceptance    TEXT NOT NULL DEFAULT '[]',
+    status        VARCHAR(40) NOT NULL DEFAULT 'active',
+    agent_id      TEXT REFERENCES agents(id) ON DELETE SET NULL,
+    session_key   TEXT NOT NULL DEFAULT '',
+    checkpoint_seq INT NOT NULL DEFAULT 0,
+    metadata      TEXT NOT NULL DEFAULT '{}',
+    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_missions_tenant_created
+    ON missions(tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_missions_tenant_status
+    ON missions(tenant_id, status);

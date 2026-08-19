@@ -60,6 +60,18 @@ const (
 	MethodRunsPause = "runs.pause"
 	MethodRunsWake  = "runs.wake"
 
+	// Missions (Mission Mode): a durable data model for named objectives with
+	// goals, milestones, and acceptance criteria. mission.create/get/list are
+	// synchronous store reads/writes; mission.pause transitions to paused;
+	// mission.resume re-drives the owning agent's run; mission.delete removes
+	// the record. Handlers live in internal/gateway/methods/mission.go.
+	MethodMissionCreate = "mission.create"
+	MethodMissionGet    = "mission.get"
+	MethodMissionList   = "mission.list"
+	MethodMissionPause  = "mission.pause"
+	MethodMissionResume = "mission.resume"
+	MethodMissionDelete = "mission.delete"
+
 	// System
 	MethodConnect = "connect"
 	MethodHealth  = "health"

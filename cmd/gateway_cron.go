@@ -54,8 +54,16 @@ func cronTenantContext(ctx context.Context, tenantStore store.TenantStore, tenan
 	return store.WithTenantSlug(ctx, tenant.Slug)
 }
 
-func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg *config.Config, channelMgr *channels.Manager, sessionMgr store.SessionStore, agentStore store.AgentStore, tenantStore store.TenantStore, providerStore store.ProviderStore, providerReg *providers.Registry) func(job *store.CronJob) (*store.CronJobResult, error) {
+func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg *config.Config, channelMgr *channels.Manager, sessionMgr store.SessionStore, agentStore store.AgentStore, tenantStore store.TenantStore, providerStore store.ProviderStore, providerReg *providers.Registry, missionStore store.MissionStore) func(job *store.CronJob) (*store.CronJobResult, error) {
 	return func(job *store.CronJob) (*store.CronJobResult, error) {
+		// Mission payload: a scheduled mission tick. The mission ID is carried in
+		// job.Payload.Message (KISS — the CronPayload struct is untouched). The
+		// owning agent continues the mission's session through the scheduler cron
+		// lane, exactly as an agent-turn job would.
+		if job.Payload.Kind == store.CronPayloadKindMission {
+			return runMissionCronJob(sched, cfg, channelMgr, job, missionStore, tenantStore, msgBus)
+		}
+
 		agentID := job.AgentID
 		if agentID == "" && agentStore != nil {
 			// Resolve real default agent from DB instead of using literal "default" string.
@@ -288,6 +296,113 @@ func runCommandCronJob(cfg *config.Config, job *store.CronJob, tenantStore store
 
 	deliverCronOutput(msgBus, job, res.Summary, nil, peerKind)
 	return &store.CronJobResult{Content: res.Summary}, nil
+}
+
+// runMissionCronJob resumes a mission on its scheduler cron tick. The cron
+// job's payload.Message carries the mission ID (KISS — the CronPayload struct
+// is unchanged). It resolves the mission, rejects terminal states, then
+// schedules an agent turn on the mission's OWN session key so the owning agent
+// continues the mission's goals at the configured cadence. On a successful
+// run the mission transitions back to active (matching mission.resume).
+func runMissionCronJob(sched *scheduler.Scheduler, cfg *config.Config, channelMgr *channels.Manager, job *store.CronJob, missionStore store.MissionStore, tenantStore store.TenantStore, msgBus *bus.MessageBus) (*store.CronJobResult, error) {
+	if missionStore == nil {
+		return nil, fmt.Errorf("mission cron job %s: mission store not available", job.ID)
+	}
+	missionID := job.Payload.Message
+	if missionID == "" {
+		return nil, fmt.Errorf("mission cron job %s: empty mission ID in payload", job.ID)
+	}
+	id, err := uuid.Parse(missionID)
+	if err != nil {
+		return nil, fmt.Errorf("mission cron job %s: invalid mission ID %q", job.ID, missionID)
+	}
+
+	// Mission ticks share the tenant scoping and hard timeout of agent-turn
+	// cron jobs so a hung continuation can't block the cron scheduler forever.
+	jobTimeout := cfg.Cron.JobTimeoutDuration()
+	cronCtx, cancel := context.WithTimeout(cronTenantContext(context.Background(), tenantStore, job.TenantID), jobTimeout)
+	defer cancel()
+
+	mission, err := missionStore.GetMission(cronCtx, id)
+	if err != nil {
+		return nil, fmt.Errorf("mission cron job %s: get mission: %w", job.ID, err)
+	}
+	switch mission.Status {
+	case store.MissionStatusCompleted, store.MissionStatusFailed, store.MissionStatusCancelled:
+		return nil, fmt.Errorf("mission cron job %s: mission %s is in terminal state %q", job.ID, missionID, mission.Status)
+	}
+	if mission.SessionKey == "" {
+		return nil, fmt.Errorf("mission cron job %s: mission %s has no session key", job.ID, missionID)
+	}
+
+	peerKind := resolveCronPeerKind(job)
+	// Schedule the continuation through the cron lane so per-session concurrency
+	// control (same session can't run concurrently) and /stop integration apply
+	// exactly as they do for agent-turn cron jobs.
+	outCh := sched.Schedule(cronCtx, scheduler.LaneCron, agent.RunRequest{
+		SessionKey:  mission.SessionKey,
+		Message:     missionContinuePrompt(mission),
+		Channel:     job.DeliverChannel,
+		ChannelType: resolveChannelType(channelMgr, job.DeliverChannel),
+		ChatID:      job.DeliverTo,
+		PeerKind:    peerKind,
+		UserID:      job.UserID,
+		RunID:       fmt.Sprintf("cron-mission:%s", job.ID),
+		Stream:      false,
+		TraceName:   fmt.Sprintf("Mission [%s] - %s", mission.Name, mission.SessionKey),
+		TraceTags:   []string{"cron", "mission"},
+	})
+
+	var outcome scheduler.RunOutcome
+	select {
+	case outcome = <-outCh:
+	case <-cronCtx.Done():
+		return nil, fmt.Errorf("mission cron job %s timed out after %s", job.Name, jobTimeout)
+	}
+	if outcome.Err != nil {
+		return nil, outcome.Err
+	}
+
+	// A successfully ticked mission is active again (matching mission.resume).
+	if err := missionStore.UpdateMissionStatus(cronCtx, id, store.MissionStatusActive); err != nil {
+		slog.Warn("cron.mission_status_update_failed", "job_id", job.ID, "mission_id", missionID, "error", err)
+	}
+
+	result := outcome.Result
+	deliverCronOutput(msgBus, job, result.Content, result.Media, peerKind)
+
+	cronResult := &store.CronJobResult{Content: result.Content}
+	if result.Usage != nil {
+		cronResult.InputTokens = result.Usage.PromptTokens
+		cronResult.OutputTokens = result.Usage.CompletionTokens
+	}
+	return cronResult, nil
+}
+
+// missionContinuePrompt builds the continuation directive handed to the agent
+// on each mission cron tick so it keeps the mission's goals, milestones, and
+// acceptance criteria in context without requiring a fresh model turn setup.
+func missionContinuePrompt(m *store.Mission) string {
+	var b strings.Builder
+	b.WriteString("Continue working on mission: ")
+	b.WriteString(m.Name)
+	b.WriteString(".")
+	if len(m.Goals) > 0 {
+		b.WriteString(" Goals: ")
+		b.WriteString(strings.Join(m.Goals, "; "))
+		b.WriteString(".")
+	}
+	if len(m.Milestones) > 0 {
+		b.WriteString(" Milestones: ")
+		b.WriteString(strings.Join(m.Milestones, "; "))
+		b.WriteString(".")
+	}
+	if len(m.Acceptance) > 0 {
+		b.WriteString(" Acceptance criteria: ")
+		b.WriteString(strings.Join(m.Acceptance, "; "))
+		b.WriteString(".")
+	}
+	return b.String()
 }
 
 func cronOutputContainsNoReplySentinel(content string) bool {

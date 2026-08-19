@@ -18,11 +18,13 @@ var (
 	ErrCronCommandInvalid          = errors.New("invalid cron command payload")
 )
 
-// Cron payload kinds. A job either runs an LLM/agent turn ("agent_turn") or a
-// deterministic shell command in the gateway process ("command", no model cost).
+// Cron payload kinds. A job either runs an LLM/agent turn ("agent_turn"), a
+// deterministic shell command in the gateway process ("command", no model
+// cost), or resumes a mission ("mission", carrying the mission ID in Message).
 const (
 	CronPayloadKindAgentTurn = "agent_turn"
 	CronPayloadKindCommand   = "command"
+	CronPayloadKindMission   = "mission"
 )
 
 // CronJob represents a scheduled job.
