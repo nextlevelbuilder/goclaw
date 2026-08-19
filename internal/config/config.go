@@ -50,6 +50,7 @@ type Config struct {
 	Channels  ChannelsConfig  `json:"channels"`
 	Providers ProvidersConfig `json:"providers"`
 	Gateway   GatewayConfig   `json:"gateway"`
+	Audit     AuditConfig     `json:"audit"`
 	Tools     ToolsConfig     `json:"tools"`
 	Skills    SkillsConfig    `json:"skills"`
 	Sessions  SessionsConfig  `json:"sessions"`
@@ -767,6 +768,48 @@ type TelemetryConfig struct {
 	ServiceName  string                   `json:"service_name,omitempty"`  // OTEL service name (default "goclaw-gateway")
 	Headers      map[string]string        `json:"headers,omitempty"`       // extra headers (e.g. auth tokens for cloud backends)
 	ModelPricing map[string]*ModelPricing `json:"model_pricing,omitempty"` // cost per model, key = "provider/model" or just "model"
+	// Prometheus serves a Prometheus text-exposition /metrics endpoint on its
+	// own port. The endpoint is compiled with `-tags prometheus` (default
+	// builds are unaffected). Off by default.
+	Prometheus PrometheusConfig `json:"prometheus,omitempty"`
+}
+
+// PrometheusConfig configures the optional Prometheus /metrics endpoint
+// (build-tag prometheus). The endpoint exposes in-process reliability counters
+// plus per-tenant spend from usage_event_rollups. Bind it to a
+// private/loopback interface — it may expose cost data.
+type PrometheusConfig struct {
+	// Enabled turns on the /metrics endpoint (default false). Requires the
+	// binary to be built with `-tags prometheus`.
+	Enabled bool `json:"enabled,omitempty"`
+	// Port is the listener port for /metrics. Default 9090 when enabled.
+	Port int `json:"port,omitempty"`
+	// Host is the bind interface. Default "127.0.0.1" (loopback only) so the
+	// cost/usage data never leaks onto a public interface unintentionally.
+	Host string `json:"host,omitempty"`
+}
+
+// DefaultPrometheusPort is the default /metrics port when enabled and unset.
+const DefaultPrometheusPort = 9090
+
+// DefaultPrometheusHost is the default /metrics bind interface — loopback only
+// by default because the endpoint may expose cost data.
+const DefaultPrometheusHost = "127.0.0.1"
+
+// EffectivePort returns the configured /metrics port, or the default when unset.
+func (p PrometheusConfig) EffectivePort() int {
+	if p.Port <= 0 {
+		return DefaultPrometheusPort
+	}
+	return p.Port
+}
+
+// BindHost returns the configured bind interface, or loopback when unset.
+func (p PrometheusConfig) BindHost() string {
+	if p.Host == "" {
+		return DefaultPrometheusHost
+	}
+	return p.Host
 }
 
 // CronConfig configures the cron job system.
@@ -871,6 +914,7 @@ func (c *Config) ReplaceFrom(src *Config) {
 	c.Channels = src.Channels
 	c.Providers = src.Providers
 	c.Gateway = src.Gateway
+	c.Audit = src.Audit
 	c.Tools = src.Tools
 	c.Skills = src.Skills
 	c.Sessions = src.Sessions

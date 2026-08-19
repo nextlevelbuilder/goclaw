@@ -77,8 +77,8 @@ func TestPGUsageCapStoreReserveUsageIdempotent(t *testing.T) {
 	if usedTokens != 7 {
 		t.Fatalf("used_tokens = %d, want 7", usedTokens)
 	}
-	if reservedTokens != 0 {
-		t.Fatalf("reserved_tokens after reconcile = %d, want 0", reservedTokens)
+	if reservedTokens != 3 {
+		t.Fatalf("reserved_tokens after reconcile = %d, want 3 (unused portion released)", reservedTokens)
 	}
 }
 

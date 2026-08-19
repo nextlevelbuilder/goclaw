@@ -110,6 +110,9 @@ func Default() *Config {
 			MaxMessageChars: DefaultMaxMessageChars,
 			RateLimitRPM:    20,
 		},
+		Audit: AuditConfig{
+			RetentionDays: 0, // 0 = keep audit rows forever
+		},
 		Tools: ToolsConfig{
 			Browser: BrowserToolConfig{
 				Enabled:           true,
@@ -324,6 +327,19 @@ func (c *Config) applyEnvOverrides() {
 	}
 	if v := os.Getenv("GOCLAW_TELEMETRY_INSECURE"); v != "" {
 		c.Telemetry.Insecure = v == "true" || v == "1"
+	}
+	// Prometheus /metrics (build-tag prometheus). GOCLAW_PROMETHEUS_ENABLED
+	// also accepts "true"/"1"; port and host fall back to the config defaults.
+	if v := os.Getenv("GOCLAW_PROMETHEUS_ENABLED"); v != "" {
+		c.Telemetry.Prometheus.Enabled = v == "true" || v == "1"
+	}
+	if v := os.Getenv("GOCLAW_PROMETHEUS_PORT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.Telemetry.Prometheus.Port = n
+		}
+	}
+	if v := os.Getenv("GOCLAW_PROMETHEUS_HOST"); v != "" {
+		c.Telemetry.Prometheus.Host = v
 	}
 
 	// Owner IDs from env (comma-separated, whitespace-trimmed)

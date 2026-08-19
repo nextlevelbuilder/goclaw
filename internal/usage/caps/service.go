@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/bgalert"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/usage/pricing"
@@ -24,6 +25,13 @@ var (
 type Service struct {
 	store     store.UsageCapStore
 	providers store.ProviderStore
+
+	// webhookURL / webhookMinInterval configure the best-effort budget-threshold
+	// webhook (reason goclaw.budget). Empty url disables. Set once at gateway
+	// startup via SetAlertWebhook from the same reliability alert config that
+	// feeds bgalert.SendWebhook.
+	webhookURL         string
+	webhookMinInterval int
 }
 
 func NewService(s store.UsageCapStore, providers store.ProviderStore) *Service {
@@ -231,6 +239,139 @@ func (r *Reservation) reconcile(ctx context.Context, resp *providers.ChatRespons
 		ActualCostMicros: cost, Status: status,
 	}); err != nil {
 		slog.Warn("usage_caps.reconcile_failed", "reservation_key", r.key, "error", err)
+		return
+	}
+	r.checkBudgetThresholds(ctx, cost, actual.TotalTokens())
+}
+
+// checkBudgetThresholds fires a budget-threshold warn event (decision='warn',
+// reason='budget_threshold', reason_group='goclaw.budget') when a Reconcile
+// drives any reserved policy past its warn_at_percent. Each
+// (policy, window_start) combination warns at most once, so continuous usage
+// past the threshold does not spam events or webhooks.
+func (r *Reservation) checkBudgetThresholds(ctx context.Context, actualCostMicros, actualTokens int64) {
+	for _, p := range r.result.Policies {
+		if p.WarnAtPercent == nil || *p.WarnAtPercent <= 0 {
+			continue
+		}
+		start := windowStart(time.Now().UTC(), p.Window)
+		if r.budgetWindowWarned(ctx, p.ID, start) {
+			continue
+		}
+		rows, err := r.svc.store.GetBudgetUsage(ctx, r.result.TenantID, store.BudgetUsageWindow{Window: p.Window})
+		if err != nil {
+			slog.Warn("usage_caps.warn_threshold_read_failed", "policy_id", p.ID, "error", err)
+			continue
+		}
+		var row *store.BudgetUsageRow
+		for i := range rows {
+			if rows[i].Policy.ID == p.ID {
+				row = &rows[i]
+				break
+			}
+		}
+		if row == nil || row.PercentUsed < (*p.WarnAtPercent)/100 {
+			continue
+		}
+		r.emitBudgetWarn(ctx, p, start, actualCostMicros, actualTokens)
+	}
+}
+
+// budgetWindowWarned reports whether a budget-threshold warn already fired for
+// the given policy + window. Falls back to false when the store does not
+// implement the optional dedup interface.
+func (r *Reservation) budgetWindowWarned(ctx context.Context, policyID uuid.UUID, windowStart time.Time) bool {
+	if w, ok := r.svc.store.(store.UsageCapBudgetWarnStore); ok {
+		fired, err := w.BudgetWindowWarned(ctx, r.result.TenantID, policyID, windowStart)
+		return err == nil && fired
+	}
+	return false
+}
+
+func (r *Reservation) emitBudgetWarn(ctx context.Context, p store.UsageCapPolicy, windowStart time.Time, costMicros, tokens int64) error {
+	event := &store.UsageCapEvent{
+		TenantID:            r.result.TenantID,
+		PolicyID:            &p.ID,
+		ReservationKey:      r.key,
+		Decision:            store.UsageCapEventWarn,
+		Reason:              "budget_threshold",
+		EstimatedTokens:     r.usage.TotalTokens(),
+		EstimatedCostMicros: r.estimatedCostMicros,
+		ActualTokens:        tokens,
+		ActualCostMicros:    costMicros,
+		Metadata: mustJSON(map[string]any{
+			"window_start": windowStart.UTC().Format(time.RFC3339),
+			"reason_group": "goclaw.budget",
+			"policy_id":    p.ID.String(),
+		}),
+	}
+	if err := r.svc.store.InsertUsageCapEvent(ctx, event); err != nil {
+		slog.Warn("usage_caps.warn_event_failed", "policy_id", p.ID, "error", err)
+		return err
+	}
+	slog.Warn("usage_caps.warn_threshold",
+		"policy_id", p.ID,
+		"window_start", windowStart.Format(time.RFC3339),
+		"reason_group", "goclaw.budget",
+		"percent_used", rowPercent(p, event.ActualCostMicros, event.ActualTokens))
+	r.svc.fireBudgetWebhook(ctx, p, costMicros, tokens)
+	return nil
+}
+
+// fireBudgetWebhook posts a best-effort webhook for a budget-threshold crossing.
+// bgalert.SendWebhook requires a non-nil error and maps unknown reasons to
+// 'warning' severity; the reason group (goclaw.budget) rides in the reason arg.
+// Config-gated: no-op when the gateway never called SetAlertWebhook.
+func (s *Service) fireBudgetWebhook(ctx context.Context, p store.UsageCapPolicy, costMicros, tokens int64) {
+	if s == nil || s.webhookURL == "" {
+		return
+	}
+	msg := fmt.Errorf("goclaw.budget threshold reached for policy %s (cost_micros=%d tokens=%d)", p.ID, costMicros, tokens)
+	bgalert.SendWebhook(ctx, bgalert.AlertDeps{
+		WebhookURL:         s.webhookURL,
+		MinIntervalSeconds: s.webhookMinInterval,
+	}, "usage_caps", "goclaw.budget", msg)
+}
+
+// SetAlertWebhook configures the budget-threshold webhook. Empty url disables.
+// Called once at gateway startup from the same alert config that feeds bgalert.
+func (s *Service) SetAlertWebhook(url string, minIntervalSeconds int) {
+	if s == nil {
+		return
+	}
+	s.webhookURL = url
+	s.webhookMinInterval = minIntervalSeconds
+}
+
+// rowPercent mirrors the store's BudgetUsageRow.PercentUsed precedence (cost
+// limit wins when both are set) for warn-event logging.
+func rowPercent(p store.UsageCapPolicy, costMicros, tokens int64) float64 {
+	if p.MaxCostMicros != nil && *p.MaxCostMicros > 0 {
+		return float64(costMicros) / float64(*p.MaxCostMicros)
+	}
+	if p.MaxTokens != nil && *p.MaxTokens > 0 {
+		return float64(tokens) / float64(*p.MaxTokens)
+	}
+	return 0
+}
+
+// windowStart returns the start of the usage window containing now, mirroring
+// the store-side usageWindow used for usage_cap_counters rows.
+func windowStart(now time.Time, window string) time.Time {
+	now = now.UTC()
+	switch window {
+	case store.UsageCapWindowDay:
+		return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	case store.UsageCapWindowWeek:
+		weekday := int(now.Weekday())
+		if weekday == 0 {
+			weekday = 7
+		}
+		return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, -(weekday - 1))
+	case store.UsageCapWindowMonth:
+		return time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	default:
+		return now.Truncate(time.Hour)
 	}
 }
 

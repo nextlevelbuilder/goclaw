@@ -139,6 +139,12 @@ func (e *Exporter) exportSpan(ctx context.Context, s store.SpanData) {
 	if s.OutputTokens > 0 {
 		attrs = append(attrs, attribute.Int("gen_ai.usage.output_tokens", s.OutputTokens))
 	}
+	// Cost in USD for the span. This is the billing truth (provider-priced in
+	// the backfill pipeline); the span carries it so OTel drill-downs can sum
+	// spend per request/trace. Attribute omitted when the span has no cost.
+	if s.TotalCost != nil && *s.TotalCost > 0 {
+		attrs = append(attrs, attribute.Float64("goclaw.llm.cost_usd", *s.TotalCost))
+	}
 	if s.FinishReason != "" {
 		attrs = append(attrs, attribute.String("gen_ai.response.finish_reason", s.FinishReason))
 	}

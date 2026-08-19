@@ -10,6 +10,12 @@ import (
 
 func (s *PGUsageEventStore) BackfillUsageEventCosts(ctx context.Context) (store.UsageEventCostBackfillStats, error) {
 	var stats store.UsageEventCostBackfillStats
+	// Cost source of truth: usage_events.cost_usd is the billing truth for
+	// rollups, and spans are the originating measure. This backfill reconciles
+	// every linked event against its span so a later span cost correction (e.g.
+	// after a pricing sync) propagates to the event and downstream rollups.
+	// Zero-cost events still get filled; diverging costs get overwritten.
+	// Span cost itself is retained and never dropped.
 	rows, err := s.db.QueryContext(ctx, `
 WITH linked_costs AS (
 	SELECT
@@ -21,8 +27,7 @@ WITH linked_costs AS (
 	  ON s.id = e.span_id
 	 AND s.trace_id = e.trace_id
 	 AND s.tenant_id = e.tenant_id
-	WHERE COALESCE(e.cost_usd, 0) = 0
-	  AND COALESCE(s.total_cost, 0) > 0
+	WHERE COALESCE(s.total_cost, 0) > 0
 )
 UPDATE usage_events e
 SET cost_usd = linked_costs.total_cost

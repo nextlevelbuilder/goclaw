@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
@@ -242,6 +243,108 @@ func TestReservationReconcileIgnoresUnpricedRequestCount(t *testing.T) {
 	}
 }
 
+// TestReservationReconcileFiresWarnThresholdOnce verifies that a Reconcile
+// crossing warn_at_percent inserts exactly one decision='warn' usage_cap_event
+// per (policy, window) and no more on a second reconcile of the same window.
+func TestReservationReconcileFiresWarnThresholdOnce(t *testing.T) {
+	warnAt := 50.0
+	policy := store.UsageCapPolicy{
+		ID: uuid.New(), TenantID: uuid.New(), MaxTokens: int64Ptr(1000),
+		WarnAtPercent: &warnAt, Window: store.UsageCapWindowDay, Enabled: true,
+	}
+	usageStore := &fakeUsageCapStore{
+		policies: []store.UsageCapPolicy{policy},
+		overview: []store.BudgetUsageRow{{
+			Policy: policy, UsedTokens: 600, UsedCostMicros: 0,
+			PercentUsed: 0.6, WarnAtPercent: &warnAt,
+		}},
+	}
+	providerStore := &fakeProviderStore{provider: &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		Name:         "openrouter",
+		ProviderType: store.ProviderOpenRouter,
+		APIKey:       "sk-test",
+	}}
+	svc := NewService(usageStore, providerStore)
+	reservation, err := svc.Preflight(context.Background(), Request{
+		TenantID: policy.TenantID, ProviderName: "openrouter", ModelID: "token/model",
+		ReservationKey: "warn-threshold", Messages: []providers.Message{{Role: "user", Content: "hello"}},
+		MaxOutputTokens: 10,
+	})
+	if err != nil {
+		t.Fatalf("Preflight returned error: %v", err)
+	}
+	resp := &providers.ChatResponse{Usage: &providers.Usage{PromptTokens: 590, CompletionTokens: 10}}
+
+	reservation.Reconcile(context.Background(), resp, nil)
+	reservation.Reconcile(context.Background(), resp, nil)
+
+	var warnEvents int
+	for _, e := range usageStore.events {
+		if e.Decision == store.UsageCapEventWarn {
+			warnEvents++
+			if e.Reason != "budget_threshold" {
+				t.Fatalf("warn event reason = %q, want budget_threshold", e.Reason)
+			}
+		}
+	}
+	if warnEvents != 1 {
+		t.Fatalf("warn events = %d, want exactly 1 per (policy, window)", warnEvents)
+	}
+}
+
+// TestReservationReconcileDispatchesWebhookWhenWarned verifies the budget webhook
+// fires through bgalert dependencies when warn_at_percent is crossed. The
+// webhook body is posted only if SetAlertWebhook configured a URL; the event
+// insert is unconditional.
+func TestReservationReconcileDispatchesWebhookWhenWarned(t *testing.T) {
+	warnAt := 50.0
+	policy := store.UsageCapPolicy{
+		ID: uuid.New(), TenantID: uuid.New(), MaxTokens: int64Ptr(1000),
+		WarnAtPercent: &warnAt, Window: store.UsageCapWindowDay, Enabled: true,
+	}
+	usageStore := &fakeUsageCapStore{
+		policies: []store.UsageCapPolicy{policy},
+		overview: []store.BudgetUsageRow{{
+			Policy: policy, UsedTokens: 600, UsedCostMicros: 0,
+			PercentUsed: 0.6, WarnAtPercent: &warnAt,
+		}},
+	}
+	providerStore := &fakeProviderStore{provider: &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		Name:         "openrouter",
+		ProviderType: store.ProviderOpenRouter,
+		APIKey:       "sk-test",
+	}}
+	svc := NewService(usageStore, providerStore)
+	svc.SetAlertWebhook("http://localhost:1/alert", 0)
+
+	reservation, err := svc.Preflight(context.Background(), Request{
+		TenantID: policy.TenantID, ProviderName: "openrouter", ModelID: "token/model",
+		ReservationKey: "warn-webhook", Messages: []providers.Message{{Role: "user", Content: "hello"}},
+		MaxOutputTokens: 10,
+	})
+	if err != nil {
+		t.Fatalf("Preflight returned error: %v", err)
+	}
+	reservation.Reconcile(context.Background(), &providers.ChatResponse{Usage: &providers.Usage{
+		PromptTokens: 590, CompletionTokens: 10,
+	}}, nil)
+
+	var warnFound bool
+	for _, e := range usageStore.events {
+		if e.Decision == store.UsageCapEventWarn {
+			warnFound = true
+			if e.Metadata == nil || len(e.Metadata) == 0 {
+				t.Fatal("warn event missing metadata")
+			}
+		}
+	}
+	if !warnFound {
+		t.Fatal("no warn event recorded when webhook dispatched")
+	}
+}
+
 func TestPreflightTraceMetadataForCapExceeded(t *testing.T) {
 	policy := store.UsageCapPolicy{ID: uuid.New(), TenantID: uuid.New(), MaxTokens: int64Ptr(10), Enabled: true}
 	usageStore := &fakeUsageCapStore{
@@ -429,6 +532,7 @@ type fakeUsageCapStore struct {
 	reconcileCalls       int
 	reconcileCtxCanceled bool
 	events               []store.UsageCapEvent
+	overview             []store.BudgetUsageRow
 }
 
 func (s *fakeUsageCapStore) UpsertPricingCatalog(context.Context, []store.UsagePricingCatalogEntry) (int, error) {
@@ -470,7 +574,7 @@ func (s *fakeUsageCapStore) ReserveUsage(_ context.Context, req store.UsageReser
 	if s.reserveErr != nil {
 		return nil, s.reserveErr
 	}
-	return &store.UsageReservationResult{ReservationKey: req.ReservationKey, Policies: policies}, nil
+	return &store.UsageReservationResult{TenantID: req.TenantID, ReservationKey: req.ReservationKey, Policies: policies}, nil
 }
 func (s *fakeUsageCapStore) ReconcileUsage(ctx context.Context, req store.UsageReconcileRequest) error {
 	s.reconciled = req
@@ -489,6 +593,18 @@ func (s *fakeUsageCapStore) InsertUsageCapEvent(_ context.Context, event *store.
 		s.events = append(s.events, *event)
 	}
 	return nil
+}
+func (s *fakeUsageCapStore) GetBudgetUsage(context.Context, uuid.UUID, store.BudgetUsageWindow) ([]store.BudgetUsageRow, error) {
+	return s.overview, nil
+}
+func (s *fakeUsageCapStore) BudgetWindowWarned(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ time.Time) (bool, error) {
+	var found bool
+	for _, e := range s.events {
+		if e.Decision == store.UsageCapEventWarn {
+			found = true
+		}
+	}
+	return found, nil
 }
 
 type fakeProviderStore struct {

@@ -151,6 +151,9 @@ func (s *tracePricingUsageStore) ListUsageCapEvents(context.Context, uuid.UUID, 
 func (s *tracePricingUsageStore) InsertUsageCapEvent(context.Context, *store.UsageCapEvent) error {
 	return nil
 }
+func (s *tracePricingUsageStore) GetBudgetUsage(context.Context, uuid.UUID, store.BudgetUsageWindow) ([]store.BudgetUsageRow, error) {
+	return nil, nil
+}
 
 type tracePricingProviderStore struct {
 	provider *store.LLMProviderData

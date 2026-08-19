@@ -19,6 +19,7 @@ const (
 	UsageCapEventBlock     = "block"
 	UsageCapEventReconcile = "reconcile"
 	UsageCapEventSkip      = "skip"
+	UsageCapEventWarn      = "warn"
 
 	UsageCapSourceManual      = "manual"
 	UsageCapSourceAgentBudget = "agent_budget_monthly_cents"
@@ -104,26 +105,28 @@ type UsageCapPolicy struct {
 	ProviderID    *uuid.UUID `json:"provider_id,omitempty" db:"provider_id"`
 	ProviderType  string     `json:"provider_type,omitempty" db:"provider_type"`
 	ModelID       string     `json:"model_id,omitempty" db:"model_id"`
-	Window        string     `json:"window" db:"window"`
-	MaxTokens     *int64     `json:"max_tokens,omitempty" db:"max_tokens"`
-	MaxCostMicros *int64     `json:"max_cost_micros,omitempty" db:"max_cost_micros"`
-	Source        string     `json:"source,omitempty" db:"source"`
-	Enabled       bool       `json:"enabled" db:"enabled"`
-	Priority      int        `json:"priority" db:"priority"`
-	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at" db:"updated_at"`
+	Window         string     `json:"window" db:"window"`
+	MaxTokens      *int64     `json:"max_tokens,omitempty" db:"max_tokens"`
+	MaxCostMicros  *int64     `json:"max_cost_micros,omitempty" db:"max_cost_micros"`
+	WarnAtPercent  *float64   `json:"warn_at_percent,omitempty" db:"warn_at_percent"`
+	Source         string     `json:"source,omitempty" db:"source"`
+	Enabled        bool       `json:"enabled" db:"enabled"`
+	Priority       int        `json:"priority" db:"priority"`
+	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 type UsageCapPolicyPatch struct {
-	AgentID       **uuid.UUID
-	ProviderID    **uuid.UUID
-	ProviderType  *string
-	ModelID       *string
-	Window        *string
-	MaxTokens     **int64
-	MaxCostMicros **int64
-	Enabled       *bool
-	Priority      *int
+	AgentID        **uuid.UUID
+	ProviderID     **uuid.UUID
+	ProviderType   *string
+	ModelID        *string
+	Window         *string
+	MaxTokens      **int64
+	MaxCostMicros  **int64
+	WarnAtPercent  **float64
+	Enabled        *bool
+	Priority       *int
 }
 
 type UsageCapScope struct {
@@ -143,6 +146,7 @@ type UsageReserveRequest struct {
 }
 
 type UsageReservationResult struct {
+	TenantID       uuid.UUID        `json:"tenant_id"`
 	ReservationKey string           `json:"reservation_key"`
 	Policies       []UsageCapPolicy `json:"policies"`
 	Skipped        bool             `json:"skipped,omitempty"`
@@ -182,6 +186,36 @@ type UsageCapEvent struct {
 	CreatedAt           time.Time       `json:"created_at" db:"created_at"`
 }
 
+// BudgetUsageWindow selects which policy window the overview aggregates over.
+// Empty/zero value falls back to each policy's own configured window.
+type BudgetUsageWindow struct {
+	// Window is one of store.UsageCapWindow* (hour/day/week/month). Empty means
+	// per-policy window (the policy's own window_key is authoritative).
+	Window string
+	// Start/End override the window bounds. Zero values mean "derive from
+	// Window via usageWindow"; if both Window and bounds are empty, the policy's
+	// own window_key is used.
+	Start time.Time
+	End   time.Time
+}
+
+// BudgetUsageRow is one policy's spend-to-date picture from usage_cap_counters.
+type BudgetUsageRow struct {
+	Policy          UsageCapPolicy `json:"policy"`
+	WindowStart     time.Time      `json:"window_start"`
+	WindowEnd       time.Time      `json:"window_end"`
+	UsedCostMicros  int64          `json:"used_cost_micros"`
+	ReservedCostMicros int64       `json:"reserved_cost_micros"`
+	UsedTokens      int64          `json:"used_tokens"`
+	ReservedTokens  int64          `json:"reserved_tokens"`
+	// PercentUsed is 0..1 when a limit (tokens or cost) exists, else 0.
+	PercentUsed float64 `json:"percent_used"`
+	// WarnAtPercent is the policy's configured threshold (nil = disabled).
+	WarnAtPercent *float64 `json:"warn_at_percent,omitempty"`
+	// Warned reports whether the current window already emitted a warn event.
+	Warned bool `json:"warned"`
+}
+
 type UsageCapStore interface {
 	UpsertPricingCatalog(ctx context.Context, entries []UsagePricingCatalogEntry) (int, error)
 	ListPricingCatalog(ctx context.Context, q UsagePricingQuery) ([]UsagePricingCatalogEntry, error)
@@ -199,4 +233,13 @@ type UsageCapStore interface {
 	ListUsageCapUtilization(ctx context.Context, tenantID uuid.UUID) ([]UsageCapUtilization, error)
 	ListUsageCapEvents(ctx context.Context, tenantID uuid.UUID, limit int) ([]UsageCapEvent, error)
 	InsertUsageCapEvent(ctx context.Context, event *UsageCapEvent) error
+	// GetBudgetUsage returns per-policy used/limit/percent for the given window.
+	GetBudgetUsage(ctx context.Context, tenantID uuid.UUID, window BudgetUsageWindow) ([]BudgetUsageRow, error)
+}
+
+// UsageCapBudgetWarnStore is implemented by stores that can answer whether a
+// budget-threshold warn event already fired for a policy + window. It is
+// optional: Reconcile warns best-effort and skips when the store lacks it.
+type UsageCapBudgetWarnStore interface {
+	BudgetWindowWarned(ctx context.Context, tenantID, policyID uuid.UUID, windowStart time.Time) (bool, error)
 }

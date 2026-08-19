@@ -26,13 +26,14 @@ func (s *PGUsageCapStore) CreateUsageCapPolicy(ctx context.Context, p *store.Usa
 	const q = `
 	INSERT INTO usage_cap_policies (
 		id, tenant_id, agent_id, provider_id, provider_type, model_id, window_key,
-		max_tokens, max_cost_micros, source, enabled, priority
-	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+		max_tokens, max_cost_micros, warn_at_percent, source, enabled, priority
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 	RETURNING created_at, updated_at`
 	return s.db.QueryRowContext(ctx, q,
 		p.ID, p.TenantID, uuidPtrVal(p.AgentID), uuidPtrVal(p.ProviderID),
 		nullEmpty(p.ProviderType), nullEmpty(p.ModelID), p.Window,
-		intPtrVal(p.MaxTokens), intPtrVal(p.MaxCostMicros), p.Source, p.Enabled, p.Priority,
+		intPtrVal(p.MaxTokens), intPtrVal(p.MaxCostMicros), warnPtrVal(p.WarnAtPercent),
+		p.Source, p.Enabled, p.Priority,
 	).Scan(&p.CreatedAt, &p.UpdatedAt)
 }
 
@@ -117,18 +118,21 @@ func (s *PGUsageCapStore) UpdateUsageCapPolicy(ctx context.Context, tenantID, id
 	if patch.Priority != nil {
 		p.Priority = *patch.Priority
 	}
+	if patch.WarnAtPercent != nil {
+		p.WarnAtPercent = *patch.WarnAtPercent
+	}
 	if err := s.validateUsageCapRefs(ctx, tenantID, p.AgentID, p.ProviderID); err != nil {
 		return nil, err
 	}
 	const q = `
 UPDATE usage_cap_policies SET agent_id=$3, provider_id=$4, provider_type=$5,
 	model_id=$6, window_key=$7, max_tokens=$8, max_cost_micros=$9,
-	enabled=$10, priority=$11, updated_at=now()
+	warn_at_percent=$10, enabled=$11, priority=$12, updated_at=now()
 WHERE tenant_id=$1 AND id=$2
 RETURNING updated_at`
 	if err := s.db.QueryRowContext(ctx, q, tenantID, id, uuidPtrVal(p.AgentID), uuidPtrVal(p.ProviderID),
 		nullEmpty(p.ProviderType), nullEmpty(p.ModelID), p.Window, intPtrVal(p.MaxTokens),
-		intPtrVal(p.MaxCostMicros), p.Enabled, p.Priority).Scan(&p.UpdatedAt); err != nil {
+		intPtrVal(p.MaxCostMicros), warnPtrVal(p.WarnAtPercent), p.Enabled, p.Priority).Scan(&p.UpdatedAt); err != nil {
 		return nil, err
 	}
 	return p, nil
@@ -153,7 +157,7 @@ func (s *PGUsageCapStore) DeleteUsageCapPolicy(ctx context.Context, tenantID, id
 
 func (s *PGUsageCapStore) ReserveUsage(ctx context.Context, req store.UsageReserveRequest, policies []store.UsageCapPolicy) (*store.UsageReservationResult, error) {
 	if len(policies) == 0 {
-		return &store.UsageReservationResult{ReservationKey: req.ReservationKey, Skipped: true, Reason: "no_policy"}, nil
+		return &store.UsageReservationResult{TenantID: req.TenantID, ReservationKey: req.ReservationKey, Skipped: true, Reason: "no_policy"}, nil
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -202,7 +206,7 @@ WHERE policy_id=$1 AND window_start=$2
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return &store.UsageReservationResult{ReservationKey: req.ReservationKey, Policies: policies}, nil
+	return &store.UsageReservationResult{TenantID: req.TenantID, ReservationKey: req.ReservationKey, Policies: policies}, nil
 }
 
 func (s *PGUsageCapStore) ReconcileUsage(ctx context.Context, req store.UsageReconcileRequest) error {
@@ -244,6 +248,10 @@ RETURNING policy_id, window_start, reserved_tokens, reserved_cost_micros`,
 		return err
 	}
 	for _, r := range reservations {
+		// Reconcile settles a reservation: the consumed amount (actual) leaves
+		// reserved and lands in used; the unconsumed portion stays reserved as
+		// pending usage. Subtracting the full reserved amount would drop the
+		// reservation to zero regardless of what was actually consumed.
 		if _, err := tx.ExecContext(ctx, `
 UPDATE usage_cap_counters SET
 	reserved_tokens = GREATEST(reserved_tokens - $3, 0),
@@ -251,7 +259,7 @@ UPDATE usage_cap_counters SET
 	used_tokens = used_tokens + $5,
 	used_cost_micros = used_cost_micros + $6,
 	updated_at = now()
-WHERE policy_id=$1 AND window_start=$2`, r.policyID, r.start, r.tokens, r.cost, req.ActualTokens, req.ActualCostMicros); err != nil {
+WHERE policy_id=$1 AND window_start=$2`, r.policyID, r.start, req.ActualTokens, req.ActualCostMicros, req.ActualTokens, req.ActualCostMicros); err != nil {
 			return err
 		}
 	}
@@ -364,14 +372,15 @@ SELECT EXISTS (
 }
 
 const policySelectSQL = `SELECT id, tenant_id, agent_id, provider_id, COALESCE(provider_type,''), COALESCE(model_id,''),
-	window_key, max_tokens, max_cost_micros, COALESCE(source,'manual'), enabled, priority, created_at, updated_at FROM usage_cap_policies`
+	window_key, max_tokens, max_cost_micros, warn_at_percent, COALESCE(source,'manual'), enabled, priority, created_at, updated_at FROM usage_cap_policies`
 
 func scanPolicy(row scanner) (store.UsageCapPolicy, error) {
 	var p store.UsageCapPolicy
 	var agentID, providerID uuid.NullUUID
 	var maxTokens, maxCost sql.NullInt64
+	var warnAt sql.NullFloat64
 	err := row.Scan(&p.ID, &p.TenantID, &agentID, &providerID, &p.ProviderType, &p.ModelID,
-		&p.Window, &maxTokens, &maxCost, &p.Source, &p.Enabled, &p.Priority, &p.CreatedAt, &p.UpdatedAt)
+		&p.Window, &maxTokens, &maxCost, &warnAt, &p.Source, &p.Enabled, &p.Priority, &p.CreatedAt, &p.UpdatedAt)
 	if agentID.Valid {
 		p.AgentID = &agentID.UUID
 	}
@@ -384,7 +393,113 @@ func scanPolicy(row scanner) (store.UsageCapPolicy, error) {
 	if maxCost.Valid {
 		p.MaxCostMicros = &maxCost.Int64
 	}
+	if warnAt.Valid {
+		p.WarnAtPercent = &warnAt.Float64
+	}
 	return p, err
+}
+
+// GetBudgetUsage returns per-policy spend-to-date rows for the tenant's
+// enabled policies. Window bounds are derived from BudgetUsageWindow when set;
+// otherwise each policy's own window_key is used (usageWindow already handles
+// default = hour). Percent is 0..1 against the policy's active limit.
+func (s *PGUsageCapStore) GetBudgetUsage(ctx context.Context, tenantID uuid.UUID, window store.BudgetUsageWindow) ([]store.BudgetUsageRow, error) {
+	policies, err := s.ListUsageCapPolicies(ctx, store.UsageCapScope{TenantID: tenantID}, false)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	out := make([]store.BudgetUsageRow, 0, len(policies))
+	for _, p := range policies {
+		var start, end time.Time
+		switch {
+		case window.Window != "":
+			start, end = usageWindow(now, window.Window)
+		case !window.Start.IsZero() && !window.End.IsZero():
+			start, end = window.Start.UTC(), window.End.UTC()
+		default:
+			start, end = usageWindow(now, p.Window)
+		}
+		row := store.BudgetUsageRow{Policy: p, WindowStart: start, WindowEnd: end, WarnAtPercent: p.WarnAtPercent}
+		err := s.db.QueryRowContext(ctx, `
+SELECT used_tokens, reserved_tokens, used_cost_micros, reserved_cost_micros
+FROM usage_cap_counters WHERE policy_id=$1 AND window_start=$2`, p.ID, start).
+			Scan(&row.UsedTokens, &row.ReservedTokens, &row.UsedCostMicros, &row.ReservedCostMicros)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+		row.PercentUsed = budgetRowPercent(row)
+		row.Warned = s.budgetWindowWarned(ctx, tenantID, p.ID, row)
+		out = append(out, row)
+	}
+	return out, nil
+}
+
+func (s *PGUsageCapStore) budgetWindowWarned(ctx context.Context, tenantID uuid.UUID, policyID uuid.UUID, row store.BudgetUsageRow) bool {
+	if !row.WindowStart.IsZero() {
+		var exists bool
+		if err := s.db.QueryRowContext(ctx, `
+SELECT EXISTS (
+	SELECT 1 FROM usage_cap_events
+	WHERE tenant_id=$1 AND policy_id=$2 AND decision=$3 AND metadata->>'window_start' = $4
+)`, tenantID, policyID, store.UsageCapEventWarn, row.WindowStart.UTC().Format(time.RFC3339)).
+			Scan(&exists); err != nil {
+			return false
+		}
+		return exists
+	}
+	return false
+}
+
+// BudgetWindowWarned reports whether a warn event already fired for the given
+// policy + window (stored in event metadata under window_start). Reconcile uses
+// it to fire the budget-threshold alert exactly once per window.
+func (s *PGUsageCapStore) BudgetWindowWarned(ctx context.Context, tenantID uuid.UUID, policyID uuid.UUID, windowStart time.Time) (bool, error) {
+	var exists bool
+	err := s.db.QueryRowContext(ctx, `
+SELECT EXISTS (
+	SELECT 1 FROM usage_cap_events
+	WHERE tenant_id=$1 AND policy_id=$2 AND decision=$3 AND metadata->>'window_start' = $4
+)`, tenantID, policyID, store.UsageCapEventWarn, windowStart.UTC().Format(time.RFC3339)).
+		Scan(&exists)
+	return exists, err
+}
+
+// budgetRowPercent computes 0..1 utilization against the policy's active limit.
+// Cost limit wins when both are set (money is the classic budget guardrail).
+func budgetRowPercent(row store.BudgetUsageRow) float64 {
+	limitCost := row.Policy.MaxCostMicros
+	if limitCost != nil {
+		if *limitCost <= 0 {
+			return 0
+		}
+		used := float64(row.UsedCostMicros + row.ReservedCostMicros)
+		percent := used / float64(*limitCost)
+		if percent > 1 {
+			return 1
+		}
+		return percent
+	}
+	limitTokens := row.Policy.MaxTokens
+	if limitTokens != nil {
+		if *limitTokens <= 0 {
+			return 0
+		}
+		used := float64(row.UsedTokens + row.ReservedTokens)
+		percent := used / float64(*limitTokens)
+		if percent > 1 {
+			return 1
+		}
+		return percent
+	}
+	return 0
+}
+
+func warnPtrVal(v *float64) any {
+	if v == nil {
+		return nil
+	}
+	return *v
 }
 
 func usageWindow(now time.Time, window string) (time.Time, time.Time) {

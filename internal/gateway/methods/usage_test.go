@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -23,7 +24,30 @@ type usageSessionStore struct {
 
 func (s *usageSessionStore) ListPagedRich(_ context.Context, opts store.SessionListOpts) store.SessionListRichResult {
 	s.opts = append(s.opts, opts)
-	return store.SessionListRichResult{Sessions: s.sessions, Total: len(s.sessions)}
+	// Mimic the SQL-backed implementation the handler contracts against:
+	// token>0 filter, most-recent-first ordering, then LIMIT/OFFSET.
+	list := make([]store.SessionInfoRich, 0, len(s.sessions))
+	for _, sess := range s.sessions {
+		if opts.TokenFilter && sess.InputTokens+sess.OutputTokens <= 0 {
+			continue
+		}
+		list = append(list, sess)
+	}
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].Updated.After(list[j].Updated)
+	})
+	total := len(list)
+	start := min(opts.Offset, total)
+	end := start + opts.Limit
+	if opts.Limit > 0 && end > total {
+		end = total
+	}
+	if opts.Limit > 0 {
+		list = list[start:end]
+	} else {
+		list = list[start:]
+	}
+	return store.SessionListRichResult{Sessions: list, Total: total}
 }
 
 type usageTracingStore struct {

@@ -35,6 +35,7 @@ func (h *UsageCapsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /v1/usage-caps/policies/{id}", h.writeAuth(h.handleUpdatePolicy))
 	mux.HandleFunc("DELETE /v1/usage-caps/policies/{id}", h.writeAuth(h.handleDeletePolicy))
 	mux.HandleFunc("GET /v1/usage-caps/utilization", h.auth(h.handleUtilization))
+	mux.HandleFunc("GET /v1/usage-caps/overview", h.auth(h.handleBudgetOverview))
 	mux.HandleFunc("GET /v1/usage-caps/events", h.auth(h.handleEvents))
 	mux.HandleFunc("POST /v1/model-pricing/sync-openrouter", h.masterAuth(h.handleSyncOpenRouter))
 	mux.HandleFunc("GET /v1/model-pricing", h.auth(h.handleListPricing))
@@ -153,6 +154,27 @@ func (h *UsageCapsHandler) handleUtilization(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, map[string]any{"rows": rows})
 }
 
+// handleBudgetOverview returns per-policy spend-to-date rows aggregated over
+// the requested window (hour/day/week/month) or each policy's own configured
+// window when no query param is given.
+func (h *UsageCapsHandler) handleBudgetOverview(w http.ResponseWriter, r *http.Request) {
+	window := store.BudgetUsageWindow{Window: r.URL.Query().Get("window")}
+	if window.Window != "" {
+		switch window.Window {
+		case store.UsageCapWindowHour, store.UsageCapWindowDay, store.UsageCapWindowWeek, store.UsageCapWindowMonth:
+		default:
+			writeUsageCapError(w, r, http.StatusBadRequest, i18n.MsgInvalidRequest, "window must be hour|day|week|month")
+			return
+		}
+	}
+	rows, err := h.store.GetBudgetUsage(r.Context(), tenantIDOrMaster(r), window)
+	if err != nil {
+		writeUsageCapError(w, r, http.StatusInternalServerError, i18n.MsgUsageCapsOverviewFailed)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rows": rows})
+}
+
 func (h *UsageCapsHandler) handleEvents(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	events, err := h.store.ListUsageCapEvents(r.Context(), tenantIDOrMaster(r), limit)
@@ -256,6 +278,7 @@ type policyBody struct {
 	MaxTokens     *int64   `json:"max_tokens"`
 	MaxCostMicros *int64   `json:"max_cost_micros"`
 	MaxCostUSD    *float64 `json:"max_cost_usd"`
+	WarnAtPercent *float64 `json:"warn_at_percent"`
 	Enabled       *bool    `json:"enabled"`
 	Priority      *int     `json:"priority"`
 }
@@ -296,6 +319,7 @@ func (b policyBody) toPolicy(tenantID uuid.UUID) (store.UsageCapPolicy, error) {
 	}
 	p.MaxTokens = b.MaxTokens
 	p.MaxCostMicros = maxCostMicros(b.MaxCostMicros, b.MaxCostUSD)
+	p.WarnAtPercent = b.WarnAtPercent
 	return p, nil
 }
 
@@ -327,6 +351,9 @@ func (b policyBody) toPatch() (store.UsageCapPolicyPatch, error) {
 		v := maxCostMicros(b.MaxCostMicros, b.MaxCostUSD)
 		patch.MaxCostMicros = &v
 	}
+	if b.WarnAtPercent != nil {
+		patch.WarnAtPercent = &b.WarnAtPercent
+	}
 	patch.Enabled = b.Enabled
 	patch.Priority = b.Priority
 	return patch, nil
@@ -350,6 +377,10 @@ func policyPatchFromBody(bodyBytes []byte) (store.UsageCapPolicyPatch, error) {
 		if isJSONNull(raw["max_cost_micros"]) || isJSONNull(raw["max_cost_usd"]) {
 			var v *int64
 			patch.MaxCostMicros = &v
+		}
+		if isJSONNull(raw["warn_at_percent"]) {
+			var v *float64
+			patch.WarnAtPercent = &v
 		}
 	}
 	return patch, nil

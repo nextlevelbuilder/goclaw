@@ -452,6 +452,14 @@ type GatewayConfig struct {
 	PublicURL               string              `json:"public_url,omitempty"`                 // public base URL for OAuth callbacks (e.g. "https://goclaw.example.com")
 }
 
+// AuditConfig controls the audit log (activity_logs) retention behavior.
+type AuditConfig struct {
+	// RetentionDays is how many days of audit rows to keep. A daily background
+	// sweep deletes activity_logs rows older than this. 0 (default) keeps
+	// everything forever.
+	RetentionDays int `json:"retention_days,omitempty"`
+}
+
 // ToolsConfig controls tool availability, policy, and web search.
 type ToolsConfig struct {
 	Profile                 string                        `json:"profile,omitempty"`                 // global profile: "minimal", "coding", "messaging", "full"

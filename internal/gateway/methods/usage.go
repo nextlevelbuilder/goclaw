@@ -62,18 +62,17 @@ func (m *UsageMethods) handleGet(ctx context.Context, client *gateway.Client, re
 		params.Limit = 20
 	}
 
-	// Use ListPagedRich: single query returns model, provider, tokens — no N+1 GetOrCreate loop.
-	// Fetch large batch to filter non-zero tokens, then paginate in-memory.
+	// SQL-backed pagination: ListPagedRich pushes the token>0 filter and
+	// LIMIT/OFFSET into the database. Response shape is unchanged.
 	result := m.sessions.ListPagedRich(ctx, store.SessionListOpts{
-		AgentID: params.AgentID,
-		Limit:   10000,
+		AgentID:     params.AgentID,
+		Limit:       params.Limit,
+		Offset:      params.Offset,
+		TokenFilter: true,
 	})
 
 	records := make([]UsageRecord, 0, len(result.Sessions))
 	for _, s := range result.Sessions {
-		if s.InputTokens == 0 && s.OutputTokens == 0 {
-			continue
-		}
 		agentID := extractAgentIDFromKey(s.Key)
 		records = append(records, UsageRecord{
 			AgentID:      agentID,
@@ -92,12 +91,8 @@ func (m *UsageMethods) handleGet(ctx context.Context, client *gateway.Client, re
 		return records[i].Timestamp > records[j].Timestamp
 	})
 
-	total := len(records)
-
-	// Apply offset + limit
+	total := result.Total
 	offset := min(params.Offset, total)
-	end := min(offset+params.Limit, total)
-	records = records[offset:end]
 	if m.sessionCosts != nil && len(records) > 0 {
 		sessionKeys := make([]string, 0, len(records))
 		for _, record := range records {
@@ -119,8 +114,9 @@ func (m *UsageMethods) handleGet(ctx context.Context, client *gateway.Client, re
 }
 
 func (m *UsageMethods) handleSummary(ctx context.Context, client *gateway.Client, req *protocol.RequestFrame) {
-	// Use ListPagedRich: single query returns all token data — no N+1 GetOrCreate loop.
-	result := m.sessions.ListPagedRich(ctx, store.SessionListOpts{Limit: 10000})
+	// SQL-backed filter: only sessions that have recorded token usage count
+	// toward the summary (avoids scanning zero-token sessions in memory).
+	result := m.sessions.ListPagedRich(ctx, store.SessionListOpts{Limit: 10000, TokenFilter: true})
 
 	type agentSummary struct {
 		InputTokens  int64 `json:"inputTokens"`
@@ -133,10 +129,6 @@ func (m *UsageMethods) handleSummary(ctx context.Context, client *gateway.Client
 	var totalRecords int
 
 	for _, s := range result.Sessions {
-		if s.InputTokens == 0 && s.OutputTokens == 0 {
-			continue
-		}
-
 		agentID := extractAgentIDFromKey(s.Key)
 		if byAgent[agentID] == nil {
 			byAgent[agentID] = &agentSummary{}
