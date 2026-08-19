@@ -5,7 +5,7 @@ Nguồn vision: `plans/260815-2340-goclaw-repository-reliability/GoClaw_AgentKit
 
 ## Status
 
-- **Phase 6 (Advanced):** `[ ]` — IN PROGRESS (2026-08-19).
+- **Phase 6 (Advanced):** `[x]` SHIPPED (2026-08-19) — WS-A Hibernation (PR #19), WS-B Time Travel (PR #20), WS-C Mission Mode (PR #21), tất cả merged vào dev, CI green, dual-DB lockstep verified.
 - Phase 1 `/gc:` Foundation `[x]` SHIPPED (PR #8). Phase 2 Durable Runtime `[x]` (PR #10). Phase 3 Native Layer `[x]` (PR #11-14). Phase 4 Reliability = trùng reliability plan `[x]` (không làm lại). Phase 5 Multi-Agent `[x]` SHIPPED (PR #15-18).
 
 ## Quyết định đã chốt (controller scout, 2026-08-19)
@@ -29,20 +29,20 @@ Nguồn vision: `plans/260815-2340-goclaw-repository-reliability/GoClaw_AgentKit
 
 | Phase | Nội dung | Trạng thái |
 |-------|----------|------------|
-| 6 | Advanced (hibernation + time travel + mission mode) | `[ ]` |
+| 6 | Advanced (hibernation + time travel + mission mode) | `[x]` SHIPPED |
 
 ## Acceptance criteria (Phase 6)
 
-- [ ] **Hibernation** (WS-A): `runs.pause` ghi checkpoint + status `paused` on-demand (không chỉ crash-recovery); `runs.wake` reuses `runs.resume` path. Protocol methods + permissions (write) + i18n. Test pass.
-- [ ] **Hibernation idle-timer** (WS-A): idle hibernate optional (config-gated) — run tự pause sau N phút không heartbeat. Test pass.
-- [ ] **Time travel** (WS-B): bảng `run_checkpoint_snapshots` (append-only versioned) PG+SQLite, migration `000101` + `RequiredSchemaVersion` 101 + SQLite patch 63→64 + `SchemaVersion` 64. Test roundtrip + tenant scope.
-- [ ] **Time travel replay** (WS-B): `runs.checkpoints.list` liệt kê snapshot; `runs.replay` rewind resume từ snapshot N (rebuild via `ResumeRun` path). Test pass.
-- [ ] **Mission data model** (WS-C): bảng `missions` (goals/milestones/acceptance_criteria/status/checkpoint refs/tenant) + `MissionStore` PG+SQLite; `team_tasks`/`artifacts` linkable. Test pass.
-- [ ] **/gc:mission** (WS-C): command kind `mission` + registry + skill; create/pause/resume mission qua loop. Test pass.
-- [ ] **Mission scheduler** (WS-C): cron payload kind `mission` hoặc mission-specific job; `ComputeNextRun` reuse. Test pass.
-- [ ] Dual-DB lockstep: PG migration + bump; SQLite schema.sql + patch + bump (cho cả snapshots + missions).
-- [ ] Mỗi workstream: test → tự review → PR riêng → CI green.
-- [ ] Regression: `go build ./...`, `go vet ./...`, `go build -tags sqliteonly ./...`, unit + integration xanh.
+- [x] **Hibernation** (WS-A): `runs.pause` ghi checkpoint + status `paused` on-demand (không chỉ crash-recovery); `runs.wake` reuses `runs.resume` path. Protocol methods + permissions (write) + i18n. Test pass.
+- [x] **Hibernation idle-timer** (WS-A): idle hibernate optional (config-gated) — run tự pause sau N phút không heartbeat. Test pass.
+- [x] **Time travel** (WS-B): bảng `run_checkpoint_snapshots` (append-only versioned) PG+SQLite, migration `000101` + `RequiredSchemaVersion` 101 + SQLite patch 63→64 + `SchemaVersion` 64. Test roundtrip + tenant scope.
+- [x] **Time travel replay** (WS-B): `runs.checkpoints.list` liệt kê snapshot; `runs.replay` rewind resume từ snapshot N (rebuild via `ResumeRun` path). Test pass.
+- [x] **Mission data model** (WS-C): bảng `missions` (goals/milestones/acceptance_criteria/status/checkpoint refs/tenant) + `MissionStore` PG+SQLite; `team_tasks`/`artifacts` linkable. Test pass.
+- [x] **/gc:mission** (WS-C): command kind `mission` + registry + skill; create/pause/resume mission qua loop. Test pass.
+- [x] **Mission scheduler** (WS-C): cron payload kind `mission` hoặc mission-specific job; `ComputeNextRun` reuse. Test pass.
+- [x] Dual-DB lockstep: PG migration + bump; SQLite schema.sql + patch + bump (cho cả snapshots + missions).
+- [x] Mỗi workstream: test → tự review → PR riêng → CI green.
+- [x] Regression: `go build ./...`, `go vet ./...`, `go build -tags sqliteonly ./...`, unit + integration xanh.
 
 ## Workstreams (disjoint, backend-only)
 
