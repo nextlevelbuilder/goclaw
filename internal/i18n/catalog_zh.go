@@ -60,7 +60,8 @@ func init() {
 		MsgConfigHashMismatch: "配置已更改（hash 不匹配）",
 
 		// Exec approval
-		MsgExecApprovalDisabled: "执行审批未启用",
+		MsgExecApprovalDisabled:  "执行审批未启用",
+		MsgApprovalHistoryFailed: "加载审批历史失败：%s",
 
 		// Pairing
 		MsgSenderChannelRequired: "senderId 和 channel 是必填项",
@@ -118,6 +119,7 @@ func init() {
 		MsgUsageCapPolicyManaged:                "无法修改系统托管的 usage cap 策略",
 		MsgUsageCapsDeletePolicyFailed:          "无法删除 usage cap 策略",
 		MsgUsageCapsUtilizationFailed:           "无法加载 usage cap 使用量",
+		MsgUsageCapsOverviewFailed:              "无法加载预算概览",
 		MsgUsageCapsEventsFailed:                "无法加载 usage cap 事件",
 		MsgUsagePricingSyncOpenRouterFailed:     "无法同步 OpenRouter 价格：%s",
 		MsgUsagePricingStoreCatalogFailed:       "无法保存价格目录",

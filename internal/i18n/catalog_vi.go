@@ -60,7 +60,8 @@ func init() {
 		MsgConfigHashMismatch: "cấu hình đã thay đổi (hash không khớp)",
 
 		// Exec approval
-		MsgExecApprovalDisabled: "phê duyệt thực thi chưa được bật",
+		MsgExecApprovalDisabled:  "phê duyệt thực thi chưa được bật",
+		MsgApprovalHistoryFailed: "không tải được lịch sử phê duyệt: %s",
 
 		// Pairing
 		MsgSenderChannelRequired: "senderId và channel là bắt buộc",
@@ -118,6 +119,7 @@ func init() {
 		MsgUsageCapPolicyManaged:                "không thể chỉnh sửa chính sách usage cap do hệ thống quản lý",
 		MsgUsageCapsDeletePolicyFailed:          "không thể xóa chính sách usage cap",
 		MsgUsageCapsUtilizationFailed:           "không thể tải mức sử dụng usage cap",
+		MsgUsageCapsOverviewFailed:              "không thể tải tổng quan ngân sách",
 		MsgUsageCapsEventsFailed:                "không thể tải sự kiện usage cap",
 		MsgUsagePricingSyncOpenRouterFailed:     "không thể đồng bộ giá OpenRouter: %s",
 		MsgUsagePricingStoreCatalogFailed:       "không thể lưu catalog giá",

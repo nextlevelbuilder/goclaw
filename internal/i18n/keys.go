@@ -62,6 +62,7 @@ const (
 
 	// --- Exec approval ---
 	MsgExecApprovalDisabled = "error.exec_approval_disabled" // "exec approval is not enabled"
+	MsgApprovalHistoryFailed = "error.approval_history_failed" // "failed to load approval history: %s"
 
 	// --- Pairing ---
 	MsgSenderChannelRequired = "error.sender_channel_required" // "senderId and channel are required"
@@ -119,6 +120,7 @@ const (
 	MsgUsageCapPolicyManaged                = "usage_caps.policy_managed"
 	MsgUsageCapsDeletePolicyFailed          = "usage_caps.delete_policy_failed"
 	MsgUsageCapsUtilizationFailed           = "usage_caps.utilization_failed"
+	MsgUsageCapsOverviewFailed              = "usage_caps.overview_failed"
 	MsgUsageCapsEventsFailed                = "usage_caps.events_failed"
 	MsgUsagePricingSyncOpenRouterFailed     = "usage_pricing.sync_openrouter_failed"
 	MsgUsagePricingStoreCatalogFailed       = "usage_pricing.store_catalog_failed"

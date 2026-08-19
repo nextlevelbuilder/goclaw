@@ -39,6 +39,9 @@ func buildSessionFilter(opts store.SessionListOpts, tableAlias string) (string, 
 		conditions = append(conditions, prefix+"tenant_id = ?")
 		args = append(args, opts.TenantID)
 	}
+	if opts.TokenFilter {
+		conditions = append(conditions, "("+prefix+"input_tokens > 0 OR "+prefix+"output_tokens > 0)")
+	}
 
 	if len(conditions) == 0 {
 		return "", nil

@@ -61,6 +61,9 @@ func buildSessionFilter(ctx context.Context, opts store.SessionListOpts, tableAl
 		args = append(args, tenantID)
 		idx++
 	}
+	if opts.TokenFilter {
+		conditions = append(conditions, fmt.Sprintf("(%sinput_tokens > 0 OR %soutput_tokens > 0)", prefix, prefix))
+	}
 	_ = idx // consumed
 
 	if len(conditions) == 0 {

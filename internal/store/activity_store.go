@@ -53,4 +53,7 @@ type ActivityStore interface {
 	List(ctx context.Context, opts ActivityListOpts) ([]ActivityLog, error)
 	Count(ctx context.Context, opts ActivityListOpts) (int, error)
 	Aggregate(ctx context.Context, opts ActivityAggregateOpts) ([]ActivityAggregateBucket, int, error)
+	// Prune deletes all activity_logs rows created before the given time,
+	// in batches to avoid long locks. Returns the total number of rows deleted.
+	Prune(ctx context.Context, before time.Time) (int64, error)
 }

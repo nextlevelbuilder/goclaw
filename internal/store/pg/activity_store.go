@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -73,6 +74,32 @@ func (s *PGActivityStore) Count(ctx context.Context, opts store.ActivityListOpts
 	var count int
 	err := s.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	return count, err
+}
+
+// Prune deletes activity_logs rows created before the given time in batches
+// to avoid long locks. Mirrors the workstation_activity Prune pattern.
+func (s *PGActivityStore) Prune(ctx context.Context, before time.Time) (int64, error) {
+	var total int64
+	for {
+		res, err := s.db.ExecContext(ctx,
+			`DELETE FROM activity_logs
+			 WHERE id IN (
+			   SELECT id FROM activity_logs WHERE created_at < $1 LIMIT 1000
+			 )`,
+			before,
+		)
+		if err != nil {
+			return total, err
+		}
+		n, _ := res.RowsAffected()
+		total += n
+		if n < 1000 {
+			break
+		}
+		// Brief sleep between batches to reduce lock pressure.
+		time.Sleep(100 * time.Millisecond)
+	}
+	return total, nil
 }
 
 func (s *PGActivityStore) Aggregate(ctx context.Context, opts store.ActivityAggregateOpts) ([]store.ActivityAggregateBucket, int, error) {

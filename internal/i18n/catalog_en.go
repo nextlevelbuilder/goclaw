@@ -60,7 +60,8 @@ func init() {
 		MsgConfigHashMismatch: "config has changed (hash mismatch)",
 
 		// Exec approval
-		MsgExecApprovalDisabled: "exec approval is not enabled",
+		MsgExecApprovalDisabled:  "exec approval is not enabled",
+		MsgApprovalHistoryFailed: "failed to load approval history: %s",
 
 		// Pairing
 		MsgSenderChannelRequired: "senderId and channel are required",
@@ -118,6 +119,7 @@ func init() {
 		MsgUsageCapPolicyManaged:                "managed usage cap policies cannot be modified",
 		MsgUsageCapsDeletePolicyFailed:          "failed to delete usage cap policy",
 		MsgUsageCapsUtilizationFailed:           "failed to load usage cap utilization",
+		MsgUsageCapsOverviewFailed:              "failed to load budget overview",
 		MsgUsageCapsEventsFailed:                "failed to load usage cap events",
 		MsgUsagePricingSyncOpenRouterFailed:     "failed to sync OpenRouter pricing: %s",
 		MsgUsagePricingStoreCatalogFailed:       "failed to store pricing catalog",

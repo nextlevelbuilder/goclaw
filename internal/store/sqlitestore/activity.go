@@ -5,8 +5,10 @@ package sqlitestore
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -62,10 +64,15 @@ func (s *SQLiteActivityStore) List(ctx context.Context, opts store.ActivityListO
 	for rows.Next() {
 		var a store.ActivityLog
 		var createdAt sqliteTime
-		if err := rows.Scan(&a.ID, &a.ActorType, &a.ActorID, &a.Action, &a.EntityType, &a.EntityID, &a.Details, &a.IPAddress, &createdAt); err != nil {
+		var details string
+		if err := rows.Scan(&a.ID, &a.ActorType, &a.ActorID, &a.Action, &a.EntityType, &a.EntityID, &details, &a.IPAddress, &createdAt); err != nil {
 			return nil, err
 		}
 		a.CreatedAt = createdAt.Time
+		a.Details = json.RawMessage(details)
+		if string(a.Details) == "" {
+			a.Details = nil
+		}
 		result = append(result, a)
 	}
 	return result, rows.Err()
@@ -78,6 +85,32 @@ func (s *SQLiteActivityStore) Count(ctx context.Context, opts store.ActivityList
 	var count int
 	err := s.db.QueryRowContext(ctx, query, args...).Scan(&count)
 	return count, err
+}
+
+// Prune deletes activity_logs rows created before the given time in batches.
+// Mirrors the workstation_activity Prune pattern.
+func (s *SQLiteActivityStore) Prune(ctx context.Context, before time.Time) (int64, error) {
+	var total int64
+	ts := before.UTC().Format(time.RFC3339Nano)
+	for {
+		res, err := s.db.ExecContext(ctx,
+			`DELETE FROM activity_logs
+			 WHERE id IN (
+			   SELECT id FROM activity_logs WHERE created_at < ? LIMIT 1000
+			 )`,
+			ts,
+		)
+		if err != nil {
+			return total, err
+		}
+		n, _ := res.RowsAffected()
+		total += n
+		if n < 1000 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return total, nil
 }
 
 func (s *SQLiteActivityStore) Aggregate(ctx context.Context, opts store.ActivityAggregateOpts) ([]store.ActivityAggregateBucket, int, error) {

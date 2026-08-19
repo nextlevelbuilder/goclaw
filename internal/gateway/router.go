@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/cache"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
@@ -178,6 +179,7 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 			}
 			client.tenantID = tid
 		}
+		emitConnectAuthAudit(r, ctx, client, "auth.login", "gateway_token", params.UserID)
 		r.sendConnectResponse(ctx, client, req.ID)
 		return
 	}
@@ -228,6 +230,7 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 					"tenant_id", client.tenantID.String(),
 				)
 			}
+			emitConnectAuthAudit(r, ctx, client, "auth.login", "api_key", client.userID)
 			r.sendConnectResponse(ctx, client, req.ID)
 			return
 		}
@@ -239,6 +242,7 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 		client.authenticated = true
 		client.userID = params.UserID
 		client.tenantID = store.MasterTenantID
+		emitConnectAuthAudit(r, ctx, client, "auth.login", "no_auth", params.UserID)
 		r.sendConnectResponse(ctx, client, req.ID)
 		return
 	}
@@ -297,6 +301,7 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 				"tenant_id", client.tenantID,
 				"role", string(client.role),
 			)
+			emitConnectAuthAudit(r, ctx, client, "auth.login", "pairing", params.UserID)
 			r.sendConnectResponse(ctx, client, req.ID)
 			return
 		}
@@ -335,6 +340,7 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 		"has_token", params.Token != "",
 		"has_sender_id", params.SenderID != "",
 	)
+	emitConnectAuthAudit(r, ctx, client, "auth.login_failed", "invalid_credentials", params.UserID)
 	client.authenticated = false
 	locale := i18n.Normalize(client.locale)
 	client.SendResponse(protocol.NewErrorResponse(
@@ -404,6 +410,43 @@ func (r *MethodRouter) sendConnectResponse(ctx context.Context, client *Client, 
 	}
 
 	client.SendResponse(protocol.NewOKResponse(reqID, resp))
+}
+
+// emitConnectAuthAudit broadcasts an auth.login / auth.login_failed audit event
+// for WebSocket connect attempts. The tenant is resolved from the request
+// context (which the router injects during Handle) or the client once assigned.
+func emitConnectAuthAudit(r *MethodRouter, ctx context.Context, client *Client, action, method, userID string) {
+	pub := r.server.EventPublisher()
+	if pub == nil {
+		return
+	}
+	tenantID := r.routerTenantID(ctx, client)
+	pub.Broadcast(bus.Event{
+		Name: protocol.EventAuditLog,
+		Payload: bus.AuditEventPayload{
+			ActorType:  "user",
+			ActorID:    userID,
+			Action:     action,
+			EntityType: "auth",
+			EntityID:   method,
+			IPAddress:  client.RemoteAddr(),
+			TenantID:   tenantID,
+		},
+	})
+}
+
+// routerTenantID returns the tenant for an audit event during WS connect.
+// The router injects the resolved tenant into ctx during Handle; the client's
+// tenant is also set once authenticated. Falls back to master for system-level
+// logins (e.g. owner with gateway token).
+func (r *MethodRouter) routerTenantID(ctx context.Context, client *Client) uuid.UUID {
+	if tid := store.TenantIDFromContext(ctx); tid != uuid.Nil {
+		return tid
+	}
+	if tid := client.TenantID(); tid != uuid.Nil {
+		return tid
+	}
+	return store.MasterTenantID
 }
 
 // isOwnerID checks if the given user ID is in the configured owner list.

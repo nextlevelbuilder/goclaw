@@ -84,6 +84,7 @@ var pkgAPIKeyCache *apiKeyCache
 var pkgPairingStore store.PairingStore
 var pkgTenantCache *tenantCache
 var pkgOwnerIDs []string
+var pkgMsgBus *bus.MessageBus // for audit event broadcasting (auth.login/logout)
 
 // InitGatewayToken sets the gateway bearer token for HTTP auth.
 // Must be called once during server startup before handling requests.
@@ -120,6 +121,49 @@ func InitPairingAuth(ps store.PairingStore) {
 // Owners get RoleOwner with gateway token; others get RoleAdmin scoped to their tenant.
 func InitOwnerIDs(ids []string) {
 	pkgOwnerIDs = ids
+}
+
+// InitAuditBus sets the message bus used for auth audit events.
+// Must be called once during server startup before handling requests.
+// The audit subscriber (cmd/gateway_events.go) persists these to activity_logs.
+func InitAuditBus(mb *bus.MessageBus) {
+	pkgMsgBus = mb
+}
+
+// authMethod describes the HTTP auth mechanism in use for this request
+// (used as the audit entity ID for login/login_failed events).
+func authMethod(r *http.Request) string {
+	if extractBearerToken(r) != "" {
+		return "bearer"
+	}
+	if r.Header.Get("X-GoClaw-Sender-Id") != "" {
+		return "pairing"
+	}
+	return "none"
+}
+
+// auditLogin emits an auth.login / auth.login_failed audit event for HTTP
+// authentication attempts. Failure events carry the auth method in entity_type.
+func auditLogin(r *http.Request, action, method string) {
+	if pkgMsgBus == nil {
+		return
+	}
+	actorID := extractUserID(r)
+	if actorID == "" {
+		actorID = "system"
+	}
+	pkgMsgBus.Broadcast(bus.Event{
+		Name: protocol.EventAuditLog,
+		Payload: bus.AuditEventPayload{
+			ActorType:  "user",
+			ActorID:    actorID,
+			Action:     action,
+			EntityType: "auth",
+			EntityID:   method,
+			IPAddress:  r.RemoteAddr,
+			TenantID:   store.TenantIDFromContext(r.Context()),
+		},
+	})
 }
 
 // isHTTPOwnerID checks if the user ID is a configured owner.
@@ -387,6 +431,7 @@ func requireAuth(minRole permissions.Role, next http.HandlerFunc) http.HandlerFu
 		auth := resolveAuth(r)
 
 		if !auth.Authenticated {
+			auditLogin(r, "auth.login_failed", authMethod(r))
 			writeJSON(w, http.StatusUnauthorized, map[string]string{
 				"error": i18n.T(locale, i18n.MsgUnauthorized),
 			})
@@ -399,6 +444,7 @@ func requireAuth(minRole permissions.Role, next http.HandlerFunc) http.HandlerFu
 		}
 
 		if !permissions.HasMinRole(auth.Role, required) {
+			auditLogin(r, "auth.login_failed", authMethod(r))
 			writeJSON(w, http.StatusForbidden, map[string]string{
 				"error": i18n.T(locale, i18n.MsgPermissionDenied, r.URL.Path+" requires "+string(required)+" role"),
 			})
@@ -406,6 +452,7 @@ func requireAuth(minRole permissions.Role, next http.HandlerFunc) http.HandlerFu
 		}
 
 		ctx := enrichContext(r.Context(), r, auth)
+		auditLogin(r.WithContext(ctx), "auth.login", authMethod(r))
 		next(w, r.WithContext(ctx))
 	}
 }
@@ -418,6 +465,7 @@ func requireAuthBearer(minRole permissions.Role, bearer string, w http.ResponseW
 	auth := resolveAuthWithBearer(r, bearer)
 
 	if !auth.Authenticated {
+		auditLogin(r, "auth.login_failed", authMethod(r))
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error": i18n.T(locale, i18n.MsgUnauthorized),
 		})
@@ -430,6 +478,7 @@ func requireAuthBearer(minRole permissions.Role, bearer string, w http.ResponseW
 	}
 
 	if !permissions.HasMinRole(auth.Role, required) {
+		auditLogin(r, "auth.login_failed", authMethod(r))
 		writeJSON(w, http.StatusForbidden, map[string]string{
 			"error": i18n.T(locale, i18n.MsgPermissionDenied, r.URL.Path+" requires "+string(required)+" role"),
 		})
@@ -437,6 +486,7 @@ func requireAuthBearer(minRole permissions.Role, bearer string, w http.ResponseW
 	}
 
 	ctx := enrichContext(r.Context(), r, auth)
+	auditLogin(r.WithContext(ctx), "auth.login", authMethod(r))
 	return r.WithContext(ctx), true
 }
 

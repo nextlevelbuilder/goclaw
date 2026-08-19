@@ -1,6 +1,10 @@
 package http
 
 import (
+	"encoding/csv"
+	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -24,7 +28,13 @@ func NewActivityHandler(activity store.ActivityStore) *ActivityHandler {
 // RegisterRoutes registers activity routes on the given mux.
 func (h *ActivityHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/activity/aggregate", h.authMiddleware(h.handleAggregate))
+	mux.HandleFunc("GET /v1/activity/export", h.requireAdmin(h.handleExport))
 	mux.HandleFunc("GET /v1/activity", h.authMiddleware(h.handleList))
+}
+
+// requireAdmin gates an endpoint at RoleAdmin (export exposes all tenant rows).
+func (h *ActivityHandler) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return requireAuth(permissions.RoleAdmin, next)
 }
 
 func (h *ActivityHandler) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -133,6 +143,129 @@ func parseOptionalRFC3339(raw string) (*time.Time, bool) {
 		return nil, false
 	}
 	return &t, true
+}
+
+// handleExport streams the full tenant-scoped activity log as CSV or JSONL.
+// Admin-gated (requireAdmin) — export can include rows for every actor.
+// The rows are streamed in pages so large tenants don't buffer the whole
+// result set in memory.
+func (h *ActivityHandler) handleExport(w http.ResponseWriter, r *http.Request) {
+	format := r.URL.Query().Get("format")
+	if format == "" {
+		format = "csv"
+	}
+	if format != "csv" && format != "jsonl" {
+		locale := store.LocaleFromContext(r.Context())
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest,
+			i18n.T(locale, i18n.MsgInvalidRequest, "format must be csv or jsonl"))
+		return
+	}
+
+	opts := store.ActivityListOpts{}
+	if v := r.URL.Query().Get("actor_type"); v != "" {
+		opts.ActorType = v
+	}
+	if v := r.URL.Query().Get("action"); v != "" {
+		opts.Action = v
+	}
+	if v := r.URL.Query().Get("entity_type"); v != "" {
+		opts.EntityType = v
+	}
+	if v := r.URL.Query().Get("entity_id"); v != "" {
+		opts.EntityID = v
+	}
+	from, ok := parseOptionalRFC3339(r.URL.Query().Get("from"))
+	if !ok {
+		locale := store.LocaleFromContext(r.Context())
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest,
+			i18n.T(locale, i18n.MsgInvalidRequest, "from must be RFC3339"))
+		return
+	}
+	to, ok := parseOptionalRFC3339(r.URL.Query().Get("to"))
+	if !ok {
+		locale := store.LocaleFromContext(r.Context())
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest,
+			i18n.T(locale, i18n.MsgInvalidRequest, "to must be RFC3339"))
+		return
+	}
+	if from != nil && to != nil && !from.Before(*to) {
+		locale := store.LocaleFromContext(r.Context())
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest,
+			i18n.T(locale, i18n.MsgInvalidRequest, "from must be before to"))
+		return
+	}
+	opts.From = from
+	opts.To = to
+
+	contentType := "text/csv"
+	if format == "jsonl" {
+		contentType = "application/x-ndjson"
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", `attachment; filename="activity.`+format+`"`)
+	flusher, _ := w.(http.Flusher)
+
+	// Page through rows (export ignores the caller's limit; admin wants all).
+	const pageSize = 500
+	var offset int
+	if err := h.writeExportHeader(w, format); err != nil {
+		return
+	}
+	for {
+		pageOpts := opts
+		pageOpts.Limit = pageSize
+		pageOpts.Offset = offset
+		logs, err := h.activity.List(r.Context(), pageOpts)
+		if err != nil {
+			slog.Warn("activity.export.list_failed", "error", err, "offset", offset)
+			return
+		}
+		if err := h.writeExportRows(w, format, logs); err != nil {
+			return
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+		if len(logs) < pageSize {
+			break
+		}
+		offset += pageSize
+	}
+}
+
+func (h *ActivityHandler) writeExportHeader(w http.ResponseWriter, format string) error {
+	if format != "csv" {
+		return nil
+	}
+	_, err := io.WriteString(w, "id,actor_type,actor_id,action,entity_type,entity_id,ip_address,created_at\n")
+	return err
+}
+
+func (h *ActivityHandler) writeExportRows(w http.ResponseWriter, format string, logs []store.ActivityLog) error {
+	if format == "csv" {
+		cw := csv.NewWriter(w)
+		for _, l := range logs {
+			_ = cw.Write([]string{
+				l.ID.String(),
+				l.ActorType,
+				l.ActorID,
+				l.Action,
+				l.EntityType,
+				l.EntityID,
+				l.IPAddress,
+				l.CreatedAt.UTC().Format(time.RFC3339),
+			})
+		}
+		cw.Flush()
+		return cw.Error()
+	}
+	enc := json.NewEncoder(w)
+	for _, l := range logs {
+		if err := enc.Encode(l); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (h *ActivityHandler) handleList(w http.ResponseWriter, r *http.Request) {

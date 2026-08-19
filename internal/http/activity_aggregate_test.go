@@ -23,6 +23,7 @@ func (s *fakeActivityStore) List(context.Context, store.ActivityListOpts) ([]sto
 func (s *fakeActivityStore) Count(context.Context, store.ActivityListOpts) (int, error) {
 	return 0, nil
 }
+func (s *fakeActivityStore) Prune(context.Context, time.Time) (int64, error) { return 0, nil }
 func (s *fakeActivityStore) Aggregate(_ context.Context, opts store.ActivityAggregateOpts) ([]store.ActivityAggregateBucket, int, error) {
 	s.opts = opts
 	return []store.ActivityAggregateBucket{{Key: "session.branch", Count: 2, LastSeen: time.Now().UTC()}}, 2, nil

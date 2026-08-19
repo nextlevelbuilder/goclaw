@@ -74,6 +74,12 @@ type SessionListOpts struct {
 	TenantID uuid.UUID `db:"-"` // optional: filter by tenant (uuid.Nil = no filter)
 	Limit    int       `db:"-"`
 	Offset   int       `db:"-"`
+
+	// TokenFilter, when true, limits results to sessions that have recorded any
+	// token usage (input_tokens > 0 OR output_tokens > 0). Used by the usage
+	// listing so the token-heavy filter is pushed into SQL instead of scanning
+	// the whole table in memory.
+	TokenFilter bool `db:"-"`
 }
 
 // SessionListResult is the paginated result of ListPaged.

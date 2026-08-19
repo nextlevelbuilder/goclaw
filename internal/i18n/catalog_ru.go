@@ -118,6 +118,7 @@ func init() {
 		MsgUsageCapPolicyManaged:                "управляемые политики лимитов использования нельзя изменять",
 		MsgUsageCapsDeletePolicyFailed:          "не удалось удалить политику лимитов использования",
 		MsgUsageCapsUtilizationFailed:           "не удалось загрузить использование лимитов",
+		MsgUsageCapsOverviewFailed:              "не удалось загрузить обзор бюджета",
 		MsgUsageCapsEventsFailed:                "не удалось загрузить события лимитов использования",
 		MsgUsagePricingSyncOpenRouterFailed:     "не удалось синхронизировать цены OpenRouter: %s",
 		MsgUsagePricingStoreCatalogFailed:       "не удалось сохранить каталог цен",

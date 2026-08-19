@@ -1090,6 +1090,13 @@ func (s *Server) registerClient(c *Client) {
 }
 
 func (s *Server) unregisterClient(c *Client) {
+	// Emit auth.logout for authenticated connections so session teardown is
+	// auditable. Unauthenticated rejects (connect failures) are already covered
+	// by auth.login_failed at connect time and produce no logout noise here.
+	if c.authenticated {
+		s.emitLogoutAudit(c)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.clients, c.id)
@@ -1100,9 +1107,39 @@ func (s *Server) unregisterClient(c *Client) {
 	slog.Info("client disconnected", "id", c.id)
 }
 
+// emitLogoutAudit broadcasts an auth.logout event for an authenticated client
+// that is disconnecting. The event publisher may be nil in tests.
+func (s *Server) emitLogoutAudit(c *Client) {
+	if s.eventPub == nil {
+		return
+	}
+	tenantID := c.TenantID()
+	if tenantID == uuid.Nil {
+		tenantID = store.MasterTenantID
+	}
+	s.eventPub.Broadcast(bus.Event{
+		Name: protocol.EventAuditLog,
+		Payload: bus.AuditEventPayload{
+			ActorType:  "user",
+			ActorID:    c.UserID(),
+			Action:     "auth.logout",
+			EntityType: "auth",
+			EntityID:   "disconnect",
+			IPAddress:  c.RemoteAddr(),
+			TenantID:   tenantID,
+		},
+	})
+}
+
 // SetLogTee attaches a LogTee so that disconnecting clients are auto-unsubscribed.
 func (s *Server) SetLogTee(lt *LogTee) {
 	s.logTee = lt
+}
+
+// EventPublisher returns the event publisher used for broadcast events.
+// May be nil in tests or when the server is constructed without a bus.
+func (s *Server) EventPublisher() bus.EventPublisher {
+	return s.eventPub
 }
 
 // StartTestServer creates a listener on :0 (random port) and returns the
