@@ -19,6 +19,7 @@ export interface UsageCapPolicy {
   window: "hour" | "day" | "week" | "month";
   max_tokens?: number;
   max_cost_micros?: number;
+  warn_at_percent?: number;
   source?: "manual" | "agent_budget_monthly_cents";
   enabled: boolean;
   priority: number;
@@ -34,6 +35,19 @@ export interface UsageCapUtilization {
   reserved_tokens: number;
   used_cost_micros: number;
   reserved_cost_micros: number;
+}
+
+export interface BudgetUsageRow {
+  policy: UsageCapPolicy;
+  window_start: string;
+  window_end: string;
+  used_cost_micros: number;
+  reserved_cost_micros: number;
+  used_tokens: number;
+  reserved_tokens: number;
+  percent_used: number;
+  warn_at_percent?: number;
+  warned: boolean;
 }
 
 export interface UsageCapEvent {

@@ -95,6 +95,7 @@ export const queryKeys = {
       policies: ["usage", "caps", "policies"] as const,
       utilization: ["usage", "caps", "utilization"] as const,
       events: ["usage", "caps", "events"] as const,
+      overview: (window: string) => ["usage", "caps", "overview", window] as const,
     },
   },
   teams: {
