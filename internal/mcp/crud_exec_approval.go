@@ -50,7 +50,7 @@ func handleExecApprovalList(manager *tools.ExecApprovalManager) mcpserver.ToolHa
 }
 
 func handleExecApprovalApprove(manager *tools.ExecApprovalManager) mcpserver.ToolHandlerFunc {
-	return func(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+	return func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 		id, err := req.RequireString("id")
 		if err != nil {
 			return toolError("exec.approval.approve", err)
@@ -59,7 +59,7 @@ func handleExecApprovalApprove(manager *tools.ExecApprovalManager) mcpserver.Too
 		if req.GetBool("always", false) {
 			decision = tools.ApprovalAllowAlways
 		}
-		if err := manager.Resolve(id, decision); err != nil {
+		if err := manager.Resolve(ctx, id, decision, nil); err != nil {
 			return toolError("exec.approval.approve", err)
 		}
 		return jsonToolResult(map[string]any{"resolved": true, "decision": string(decision)})
@@ -67,12 +67,12 @@ func handleExecApprovalApprove(manager *tools.ExecApprovalManager) mcpserver.Too
 }
 
 func handleExecApprovalDeny(manager *tools.ExecApprovalManager) mcpserver.ToolHandlerFunc {
-	return func(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+	return func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 		id, err := req.RequireString("id")
 		if err != nil {
 			return toolError("exec.approval.deny", err)
 		}
-		if err := manager.Resolve(id, tools.ApprovalDeny); err != nil {
+		if err := manager.Resolve(ctx, id, tools.ApprovalDeny, nil); err != nil {
 			return toolError("exec.approval.deny", err)
 		}
 		return jsonToolResult(map[string]any{"resolved": true, "decision": "deny"})

@@ -43,4 +43,8 @@ type gatewayDeps struct {
 	audioMgr         *audio.Manager      // nil if TTS not configured; used by TTSHandler
 	ttsHandler       *httpapi.TTSHandler // nil if TTS not configured; for hot-reload
 	teamWorkEmbedder memory.EmbeddingProvider
+
+	// auditRetentionStop stops the daily audit log retention sweep goroutine.
+	// Nil when retention is disabled (Audit.RetentionDays == 0).
+	auditRetentionStop func()
 }

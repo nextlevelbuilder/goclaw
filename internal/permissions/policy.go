@@ -486,8 +486,9 @@ func isReadMethod(method string) bool {
 		protocol.MethodHooksList,
 		protocol.MethodHooksHistory,
 
-		// Approvals read-only listing
+		// Approvals read-only listing + history
 		protocol.MethodApprovalsList,
+		protocol.MethodApprovalsHistory,
 
 		// TTS read-only (status/providers listing)
 		protocol.MethodTTSStatus,

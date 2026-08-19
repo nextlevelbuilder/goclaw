@@ -295,6 +295,11 @@ func (d *gatewayDeps) runLifecycle(
 			close(deps.auditCh)
 		}
 
+		// Stop the daily audit retention sweep so it can't run after the DB closes.
+		if d.auditRetentionStop != nil {
+			d.auditRetentionStop()
+		}
+
 		if delegate, ok := d.toolsReg.Get("delegate"); ok {
 			if closer, ok := delegate.(interface {
 				CloseContext(context.Context) error

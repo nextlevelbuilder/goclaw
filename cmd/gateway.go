@@ -353,12 +353,32 @@ func runGateway() {
 	}
 
 	pgStores, traceCollector, snapshotWorker := setupStoresAndTracing(cfg, dataDir, msgBus)
+
+	// Prometheus /metrics (build-tag prometheus): serves in-process reliability
+	// counters + per-tenant spend on a dedicated port. No-op unless the binary
+	// is built with `-tags prometheus` and telemetry.prometheus_enabled = true.
+	if stopPrometheus, promErr := wirePrometheusMetrics(context.Background(), cfg, pgStores.DB); promErr != nil {
+		slog.Warn("prometheus /metrics disabled", "error", promErr)
+	} else if stopPrometheus != nil {
+		defer stopPrometheus()
+	}
+
 	if browserMgr != nil && pgStores != nil && pgStores.BrowserCookies != nil && cfg.Tools.Browser.CookieSyncEnabled {
 		browserMgr.SetCookieProvider(newStoreBrowserCookieProvider(pgStores.BrowserCookies))
 	}
 
 	if ttsTool != nil && pgStores.SystemConfigs != nil {
 		ttsTool.SetSystemConfigStore(pgStores.SystemConfigs)
+	}
+
+	// Wire durable approval persistence + push notifications. Best-effort: an
+	// approval store write never blocks command execution, so the in-memory
+	// manager keeps working even when the DB is temporarily unavailable.
+	if pgStores.Approval != nil {
+		execApprovalMgr.SetApprovalStore(pgStores.Approval)
+	}
+	if msgBus != nil {
+		execApprovalMgr.SetEventBus(msgBus)
 	}
 
 	// Recover from crashes: flip ghost 'summoning' rows to 'summon_failed'.
@@ -475,6 +495,13 @@ func runGateway() {
 
 	teamWorkEmbedder := setupMemoryEmbeddings(pgStores, providerRegistry)
 	usageCapSvc := usagecaps.NewService(pgStores.UsageCaps, pgStores.Providers)
+	// Budget-threshold webhook (reason goclaw.budget) shares the reliability
+	// alert config: enabled only when alerts are on, throttled to the same
+	// minimum interval.
+	usageCapSvc.SetAlertWebhook(
+		effectiveAlertWebhookURL(cfg),
+		int(cfg.Reliability.Alerts.EffectiveAlertMinInterval()/time.Second),
+	)
 
 	// Resolve background provider for consolidation + vault enrichment.
 	// Fallback: background.provider → agent.default_provider → first registered provider.
@@ -723,6 +750,7 @@ func runGateway() {
 	httpapi.InitGatewayToken(cfg.Gateway.Token)
 	mcpbridge.SetAllowedHosts(cfg.Gateway.MCPAllowedHosts) // operator allowlist: trusted MCP hosts exempt from private-IP SSRF block
 	httpapi.InitGatewayNoAuthFallbackAllowed(config.GatewayNoAuthFallbackAllowed(cfg.Gateway))
+	httpapi.InitAuditBus(msgBus)
 	exportTokenStore := httpapi.InitExportTokenStore()
 	defer exportTokenStore.Stop()
 	agentsH, skillsH, tracesH, mcpH, channelInstancesH, providersH, builtinToolsH, pendingMessagesH, teamEventsH, secureCLIH, secureCLIGrantH, mcpUserCredsH := wireHTTP(pgStores, cfg.Agents.Defaults.Workspace, dataDir, bundledSkillsDir, msgBus, domainBus, toolsReg, providerRegistry, modelReg, permPE.IsOwner, gatewayAddr, mcpToolLister, usageCapSvc, cfg, cfg.Skills)
@@ -826,7 +854,7 @@ func runGateway() {
 	// Register all RPC methods
 	server.SetLogTee(logTee)
 	server.SetRuntimeLogsHandler(httpapi.NewRuntimeLogsHandler(logTee))
-	pairingMethods, heartbeatMethods, chatMethods, cfgPermsMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Tracing, pgStores.RunTimeline, pgStores.Runs, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, pgStores.AgentLinks, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants, pgStores.SkillTenantCfgs, audioMgr, usageCapSvc, providerRegistry, teamWorkEmbedder, pgStores.Contracts, pgStores.CheckpointSnapshots, pgStores.Missions)
+	pairingMethods, heartbeatMethods, chatMethods, cfgPermsMethods := registerAllMethods(server, agentRouter, pgStores.Sessions, pgStores.Tracing, pgStores.RunTimeline, pgStores.Runs, pgStores.Cron, pgStores.Pairing, cfg, cfgPath, workspace, dataDir, msgBus, execApprovalMgr, pgStores.Approval, pgStores.Agents, pgStores.Skills, pgStores.ConfigSecrets, pgStores.Teams, pgStores.AgentLinks, contextFileInterceptor, logTee, pgStores.Heartbeats, pgStores.ConfigPermissions, pgStores.SystemConfigs, pgStores.Tenants, pgStores.SkillTenantCfgs, audioMgr, usageCapSvc, providerRegistry, teamWorkEmbedder, pgStores.Contracts, pgStores.CheckpointSnapshots, pgStores.Missions)
 
 	// Phase 3: Agent hooks RPC methods (hooks.list/create/update/delete/toggle/test/history).
 	if hs, ok := pgStores.Hooks.(hooks.HookStore); ok && hs != nil {
@@ -1066,6 +1094,9 @@ func runGateway() {
 	// Audit log subscriber + team task event subscribers.
 	auditCh := deps.wireAuditSubscriber()
 	deps.wireEventSubscribers()
+
+	// Daily audit retention sweep (audit.retentionDays > 0 only).
+	deps.wireAuditRetentionSweep()
 
 	// Setup graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())

@@ -18,7 +18,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
-func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore store.SessionStore, tracingStore store.TracingStore, runTimeline store.RunTimelineStore, runsStore store.RunsStore, cronStore store.CronStore, pairingStore store.PairingStore, cfg *config.Config, cfgPath, workspace, dataDir string, msgBus *bus.MessageBus, execApprovalMgr *tools.ExecApprovalManager, agentStore store.AgentStore, skillStore store.SkillStore, configSecretsStore store.ConfigSecretsStore, teamStore store.TeamStore, agentLinkStore store.AgentLinkStore, contextFileInterceptor *tools.ContextFileInterceptor, logTee *gateway.LogTee, heartbeatStore store.HeartbeatStore, configPermStore store.ConfigPermissionStore, sysConfigStore store.SystemConfigStore, tenantStore store.TenantStore, skillTenantCfgStore store.SkillTenantConfigStore, audioMgr *audio.Manager, usageCapSvc *usagecaps.Service, providerReg *providers.Registry, teamWorkEmbedder memory.EmbeddingProvider, contractStore store.ContractStore, checkpointSnapshots store.CheckpointSnapshotStore, missionStore store.MissionStore) (*methods.PairingMethods, *methods.HeartbeatMethods, *methods.ChatMethods, *methods.ConfigPermissionsMethods) {
+func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore store.SessionStore, tracingStore store.TracingStore, runTimeline store.RunTimelineStore, runsStore store.RunsStore, cronStore store.CronStore, pairingStore store.PairingStore, cfg *config.Config, cfgPath, workspace, dataDir string, msgBus *bus.MessageBus, execApprovalMgr *tools.ExecApprovalManager, approvalStore store.ApprovalStore, agentStore store.AgentStore, skillStore store.SkillStore, configSecretsStore store.ConfigSecretsStore, teamStore store.TeamStore, agentLinkStore store.AgentLinkStore, contextFileInterceptor *tools.ContextFileInterceptor, logTee *gateway.LogTee, heartbeatStore store.HeartbeatStore, configPermStore store.ConfigPermissionStore, sysConfigStore store.SystemConfigStore, tenantStore store.TenantStore, skillTenantCfgStore store.SkillTenantConfigStore, audioMgr *audio.Manager, usageCapSvc *usagecaps.Service, providerReg *providers.Registry, teamWorkEmbedder memory.EmbeddingProvider, contractStore store.ContractStore, checkpointSnapshots store.CheckpointSnapshotStore, missionStore store.MissionStore) (*methods.PairingMethods, *methods.HeartbeatMethods, *methods.ChatMethods, *methods.ConfigPermissionsMethods) {
 	router := server.Router()
 
 	// Phase 1: Core methods
@@ -91,7 +91,11 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 	server.SetLLMProviders(providerReg, cfg.Gateway.BackgroundProvider, cfg.Gateway.BackgroundModel)
 
 	// Phase 2: Exec approval (always registered — returns empty when manager is nil)
-	methods.NewExecApprovalMethods(execApprovalMgr, msgBus).Register(router)
+	execApprovalMethods := methods.NewExecApprovalMethods(execApprovalMgr, msgBus)
+	if approvalStore != nil {
+		execApprovalMethods.SetApprovalStore(approvalStore)
+	}
+	execApprovalMethods.Register(router)
 
 	// Phase 2: Send (outbound message routing)
 	methods.NewSendMethods(msgBus).Register(router)

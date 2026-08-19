@@ -61,6 +61,9 @@ type Stores struct {
 	CheckpointSnapshots CheckpointSnapshotStore
 	// Missions persists durable mission records (Mission Mode).
 	Missions MissionStore
+	// Approval persists command-execution approval requests so the queue
+	// survives restarts and operators can audit resolved decisions.
+	Approval ApprovalStore
 
 	Webhooks     WebhookStore
 	WebhookCalls WebhookCallStore
@@ -71,6 +74,8 @@ type Stores struct {
 	WorkstationPermissions WorkstationPermissionStore
 	WorkstationActivity    WorkstationActivityStore
 
-	// UsageCaps is Standard/PostgreSQL only in the first budget-control rollout.
+	// UsageCaps persists budget-control policies, counters, and pricing.
+	// Implemented for both PostgreSQL (pg) and SQLite (sqlitestore), so the
+	// desktop/Lite edition enforces budgets too.
 	UsageCaps UsageCapStore
 }

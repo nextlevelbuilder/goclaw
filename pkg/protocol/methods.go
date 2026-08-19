@@ -108,6 +108,7 @@ const (
 	MethodApprovalsList    = "exec.approval.list"
 	MethodApprovalsApprove = "exec.approval.approve"
 	MethodApprovalsDeny    = "exec.approval.deny"
+	MethodApprovalsHistory = "exec.approval.history"
 
 	MethodUsageGet     = "usage.get"
 	MethodUsageSummary = "usage.summary"

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -256,11 +257,28 @@ func (d *gatewayDeps) wireTeamProgressNotifySubscriber() {
 	slog.Info("team progress notification subscriber registered")
 }
 
+// auditActivityStore returns the ActivityStore for audit persistence.
+//
+// d.pgStores is the unified store container produced by setupStoresAndTracing
+// for every backend: "postgres", "sqlite", and "-tags sqliteonly" (desktop/Lite)
+// all return the same *store.Stores, and its Activity field is set by the
+// corresponding store factory (PGActivityStore or SQLiteActivityStore — see
+// internal/store/sqlitestore/factory.go:67). So on desktop builds
+// d.pgStores.Activity is the SQLiteActivityStore and audit rows ARE persisted
+// to the local SQLite database.
+func (d *gatewayDeps) auditActivityStore() store.ActivityStore {
+	if d.pgStores == nil {
+		return nil
+	}
+	return d.pgStores.Activity
+}
+
 // wireAuditSubscriber sets up the audit log subscriber that persists events to activity_logs.
 // Uses a buffered channel with a single worker to avoid unbounded goroutines.
 // Returns the audit channel so the shutdown goroutine can close it to flush pending entries.
 func (d *gatewayDeps) wireAuditSubscriber() chan bus.AuditEventPayload {
-	if d.pgStores.Activity == nil {
+	activityStore := d.auditActivityStore()
+	if activityStore == nil {
 		return nil
 	}
 	auditCh := make(chan bus.AuditEventPayload, 256)
@@ -281,7 +299,7 @@ func (d *gatewayDeps) wireAuditSubscriber() chan bus.AuditEventPayload {
 	go func() {
 		for payload := range auditCh {
 			auditCtx := store.WithTenantID(context.Background(), payload.TenantID)
-			if err := d.pgStores.Activity.Log(auditCtx, &store.ActivityLog{
+			if err := activityStore.Log(auditCtx, &store.ActivityLog{
 				ActorType:  payload.ActorType,
 				ActorID:    payload.ActorID,
 				Action:     payload.Action,
@@ -296,6 +314,41 @@ func (d *gatewayDeps) wireAuditSubscriber() chan bus.AuditEventPayload {
 	}()
 	slog.Info("audit subscriber registered")
 	return auditCh
+}
+
+// wireAuditRetentionSweep starts a daily goroutine that deletes audit rows
+// older than the configured retention window. Disabled when RetentionDays <= 0
+// (the default) — 0 means "keep forever". Mirrors the workstation activity sink
+// retention pattern (24h ticker + stop channel).
+func (d *gatewayDeps) wireAuditRetentionSweep() {
+	if d.cfg == nil || d.cfg.Audit.RetentionDays <= 0 {
+		return
+	}
+	activityStore := d.auditActivityStore()
+	if activityStore == nil {
+		return
+	}
+	stopCh := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				before := time.Now().Add(-time.Duration(d.cfg.Audit.RetentionDays) * 24 * time.Hour)
+				n, err := activityStore.Prune(context.Background(), before)
+				if err != nil {
+					slog.Warn("audit.prune_error", "error", err)
+				} else if n > 0 {
+					slog.Info("audit.pruned", "rows", n, "before", before.Format(time.RFC3339))
+				}
+			case <-stopCh:
+				return
+			}
+		}
+	}()
+	d.auditRetentionStop = func() { close(stopCh) }
+	slog.Info("audit retention sweep registered", "retention_days", d.cfg.Audit.RetentionDays)
 }
 
 // wireChannelStreamingSubscriber subscribes to agent events for channel streaming/reaction forwarding.
