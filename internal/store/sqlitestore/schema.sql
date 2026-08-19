@@ -1522,6 +1522,168 @@ CREATE INDEX IF NOT EXISTS idx_usage_event_rollups_resource_hour
     ON usage_event_rollups(tenant_id, resource_type, resource_name, bucket_hour DESC);
 
 -- ============================================================
+-- Table: usage_cap_policies
+-- Mirrors PG migrations 000071 + 000072 + 000104 (warn_at_percent).
+-- window_key CHECK mirrors PG; max_tokens/max_cost_micros nullable.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS usage_cap_policies (
+    id               TEXT NOT NULL PRIMARY KEY,
+    tenant_id        TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    agent_id         TEXT REFERENCES agents(id) ON DELETE CASCADE,
+    provider_id      TEXT REFERENCES llm_providers(id) ON DELETE CASCADE,
+    provider_type    TEXT,
+    model_id         TEXT,
+    window_key       TEXT NOT NULL CHECK (window_key IN ('hour', 'day', 'week', 'month')),
+    max_tokens       BIGINT CHECK (max_tokens IS NULL OR max_tokens >= 0),
+    max_cost_micros  BIGINT CHECK (max_cost_micros IS NULL OR max_cost_micros >= 0),
+    warn_at_percent  NUMERIC(5,2) CHECK (warn_at_percent IS NULL OR (warn_at_percent >= 0 AND warn_at_percent <= 100)),
+    source           TEXT NOT NULL DEFAULT 'manual',
+    enabled          BOOLEAN NOT NULL DEFAULT 1,
+    priority         INTEGER NOT NULL DEFAULT 100,
+    created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    CHECK (max_tokens IS NOT NULL OR max_cost_micros IS NOT NULL)
+);
+
+CREATE INDEX IF NOT EXISTS idx_usage_cap_policies_scope
+    ON usage_cap_policies (tenant_id, enabled, agent_id, provider_id, provider_type, model_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_cap_policies_agent_budget_source
+    ON usage_cap_policies (tenant_id, agent_id)
+    WHERE source = 'agent_budget_monthly_cents';
+
+CREATE INDEX IF NOT EXISTS idx_usage_cap_policies_warn
+    ON usage_cap_policies (warn_at_percent)
+    WHERE warn_at_percent IS NOT NULL;
+
+-- ============================================================
+-- Table: usage_cap_counters
+-- Mirrors PG migration 000071. PK (policy_id, window_start); window timestamps
+-- stored as TEXT RFC3339Nano.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS usage_cap_counters (
+    policy_id            TEXT NOT NULL REFERENCES usage_cap_policies(id) ON DELETE CASCADE,
+    window_start         TEXT NOT NULL,
+    window_end           TEXT NOT NULL,
+    used_tokens          BIGINT NOT NULL DEFAULT 0,
+    reserved_tokens      BIGINT NOT NULL DEFAULT 0,
+    used_cost_micros     BIGINT NOT NULL DEFAULT 0,
+    reserved_cost_micros BIGINT NOT NULL DEFAULT 0,
+    updated_at           TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (policy_id, window_start)
+);
+
+-- ============================================================
+-- Table: usage_cap_reservations
+-- Mirrors PG migration 000071. metadata is JSON TEXT.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS usage_cap_reservations (
+    id                  TEXT NOT NULL PRIMARY KEY,
+    reservation_key     TEXT NOT NULL,
+    policy_id           TEXT NOT NULL REFERENCES usage_cap_policies(id) ON DELETE CASCADE,
+    window_start        TEXT NOT NULL,
+    reserved_tokens     BIGINT NOT NULL DEFAULT 0,
+    reserved_cost_micros BIGINT NOT NULL DEFAULT 0,
+    actual_tokens       BIGINT NOT NULL DEFAULT 0,
+    actual_cost_micros  BIGINT NOT NULL DEFAULT 0,
+    status              TEXT NOT NULL DEFAULT 'reserved',
+    metadata            TEXT NOT NULL DEFAULT '{}',
+    created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE (reservation_key, policy_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_usage_cap_reservations_key
+    ON usage_cap_reservations (reservation_key);
+
+-- ============================================================
+-- Table: usage_cap_events
+-- Mirrors PG migration 000071. metadata is JSON TEXT; decision 'warn' rows
+-- carry window_start in metadata for once-per-window budget alerts.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS usage_cap_events (
+    id                    TEXT NOT NULL PRIMARY KEY,
+    tenant_id             TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    policy_id             TEXT REFERENCES usage_cap_policies(id) ON DELETE SET NULL,
+    reservation_key       TEXT,
+    decision              TEXT NOT NULL,
+    reason                TEXT,
+    estimated_tokens      BIGINT NOT NULL DEFAULT 0,
+    estimated_cost_micros BIGINT NOT NULL DEFAULT 0,
+    actual_tokens         BIGINT NOT NULL DEFAULT 0,
+    actual_cost_micros    BIGINT NOT NULL DEFAULT 0,
+    metadata              TEXT NOT NULL DEFAULT '{}',
+    created_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_usage_cap_events_tenant_created
+    ON usage_cap_events (tenant_id, created_at DESC);
+
+-- ============================================================
+-- Table: usage_pricing_catalog
+-- Mirrors PG migration 000070. Prices stored as decimal TEXT; raw_pricing and
+-- raw_model are JSON TEXT.
+-- ============================================================
+
+-- Price columns use TEXT affinity so the exact decimal string from the
+-- OpenRouter sync round-trips losslessly (PG stores NUMERIC(30,18) and reads
+-- ::text; HTTP exposes these as *string). SQLite NUMERIC would coerce to REAL.
+CREATE TABLE IF NOT EXISTS usage_pricing_catalog (
+    id                 TEXT NOT NULL PRIMARY KEY,
+    model_id           TEXT NOT NULL UNIQUE,
+    canonical_model_id TEXT,
+    raw_pricing        TEXT NOT NULL DEFAULT '{}',
+    raw_model          TEXT NOT NULL DEFAULT '{}',
+    input_price        TEXT CHECK (input_price IS NULL OR CAST(input_price AS REAL) >= 0),
+    output_price       TEXT CHECK (output_price IS NULL OR CAST(output_price AS REAL) >= 0),
+    cache_read_price   TEXT CHECK (cache_read_price IS NULL OR CAST(cache_read_price AS REAL) >= 0),
+    cache_write_price  TEXT CHECK (cache_write_price IS NULL OR CAST(cache_write_price AS REAL) >= 0),
+    reasoning_price    TEXT CHECK (reasoning_price IS NULL OR CAST(reasoning_price AS REAL) >= 0),
+    request_price      TEXT CHECK (request_price IS NULL OR CAST(request_price AS REAL) >= 0),
+    image_price        TEXT CHECK (image_price IS NULL OR CAST(image_price AS REAL) >= 0),
+    web_search_price   TEXT CHECK (web_search_price IS NULL OR CAST(web_search_price AS REAL) >= 0),
+    synced_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    created_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_usage_pricing_catalog_synced_at
+    ON usage_pricing_catalog (synced_at DESC);
+
+-- ============================================================
+-- Table: usage_pricing_overrides
+-- Mirrors PG migration 000070. UNIQUE (tenant_id, provider_id, model_id).
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS usage_pricing_overrides (
+    id                TEXT NOT NULL PRIMARY KEY,
+    tenant_id         TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    provider_id       TEXT NOT NULL REFERENCES llm_providers(id) ON DELETE CASCADE,
+    provider_type     TEXT NOT NULL,
+    model_id          TEXT NOT NULL,
+    input_price       TEXT CHECK (input_price IS NULL OR CAST(input_price AS REAL) >= 0),
+    output_price      TEXT CHECK (output_price IS NULL OR CAST(output_price AS REAL) >= 0),
+    cache_read_price  TEXT CHECK (cache_read_price IS NULL OR CAST(cache_read_price AS REAL) >= 0),
+    cache_write_price TEXT CHECK (cache_write_price IS NULL OR CAST(cache_write_price AS REAL) >= 0),
+    reasoning_price   TEXT CHECK (reasoning_price IS NULL OR CAST(reasoning_price AS REAL) >= 0),
+    request_price     TEXT CHECK (request_price IS NULL OR CAST(request_price AS REAL) >= 0),
+    image_price       TEXT CHECK (image_price IS NULL OR CAST(image_price AS REAL) >= 0),
+    web_search_price  TEXT CHECK (web_search_price IS NULL OR CAST(web_search_price AS REAL) >= 0),
+    enabled           BOOLEAN NOT NULL DEFAULT 1,
+    created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE (tenant_id, provider_id, model_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_usage_pricing_overrides_tenant_provider
+    ON usage_pricing_overrides (tenant_id, provider_id, model_id)
+    WHERE enabled;
+
+-- ============================================================
 -- Table: builtin_tools
 -- ============================================================
 
@@ -2528,3 +2690,28 @@ CREATE INDEX IF NOT EXISTS idx_missions_tenant_created
     ON missions(tenant_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_missions_tenant_status
     ON missions(tenant_id, status);
+
+CREATE TABLE IF NOT EXISTS approval_requests (
+    id              TEXT NOT NULL PRIMARY KEY,
+    tenant_id       TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    agent_id        TEXT REFERENCES agents(id) ON DELETE SET NULL,
+    requester_id    TEXT,
+    requester_type  TEXT,
+    action_type     TEXT NOT NULL,
+    payload         TEXT NOT NULL DEFAULT '{}',
+    command         TEXT,
+    status          TEXT NOT NULL,
+    decision        TEXT,
+    decided_by      TEXT,
+    allow_once      INTEGER,
+    allow_always    INTEGER,
+    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    decided_at      TEXT,
+    expired_at      TEXT,
+    timeout_seconds INTEGER NOT NULL DEFAULT 120
+);
+
+CREATE INDEX IF NOT EXISTS idx_approval_requests_tenant_status
+    ON approval_requests(tenant_id, status);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_agent
+    ON approval_requests(agent_id);
