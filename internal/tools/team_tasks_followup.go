@@ -39,10 +39,10 @@ func (t *TeamTasksTool) executeAskUser(ctx context.Context, args map[string]any)
 	// Resolve channel: prefer task's channel, fallback to context channel.
 	channel := task.Channel
 	chatID := task.ChatID
-	ctxChannel := ToolChannelFromCtx(ctx)
+	ctxChannel := OriginChannelFromCtx(ctx)
 	if channel == "" || channel == ChannelTeammate || channel == ChannelSystem || channel == ChannelDashboard {
 		channel = ctxChannel
-		chatID = ToolChatIDFromCtx(ctx)
+		chatID = OriginChatIDFromCtx(ctx)
 	}
 	if channel == "" || channel == ChannelTeammate || channel == ChannelSystem || channel == ChannelDashboard {
 		return ErrorResult("cannot set follow-up: no valid channel found (task has no origin channel and context channel is internal)")

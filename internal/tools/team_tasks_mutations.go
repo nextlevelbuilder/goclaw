@@ -211,7 +211,7 @@ func (t *TeamTasksTool) executeAttach(ctx context.Context, args map[string]any) 
 		return ErrorResult("task does not belong to your team")
 	}
 
-	chatID := ToolChatIDFromCtx(ctx)
+	chatID := OriginChatIDFromCtx(ctx)
 	if err := t.manager.Store().AttachFileToTask(ctx, &store.TeamTaskAttachmentData{
 		TaskID:           taskID,
 		TeamID:           team.ID,

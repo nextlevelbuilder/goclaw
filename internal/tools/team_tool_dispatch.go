@@ -123,11 +123,11 @@ func (m *TeamToolManager) dispatchTaskToAgent(ctx context.Context, task *store.T
 	// Falls back to ctx values for initial dispatch (task just created, fields match ctx).
 	originChannel := task.Channel
 	if originChannel == "" {
-		originChannel = ToolChannelFromCtx(ctx)
+		originChannel = OriginChannelFromCtx(ctx)
 	}
 	originChatID := task.ChatID
 	if originChatID == "" {
-		originChatID = ToolChatIDFromCtx(ctx)
+		originChatID = OriginChatIDFromCtx(ctx)
 	}
 	// Resolve lead agent key for completion announce routing.
 	fromAgent := ToolAgentKeyFromCtx(ctx)
