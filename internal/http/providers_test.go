@@ -554,6 +554,42 @@ func TestProvidersHandlerUpdateAllowsClaudeCLIExecutablePath(t *testing.T) {
 	}
 }
 
+func TestProvidersHandlerUpdateMarshalsSettingsForStore(t *testing.T) {
+	token := setupProvidersAdminToken(t)
+	providerStore := newMockProviderStore()
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		Name:         "openai",
+		ProviderType: store.ProviderOpenAICompat,
+		Enabled:      true,
+		Settings:     json.RawMessage(`{}`),
+	}
+	if err := providerStore.CreateProvider(context.Background(), provider); err != nil {
+		t.Fatalf("CreateProvider() error = %v", err)
+	}
+
+	handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	body := `{"settings":{"timeout_seconds":60}}`
+	req := httptest.NewRequest(http.MethodPut, "/v1/providers/"+provider.ID.String(), bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status code = %d, want %d, body=%s", w.Code, http.StatusOK, w.Body.String())
+	}
+	current, err := providerStore.GetProvider(context.Background(), provider.ID)
+	if err != nil {
+		t.Fatalf("GetProvider() error = %v", err)
+	}
+	if got, want := string(current.Settings), `{"timeout_seconds":60}`; got != want {
+		t.Fatalf("settings = %s, want %s", got, want)
+	}
+}
+
 func TestProvidersHandlerUpdateRejectsIncompatibleEmbeddingDimensions(t *testing.T) {
 	token := setupProvidersAdminToken(t)
 	providerStore := newMockProviderStore()

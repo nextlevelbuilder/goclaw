@@ -20,7 +20,7 @@ type providerRow struct {
 	APIBase      string          `json:"api_base" db:"api_base"`
 	APIKey       string          `json:"api_key" db:"api_key"`
 	Enabled      bool            `json:"enabled" db:"enabled"`
-	Settings     json.RawMessage `json:"settings" db:"settings"`
+	Settings     sqliteJSONValue `json:"settings" db:"settings"`
 	CreatedAt    sqliteTime      `json:"created_at" db:"created_at"`
 	UpdatedAt    sqliteTime      `json:"updated_at" db:"updated_at"`
 	TenantID     uuid.UUID       `json:"tenant_id" db:"tenant_id"`
@@ -36,7 +36,7 @@ func (r *providerRow) toLLMProviderData() store.LLMProviderData {
 		APIBase:      r.APIBase,
 		APIKey:       r.APIKey,
 		Enabled:      r.Enabled,
-		Settings:     r.Settings,
+		Settings:     json.RawMessage(r.Settings),
 	}
 }
 
