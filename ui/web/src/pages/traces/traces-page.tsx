@@ -174,11 +174,11 @@ export function TracesPage() {
             <table className="w-full min-w-[600px] text-sm">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="px-4 py-3 text-left font-medium max-w-[40%]">{t("columns.name")}</th>
-                  <th className="px-3 py-3 text-center font-medium w-10"></th>
-                  <th className="px-4 py-3 text-left font-medium whitespace-nowrap">{t("columns.tokens")}</th>
-                  <th className="px-4 py-3 text-center font-medium whitespace-nowrap">{t("columns.spans")}</th>
-                  <th className="px-4 py-3 text-right font-medium whitespace-nowrap">{t("columns.time")}</th>
+                  <th className="px-4 py-3 text-left font-medium w-[36%] max-w-[280px]">{t("columns.name")}</th>
+                  <th className="px-3 py-3 text-left font-medium w-28 whitespace-nowrap">{t("columns.status")}</th>
+                  <th className="px-4 py-3 text-left font-medium w-28 whitespace-nowrap">{t("columns.tokens")}</th>
+                  <th className="px-4 py-3 text-center font-medium w-20 whitespace-nowrap">{t("columns.spans")}</th>
+                  <th className="px-4 py-3 text-right font-medium w-28 whitespace-nowrap">{t("columns.time")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -227,7 +227,10 @@ export function TracesPage() {
                       </td>
                       <td className="px-3 py-2.5 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          <StatusIcon status={trace.status} />
+                          <span className="inline-flex items-center gap-1.5">
+                    <StatusIcon status={trace.status} />
+                    <span className="text-xs capitalize text-muted-foreground">{trace.status || "unknown"}</span>
+                  </span>
                           {(trace.status === "running") && (
                             <Button
                               variant="destructive"
