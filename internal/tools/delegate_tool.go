@@ -74,6 +74,7 @@ type DelegateTool struct {
 	msgBus         *bus.MessageBus         // for async announce back to parent
 	taskStore      store.SubagentTaskStore // durable async completion ledger
 	hookDispatcher hooks.Dispatcher        // optional; nil-safe
+	postTurn       PostTurnProcessor       // optional; dispatches team tasks a detached delegatee creates
 	admission      *orchestration.ChildRunAdmission
 	workspace      string
 	dataDir        string
@@ -101,6 +102,9 @@ func (t *DelegateTool) SetMsgBus(mb *bus.MessageBus) { t.msgBus = mb }
 
 // SetTaskStore configures the durable ledger used by async delegations.
 func (t *DelegateTool) SetTaskStore(s store.SubagentTaskStore) { t.taskStore = s }
+
+// SetPostTurnProcessor wires post-turn team-task dispatch for async delegations.
+func (t *DelegateTool) SetPostTurnProcessor(p PostTurnProcessor) { t.postTurn = p }
 
 // SetHookDispatcher sets the hook dispatcher for SubagentStart/Stop events.
 func (t *DelegateTool) SetHookDispatcher(d hooks.Dispatcher) { t.hookDispatcher = d }
@@ -460,12 +464,18 @@ func (t *DelegateTool) executeAsyncMode(ctx context.Context, job *delegateArtifa
 	}()
 	// Detach from parent cancellation but keep a bounded admitted callback.
 	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Minute)
+	// The delegatee runs after the caller's turn has ended, so the caller's
+	// post-turn drain has already fired by the time it calls team_tasks. Give
+	// this run its own tracker, drained when the delegatee finishes, so tasks it
+	// creates are dispatched and the team create lock it takes is released.
+	bgCtx, drainTeamDispatch := InjectTeamDispatch(bgCtx, t.postTurn)
 	announceCtx := context.WithoutCancel(ctx)
 	var dr DelegateResult
 	var runErr error
 	runStarted := make(chan struct{})
 	ticket, err := t.admission.Enqueue(bgCtx, delegateAdmissionConstraints(ctx, req), func(runCtx context.Context, lease *orchestration.ChildRunLease) {
 		defer job.closeCallerRoot()
+		defer drainTeamDispatch()
 		close(runStarted)
 		runCtx = withDelegatedAgentExecution(runCtx, lease)
 		dr, runErr = t.runArtifactExchange(runCtx, job)

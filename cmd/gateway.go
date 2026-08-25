@@ -785,6 +785,9 @@ func runGateway() {
 		chatMethods.SetPostTurnProcessor(postTurn)
 		server.SetPostTurnProcessor(postTurn) // HTTP: /v1/chat/completions, /v1/responses
 		wakeH.SetPostTurnProcessor(postTurn)  // HTTP: /v1/agents/{id}/wake
+		if subagentMgr != nil {
+			subagentMgr.SetPostTurnProcessor(postTurn) // async spawns: detached from the parent turn
+		}
 	}
 
 	// Wire pairing event broadcasts to all WS clients.

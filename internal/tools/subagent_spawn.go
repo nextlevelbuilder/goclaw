@@ -71,6 +71,11 @@ func (sm *SubagentManager) SpawnWithReceipt(
 	// WithoutCancel preserves all context values (agent ID, workspace, trace info, etc.)
 	// but parent Done() no longer propagates. Manual cancel via taskCancel() still works.
 	detached := context.WithoutCancel(ctx)
+	// The subagent runs after the parent's turn has ended, so the parent's
+	// post-turn drain has already fired by the time it calls team_tasks. Give
+	// this run its own tracker, drained when the subagent finishes, so tasks it
+	// creates are dispatched and the team create lock it takes is released.
+	detached, drainTeamDispatch := InjectTeamDispatch(detached, sm.postTurn)
 	taskCtx, taskCancel := context.WithCancel(detached)
 	subTask.cancelFunc = taskCancel
 
@@ -90,6 +95,7 @@ func (sm *SubagentManager) SpawnWithReceipt(
 		ParentFanout: cfg.MaxChildrenPerAgent,
 		Depth:        admissionDepth,
 	}, func(runCtx context.Context, lease *orchestration.ChildRunLease) {
+		defer drainTeamDispatch()
 		sm.markTaskRunning(subTask)
 		iterations = sm.executeTask(withSubagentExecution(runCtx, scope, subTask.ID, subTask.Depth, lease), subTask)
 		lease.Release()

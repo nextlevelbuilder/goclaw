@@ -647,6 +647,14 @@ func wireExtras(
 	if stores.Teams != nil && stores.Agents != nil {
 		teamMgr := tools.NewTeamToolManager(stores.Teams, stores.Agents, msgBus, workspace)
 		postTurn = teamMgr
+		// Async delegations run detached from the caller's turn, so they need their
+		// own post-turn dispatch. The delegate tool is registered above, before the
+		// team manager exists — wire it now that postTurn is available.
+		if delegateTool, ok := toolsReg.Get("delegate"); ok {
+			if dt, ok := delegateTool.(*tools.DelegateTool); ok {
+				dt.SetPostTurnProcessor(postTurn)
+			}
+		}
 		var teamPolicy tools.TeamActionPolicy = tools.FullTeamPolicy{}
 		if !edition.Current().TeamFullMode {
 			teamPolicy = tools.LiteTeamPolicy{}

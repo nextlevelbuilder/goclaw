@@ -111,6 +111,7 @@ type SubagentManager struct {
 	announceQueue   *AnnounceQueue          // optional: batches announces with debounce
 	taskStore       store.SubagentTaskStore // optional: durable async completion ledger
 	usageCaps       *usagecaps.Service
+	postTurn        PostTurnProcessor // optional: dispatches team tasks a detached subagent creates
 	admission       *orchestration.ChildRunAdmission
 	sweeperOnce     sync.Once
 	sweeperStop     chan struct{}
@@ -186,6 +187,11 @@ func (sm *SubagentManager) SetAnnounceQueue(q *AnnounceQueue) {
 // SetTaskStore sets the persistent store for task lifecycle and async retrieval.
 func (sm *SubagentManager) SetTaskStore(s store.SubagentTaskStore) {
 	sm.taskStore = s
+}
+
+// SetPostTurnProcessor wires post-turn team-task dispatch for async spawns.
+func (sm *SubagentManager) SetPostTurnProcessor(p PostTurnProcessor) {
+	sm.postTurn = p
 }
 
 func (sm *SubagentManager) SetUsageCapService(s *usagecaps.Service) {
