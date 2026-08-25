@@ -1,0 +1,1 @@
+import{t as e}from"./use-auth-store-CKkxBm4b.js";function t(){let t=e(e=>e.tenantId),n=e(e=>e.tenantName),r=e(e=>e.tenantSlug),i=e(e=>e.isOwner),a=e(e=>e.availableTenants);return{tenants:a,currentTenantId:t,currentTenantName:n,currentTenantSlug:r,isOwner:i,isMultiTenant:a.length>1||i,currentTenant:a.find(e=>e.id===t)}}export{t};

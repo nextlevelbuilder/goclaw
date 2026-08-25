@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-Bs4MhNha.js";var t=e();function n({title:e,description:n}){return(0,t.jsxs)(`div`,{className:`space-y-0.5 pt-4 first:pt-0`,children:[(0,t.jsx)(`h4`,{className:`text-xs font-semibold uppercase tracking-wider text-muted-foreground`,children:e}),(0,t.jsx)(`p`,{className:`text-xs text-muted-foreground`,children:n})]})}export{n as t};

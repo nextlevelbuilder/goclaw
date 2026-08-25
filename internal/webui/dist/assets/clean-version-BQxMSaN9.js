@@ -1,0 +1,1 @@
+function e(e){let t=e.match(/^(v?\d+\.\d+\.\d+)(?:-((?:beta|alpha|rc)\.?\d*))?/i);if(!t)return e;let n=t[1],r=t[2];return r?`${n}.${r.replace(/^(beta|alpha|rc)(\d+)$/i,`$1.$2`)}`:n}export{e as t};

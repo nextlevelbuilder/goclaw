@@ -1,0 +1,1 @@
+var e={invalid_type:`invalid_type`,too_big:`too_big`,too_small:`too_small`,invalid_format:`invalid_format`,not_multiple_of:`not_multiple_of`,unrecognized_keys:`unrecognized_keys`,invalid_union:`invalid_union`,invalid_key:`invalid_key`,invalid_element:`invalid_element`,invalid_value:`invalid_value`,custom:`custom`},t;(function(e){})(t||={});export{e as t};

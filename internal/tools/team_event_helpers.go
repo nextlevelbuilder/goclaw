@@ -118,8 +118,8 @@ func WithProgress(percent int, step string) TaskEventOption {
 func WithContextInfo(ctx context.Context) TaskEventOption {
 	return func(p *protocol.TeamTaskEventPayload) {
 		p.UserID = store.UserIDFromContext(ctx)
-		p.Channel = ToolChannelFromCtx(ctx)
-		p.ChatID = ToolChatIDFromCtx(ctx)
+		p.Channel = OriginChannelFromCtx(ctx)
+		p.ChatID = OriginChatIDFromCtx(ctx)
 		p.PeerKind = ToolPeerKindFromCtx(ctx)
 		p.LocalKey = ToolLocalKeyFromCtx(ctx)
 	}
