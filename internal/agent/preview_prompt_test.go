@@ -78,9 +78,14 @@ func TestPreviewInlineDecisionMatchesRuntime(t *testing.T) {
 	}{
 		{"empty", 0, 0, false},
 		{"one small skill", 1, 20, true},
+		// Count gate, isolated: descriptions stay tiny so the token estimate is far
+		// under the ceiling and only the count can decide.
 		{"at the count ceiling", skillInlineMaxCount, 10, true},
 		{"one past the count ceiling", skillInlineMaxCount + 1, 10, false},
-		{"few skills, huge descriptions", 100, 200, false},
+		// Token gate, isolated: the count stays under the ceiling, so a false verdict
+		// can only come from the token estimate. 58 x (8 + 200 + 10) / 4 = 3161 > 3000.
+		{"under the count ceiling, under the token ceiling", 40, 200, true},
+		{"under the count ceiling, over the token ceiling", 58, 200, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			infos := skillInfoN(tc.count, tc.descLen)
