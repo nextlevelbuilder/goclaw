@@ -16,6 +16,17 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Added
 
+- **Inbound media on `POST /v1/webhooks/llm`** — an optional `media[{url, filename}]` array,
+  **sync mode only**. The gateway downloads each URL server-side and hands the agent local
+  files plus the `<media:image>` tags the vision path needs, so a webhook caller can send an
+  image the way Telegram and the WebSocket client already can. Guards: SSRF validation with
+  per-redirect-hop dial checks, a 25 MB size cap, a 50 MP image-header cap, an eight-entry MIME
+  allowlist cross-checked against the file's actual bytes, a 10-item count cap, and a process-wide
+  byte budget. Any failed item fails the whole request, the status is picked by a fixed severity
+  order rather than array position, and the failure detail exposed to callers is a closed enum so
+  the endpoint cannot be used as an internal-network oracle. `mode=async` with `media` returns
+  400. Audit rows store media URLs with the query string stripped.
+
 - **Behavior UX sidecar delivery overrides** — Adds sidecar-generated Quick
   Acknowledgement and Intermediate Replies with provider/model, timeout, token,
   and char caps. Effective config resolves Channel > Agent > Workspace, with

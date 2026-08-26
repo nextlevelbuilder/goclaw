@@ -229,18 +229,20 @@ Triggers an agent with an input prompt. Available in all editions.
   "model": "claude-opus-4-5",
   "mode": "sync",
   "callback_url": "",
+  "media": [],
   "metadata": {}
 }
 ```
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `input` | string or array | yes | Plain string, or `[{role, content}]` array |
+| `input` | string or array | yes* | Plain string, or `[{role, content}]` array. *Optional when `media` is non-empty |
 | `session_key` | string | no | Stable key for multi-turn conversation continuity |
 | `user_id` | string | no | External user identifier for scoping |
 | `model` | string | no | Per-request model override |
 | `mode` | string | no | `"sync"` (default) or `"async"` |
 | `callback_url` | string | required if async | HTTPS URL for delivery. Validated against SSRF policy |
+| `media` | array | no | Attachments fetched server-side. Max 10 items, 25 MB each. **Sync mode only.** See [Media Attachments](#media-attachments) |
 | `metadata` | object | no | Echoed to callback payload (max 8 KB) |
 
 **Input formats:**
@@ -255,6 +257,80 @@ Triggers an agent with an input prompt. Available in all editions.
   {"role": "user", "content": "List 3 key metrics"}
 ]
 ```
+
+### Media Attachments
+
+Pass remote URLs in `media` and the gateway downloads each one before the agent runs, then hands
+the agent local files the same way the Telegram and WebSocket paths do. Attachments are fetched by
+URL rather than uploaded because `POST /v1/media/upload` requires a user or admin role, which a
+webhook caller holding a `wh_` bearer or an HMAC key does not have.
+
+```json
+{
+  "input": "What is wrong in this screenshot?",
+  "media": [
+    {"url": "https://cdn.example.com/shot.png", "filename": "shot.png"}
+  ]
+}
+```
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `url` | string | yes | Public HTTP(S). Validated against the SSRF policy; redirects are followed and every hop re-validated |
+| `filename` | string | no | Original name. Used for the stored file name and for the `<media:document>` tag |
+
+Things that are not guessable from the shape:
+
+- **Allowed MIME types** — the same list as `media_url` on `/message`: `image/jpeg`, `image/png`,
+  `image/gif`, `image/webp`, `video/mp4`, `audio/mpeg`, `audio/ogg`, `application/pdf`. The
+  response `Content-Type` decides, not the URL extension, so an extension-less CDN link works. The
+  declared type is also cross-checked against the file's actual leading bytes, and an
+  `image/*` file that does not decode is rejected. Source of truth:
+  `webhooks.AllowedMediaMIMETypes` in `internal/webhooks/inbound_media.go`.
+- **`media` is sync-only.** `mode=async` with a non-empty `media` returns **400** and enqueues
+  nothing. This is the first thing an integrator trips over. The async payload is frozen before
+  the mode dispatch, so a downloaded file has no way to reach the worker — an accepted request
+  would silently run with no image at all.
+- **Any failed item fails the whole request.** There is no partial success and no per-item note in
+  the answer. Either every attachment arrives or the request errors.
+- **Failure detail is deliberately coarse.** The body carries a generic message per status code
+  and never reveals whether a host resolved, what it resolved to, or why a connection failed —
+  otherwise this endpoint would be an internal-network and port-scanning oracle. Do not write
+  client logic that parses it.
+- **Private and loopback URLs are refused**, including via redirect and DNS rebinding: the
+  resolved destination IP is checked at every hop's dial. A self-hosted object store on a private
+  network will not work.
+- **Image dimensions are capped at 50 megapixels**, checked from the file header before any
+  decode. A small file declaring huge dimensions is rejected with 413. An `image/*` file whose
+  header does not decode at all is rejected with 415 — which includes **animated WebP**, since the
+  decoder in use handles still WebP only. Send an animated image as a still frame or as
+  `video/mp4`.
+- **The URL only has to be reachable at POST time.** The download happens before the agent starts,
+  so a short-lived signed Zalo or Messenger CDN URL works — that is the point of the design.
+- **Latency.** The download runs before the agent starts and shares one deadline with it, so a
+  sync call never exceeds `gateway.webhook_sync_timeout_sec` in total. A slow download eats into
+  the agent's share of that budget and can end in a 504 — size the timeout for both halves.
+- **Concurrency.** Each in-flight attachment reserves the full 25 MB against a 512 MB process-wide
+  budget, regardless of its actual size, so roughly **20 attachments can be downloading at once
+  across the whole gateway**. Past that, further media requests get 503 with `Retry-After: 5`
+  until one finishes. This bound is separate from — and reached sooner than — the webhook lane's
+  concurrency limit, because the download happens before a lane slot is taken.
+- **The URL's query string is stripped everywhere it is retained or forwarded.** A presigned
+  URL's signature is a bearer credential, so it is removed from the audit row
+  (`request_payload`, readable via `GET /v1/webhooks/{id}/calls/{callId}` for 30 days), from the
+  `<media:image url="...">` tag the agent sees — which is sent to the LLM provider and kept in
+  session history — and from every log line. Only the scheme, host, and path survive. The gateway
+  uses the full URL to fetch, and nothing else.
+- **`user_id` and workspace isolation.** Media is persisted under
+  `<workspace>/<agent_key>/<user_id>/.uploads/`. **A caller that omits `user_id` lands in
+  `<workspace>/<agent_key>/.uploads/`** — no empty segment is created, and every such caller shares
+  that one directory. Send a stable opaque id. The segment keeps only `[A-Za-z0-9_-]` and maps
+  everything else to `_`, so `a.b@x.com` and `a_b_x_com` collide.
+- **Not supported on the admin test endpoint.** `POST /v1/webhooks/{id}/test` and the web UI test
+  dialog stay text-only.
+
+Media the agent produces is **not** returned: the sync response carries `output` text only. The
+asymmetry is deliberate for now, not an oversight.
 
 ### Sync Response — 200 OK
 
@@ -345,13 +421,19 @@ The agent runs asynchronously. Results are delivered via outbound callback (see 
 
 | Status | Code | When |
 |--------|------|------|
-| 400 | `invalid_request` | Missing `input`, bad `mode`, missing `callback_url` for async |
+| 400 | `invalid_request` | Missing `input` and `media`, bad `mode`, missing `callback_url` for async, `media` sent with `mode=async`, or a `media` URL blocked by the SSRF policy |
 | 401 | — | Auth failure (bearer invalid, HMAC mismatch, revoked, HMAC replay) |
 | 403 | `unauthorized` | `localhost_only` violation, IP allowlist denial, kind mismatch, tenant mismatch |
 | 404 | `not_found` | Agent not found |
+| 413 | `invalid_request` | A media file exceeds 25 MB, or an image exceeds 50 megapixels |
+| 415 | `invalid_request` | Media MIME type not in the allowlist, or the content does not match the declared type |
 | 429 | — | Rate limit exceeded; `Retry-After: 60` header set |
-| 503 | — | Webhook processing lane at capacity |
+| 503 | — | Webhook processing lane at capacity, or media download capacity temporarily exhausted (retryable) |
 | 504 | — | LLM timeout (sync mode only) |
+
+When several attachments fail, the status is chosen by a fixed severity order —
+SSRF, then MIME denied, then too large, then download failed, then capacity — so it never depends
+on which array position happened to fail.
 
 ---
 
@@ -404,6 +486,7 @@ Sends a message to a user on a connected channel. **Standard edition only** — 
 | 400 | `invalid_request` | Missing `chat_id`, `content`, SSRF-blocked `media_url` |
 | 403 | `unauthorized` | Channel belongs to different tenant |
 | 404 | `not_found` | Channel instance not found |
+| 413 | `invalid_request` | `media_url` exceeds the 25 MB size limit |
 | 415 | `invalid_request` | MIME type denied for media |
 | 429 | — | Rate limit exceeded |
 | 501 | `invalid_request` | Channel does not support media and `fallback_to_text=false` |
@@ -609,11 +692,17 @@ Both tiers must pass. If either rejects the request, `429 Too Many Requests` is 
 | Feature | Standard | Lite |
 |---------|----------|------|
 | `/v1/webhooks/llm` | Available | Available (localhost_only forced) |
+| `media[]` on `/v1/webhooks/llm` | Available | Available |
 | `/v1/webhooks/message` | Available | Disabled |
 | `localhost_only=false` | Configurable | Always true; cannot be unset |
 | `kind="message"` webhook creation | Allowed | Rejected (403) |
 
 On Lite, all webhooks are automatically created with `localhost_only=true` regardless of the request field. Attempting to unset `localhost_only` via PATCH returns `403`.
+
+`media[]` is not edition-gated: it adds no channel dependency. Note that `localhost_only`
+restricts who may **call** the webhook, not where the media may be hosted — a Lite caller on
+localhost can still reference a public CDN URL, and a private-network media host is refused on
+both editions.
 
 ---
 
@@ -622,6 +711,7 @@ On Lite, all webhooks are automatically created with `localhost_only=true` regar
 ### SSRF Protection
 
 - `media_url` in message webhooks: validated against SSRF policy + HEAD-probed before fetch.
+- `media[].url` in LLM webhooks: validated before the fetch, and the resolved destination IP is re-checked at every redirect hop's dial, so a redirect into a private range or a DNS rebind is refused mid-fetch. Only the failure category reaches the caller — never a host, IP, port, or error string.
 - `callback_url` in async LLM webhooks: validated at enqueue time and re-validated at delivery time (prevents DNS rebinding attacks).
 - Log event: `security.webhook.ssrf_blocked` / `security.webhook.callback_ssrf_blocked`.
 
@@ -764,9 +854,16 @@ SHA-256 hex digest of the raw request body bytes. Used by the idempotency subsys
   "model": "optional-override",
   "mode": "sync",
   "callback_url": "",
+  "media": [{"url": "https://cdn.example.com/shot.png", "filename": "shot.png"}],
   "metadata": null
 }
 ```
+
+`media[].url` is stored with its **query string and userinfo stripped**. A presigned URL's
+signature is a bearer credential and this column is readable via
+`GET /v1/webhooks/{id}/calls/{callId}` for the full 30-day retention window. The same redaction
+is applied to the media tag the agent sees and to every log line. `body_hash` is computed over
+the raw body, so idempotency still sees the original request.
 
 **`POST /v1/webhooks/message`** — meta contains delivery context:
 
