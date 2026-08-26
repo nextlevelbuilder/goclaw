@@ -12,8 +12,8 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
-	"github.com/nextlevelbuilder/goclaw/internal/tokencount"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
@@ -57,6 +57,9 @@ type PreviewDeps struct {
 	SkillsLoader interface {
 		BuildPinnedSummary(ctx context.Context, names []string) string
 		BuildSummary(ctx context.Context, allowList []string) string
+		// FilterSkills feeds shouldInlineSkills, so the preview reaches the same
+		// inline-vs-search verdict as the live prompt builder.
+		FilterSkills(ctx context.Context, allowList []string) []skills.Info
 	}
 	// MCPLister provides store-based MCP tool info for preview (nil = skip).
 	// When set, MCP tool descriptions are populated from configured servers
@@ -304,13 +307,10 @@ func BuildPreviewPrompt(ctx context.Context, ag *store.AgentData, mode PromptMod
 			}
 		}
 
-		summary := deps.SkillsLoader.BuildSummary(ctx, skillAllowList)
-		if summary != "" {
-			tokens := tokencount.NewFallbackCounter().Count("claude-3", summary)
-			if tokens <= skillInlineMaxTokens {
-				skillsSummary = summary
-			}
-			// Over threshold → search-only mode (skillsSummary stays empty)
+		// Same decision function as the live prompt builder — see shouldInlineSkills.
+		// Over threshold → search-only mode (skillsSummary stays empty).
+		if shouldInlineSkills(deps.SkillsLoader.FilterSkills(ctx, skillAllowList)) {
+			skillsSummary = deps.SkillsLoader.BuildSummary(ctx, skillAllowList)
 		}
 	}
 

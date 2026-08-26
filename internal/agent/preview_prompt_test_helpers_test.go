@@ -2,7 +2,10 @@ package agent
 
 import (
 	"context"
+	"fmt"
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"sort"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -46,16 +49,17 @@ type mockTool struct {
 	desc string
 }
 
-func (t *mockTool) Name() string                                          { return t.name }
-func (t *mockTool) Description() string                                   { return t.desc }
-func (t *mockTool) Parameters() map[string]any                            { return nil }
+func (t *mockTool) Name() string                                              { return t.name }
+func (t *mockTool) Description() string                                       { return t.desc }
+func (t *mockTool) Parameters() map[string]any                                { return nil }
 func (t *mockTool) Execute(_ context.Context, _ map[string]any) *tools.Result { return nil }
 
 // mockSkillsLoader implements the widened SkillsLoader interface.
 type mockSkillsLoader struct {
-	pinned        string   // pre-built pinned XML
-	summary       string   // pre-built full summary
-	capturedAllow []string // set by BuildSummary for test assertions
+	pinned        string        // pre-built pinned XML
+	summary       string        // pre-built full summary
+	infos         []skills.Info // what FilterSkills returns; drives inline-vs-search
+	capturedAllow []string      // set by BuildSummary for test assertions
 }
 
 func (m *mockSkillsLoader) BuildPinnedSummary(_ context.Context, _ []string) string {
@@ -65,6 +69,42 @@ func (m *mockSkillsLoader) BuildPinnedSummary(_ context.Context, _ []string) str
 func (m *mockSkillsLoader) BuildSummary(_ context.Context, allowList []string) string {
 	m.capturedAllow = allowList
 	return m.summary
+}
+
+// FilterSkills mirrors the real loader's allowList convention: nil means everything,
+// an empty slice means nothing, a populated slice selects by slug.
+func (m *mockSkillsLoader) FilterSkills(_ context.Context, allowList []string) []skills.Info {
+	if allowList == nil {
+		return m.infos
+	}
+	if len(allowList) == 0 {
+		return nil
+	}
+	allowed := make(map[string]bool, len(allowList))
+	for _, s := range allowList {
+		allowed[s] = true
+	}
+	var out []skills.Info
+	for _, s := range m.infos {
+		if allowed[s.Slug] {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// skillInfoN builds n skills whose combined name+description length puts the estimate
+// either side of the inline threshold, depending on descLen.
+func skillInfoN(n, descLen int) []skills.Info {
+	out := make([]skills.Info, 0, n)
+	for i := range n {
+		out = append(out, skills.Info{
+			Slug:        fmt.Sprintf("skill-%d", i),
+			Name:        fmt.Sprintf("skill-%d", i),
+			Description: strings.Repeat("x", descLen),
+		})
+	}
+	return out
 }
 
 // mockMCPLister implements MCPPreviewLister for testing.

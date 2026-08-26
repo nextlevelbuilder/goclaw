@@ -11,6 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
@@ -42,6 +43,7 @@ func TestBuildPreviewPrompt_SkillsInline(t *testing.T) {
 	r := BuildPreviewPrompt(context.Background(), baseAgent(), PromptFull, "", PreviewDeps{
 		SkillsLoader: &mockSkillsLoader{
 			summary: "<available_skills>\n<skill name=\"git\">Git operations</skill>\n</available_skills>",
+			infos:   skillInfoN(1, 20),
 		},
 	})
 	if !strings.Contains(r.Prompt, "<available_skills>") {
@@ -51,11 +53,48 @@ func TestBuildPreviewPrompt_SkillsInline(t *testing.T) {
 
 func TestBuildPreviewPrompt_SkillsSearchMode(t *testing.T) {
 	bigSummary := strings.Repeat("x", 10000)
+	// 100 skills at the 200-rune description cap: ~5300 estimated tokens, past the 3000
+	// inline ceiling. The estimate is taken from the skill list, not from the rendered
+	// summary, so the count and description length are what push it over.
 	r := BuildPreviewPrompt(context.Background(), baseAgent(), PromptFull, "", PreviewDeps{
-		SkillsLoader: &mockSkillsLoader{summary: bigSummary},
+		SkillsLoader: &mockSkillsLoader{summary: bigSummary, infos: skillInfoN(100, 200)},
 	})
 	if strings.Contains(r.Prompt, bigSummary) {
 		t.Error("expected large summary to be excluded (search-only mode)")
+	}
+}
+
+// The preview endpoint exists to show the prompt the agent actually gets. It used to
+// decide inline-vs-search with tokencount.NewFallbackCounter() over the rendered XML
+// while the runtime estimated name+description at chars/4 — on 18 real skills that read
+// 3087 against 944, so the preview claimed search mode for an agent running inline.
+// Both paths now call shouldInlineSkills; this pins them to the same verdict.
+func TestPreviewInlineDecisionMatchesRuntime(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		count      int
+		descLen    int
+		wantInline bool
+	}{
+		{"empty", 0, 0, false},
+		{"one small skill", 1, 20, true},
+		{"at the count ceiling", skillInlineMaxCount, 10, true},
+		{"one past the count ceiling", skillInlineMaxCount + 1, 10, false},
+		{"few skills, huge descriptions", 100, 200, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			infos := skillInfoN(tc.count, tc.descLen)
+			if got := shouldInlineSkills(infos); got != tc.wantInline {
+				t.Fatalf("shouldInlineSkills = %v, want %v", got, tc.wantInline)
+			}
+
+			loader := &mockSkillsLoader{summary: "<available_skills>marker</available_skills>", infos: infos}
+			r := BuildPreviewPrompt(context.Background(), baseAgent(), PromptFull, "", PreviewDeps{SkillsLoader: loader})
+			gotInPreview := strings.Contains(r.Prompt, "<available_skills>marker</available_skills>")
+			if gotInPreview != tc.wantInline {
+				t.Fatalf("preview inlined = %v, want %v (must match shouldInlineSkills)", gotInPreview, tc.wantInline)
+			}
+		})
 	}
 }
 
@@ -77,6 +116,7 @@ func TestBuildPreviewPrompt_SkillAllowList(t *testing.T) {
 	ag := baseAgent()
 	loader := &mockSkillsLoader{
 		summary: "<available_skills><skill name=\"allowed\">ok</skill></available_skills>",
+		infos:   []skills.Info{{Slug: "allowed-skill", Name: "allowed", Description: "ok"}},
 	}
 	r := BuildPreviewPrompt(context.Background(), ag, PromptFull, "user1", PreviewDeps{
 		SkillsLoader: loader,
@@ -96,6 +136,7 @@ func TestBuildPreviewPrompt_SkillAccessStoreError(t *testing.T) {
 	ag := baseAgent()
 	loader := &mockSkillsLoader{
 		summary: "<available_skills><skill name=\"s\">desc</skill></available_skills>",
+		infos:   skillInfoN(3, 20),
 	}
 	r := BuildPreviewPrompt(context.Background(), ag, PromptFull, "user1", PreviewDeps{
 		SkillsLoader:     loader,
@@ -104,8 +145,14 @@ func TestBuildPreviewPrompt_SkillAccessStoreError(t *testing.T) {
 	if r.Prompt == "" {
 		t.Fatal("expected non-empty prompt on SkillAccessStore error")
 	}
-	if loader.capturedAllow == nil || len(loader.capturedAllow) != 0 {
-		t.Errorf("expected empty (non-nil) allow list on error, got %v", loader.capturedAllow)
+	// Fail closed: an access-store error must not fall back to showing every skill.
+	// The tag itself appears in the skill-loading protocol text regardless, so match on
+	// the summary body.
+	if strings.Contains(r.Prompt, "<skill name=\"s\">") {
+		t.Error("expected no skills in the prompt when the access store errors")
+	}
+	if loader.capturedAllow != nil {
+		t.Errorf("BuildSummary should not run for an empty allow list, got %v", loader.capturedAllow)
 	}
 }
 

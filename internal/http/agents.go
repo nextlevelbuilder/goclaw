@@ -20,6 +20,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -106,6 +107,7 @@ type ToolPreviewLister interface {
 type SkillPreviewBuilder interface {
 	BuildPinnedSummary(ctx context.Context, names []string) string
 	BuildSummary(ctx context.Context, allowList []string) string
+	FilterSkills(ctx context.Context, allowList []string) []skills.Info
 }
 
 // SetPreviewDeps attaches optional dependencies for system prompt preview.

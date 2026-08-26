@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
 )
 
 // Hybrid skill thresholds: when skill count and total token estimate are below
@@ -29,26 +31,39 @@ func (l *Loop) resolveSkillsSummary(ctx context.Context, skillFilter []string) s
 	}
 
 	filtered := l.skillsLoader.FilterSkills(ctx, allowList)
-	if len(filtered) == 0 {
+	if !shouldInlineSkills(filtered) {
+		// Search mode: no XML in prompt, agent uses skill_search tool
 		return ""
 	}
+	return l.skillsLoader.BuildSummary(ctx, allowList)
+}
 
-	// Estimate tokens: ~1 token per 4 chars for name+description.
-	// Cap description length to match BuildSummary() truncation (skillDescMaxLen=200 runes).
+// shouldInlineSkills decides between inline mode and search mode for a set of skills.
+//
+// Both the live prompt builder and the system-prompt preview endpoint must call this.
+// They used to decide separately and disagree: the preview counted tokens with
+// tokencount.NewFallbackCounter() over the fully rendered XML — tags, <location> paths
+// and all, at roughly runes/2 — while the runtime estimated name+description at chars/4.
+// On the same 18 skills that was 3087 against 944, so the preview reported search mode
+// for an agent that was actually running inline. A preview whose whole purpose is to show
+// the real prompt cannot use a different rule than the real prompt.
+//
+// The estimate deliberately mirrors BuildSummary()'s truncation (skillDescMaxLen=200
+// runes) rather than measuring the rendered string, so the decision costs no rendering.
+func shouldInlineSkills(filtered []skills.Info) bool {
+	if len(filtered) == 0 {
+		return false
+	}
+	if len(filtered) > skillInlineMaxCount {
+		return false
+	}
+	// ~1 token per 4 chars for name+description, +10 for the XML tag overhead per entry.
 	totalChars := 0
 	for _, s := range filtered {
 		descLen := min(len(s.Description), 200)
-		totalChars += len(s.Name) + descLen + 10 // +10 for XML tags overhead
+		totalChars += len(s.Name) + descLen + 10
 	}
-	estimatedTokens := totalChars / 4
-
-	if len(filtered) <= skillInlineMaxCount && estimatedTokens <= skillInlineMaxTokens {
-		// Inline mode: build full XML summary
-		return l.skillsLoader.BuildSummary(ctx, allowList)
-	}
-
-	// Search mode: no XML in prompt, agent uses skill_search tool
-	return ""
+	return totalChars/4 <= skillInlineMaxTokens
 }
 
 // resolvePinnedSkillsSummary builds XML for pinned skills only (always inline).
