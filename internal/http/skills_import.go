@@ -88,10 +88,43 @@ type SkillsImportSummary struct {
 // entry such as "../../etc/passwd" collapses to "etc/passwd" and stays inside skillDir.
 // A file that cannot be written is logged and skipped: a missing reference degrades the
 // skill, but it should not abort an import that is otherwise sound.
+// reservedSkillFiles are handled by name earlier in the import and must never be
+// written from the auxiliary set. sanitizeRelPath collapses "./SKILL.md" to "SKILL.md",
+// and that name does not match the switch above (which compares the raw archive path),
+// so without this guard a crafted entry would land in aux and then overwrite the
+// SKILL.md that GuardSkillContent had already scanned — the scan would pass on one file
+// while a different one reached disk.
+var reservedSkillFiles = map[string]bool{
+	"SKILL.md":      true,
+	"metadata.json": true,
+	"grants.jsonl":  true,
+}
+
+// maxImportedAuxFiles bounds how many extra files one skill may carry. Real skills hold
+// a handful of references; a four-figure count is an archive doing something else.
+const maxImportedAuxFiles = 512
+
 func writeImportedSkillAuxFiles(skillDir, slug string, aux map[string][]byte) {
+	written := 0
+	skipped := 0
 	for rel, data := range aux {
+		// Directory entries carry no content and a trailing separator. Writing them as
+		// empty files would, depending on map iteration order, occupy the name a real
+		// directory needs and silently drop everything beneath it.
+		if strings.HasSuffix(rel, "/") {
+			continue
+		}
 		clean := sanitizeRelPath(rel)
 		if clean == "" {
+			continue
+		}
+		if reservedSkillFiles[clean] {
+			slog.Warn("security.skills.import_reserved_path_rejected", "slug", slug, "entry", rel, "resolved", clean)
+			skipped++
+			continue
+		}
+		if written >= maxImportedAuxFiles {
+			skipped++
 			continue
 		}
 		dest := filepath.Join(skillDir, filepath.FromSlash(clean))
@@ -101,7 +134,12 @@ func writeImportedSkillAuxFiles(skillDir, slug string, aux map[string][]byte) {
 		}
 		if err := os.WriteFile(dest, data, 0644); err != nil {
 			slog.Warn("skills.import: write skill file", "slug", slug, "path", clean, "error", err)
+			continue
 		}
+		written++
+	}
+	if skipped > 0 {
+		slog.Warn("skills.import: skill files skipped", "slug", slug, "written", written, "skipped", skipped, "limit", maxImportedAuxFiles)
 	}
 }
 
