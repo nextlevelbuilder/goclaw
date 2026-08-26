@@ -29,7 +29,13 @@ type skillSlashCommandResult struct {
 }
 
 func (l *Loop) applySkillSlashCommand(ctx context.Context, req *RunRequest, message, extraPrompt string, skillFilter []string) (string, string, []string) {
-	result := resolveSkillSlashCommand(ctx, l.skillsLoader, l.resolveSkillSlashCommandConfig(ctx), message)
+	// l.skillAllowList is the visibility + grant filter computed when the agent was
+	// resolved (internal/agent/resolver.go). The inline <available_skills> block already
+	// honours it; the slash path did not, so /<slug> activated any skill the loader could
+	// see — including internal skills never granted to this agent, and skills belonging to
+	// another tenant's store if the loader had them. Filtering here also stops the
+	// not-found suggestions from disclosing that such a skill exists.
+	result := resolveSkillSlashCommand(ctx, l.skillsLoader, l.skillAllowList, l.resolveSkillSlashCommandConfig(ctx), message)
 	if result.Kind == skillSlashCommandNone {
 		return message, extraPrompt, skillFilter
 	}
@@ -76,7 +82,10 @@ func (l *Loop) resolveSkillSlashCommandConfig(ctx context.Context) config.SkillS
 	return cfg
 }
 
-func resolveSkillSlashCommand(ctx context.Context, loader *skills.Loader, cfg config.SkillSlashCommandConfig, message string) skillSlashCommandResult {
+// resolveSkillSlashCommand matches a slash command against the skills this agent may
+// use. allowList follows the loader's convention: nil means every skill, an empty slice
+// means none, and a populated slice is an explicit set of slugs.
+func resolveSkillSlashCommand(ctx context.Context, loader *skills.Loader, allowList []string, cfg config.SkillSlashCommandConfig, message string) skillSlashCommandResult {
 	if loader == nil || !cfg.EffectiveEnabled() {
 		return skillSlashCommandResult{Kind: skillSlashCommandNone}
 	}
@@ -84,7 +93,7 @@ func resolveSkillSlashCommand(ctx context.Context, loader *skills.Loader, cfg co
 	if !ok {
 		return skillSlashCommandResult{Kind: skillSlashCommandNone}
 	}
-	all := loader.ListSkills(ctx)
+	all := loader.FilterSkills(ctx, allowList)
 	switch parsed.verb {
 	case "list-skills":
 		return skillSlashCommandResult{Kind: skillSlashCommandList, Guidance: buildSkillSlashListGuidance(all)}

@@ -13,7 +13,7 @@ import (
 
 func TestResolveSkillSlashCommandExactSlug(t *testing.T) {
 	loader := newSlashTestLoader(t)
-	result := resolveSkillSlashCommand(context.Background(), loader, config.SkillSlashCommandConfig{Enabled: boolPtr(true), Prefix: "/"}, "/frontend-design build a landing page")
+	result := resolveSkillSlashCommand(context.Background(), loader, nil, config.SkillSlashCommandConfig{Enabled: new(true), Prefix: "/"}, "/frontend-design build a landing page")
 
 	if result.Kind != skillSlashCommandActivate {
 		t.Fatalf("kind = %v, want activate", result.Kind)
@@ -31,7 +31,7 @@ func TestResolveSkillSlashCommandExactSlug(t *testing.T) {
 
 func TestResolveSkillSlashCommandExactNameUseSyntax(t *testing.T) {
 	loader := newSlashTestLoader(t)
-	result := resolveSkillSlashCommand(context.Background(), loader, config.SkillSlashCommandConfig{Enabled: boolPtr(true), Prefix: "/"}, "/use Frontend Design build a landing page")
+	result := resolveSkillSlashCommand(context.Background(), loader, nil, config.SkillSlashCommandConfig{Enabled: new(true), Prefix: "/"}, "/use Frontend Design build a landing page")
 
 	if result.Kind != skillSlashCommandActivate {
 		t.Fatalf("kind = %v, want activate", result.Kind)
@@ -47,12 +47,12 @@ func TestResolveSkillSlashCommandExactNameUseSyntax(t *testing.T) {
 func TestResolveSkillSlashCommandPartialMatchRequiresUniqueEnabled(t *testing.T) {
 	loader := newSlashTestLoader(t)
 
-	disabled := resolveSkillSlashCommand(context.Background(), loader, config.SkillSlashCommandConfig{Enabled: boolPtr(true), Prefix: "/"}, "/front build")
+	disabled := resolveSkillSlashCommand(context.Background(), loader, nil, config.SkillSlashCommandConfig{Enabled: new(true), Prefix: "/"}, "/front build")
 	if disabled.Kind != skillSlashCommandUnknown {
 		t.Fatalf("disabled partial kind = %v, want unknown", disabled.Kind)
 	}
 
-	enabled := resolveSkillSlashCommand(context.Background(), loader, config.SkillSlashCommandConfig{Enabled: boolPtr(true), Prefix: "/", PartialMatching: true}, "/front build")
+	enabled := resolveSkillSlashCommand(context.Background(), loader, nil, config.SkillSlashCommandConfig{Enabled: new(true), Prefix: "/", PartialMatching: true}, "/front build")
 	if enabled.Kind != skillSlashCommandActivate {
 		t.Fatalf("enabled partial kind = %v, want activate", enabled.Kind)
 	}
@@ -64,7 +64,7 @@ func TestResolveSkillSlashCommandPartialMatchRequiresUniqueEnabled(t *testing.T)
 func TestResolveSkillSlashCommandFalsePositives(t *testing.T) {
 	loader := newSlashTestLoader(t)
 	for _, msg := range []string{"/home/user/project", "/etc/config.yaml", "https://example.com/path", "regular prompt"} {
-		result := resolveSkillSlashCommand(context.Background(), loader, config.SkillSlashCommandConfig{Enabled: boolPtr(true), Prefix: "/"}, msg)
+		result := resolveSkillSlashCommand(context.Background(), loader, nil, config.SkillSlashCommandConfig{Enabled: new(true), Prefix: "/"}, msg)
 		if result.Kind != skillSlashCommandNone {
 			t.Fatalf("%q kind = %v, want none", msg, result.Kind)
 		}
@@ -73,9 +73,9 @@ func TestResolveSkillSlashCommandFalsePositives(t *testing.T) {
 
 func TestResolveSkillSlashCommandListAndHelp(t *testing.T) {
 	loader := newSlashTestLoader(t)
-	cfg := config.SkillSlashCommandConfig{Enabled: boolPtr(true), Prefix: "/"}
+	cfg := config.SkillSlashCommandConfig{Enabled: new(true), Prefix: "/"}
 
-	list := resolveSkillSlashCommand(context.Background(), loader, cfg, "/list-skills")
+	list := resolveSkillSlashCommand(context.Background(), loader, nil, cfg, "/list-skills")
 	if list.Kind != skillSlashCommandList {
 		t.Fatalf("list kind = %v, want list", list.Kind)
 	}
@@ -83,7 +83,7 @@ func TestResolveSkillSlashCommandListAndHelp(t *testing.T) {
 		t.Fatalf("list guidance missing skills: %s", list.Guidance)
 	}
 
-	help := resolveSkillSlashCommand(context.Background(), loader, cfg, "/help frontend-design")
+	help := resolveSkillSlashCommand(context.Background(), loader, nil, cfg, "/help frontend-design")
 	if help.Kind != skillSlashCommandHelp {
 		t.Fatalf("help kind = %v, want help", help.Kind)
 	}
@@ -91,7 +91,7 @@ func TestResolveSkillSlashCommandListAndHelp(t *testing.T) {
 		t.Fatalf("unexpected help result: %#v", help)
 	}
 
-	helpByName := resolveSkillSlashCommand(context.Background(), loader, cfg, "/help Frontend Design")
+	helpByName := resolveSkillSlashCommand(context.Background(), loader, nil, cfg, "/help Frontend Design")
 	if helpByName.Kind != skillSlashCommandHelp {
 		t.Fatalf("help by name kind = %v, want help", helpByName.Kind)
 	}
@@ -102,7 +102,7 @@ func TestResolveSkillSlashCommandListAndHelp(t *testing.T) {
 
 func TestResolveSkillSlashCommandSuggestsUnknown(t *testing.T) {
 	loader := newSlashTestLoader(t)
-	result := resolveSkillSlashCommand(context.Background(), loader, config.SkillSlashCommandConfig{Enabled: boolPtr(true), Prefix: "/", SuggestNotFound: boolPtr(true)}, "/fronted build")
+	result := resolveSkillSlashCommand(context.Background(), loader, nil, config.SkillSlashCommandConfig{Enabled: new(true), Prefix: "/", SuggestNotFound: new(true)}, "/fronted build")
 
 	if result.Kind != skillSlashCommandUnknown {
 		t.Fatalf("kind = %v, want unknown", result.Kind)
@@ -112,8 +112,9 @@ func TestResolveSkillSlashCommandSuggestsUnknown(t *testing.T) {
 	}
 }
 
+//go:fix inline
 func boolPtr(v bool) *bool {
-	return &v
+	return new(v)
 }
 
 func newSlashTestLoader(t *testing.T) *skills.Loader {
