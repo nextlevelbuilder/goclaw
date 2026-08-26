@@ -322,6 +322,8 @@ const (
 	MsgWebhookMediaSSRFBlocked            = "webhook.media_ssrf_blocked"             // "media URL blocked by SSRF policy"
 	MsgWebhookMediaTooLarge               = "webhook.media_too_large"                // "media file exceeds size limit"
 	MsgWebhookMediaMIMEDenied             = "webhook.media_mime_denied"              // "media MIME type is not allowed"
+	MsgWebhookMediaDownloadFailed         = "webhook.media_download_failed"          // "media could not be downloaded"
+	MsgWebhookMediaBudgetExhausted        = "webhook.media_budget_exhausted"         // "media download capacity temporarily exhausted"
 	MsgWebhookCallbackURLInvalid          = "webhook.callback_url_invalid"           // "callback URL is invalid or blocked"
 	MsgWebhookLLMTimeout                  = "webhook.llm_timeout"                    // "LLM processing timed out"
 	MsgWebhookLaneSaturated               = "webhook.lane_saturated"                 // "webhook processing lane is at capacity"

@@ -26,7 +26,7 @@ func safeDialControl(_, address string, _ syscall.RawConn) error {
 	}
 	if !allowLoopbackForTest.Load() && isBlocked(ip) {
 		slog.Warn("security.ssrf_block", "reason", "blocked_dial_ip", "ip", ip.String())
-		return fmt.Errorf("ssrf: dial IP %s is in a blocked range", ip)
+		return fmt.Errorf("%w: %s", ErrBlockedDial, ip)
 	}
 	return nil
 }

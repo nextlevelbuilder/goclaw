@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/security"
+	"github.com/nextlevelbuilder/goclaw/internal/webhooks"
 )
 
 const (
@@ -18,19 +19,6 @@ const (
 	// webhookMediaProbeTimeout is the deadline for the HEAD probe request.
 	webhookMediaProbeTimeout = 15 * time.Second
 )
-
-// allowedMediaMIMETypes is the set of Content-Type values accepted for media attachments.
-// Must be lowercase prefix-matched against the probed value.
-var allowedMediaMIMETypes = map[string]bool{
-	"image/jpeg":       true,
-	"image/png":        true,
-	"image/gif":        true,
-	"image/webp":       true,
-	"video/mp4":        true,
-	"audio/mpeg":       true,
-	"audio/ogg":        true,
-	"application/pdf":  true,
-}
 
 // mediaProbeResult is returned by probeMediaURL on success.
 type mediaProbeResult struct {
@@ -110,7 +98,7 @@ func probeMediaURL(rawURL string) (*mediaProbeResult, error) {
 	// Step 5: Validate Content-Type against allowlist.
 	rawCT := resp.Header.Get("Content-Type")
 	mimeType := parseMIMEType(rawCT)
-	if !allowedMediaMIMETypes[mimeType] {
+	if !webhooks.AllowedMediaMIMETypes[mimeType] {
 		return nil, &mediaValidateError{
 			code:    "mime_denied",
 			message: fmt.Sprintf("media MIME type %q is not allowed", mimeType),

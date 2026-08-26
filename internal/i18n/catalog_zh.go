@@ -276,6 +276,8 @@ func init() {
 		MsgWebhookMediaSSRFBlocked:            "媒体 URL 被 SSRF 策略拦截",
 		MsgWebhookMediaTooLarge:               "媒体文件超出大小限制",
 		MsgWebhookMediaMIMEDenied:             "媒体 MIME 类型不被允许",
+		MsgWebhookMediaDownloadFailed:         "媒体文件下载失败",
+		MsgWebhookMediaBudgetExhausted:        "媒体下载容量暂时耗尽，请稍后重试",
 		MsgWebhookCallbackURLInvalid:          "回调 URL 无效或被拦截",
 		MsgWebhookLLMTimeout:                  "LLM 处理超时",
 		MsgWebhookLaneSaturated:               "Webhook 处理通道已满",
