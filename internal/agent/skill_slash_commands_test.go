@@ -9,6 +9,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 func TestResolveSkillSlashCommandExactSlug(t *testing.T) {
@@ -124,6 +125,21 @@ func newSlashTestLoader(t *testing.T) *skills.Loader {
 	writeSkill(t, root, "frontend-design", "Frontend Design", "Create polished UI layouts.", "Use responsive components.")
 	writeSkill(t, root, "git-helper", "Git Helper", "Handle git workflows.", "Use clean commits.")
 	return skills.NewLoader("", root, "")
+}
+
+// newManagedSlashTestLoader builds a loader whose skills come from the managed
+// (DB-backed) tier, so the allow-list gate applies to them. The filesystem tiers are
+// deliberately left empty: skillsReachableBySlash only gates Source == "managed".
+func newManagedSlashTestLoader(t *testing.T) *skills.Loader {
+	t.Helper()
+	t.Setenv("GOCLAW_DISABLE_PERSONAL_SKILLS", "1")
+	dataDir := t.TempDir()
+	storeDir := config.TenantSkillsStoreDir(dataDir, store.MasterTenantID, "")
+	// Managed layout is <store>/<slug>/<version>/SKILL.md.
+	writeSkill(t, filepath.Join(storeDir, "managed-only"), "1", "managed-only", "A managed skill.", "Body.")
+	loader := skills.NewLoader("", "", "")
+	loader.SetManagedDir(dataDir)
+	return loader
 }
 
 func writeSkill(t *testing.T, root, slug, name, description, body string) {

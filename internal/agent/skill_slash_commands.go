@@ -93,7 +93,7 @@ func resolveSkillSlashCommand(ctx context.Context, loader *skills.Loader, allowL
 	if !ok {
 		return skillSlashCommandResult{Kind: skillSlashCommandNone}
 	}
-	all := loader.FilterSkills(ctx, allowList)
+	all := skillsReachableBySlash(loader.ListSkills(ctx), allowList)
 	switch parsed.verb {
 	case "list-skills":
 		return skillSlashCommandResult{Kind: skillSlashCommandList, Guidance: buildSkillSlashListGuidance(all)}
@@ -108,6 +108,40 @@ func resolveSkillSlashCommand(ctx context.Context, loader *skills.Loader, allowL
 	default:
 		return resolveSkillActivation(ctx, loader, all, parsed.target+" "+parsed.rest, cfg)
 	}
+}
+
+// skillsReachableBySlash applies the agent's allow list to the skills the DB governs,
+// and lets the rest through.
+//
+// The allow list comes from SkillAccessStore.ListAccessible, which queries the `skills`
+// table only (internal/store/pg/skills_grants.go:410). Filesystem-tier skills — the
+// workspace, .agents and ~/.agents/~/.goclaw directories of the five-tier loader — have
+// no row there, so filtering every skill against the list would make those four tiers
+// unreachable by slash while `skill_search` still finds them
+// (internal/tools/skill_search.go:81 calls ListSkills unfiltered). Gating only the
+// managed tier closes the grant bypass without stranding skills an operator placed on
+// disk deliberately.
+//
+// Builtin skills are seeded into the table with is_system = true and ListAccessible
+// returns those unconditionally, so they stay reachable either way.
+//
+// A nil allow list means no restriction; an empty one means no managed skill is allowed.
+func skillsReachableBySlash(all []skills.Info, allowList []string) []skills.Info {
+	if allowList == nil {
+		return all
+	}
+	allowed := make(map[string]bool, len(allowList))
+	for _, slug := range allowList {
+		allowed[slug] = true
+	}
+	out := make([]skills.Info, 0, len(all))
+	for _, s := range all {
+		if s.Source == "managed" && !allowed[s.Slug] {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 func resolveSkillActivation(ctx context.Context, loader *skills.Loader, all []skills.Info, raw string, cfg config.SkillSlashCommandConfig) skillSlashCommandResult {
