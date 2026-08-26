@@ -83,6 +83,28 @@ type SkillsImportSummary struct {
 }
 
 // doSkillsImport parses the skills tar.gz and creates skills + writes files + applies grants.
+// writeImportedSkillAuxFiles writes a skill's non-SKILL.md files under skillDir,
+// preserving their directory structure. Paths are sanitised per segment, so an archive
+// entry such as "../../etc/passwd" collapses to "etc/passwd" and stays inside skillDir.
+// A file that cannot be written is logged and skipped: a missing reference degrades the
+// skill, but it should not abort an import that is otherwise sound.
+func writeImportedSkillAuxFiles(skillDir, slug string, aux map[string][]byte) {
+	for rel, data := range aux {
+		clean := sanitizeRelPath(rel)
+		if clean == "" {
+			continue
+		}
+		dest := filepath.Join(skillDir, filepath.FromSlash(clean))
+		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+			slog.Warn("skills.import: mkdir for skill file", "slug", slug, "path", clean, "error", err)
+			continue
+		}
+		if err := os.WriteFile(dest, data, 0644); err != nil {
+			slog.Warn("skills.import: write skill file", "slug", slug, "path", clean, "error", err)
+		}
+	}
+}
+
 func (h *SkillsHandler) doSkillsImport(ctx context.Context, r io.Reader, userID string, progressFn func(ProgressEvent)) (*SkillsImportSummary, error) {
 	entries, err := readTarGzEntries(r)
 	if err != nil {
@@ -94,6 +116,9 @@ func (h *SkillsHandler) doSkillsImport(ctx context.Context, r io.Reader, userID 
 		metadata []byte
 		skillMD  []byte
 		grants   []byte
+		// aux holds every other file under skills/<slug>/, keyed by its path relative
+		// to the skill root — references/errors.md, scripts/run.sh, assets/, and so on.
+		aux map[string][]byte
 	}
 	bySlug := make(map[string]*skillEntry)
 
@@ -121,6 +146,16 @@ func (h *SkillsHandler) doSkillsImport(ctx context.Context, r io.Reader, userID 
 			bySlug[slug].skillMD = data
 		case "grants.jsonl":
 			bySlug[slug].grants = data
+		default:
+			// Everything else in the skill directory. The export side archives the whole
+			// tree (addSkillDirectoryToArchive), but import used to recognise only the
+			// three names above and silently discard the rest — so a skill whose SKILL.md
+			// cites references/*.md arrived without them and failed at the first read.
+			// The switch had no default, so nothing logged and the import reported success.
+			if bySlug[slug].aux == nil {
+				bySlug[slug].aux = make(map[string][]byte)
+			}
+			bySlug[slug].aux[file] = data
 		}
 	}
 
@@ -190,6 +225,7 @@ func (h *SkillsHandler) doSkillsImport(ctx context.Context, r io.Reader, userID 
 					slog.Warn("skills.import: write SKILL.md", "slug", slug, "error", err)
 				}
 			}
+			writeImportedSkillAuxFiles(skillDir, slug, entry.aux)
 
 			skillID = uuid.Must(uuid.NewV7())
 			visibility := meta.Visibility
