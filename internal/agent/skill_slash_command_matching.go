@@ -3,6 +3,8 @@ package agent
 import (
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 )
@@ -22,9 +24,7 @@ func parseSkillSlashCommand(message, prefix string) (parsedSkillSlashCommand, bo
 	if after == "" || looksLikePath(after) {
 		return parsedSkillSlashCommand{}, false
 	}
-	first, rest, _ := strings.Cut(after, " ")
-	first = strings.TrimSpace(first)
-	rest = strings.TrimSpace(rest)
+	first, rest := cutFirstField(after)
 	switch strings.ToLower(first) {
 	case "list-skills":
 		return parsedSkillSlashCommand{verb: "list-skills"}, true
@@ -44,16 +44,38 @@ func parseSkillSlashCommand(message, prefix string) (parsedSkillSlashCommand, bo
 }
 
 func looksLikePath(value string) bool {
-	first, _, _ := strings.Cut(value, " ")
+	first, _ := cutFirstField(value)
 	return strings.Contains(first, "/") || strings.Contains(first, "\\") || strings.Contains(first, ".")
 }
 
-func firstWord(value string) (string, string) {
-	first, rest, ok := strings.Cut(strings.TrimSpace(value), " ")
-	if !ok {
-		return strings.TrimSpace(value), ""
+// cutFirstField splits value at the first run of whitespace and returns the leading
+// field plus the trimmed remainder.
+//
+// This replaces strings.Cut(value, " "), which split on a literal space only. A user who
+// types the slash command and presses Enter before the rest of the message sends
+// "/ck:git\nreview the diff"; the old split yielded the target "ck:git\nreview", which
+// matches no skill. The reply was "skill not found" followed by near-matches that
+// included the skill they had just named — the similarity fallback searched the mangled
+// string and still landed beside it. Multi-line messages are normal in Slack and
+// Telegram, so this was reachable in ordinary use.
+func cutFirstField(value string) (string, string) {
+	value = strings.TrimSpace(value)
+	i := strings.IndexFunc(value, unicode.IsSpace)
+	if i < 0 {
+		return value, ""
 	}
-	return strings.TrimSpace(first), strings.TrimSpace(rest)
+	return value[:i], strings.TrimSpace(value[i:])
+}
+
+// hasFieldPrefix reports whether raw begins with value followed by whitespace, i.e.
+// value occupies a whole leading field rather than merely being a string prefix.
+// Both arguments are expected to be lowercased by the caller.
+func hasFieldPrefix(raw, value string) bool {
+	if !strings.HasPrefix(raw, value) || len(raw) == len(value) {
+		return false
+	}
+	r, _ := utf8.DecodeRuneInString(raw[len(value):])
+	return unicode.IsSpace(r)
 }
 
 func matchSkillCommandTarget(all []skills.Info, raw string, partial bool) (skills.Info, bool, string) {
@@ -69,7 +91,7 @@ func matchSkillCommandTarget(all []skills.Info, raw string, partial bool) (skill
 	}
 	var matches []candidate
 	lowerRaw := strings.ToLower(raw)
-	partialTarget, partialRemainder := firstWord(raw)
+	partialTarget, partialRemainder := cutFirstField(raw)
 	lowerPartialTarget := strings.ToLower(partialTarget)
 	for _, skill := range all {
 		for _, value := range []string{skill.Slug, skill.Name} {
@@ -82,7 +104,7 @@ func matchSkillCommandTarget(all []skills.Info, raw string, partial bool) (skill
 				matches = append(matches, candidate{info: skill, matchText: value, score: len([]rune(value))})
 				continue
 			}
-			if strings.HasPrefix(lowerRaw, lowerValue+" ") {
+			if hasFieldPrefix(lowerRaw, lowerValue) {
 				remainder := trimMatchedSkillCommandPrefix(raw, value)
 				matches = append(matches, candidate{info: skill, matchText: value, remainder: remainder, score: len([]rune(value))})
 				continue
