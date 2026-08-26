@@ -231,19 +231,34 @@ func buildSubagentToolsRegistry(
 ) (*tools.Registry, *tools.ExecTool) {
 	reg := parentReg.Clone()
 	var execTool *tools.ExecTool
+	var readTool *tools.ReadFileTool
+	var writeTool *tools.WriteFileTool
+	var listTool *tools.ListFilesTool
 	if sandboxMgr != nil {
-		reg.Register(tools.NewSandboxedReadFileTool(workspace, restrict, sandboxMgr))
-		reg.Register(tools.NewSandboxedWriteFileTool(workspace, restrict, sandboxMgr))
-		reg.Register(tools.NewSandboxedListFilesTool(workspace, restrict, sandboxMgr))
+		readTool = tools.NewSandboxedReadFileTool(workspace, restrict, sandboxMgr)
+		writeTool = tools.NewSandboxedWriteFileTool(workspace, restrict, sandboxMgr)
+		listTool = tools.NewSandboxedListFilesTool(workspace, restrict, sandboxMgr)
 		execTool = tools.NewSandboxedExecTool(workspace, restrict, sandboxMgr)
-		reg.Register(execTool)
 	} else {
-		reg.Register(tools.NewReadFileTool(workspace, restrict))
-		reg.Register(tools.NewWriteFileTool(workspace, restrict))
-		reg.Register(tools.NewListFilesTool(workspace, restrict))
+		readTool = tools.NewReadFileTool(workspace, restrict)
+		writeTool = tools.NewWriteFileTool(workspace, restrict)
+		listTool = tools.NewListFilesTool(workspace, restrict)
 		execTool = tools.NewExecTool(workspace, restrict)
-		reg.Register(execTool)
 	}
+
+	// These four tools are built fresh, so they start with none of the hardening the
+	// gateway applied to the parent's instances at startup: exec path denials and their
+	// exemptions, shell deny-group toggles, the command keyword allowlist, and the
+	// read/write/list deny prefixes covering config.json, the databases, and delegate/.
+	// Without this, spawning a subagent widened reach — the parent could not touch the
+	// data dir, the subagent could. Inherit from the live parent instances so there is
+	// one source of truth and a later config reload cannot leave subagents behind.
+	inheritParentPathPolicy(parentReg, readTool, writeTool, listTool, execTool)
+
+	reg.Register(readTool)
+	reg.Register(writeTool)
+	reg.Register(listTool)
+	reg.Register(execTool)
 	// Red Team F3: subagent ExecTool must enforce the secure-CLI gate
 	// (and env scrub on fall-through) — without this, a parent agent
 	// can spawn a subagent to bypass the gate via host-inherited env.
@@ -251,6 +266,42 @@ func buildSubagentToolsRegistry(
 		execTool.SetSecureCLIStore(secureCLIStore)
 	}
 	return reg, execTool
+}
+
+// inheritParentPathPolicy copies the parent registry's tool hardening onto the freshly
+// built subagent tools. A tool missing from the parent registry, or registered there
+// under an unexpected concrete type, is skipped: the subagent then has no policy to
+// inherit for it, which matches the parent having none to give.
+func inheritParentPathPolicy(
+	parentReg *tools.Registry,
+	readTool *tools.ReadFileTool,
+	writeTool *tools.WriteFileTool,
+	listTool *tools.ListFilesTool,
+	execTool *tools.ExecTool,
+) {
+	if parentReg == nil {
+		return
+	}
+	if pt, ok := parentReg.Get("read_file"); ok {
+		if parent, ok := pt.(*tools.ReadFileTool); ok {
+			readTool.InheritPathPolicy(parent)
+		}
+	}
+	if pt, ok := parentReg.Get("write_file"); ok {
+		if parent, ok := pt.(*tools.WriteFileTool); ok {
+			writeTool.InheritPathPolicy(parent)
+		}
+	}
+	if pt, ok := parentReg.Get("list_files"); ok {
+		if parent, ok := pt.(*tools.ListFilesTool); ok {
+			listTool.InheritPathPolicy(parent)
+		}
+	}
+	if pt, ok := parentReg.Get("exec"); ok {
+		if parent, ok := pt.(*tools.ExecTool); ok {
+			execTool.InheritSecurityPolicy(parent)
+		}
+	}
 }
 
 // setupTTS creates the TTS manager from config and registers providers.
