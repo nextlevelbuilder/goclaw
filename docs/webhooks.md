@@ -332,6 +332,91 @@ Things that are not guessable from the shape:
 Media the agent produces is **not** returned: the sync response carries `output` text only. The
 asymmetry is deliberate for now, not an oversight.
 
+### Integrating a middleware (Zalo OA, Messenger, CRM)
+
+The common shape: a platform webhook hits your middleware, your middleware calls goclaw. The
+mistake that costs the most time is putting the image URL **inside `input`**:
+
+```json
+// WRONG — the URL is just text. Nothing is downloaded, no media tag is built,
+// and the model receives a string that looks like a link.
+{
+  "input": "Customer sent an image: https://cdn.example.com/abc.jpg\nAnswer based on it."
+}
+```
+
+```json
+// RIGHT — the URL goes in media[]. The gateway downloads it before the agent
+// runs and prepends a <media:image> tag to the message.
+{
+  "input": "Answer based on the image and the customer's question.",
+  "media": [
+    {"url": "https://cdn.example.com/abc.jpg", "filename": "abc.jpg"}
+  ]
+}
+```
+
+A URL left in `input` is not guaranteed to fail: the agent *may* choose to call `read_image`
+with it. That path is non-deterministic (it depends on the model deciding to call the tool),
+skips the size cap and the MIME allowlist, and does not persist the file to the workspace.
+`media[]` is the deterministic path.
+
+#### Requirements for the URL you send
+
+| Requirement | Why |
+|---|---|
+| Public HTTP(S), resolving to a public IP | The SSRF policy re-checks the resolved IP at every redirect hop's dial |
+| **No authentication needed** | The gateway issues a plain GET and sets no headers. A URL requiring `Authorization`, a cookie, or a signed header will fail — proxy it instead |
+| Response `Content-Type` in the allowlist | The header decides the type, not the file extension |
+| Reachable at POST time | The download happens before the agent starts, which is what makes short-lived signed CDN links usable |
+| Within 25 MB, and 50 MP for images | Hard caps |
+
+#### Pass the platform URL directly, or proxy it first?
+
+Both work. Choose by URL lifetime and auth:
+
+- **Direct** — fine when the platform serves a public, unauthenticated URL. Fewest moving parts.
+  The risk is expiry: platform CDN links are often short-lived, so a delayed retry, a replayed
+  `Idempotency-Key`, or an operator re-running a request from the audit log will hit a dead URL.
+- **Proxy through your own storage** (S3, R2, a Cloudflare Worker) — recommended when the
+  platform URL is short-lived or requires a token. A stable URL also keeps the redacted URL in
+  the audit row meaningful weeks later, which is when you actually need it.
+
+Proxying is **required** when the platform URL needs an auth header, since the gateway sends
+none.
+
+#### Errors your middleware should handle
+
+| Status | Meaning | Retry? |
+|---|---|---|
+| 400 | URL blocked by SSRF policy, download failed, or `media` sent with `mode=async` | No — fix the request |
+| 413 | File over 25 MB, or image over 50 MP | No — resize before sending |
+| 415 | MIME type not allowed, or content does not match the declared type | No |
+| 503 | Media download capacity exhausted (`Retry-After: 5`) or lane at capacity | Yes, with backoff |
+| 504 | The download plus the agent run exceeded `gateway.webhook_sync_timeout_sec` | Yes |
+
+Any one failed attachment fails the whole request, and the status reflects the most severe
+failure across all items, not the first one in the array. Failure messages are deliberately
+generic — do not parse them.
+
+#### Worked example
+
+```bash
+curl -X POST https://<host>/v1/webhooks/llm \
+  -H "Authorization: Bearer wh_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "input": "Answer based on the image and the customer question.",
+    "user_id": "zalo:1234567890",
+    "session_key": "zalo:1234567890",
+    "media": [{"url": "https://cdn.example.com/abc.jpg", "filename": "abc.jpg"}]
+  }'
+```
+
+Send a stable `user_id`: media is persisted under
+`<workspace>/<agent_key>/<user_id>/.uploads/`, and callers that omit it all share one
+directory. `session_key` keeps a multi-turn conversation together.
+
 ### Sync Response — 200 OK
 
 ```json
