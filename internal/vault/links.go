@@ -33,10 +33,14 @@ func ExtractWikilinks(content string) []WikilinkMatch {
 			continue
 		}
 
-		// Build context: ~25 chars before and after the link
+		// Build context: ~25 bytes before and after the link.
+		// Sanitize with ToValidUTF8 so the byte-offset window does not
+		// split a multi-byte rune (Vietnamese, CJK, emoji), which would
+		// produce invalid UTF-8 that PostgreSQL rejects with
+		// "invalid byte sequence for encoding UTF8" (SQLSTATE 22021).
 		start := max(m[0]-25, 0)
 		end := min(m[1]+25, len(content))
-		ctx := content[start:end]
+		ctx := strings.ToValidUTF8(content[start:end], "")
 
 		result = append(result, WikilinkMatch{
 			Target:  target,

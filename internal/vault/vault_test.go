@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
+	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // ============================================================================
@@ -466,4 +468,31 @@ Use [[templates/new-feature.md]] when creating features.
 func hashRef(data []byte) string {
 	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])
+}
+
+// ============================================================================
+// Multi-byte UTF-8 Context Tests
+// ============================================================================
+
+// TestExtractWikilinks_MultibyteUTF8Context reproduces issue #1472:
+// the byte-offset context window (±25 bytes) can split multi-byte UTF-8
+// characters (Vietnamese, CJK, emoji), producing invalid UTF-8 that
+// PostgreSQL rejects with "invalid byte sequence for encoding UTF8"
+// (SQLSTATE 22021).
+//
+// "ế" (U+1EBF) is 3 bytes in UTF-8. Ten of them = 30 bytes; adding a
+// single ASCII byte shifts the window start to byte 7, which lands on
+// a continuation byte of the 3rd "ế" — an invalid UTF-8 start.
+func TestExtractWikilinks_MultibyteUTF8Context(t *testing.T) {
+	prefix := strings.Repeat("ế", 10) + "x" // 31 bytes
+	suffix := "x" + strings.Repeat("ệ", 10)  // 31 bytes
+	content := prefix + " [[target]] " + suffix
+
+	matches := ExtractWikilinks(content)
+	if len(matches) != 1 {
+		t.Fatalf("ExtractWikilinks returned %d matches, want 1", len(matches))
+	}
+	if !utf8.ValidString(matches[0].Context) {
+		t.Errorf("context contains invalid UTF-8: %q", matches[0].Context)
+	}
 }
