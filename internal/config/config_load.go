@@ -162,6 +162,7 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_ATLASCLOUD_API_KEY", &c.Providers.AtlasCloud.APIKey)
 	envStr("GOCLAW_ATLASCLOUD_BASE_URL", &c.Providers.AtlasCloud.APIBase)
 	envStr("GOCLAW_OPENROUTER_API_KEY", &c.Providers.OpenRouter.APIKey)
+	envStr("GOCLAW_ORCAROUTER_API_KEY", &c.Providers.OrcaRouter.APIKey)
 	envStr("GOCLAW_GROQ_API_KEY", &c.Providers.Groq.APIKey)
 	envStr("GOCLAW_DEEPSEEK_API_KEY", &c.Providers.DeepSeek.APIKey)
 	envStr("GOCLAW_GEMINI_API_KEY", &c.Providers.Gemini.APIKey)

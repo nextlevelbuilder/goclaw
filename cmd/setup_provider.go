@@ -49,6 +49,7 @@ func addProvider() {
 		{"OpenAI", "openai"},
 		{"Atlas Cloud", "atlascloud"},
 		{"OpenRouter", "openrouter"},
+		{"OrcaRouter", "orcarouter"},
 		{"DashScope (Alibaba)", "dashscope"},
 		{"OpenAI-compatible", "openai_compat"},
 	}
