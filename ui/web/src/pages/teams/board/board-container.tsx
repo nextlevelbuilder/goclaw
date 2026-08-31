@@ -14,7 +14,8 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { useBoardTasks } from "./use-board-tasks";
 import type {
   TeamTaskData, TeamTaskComment, TeamTaskEvent, TeamTaskAttachment,
-  TeamMemberData, ScopeEntry,
+  TeamMemberData, ScopeEntry, TeamWorkflowDetailResponse,
+  TeamWorkflowActionRequest, TeamWorkflowActionResponse,
 } from "@/types/team";
 
 type StatusFilter = "all" | "pending" | "in_progress" | "completed";
@@ -27,6 +28,8 @@ interface BoardContainerProps {
   getTeamTasks: (teamId: string, status?: string, channel?: string, chatId?: string) => Promise<{ tasks: TeamTaskData[]; count: number }>;
   getTaskDetail: (teamId: string, taskId: string) => Promise<{ task: TeamTaskData; comments: TeamTaskComment[]; events: TeamTaskEvent[]; attachments: TeamTaskAttachment[] }>;
   getTaskLight: (teamId: string, taskId: string) => Promise<TeamTaskData>;
+  getWorkflow: (teamId: string, workflowId: string) => Promise<TeamWorkflowDetailResponse>;
+  applyWorkflowAction: (params: TeamWorkflowActionRequest) => Promise<TeamWorkflowActionResponse>;
   deleteTask?: (teamId: string, taskId: string) => Promise<void>;
   deleteTasksBulk?: (teamId: string, taskIds: string[]) => Promise<number>;
   addTaskComment?: (teamId: string, taskId: string, content: string) => Promise<void>;
@@ -35,7 +38,8 @@ interface BoardContainerProps {
 
 export const BoardContainer = memo(function BoardContainer({
   teamId, members, scopes, isTeamV2,
-  getTeamTasks, getTaskDetail, getTaskLight, deleteTask, deleteTasksBulk, addTaskComment, onWorkspace,
+  getTeamTasks, getTaskDetail, getTaskLight, getWorkflow, applyWorkflowAction,
+  deleteTask, deleteTasksBulk, addTaskComment, onWorkspace,
 }: BoardContainerProps) {
   const { t } = useTranslation("teams");
   const viewMode = useBoardStore((s) => s.viewMode);
@@ -135,6 +139,9 @@ export const BoardContainer = memo(function BoardContainer({
             isTeamV2={isTeamV2}
             emojiLookup={emojiLookup}
             getTaskDetail={getTaskDetail}
+            getWorkflow={getWorkflow}
+            applyWorkflowAction={applyWorkflowAction}
+            onWorkflowChanged={() => load()}
             deleteTask={deleteTask}
             deleteTasksBulk={deleteTasksBulk}
             addTaskComment={addTaskComment}
@@ -161,7 +168,11 @@ export const BoardContainer = memo(function BoardContainer({
             isTeamV2={isTeamV2}
             onClose={handleCloseDetail}
             getTaskDetail={getTaskDetail}
+            getWorkflow={getWorkflow}
+            applyWorkflowAction={applyWorkflowAction}
+            onWorkflowChanged={() => load()}
             deleteTask={deleteTask}
+            onAddComment={addTaskComment}
             taskLookup={taskLookup}
             memberLookup={memberLookup}
             emojiLookup={emojiLookup}

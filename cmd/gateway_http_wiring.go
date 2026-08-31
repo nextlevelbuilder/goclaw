@@ -117,7 +117,12 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 	if d.pgStores.SystemConfigs != nil {
 		d.server.SetSystemConfigsHandler(httpapi.NewSystemConfigsHandler(d.pgStores.SystemConfigs, d.msgBus))
 
-		// Refresh in-memory config when system_configs change via HTTP API
+		// Refresh in-memory config when system_configs change via HTTP API.
+		// NOTE: the changed tenant's Team Work classifier cache is invalidated by a
+		// dedicated bus subscriber (registerTeamWorkConfigInvalidator), NOT here —
+		// the three team_work_classify keys were removed from ApplySystemConfigs and
+		// are resolved per-tenant, so this closure only refreshes the shared cfg for
+		// the remaining process-wide keys.
 		d.msgBus.Subscribe(bus.TopicSystemConfigChanged, func(evt bus.Event) {
 			// Use tenant context from the request that triggered the change
 			ctx := context.Background()

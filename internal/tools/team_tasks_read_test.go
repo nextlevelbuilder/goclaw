@@ -1,7 +1,9 @@
 package tools
 
 import (
+	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -69,15 +71,22 @@ func TestExecute_PolicyBlocked(t *testing.T) {
 	}
 }
 
+// create_workflow and get_workflow are the retired multi-role workflow schema:
+// they are absent from fullActions and must fall through the same unknown-action
+// path as any other invalid action string, not a dedicated handler.
 func TestExecute_UnknownAction(t *testing.T) {
 	_, tool, _, _, ctx := newTestTeamSetup()
 
-	result := tool.Execute(ctx, map[string]any{"action": "nonexistent"})
-	if !result.IsError {
-		t.Fatal("expected error for unknown action")
-	}
-	if !strings.Contains(result.ForLLM, "unknown action") {
-		t.Errorf("expected 'unknown action' error, got: %s", result.ForLLM)
+	for _, action := range []string{"nonexistent", "create_workflow", "get_workflow"} {
+		t.Run(action, func(t *testing.T) {
+			result := tool.Execute(ctx, map[string]any{"action": action})
+			if !result.IsError {
+				t.Fatalf("expected error for unknown action %q", action)
+			}
+			if !strings.Contains(result.ForLLM, "unknown action") {
+				t.Errorf("expected 'unknown action' error for %q, got: %s", action, result.ForLLM)
+			}
+		})
 	}
 }
 
@@ -108,6 +117,7 @@ func TestSearch_SatisfiesCreateGate(t *testing.T) {
 	_, tool, _, _, ctx := newTestTeamSetup()
 
 	ptd := NewPendingTeamDispatch()
+	t.Cleanup(ptd.ReleaseTeamLock)
 	ctx = WithPendingTeamDispatch(ctx, ptd)
 
 	if ptd.HasListed() {
@@ -119,6 +129,54 @@ func TestSearch_SatisfiesCreateGate(t *testing.T) {
 	if !ptd.HasListed() {
 		t.Error("expected HasListed=true after search")
 	}
+}
+
+func TestSearchFailureDoesNotSatisfyCreateGateAndReleasesWaiters(t *testing.T) {
+	mb, tool, _, _, ctx := newTestTeamSetup()
+	ptd := NewPendingTeamDispatch()
+	t.Cleanup(ptd.ReleaseTeamLock)
+	ctx = WithPendingTeamDispatch(ctx, ptd)
+	mb.taskStore.searchErr = errors.New("search unavailable")
+
+	result := tool.Execute(ctx, map[string]any{"action": "search", "query": "test"})
+	if !result.IsError {
+		t.Fatal("expected search error")
+	}
+	if ptd.HasListed() {
+		t.Fatal("failed search must not satisfy create gate")
+	}
+
+	mb.taskStore.searchErr = nil
+	result = tool.Execute(ctx, map[string]any{"action": "search", "query": "test"})
+	if result.IsError || !ptd.HasListed() {
+		t.Fatalf("retry after failed search = %+v, listed=%v", result, ptd.HasListed())
+	}
+}
+
+func TestPendingTeamDispatchConcurrentListingWaiterDoesNotNeedPostTurn(t *testing.T) {
+	ptd := NewPendingTeamDispatch()
+	winner, _ := ptd.BeginListing()
+	if !winner {
+		t.Fatal("first listing call must win")
+	}
+	winner, wait := ptd.BeginListing()
+	if winner || wait == nil {
+		t.Fatal("second listing call must wait")
+	}
+
+	lock := &sync.Mutex{}
+	lock.Lock()
+	ptd.FailListing(lock)
+	select {
+	case <-wait:
+	case <-time.After(time.Second):
+		t.Fatal("waiter remained blocked after failed query")
+	}
+	winner, _ = ptd.BeginListing()
+	if !winner {
+		t.Fatal("waiter must be able to retry after failure")
+	}
+	ptd.MarkListed()
 }
 
 func TestGet_CrossTeamBlocked(t *testing.T) {

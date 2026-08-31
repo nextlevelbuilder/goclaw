@@ -635,9 +635,11 @@ type RunRequest struct {
 	Stream                     bool               // whether to stream response chunks
 	ExtraSystemPrompt          string             // optional: injected into system prompt (skills, subagent context, etc.)
 	TeamWorkDirective          *TeamWorkDirective // optional: force this turn through team/delegate workflow
+	DisableTeamWork            bool               // classifier/verifier degradation: prohibit orchestration for the whole run
 	SkillFilter                []string           // per-request skill override: nil=use agent default, []=no skills, ["x","y"]=whitelist
 	HistoryLimit               int                // max user turns to keep in context (0=unlimited, from channel config)
 	ToolAllow                  []string           // per-group tool allow list (nil = no restriction, supports "group:xxx")
+	BlockedTools               []string           // per-run tool deny list from routing gates; hidden from provider and execution
 	TelegramManagerPermissions []string           // hidden Telegram management permission groups granted by the channel config
 	LocalKey                   string             // composite key with topic/thread suffix for routing (e.g. "-100123:topic:42")
 	ParentTraceID              uuid.UUID          // if set, reuse parent trace instead of creating new (announce runs)
@@ -665,6 +667,24 @@ type RunRequest struct {
 	// so force-abort can mark the correct trace as cancelled. Nil = no-op.
 	OnTraceCreated func(traceID uuid.UUID)
 
+	// IsCurrentOwner is the router ownership fence (Phase 7 Decision 3). It reports
+	// whether this run still owns its session — i.e. it has not been force-aborted,
+	// unregistered, or superseded by a replacement run on the same session. The loop
+	// consults it immediately before every user-visible commit (history append,
+	// session save, final success event) and suppresses that commit when it returns
+	// false, so a zombie run cannot corrupt the session another run now owns.
+	// Cleanup, stale-attempt no-ops, and operational tracing are NOT gated on it.
+	// Nil = no fence (treated as always-owner), preserving behavior for callers that
+	// do not register with the router (tests, internal direct runs).
+	IsCurrentOwner func() bool
+
+	// NOTE: the dequeue-time pre-execution hook (inbound Team Work gate against the
+	// latest session history) is deliberately NOT a field here. It is a
+	// scheduler-owned concept — scheduler.PreExecuteHook, carried via
+	// scheduler.ScheduleOpts.PreExecute — because only the scheduler invokes it and
+	// only at dequeue, and it needs a result/error contract (abort the run) that a
+	// RunRequest field cannot express. See internal/scheduler/queue.go.
+
 	// Delegation context (set when running as a delegate agent)
 	DelegationID        string // delegation ID for event correlation
 	DelegateInputsPath  string // runtime-only read-only staged inputs root
@@ -673,6 +693,22 @@ type RunRequest struct {
 	TeamTaskID          string // team task ID (if delegation has an associated task)
 	ParentAgentID       string // parent agent key that initiated the delegation
 	LeaderAgentID       string // leader agent UUID for member memory read fallback
+
+	// WorkflowAttempt carries the accepted, backend-derived attempt identity for a
+	// workflow-work task run (tenant/team/workflow/task/dispatch_token/plan_revision).
+	// Set only after AcceptWorkflowTaskAttempt succeeds; nil for non-workflow runs.
+	// The loop injects it into context so every workflow-work mutation (heartbeat,
+	// progress, blocker, complete, post-turn settlement) fences on this one tuple
+	// and a superseded attempt can never mutate the task or fail the workflow.
+	WorkflowAttempt *store.WorkflowTaskAttempt
+
+	// WorkflowRecovery carries the backend-derived identity of the blocked step a
+	// coordinator recovery run must resolve (tenant/team/workflow/blocked task).
+	// Set only for RunKindWorkflowRecovery runs; nil otherwise. The loop injects it
+	// into context so the coordinator's bounded recovery actions (retry_blocked /
+	// cancel_workflow / fail_workflow) resolve the workflow and blocked task without
+	// the model supplying — or even seeing — a UUID.
+	WorkflowRecovery *store.WorkflowRecoveryContext
 
 	// Workspace scope propagation (set by delegation, read by workspace tools)
 	WorkspaceChannel string
@@ -686,6 +722,8 @@ type RunRequest struct {
 	// tags durable without storing inline image bytes.
 	enrichedInputMessage    providers.Message
 	hasEnrichedInputMessage bool
+	// RoutingMetadata is the channel-resolved final reply target snapshot.
+	RoutingMetadata map[string]string
 }
 
 // RunResult is the output of a completed agent run.
@@ -763,6 +801,10 @@ type runState struct {
 	// Loop detector kill flag — set when any detector triggers critical level.
 	// Propagated to RunResult.LoopKilled so the consumer can auto-fail team tasks.
 	loopKilled bool
+
+	// Clean stop after a successful handoff workflow; not an error and not surfaced as LoopKilled.
+	stopAfterTool      bool
+	suppressUserOutput bool
 
 	// Truncation retry counter — caps consecutive truncation/parse-error retries
 	// to prevent burning through all iterations when max_tokens is too low.

@@ -617,7 +617,9 @@ func (t *ExecTool) executeOnHost(ctx context.Context, command, cwd string) *Resu
 		_ = killProcessGroup(cmd, syscallSIGTERM)
 		select {
 		case <-done:
-			// Exited cleanly after SIGTERM.
+			// The shell can exit before background descendants process SIGTERM.
+			// Re-signal the process group so those descendants cannot survive.
+			_ = killProcessGroup(cmd, syscallSIGKILL)
 		case <-time.After(3 * time.Second):
 			// Still alive after grace period — force kill.
 			_ = killProcessGroup(cmd, syscallSIGKILL)

@@ -131,3 +131,15 @@ func TestToolContextKeys_MultipleValues(t *testing.T) {
 		t.Errorf("sandboxKey: expected sandbox-1, got %q", v)
 	}
 }
+
+func TestToolContextKeys_TeamWorkReviewRequired(t *testing.T) {
+	ctx := context.Background()
+	if v := TeamWorkReviewRequiredFromCtx(ctx); v {
+		t.Error("expected false on empty context")
+	}
+
+	ctx = WithTeamWorkReviewRequired(ctx, true)
+	if v := TeamWorkReviewRequiredFromCtx(ctx); !v {
+		t.Error("expected true after WithTeamWorkReviewRequired(true)")
+	}
+}

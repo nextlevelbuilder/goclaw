@@ -77,6 +77,7 @@ type Manager struct {
 	bus              *bus.MessageBus
 	runs             sync.Map // runID string → *RunContext
 	mediaClaims      sync.Map // temp media path → struct{}, in-flight dispatch claims
+	workflowDelivery sync.Map // workflow_delivery_id → dedupe expiry time.Time
 	dispatchTask     *asyncTask
 	mu               sync.RWMutex
 	contactCollector *store.ContactCollector

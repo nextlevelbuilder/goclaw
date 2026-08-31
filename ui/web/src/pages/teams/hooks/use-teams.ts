@@ -2,7 +2,11 @@ import { useState, useCallback } from "react";
 import { useWs } from "@/hooks/use-ws";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { Methods } from "@/api/protocol";
-import type { TeamData, TeamMemberData, TeamTaskData, TeamTaskComment, TeamTaskEvent, TeamTaskAttachment, TeamAccessSettings, ScopeEntry } from "@/types/team";
+import type {
+  TeamData, TeamMemberData, TeamTaskData, TeamTaskComment, TeamTaskEvent,
+  TeamTaskAttachment, TeamAccessSettings, ScopeEntry, TeamWorkflowDetailResponse,
+  TeamWorkflowActionRequest, TeamWorkflowActionResponse,
+} from "@/types/team";
 import { toast } from "@/stores/use-toast-store";
 import i18next from "i18next";
 import { userFriendlyError } from "@/lib/error-utils";
@@ -115,6 +119,22 @@ export function useTeams() {
       );
       return res.task;
     },
+    [ws],
+  );
+
+  const getWorkflow = useCallback(
+    async (teamId: string, workflowId: string) => ws.call<TeamWorkflowDetailResponse>(
+      Methods.TEAMS_WORKFLOW_GET,
+      { teamId, workflowId },
+    ),
+    [ws],
+  );
+
+  const applyWorkflowAction = useCallback(
+    async (params: TeamWorkflowActionRequest) => ws.call<TeamWorkflowActionResponse>(
+      Methods.TEAMS_WORKFLOW_ACTION,
+      params as unknown as Record<string, unknown>,
+    ),
     [ws],
   );
 
@@ -271,7 +291,8 @@ export function useTeams() {
 
   return {
     teams, loading, load, createTeam, deleteTeam, getTeam, getTeamTasks, getTeamScopes,
-    getTaskDetail, getTaskLight, approveTask, rejectTask, addTaskComment, getTaskComments, getTaskEvents,
+    getTaskDetail, getTaskLight, getWorkflow, applyWorkflowAction,
+    approveTask, rejectTask, addTaskComment, getTaskComments, getTaskEvents,
     createTask, deleteTask, deleteTasksBulk, assignTask,
     addMember, removeMember, updateTeam,
   };

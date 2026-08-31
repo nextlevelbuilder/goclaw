@@ -73,6 +73,16 @@ func seedConfigForContext(ctx context.Context, sc store.SystemConfigStore, cfg *
 			slog.Warn("failed to sync system config", "key", key, "error", err)
 		}
 	}
+	setAllowEmpty := func(key, val string) {
+		if onlyMissing {
+			if _, ok := existing[key]; ok {
+				return
+			}
+		}
+		if err := sc.Set(ctx, key, val); err != nil {
+			slog.Warn("failed to sync system config", "key", key, "error", err)
+		}
+	}
 	setInt := func(key string, val int) {
 		if val != 0 {
 			set(key, fmt.Sprintf("%d", val))
@@ -85,6 +95,18 @@ func seedConfigForContext(ctx context.Context, sc store.SystemConfigStore, cfg *
 		if val != nil {
 			set(key, fmt.Sprintf("%t", *val))
 		}
+	}
+	// setBoolAllowEmpty mirrors setAllowEmpty for the provider/model keys: an
+	// unset (*bool == nil) file-config value writes "" so a prior DB override is
+	// cleared rather than lingering (Phase 7 review 7B-M2 clear semantics). The
+	// teamworkconfig.Resolver ignores a present-empty enable key (v == "") and so
+	// falls back to the file-config default — round-tripping the "unset" state.
+	setBoolAllowEmpty := func(key string, val *bool) {
+		if val == nil {
+			setAllowEmpty(key, "")
+			return
+		}
+		setAllowEmpty(key, fmt.Sprintf("%t", *val))
 	}
 
 	// Embedding
@@ -108,8 +130,18 @@ func seedConfigForContext(ctx context.Context, sc store.SystemConfigStore, cfg *
 	setIntAllowZero("gateway.inbound_debounce_ms", cfg.Gateway.InboundDebounceMs)
 	setBool("gateway.block_reply", cfg.Gateway.BlockReply)
 	setBool("gateway.tool_status", cfg.Gateway.ToolStatus)
-	setBool("gateway.team_work_classify", cfg.Gateway.TeamWorkClassify)
-	setInt("gateway.task_recovery_interval_sec", cfg.Gateway.TaskRecoveryIntervalSec)
+	setBoolAllowEmpty("gateway.team_work_classify", cfg.Gateway.TeamWorkClassify)
+	setAllowEmpty("gateway.team_work_classify_provider", cfg.Gateway.TeamWorkClassifyProvider)
+	setAllowEmpty("gateway.team_work_classify_model", cfg.Gateway.TeamWorkClassifyModel)
+	setInt("gateway.team_work_classify_timeout_sec", cfg.Gateway.TeamWorkClassifyTimeoutSec)
+	// gateway.task_recovery_interval_sec is deliberately NOT seeded/upserted per
+	// tenant here (Phase 7 closure item 6). The recovery ticker interval is
+	// process-wide, startup-only and restart-required: it is read once from the
+	// master/startup system config by ApplyStartupSystemConfigs and captured by
+	// NewTaskTicker at construction. Writing it on every tenant seed/sync would
+	// falsely present it as a live per-tenant setting. ApplyStartupSystemConfigs
+	// still reads any pre-existing persisted master value for upgrade
+	// compatibility; the dynamic ApplySystemConfigs path continues to ignore it.
 
 	// Background workers
 	set("background.provider", cfg.Gateway.BackgroundProvider)

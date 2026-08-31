@@ -25,7 +25,7 @@ export const KanbanColumn = memo(function KanbanColumn({ columnId, title, tasks,
     <div className="flex max-h-full w-[280px] shrink-0 flex-col rounded-xl border bg-card shadow-sm">
       <div className="flex items-center gap-2 px-3 py-2.5">
         <span className={`h-2.5 w-2.5 rounded-full ${STATUS_COLORS[columnId] ?? "bg-gray-400"}`} />
-        <span className="text-sm font-medium capitalize">{title.replace(/_/g, " ")}</span>
+        <span className="text-sm font-medium capitalize">{t(`taskStatus.${columnId}`, { defaultValue: title })}</span>
         <Badge variant="secondary" className="ml-auto text-2xs px-1.5 py-0">{tasks.length}</Badge>
       </div>
 

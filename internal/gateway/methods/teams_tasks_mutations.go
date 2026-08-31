@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -92,33 +93,18 @@ func (m *TeamsMethods) handleTaskCreate(ctx context.Context, client *gateway.Cli
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"task": task}))
 
 	if m.msgBus != nil {
-		m.msgBus.Broadcast(taskBusEvent(protocol.EventTeamTaskCreated, protocol.TeamTaskEventPayload{
-			TeamID:     teamID.String(),
-			TaskID:     task.ID.String(),
-			TaskNumber: task.TaskNumber,
-			Subject:    task.Subject,
-			Status:     task.Status,
-			UserID:     client.UserID(),
-			Channel:    ch,
-			ChatID:     cid,
-			Timestamp:  taskNowUTC(),
-			ActorType:  "human",
-			ActorID:    client.UserID(),
-		}))
+		// Identity/status/workflow/revision/owner are re-derived from the committed
+		// row inside the publish path; owner display is resolved via m.agentStore.
+		tools.PublishTaskEventWithResolver(m.teamStore, m.msgBus, m.agentStore, protocol.EventTeamTaskCreated, tools.BuildTeamTaskEventPayload(task, "", tools.TeamTaskEventOptions{
+			UserID: client.UserID(), Channel: ch, ChatID: cid,
+			ActorType: "human", ActorID: client.UserID(),
+		}), uuid.Nil)
 
 		if autoAssignedAgentID != uuid.Nil {
-			m.msgBus.Broadcast(taskBusEvent(protocol.EventTeamTaskAssigned, protocol.TeamTaskEventPayload{
-				TeamID:        teamID.String(),
-				TaskID:        task.ID.String(),
-				Status:        store.TeamTaskStatusInProgress,
-				OwnerAgentKey: autoAssignedAgentID.String(),
-				UserID:        client.UserID(),
-				Channel:       ch,
-				ChatID:        cid,
-				Timestamp:     taskNowUTC(),
-				ActorType:     "human",
-				ActorID:       client.UserID(),
-			}))
+			tools.PublishTaskEventWithResolver(m.teamStore, m.msgBus, m.agentStore, protocol.EventTeamTaskAssigned, tools.BuildTeamTaskEventPayload(task, "", tools.TeamTaskEventOptions{
+				UserID: client.UserID(), Channel: ch, ChatID: cid,
+				ActorType: "human", ActorID: client.UserID(),
+			}), uuid.Nil)
 
 			// Dispatch to assigned agent.
 			m.dispatchTaskToAgent(ctx, task, task.ID, teamID, autoAssignedAgentID, client.UserID())
@@ -173,6 +159,10 @@ func (m *TeamsMethods) handleTaskAssign(ctx context.Context, client *gateway.Cli
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "task", "")))
 		return
 	}
+	if task.WorkflowID != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "workflow tasks cannot be assigned manually"))
+		return
+	}
 
 	if err := m.teamStore.AssignTask(ctx, taskID, agentID, teamID); err != nil {
 		slog.Warn("teams.tasks.assign failed", "task_id", taskID, "agent_id", agentID, "error", err)
@@ -183,17 +173,10 @@ func (m *TeamsMethods) handleTaskAssign(ctx context.Context, client *gateway.Cli
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"ok": true}))
 
 	if m.msgBus != nil {
-		m.msgBus.Broadcast(taskBusEvent(protocol.EventTeamTaskAssigned, protocol.TeamTaskEventPayload{
-			TeamID:    teamID.String(),
-			TaskID:    taskID.String(),
-			Status:    store.TeamTaskStatusInProgress,
-			UserID:    client.UserID(),
-			Channel:   task.Channel,
-			ChatID:    task.ChatID,
-			Timestamp: taskNowUTC(),
-			ActorType: "human",
-			ActorID:   client.UserID(),
-		}))
+		tools.PublishTaskEventWithResolver(m.teamStore, m.msgBus, m.agentStore, protocol.EventTeamTaskAssigned, tools.BuildTeamTaskEventPayload(task, "", tools.TeamTaskEventOptions{
+			UserID: client.UserID(), Channel: task.Channel, ChatID: task.ChatID,
+			ActorType: "human", ActorID: client.UserID(),
+		}), uuid.Nil)
 
 		// Dispatch task to the assigned agent via message bus so the consumer
 		// routes it through the agent loop.
@@ -241,6 +224,10 @@ func (m *TeamsMethods) handleTaskDelete(ctx context.Context, client *gateway.Cli
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "task", "")))
 		return
 	}
+	if task.WorkflowID != nil {
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, "workflow tasks cannot be deleted"))
+		return
+	}
 
 	if err := m.teamStore.DeleteTask(ctx, taskID, teamID); err != nil {
 		if errors.Is(err, store.ErrTaskNotFound) {
@@ -255,15 +242,9 @@ func (m *TeamsMethods) handleTaskDelete(ctx context.Context, client *gateway.Cli
 	client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{"ok": true}))
 
 	if m.msgBus != nil {
-		m.msgBus.Broadcast(taskBusEvent(protocol.EventTeamTaskDeleted, protocol.TeamTaskEventPayload{
-			TeamID:    teamID.String(),
-			TaskID:    taskID.String(),
-			Status:    task.Status,
-			UserID:    client.UserID(),
-			Channel:   "dashboard",
-			Timestamp: taskNowUTC(),
-			ActorType: "human",
-			ActorID:   client.UserID(),
+		tools.PublishDeletedTaskEvent(m.msgBus, task, tools.BuildTeamTaskEventPayload(task, "", tools.TeamTaskEventOptions{
+			UserID: client.UserID(), Channel: "dashboard",
+			ActorType: "human", ActorID: client.UserID(),
 		}))
 	}
 }
@@ -305,6 +286,19 @@ func (m *TeamsMethods) handleTaskDeleteBulk(ctx context.Context, client *gateway
 		return
 	}
 
+	taskSnapshots, err := m.teamStore.GetTasksByIDs(ctx, taskUUIDs)
+	if err != nil {
+		slog.Warn("teams.tasks.delete-bulk snapshot failed", "team_id", teamID, "error", err)
+		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgInternalError, "")))
+		return
+	}
+	snapshotByID := make(map[uuid.UUID]*store.TeamTaskData, len(taskSnapshots))
+	for i := range taskSnapshots {
+		if taskSnapshots[i].TeamID == teamID && taskSnapshots[i].WorkflowID == nil {
+			snapshotByID[taskSnapshots[i].ID] = &taskSnapshots[i]
+		}
+	}
+
 	deleted, err := m.teamStore.DeleteTasks(ctx, taskUUIDs, teamID)
 	if err != nil {
 		slog.Warn("teams.tasks.delete-bulk failed", "team_id", teamID, "error", err)
@@ -319,14 +313,14 @@ func (m *TeamsMethods) handleTaskDeleteBulk(ctx context.Context, client *gateway
 	// Broadcast delete event per task for real-time UI sync.
 	if m.msgBus != nil {
 		for _, id := range deleted {
-			m.msgBus.Broadcast(taskBusEvent(protocol.EventTeamTaskDeleted, protocol.TeamTaskEventPayload{
-				TeamID:    teamID.String(),
-				TaskID:    id.String(),
-				UserID:    client.UserID(),
-				Channel:   "dashboard",
-				Timestamp: taskNowUTC(),
-				ActorType: "human",
-				ActorID:   client.UserID(),
+			snapshot := snapshotByID[id]
+			if snapshot == nil {
+				slog.Warn("teams.tasks.delete-bulk missing authoritative snapshot", "task_id", id, "team_id", teamID)
+				continue
+			}
+			tools.PublishDeletedTaskEvent(m.msgBus, snapshot, tools.BuildTeamTaskEventPayload(snapshot, "", tools.TeamTaskEventOptions{
+				UserID: client.UserID(), Channel: "dashboard",
+				ActorType: "human", ActorID: client.UserID(),
 			}))
 		}
 	}

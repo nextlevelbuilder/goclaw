@@ -149,6 +149,13 @@ func (p *ModelFallbackProvider) runOrdered(
 			continue
 		}
 		resp, err := call(ctx, entry, req)
+		// A candidate that reports success while returning nothing at all has not
+		// answered. Treating it as success here would both mark the candidate
+		// healthy and stop the walk, so the remaining candidates — the entire
+		// point of configuring fallback — would never be tried.
+		if err == nil && ResponseCarriesNoSignal(resp) {
+			resp, err = nil, &EmptyResponseError{Provider: entry.ProviderName, Model: entry.Model}
+		}
 		if err == nil {
 			if p.tracker != nil {
 				p.tracker.RecordSuccess(key)

@@ -34,6 +34,44 @@ func (l *Loop) resolveToolCallName(name string) string {
 	return name
 }
 
+// selfFallbackDeniedTools is the canonical orchestration set, derived from the
+// single source in internal/tools so the run-level execution deny and the gate
+// block list cannot drift from the tool identities themselves.
+var selfFallbackDeniedTools = func() map[string]struct{} {
+	names := tools.OrchestrationToolNames()
+	denied := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		denied[name] = struct{}{}
+	}
+	return denied
+}()
+
+func teamWorkOrchestrationTools() []string {
+	return tools.OrchestrationToolNames()
+}
+
+const selfFallbackToolBlockedMessage = "This orchestration tool is unavailable in the current run. Continue directly with available tools."
+
+func (l *Loop) canonicalToolCallName(name string) string {
+	return l.canonicalToolName(l.resolveToolCallName(name))
+}
+
+func (l *Loop) isSelfFallbackDeniedTool(name string) bool {
+	_, denied := selfFallbackDeniedTools[l.canonicalToolCallName(name)]
+	return denied
+}
+
+func (l *Loop) filterSelfFallbackToolDefs(defs []providers.ToolDefinition) []providers.ToolDefinition {
+	filtered := make([]providers.ToolDefinition, 0, len(defs))
+	for _, def := range defs {
+		if def.Function != nil && l.isSelfFallbackDeniedTool(def.Function.Name) {
+			continue
+		}
+		filtered = append(filtered, def)
+	}
+	return filtered
+}
+
 func (l *Loop) parallelEligibleToolCall(tc providers.ToolCall) bool {
 	name := l.resolveToolCallName(tc.Name)
 	switch {

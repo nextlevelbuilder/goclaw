@@ -9,6 +9,7 @@
   "completed": "Завершённые",
   "createTask": "Создать задачу",
   "noTasks": "Пока нет задач",
+  "unassigned": "Unassigned",
   "id": "ID",
   "subject": "Тема",
   "status": "Статус",
@@ -107,5 +108,92 @@
     "poolProvider": "Пул провайдеров",
     "secureCli": "Защищённый CLI",
     "tenantUsers": "Управление арендаторами и пользователями"
+  },
+  "taskStatus": {
+    "pending": "Pending",
+    "dispatching": "Dispatching",
+    "blocked": "Blocked",
+    "in_progress": "In progress",
+    "in_review": "In review",
+    "completed": "Completed",
+    "failed": "Failed",
+    "cancelled": "Cancelled",
+    "stale": "Stale"
+  },
+  "workflow": {
+    "title": "Workflow",
+    "step": "Step",
+    "revision": "Revision {{revision}}",
+    "blockerReason": "Blocker reason: {{reason}}",
+    "actionUnavailable": "Workflow action unavailable",
+    "actionFailed": "Failed to apply workflow action",
+    "status": {
+      "pending_expansion": "Pending expansion",
+      "running": "Running",
+      "needs_revision": "Needs revision",
+      "failing": "Failing",
+      "cancelling": "Cancelling",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "delivery": {
+      "label": "Delivery: {{status}}",
+      "pending": "Pending",
+      "enqueuing": "Enqueuing",
+      "delivered": "Delivered",
+      "dead": "Dead"
+    },
+    "attempts": {
+      "expansion": "Expansion attempts: {{count}}",
+      "delivery": "Delivery attempts: {{count}}"
+    },
+    "reason": {
+      "label": "Reason",
+      "placeholder": "Explain why this action is needed",
+      "required": "A reason is required"
+    },
+    "actions": {
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "applying": "Applying...",
+      "retry_blocked": {
+        "label": "Retry blocked step",
+        "description": "Retry the blocked step with revised instructions.",
+        "confirm": "Retry this blocked step now?"
+      },
+      "cancel_workflow": {
+        "label": "Cancel workflow",
+        "description": "Cancel all remaining work in this workflow.",
+        "confirm": "Cancel this workflow? Remaining work will be stopped."
+      },
+      "fail_workflow": {
+        "label": "Fail workflow",
+        "description": "Mark the workflow as failed and stop remaining work.",
+        "confirm": "Fail this workflow? Remaining work will be stopped."
+      },
+      "retry_expansion": {
+        "label": "Retry expansion",
+        "description": "Retry expansion using the remaining bounded retry budget.",
+        "confirm": "Retry workflow expansion now?"
+      },
+      "retry_delivery": {
+        "label": "Retry delivery",
+        "description": "Start a new bounded delivery cycle for the terminal result.",
+        "confirm": "Retry terminal result delivery now?"
+      }
+    },
+    "toast": {
+      "applied": "Workflow action applied",
+      "already_applied": "Workflow action was already applied",
+      "conflict": "Workflow changed",
+      "refreshed": "The latest authoritative workflow state has been loaded.",
+      "error": "Failed to apply workflow action"
+    },
+    "outcomes": {
+      "applied": "Workflow action applied",
+      "already_applied": "Workflow action was already applied",
+      "conflict": "Workflow changed; the latest state was loaded"
+    }
   }
 }

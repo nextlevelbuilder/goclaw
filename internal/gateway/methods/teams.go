@@ -12,18 +12,26 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/internal/workflowactions"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 // TeamsMethods handles teams.* RPC methods.
 type TeamsMethods struct {
-	teamStore   store.TeamStore
-	agentStore  store.AgentStore
-	linkStore   store.AgentLinkStore // for auto-creating bidirectional links
-	agentRouter *agent.Router        // for cache invalidation
-	msgBus      *bus.MessageBus      // for pub/sub cache invalidation
-	eventBus    bus.EventPublisher
-	dataDir string // workspace data directory for resolving file paths
+	teamStore       store.TeamStore
+	agentStore      store.AgentStore
+	linkStore       store.AgentLinkStore // for auto-creating bidirectional links
+	agentRouter     *agent.Router        // for cache invalidation
+	msgBus          *bus.MessageBus      // for pub/sub cache invalidation
+	eventBus        bus.EventPublisher
+	postTurn        tools.PostTurnProcessor
+	workflowActions *workflowactions.Service
+	dataDir         string // workspace data directory for resolving file paths
+}
+
+func (m *TeamsMethods) SetPostTurnProcessor(postTurn tools.PostTurnProcessor) {
+	m.postTurn = postTurn
 }
 
 func NewTeamsMethods(teamStore store.TeamStore, agentStore store.AgentStore, linkStore store.AgentLinkStore, agentRouter *agent.Router, msgBus *bus.MessageBus, eventBus bus.EventPublisher, dataDir string) *TeamsMethods {
@@ -38,6 +46,20 @@ func (m *TeamsMethods) emitTeamCacheInvalidate() {
 	m.msgBus.Broadcast(bus.Event{
 		Name:    protocol.EventCacheInvalidate,
 		Payload: bus.CacheInvalidatePayload{Kind: bus.CacheKindTeam},
+	})
+}
+
+// emitTeamAccessCacheInvalidate refreshes tenant-bound client event snapshots.
+func (m *TeamsMethods) emitTeamAccessCacheInvalidate(ctx context.Context) {
+	if m.msgBus == nil {
+		return
+	}
+	m.msgBus.Broadcast(bus.Event{
+		Name: protocol.EventCacheInvalidate,
+		Payload: bus.CacheInvalidatePayload{
+			Kind:     bus.CacheKindTeamAccess,
+			TenantID: store.TenantIDFromContext(ctx),
+		},
 	})
 }
 
@@ -64,6 +86,9 @@ func (m *TeamsMethods) Register(router *gateway.MethodRouter) {
 
 	// Task detail handlers
 	m.RegisterTasks(router)
+
+	// Workflow detail and recovery handlers
+	m.RegisterWorkflows(router)
 }
 
 // --- List ---

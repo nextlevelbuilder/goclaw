@@ -44,14 +44,26 @@ type TraceCollector interface {
 // Each agent has a unique ID and its own provider/model/tools config.
 // Cached Loops expire after TTL (safety net for multi-instance).
 type Router struct {
-	agents          map[string]*agentEntry
-	mu              sync.RWMutex
-	activeRuns      sync.Map     // runID → *ActiveRun
-	sessionRuns     sync.Map     // sessionKey → runID (secondary index for O(1) IsSessionBusy)
-	agentActivity   sync.Map     // sessionKey → *AgentActivityStatus
-	resolver        ResolverFunc // optional: lazy creation from DB
-	ttl             time.Duration
-	traceCollector  TraceCollector // optional: for force-marking aborted traces
+	agents         map[string]*agentEntry
+	mu             sync.RWMutex
+	activeRuns     sync.Map     // runID → *ActiveRun
+	sessionRuns    sync.Map     // sessionKey → sessionOwner (secondary index for O(1) IsSessionBusy + ownership fence)
+	agentActivity  sync.Map     // sessionKey → *AgentActivityStatus
+	resolver       ResolverFunc // optional: lazy creation from DB
+	ttl            time.Duration
+	traceCollector TraceCollector // optional: for force-marking aborted traces
+	ownerSeq       atomic.Uint64  // monotonic source of immutable ownership generations (Phase 7 Decision 3)
+}
+
+// sessionOwner is the value stored in sessionRuns: the run currently owning a
+// session plus its immutable ownership generation (Phase 7 Decision 3). It is
+// comparable so CompareAndDelete can atomically release ownership ONLY when this
+// exact run+generation still holds it — a replacement run that registered a newer
+// generation is left untouched, and a force-aborted run's late UnregisterRun
+// cannot evict its successor.
+type sessionOwner struct {
+	runID      string
+	generation uint64
 }
 
 func NewRouter() *Router {
@@ -254,13 +266,69 @@ type ActiveRun struct {
 	RunID      string
 	SessionKey string
 	AgentID    string
+	RunKind    string
 	Cancel     context.CancelFunc
 	StartedAt  time.Time
 	InjectCh   chan InjectedMessage // buffered channel for mid-run user message injection
-	Done       chan struct{}        // closed when goroutine actually exits (via UnregisterRun)
-	State      atomic.Int32        // 0=running, 1=aborting, 2=done
-	TraceID    uuid.UUID           // set after trace creation via SetRunTraceID
-	TenantID   uuid.UUID           // captured at RegisterRun for forceMarkTraceAborted
+	Done       chan struct{}        // closed when goroutine actually exits (via UnregisterRun) OR on forced abort
+	State      atomic.Int32         // 0=running, 1=aborting, 2=done
+	// Generation is the immutable ownership token assigned at RegisterRun (Phase 7
+	// Decision 3). It fences zombie writes: a run whose ownership has been lost —
+	// force-aborted, unregistered, or superseded by a replacement run on the same
+	// session — no longer matches IsCurrentOwner and must suppress all
+	// user-visible commits (history append, session save, final success event).
+	// It never changes after RegisterRun; a replacement run gets a fresh, higher
+	// generation.
+	Generation uint64
+	// traceID is set after trace creation via SetRunTraceID and read by
+	// forceMarkTraceAborted on a different goroutine, so it is guarded by an
+	// atomic pointer rather than a bare field (Phase 7 review 7A-M3: sync.Map
+	// protects the map slot, not fields inside the stored *ActiveRun).
+	traceID  atomic.Pointer[uuid.UUID]
+	TenantID uuid.UUID // captured at RegisterRun for forceMarkTraceAborted (immutable after RegisterRun)
+	// onForcedAbort is an optional short, non-blocking, idempotent callback the
+	// forced-abort path (AbortRun's 3s-timeout branch) invokes to settle a turn
+	// whose lifecycle only the run goroutine knows (Phase 7 closure item 2). When
+	// a WS run goroutine is genuinely stuck and never returns, force-unregistering
+	// closes Done so the FIFO worker advances, but the original chat.send RPC and
+	// turn lifecycle would never settle. WS wires this callback to send the
+	// cancelled RPC + cancelled terminal at the force boundary. forceOnce ensures
+	// it runs at most once even under repeated/concurrent AbortRun calls; a later
+	// stuck-goroutine return hits the ErrRunOwnershipLost path whose RPC/lifecycle
+	// latches suppress any duplicate settlement. Inbound leaves this nil (no WS RPC
+	// lifecycle; its outer caller handles the typed stale outcome).
+	onForcedAbort func()
+	forceOnce     sync.Once
+}
+
+// setTraceID stores the trace UUID atomically.
+func (a *ActiveRun) setTraceID(id uuid.UUID) {
+	a.traceID.Store(&id)
+}
+
+// getTraceID loads the trace UUID atomically, returning uuid.Nil when unset.
+func (a *ActiveRun) getTraceID() uuid.UUID {
+	if p := a.traceID.Load(); p != nil {
+		return *p
+	}
+	return uuid.Nil
+}
+
+const RunKindWorkflowFinalize = "workflow_finalize"
+
+// RunKindWorkflowRecovery is the protected internal run in which the canonical
+// coordinator resolves a blocked workflow (retry/replan/cancel/fail). Unlike the
+// finalize run it deliberately KEEPS team_tasks/delegate/spawn available — the
+// coordinator resolves the blocker THROUGH those tools — so it is gated only for
+// mid-run injection refusal, not for self-fallback tool filtering.
+const RunKindWorkflowRecovery = "workflow_recovery"
+
+// ActiveRunInfo is an immutable snapshot used by callers that need to defer
+// work until a protected internal run has finished.
+type ActiveRunInfo struct {
+	RunID   string
+	RunKind string
+	Done    <-chan struct{}
 }
 
 // AbortResult describes the outcome of a single AbortRun call.
@@ -287,21 +355,87 @@ func safeClose(ch chan struct{}) {
 
 // RegisterRun records an active run so it can be aborted later.
 // ctx is used to capture the tenant ID for forceMarkTraceAborted.
-// Returns a receive-only channel for mid-run message injection.
-func (r *Router) RegisterRun(ctx context.Context, runID, sessionKey, agentID string, cancel context.CancelFunc) <-chan InjectedMessage {
+// Returns a receive-only channel for mid-run message injection and the run's
+// immutable ownership generation (Phase 7 Decision 3), which the caller wires
+// into RunRequest.IsCurrentOwner so the loop can fence zombie writes.
+func (r *Router) RegisterRun(ctx context.Context, runID, sessionKey, agentID string, cancel context.CancelFunc) (<-chan InjectedMessage, uint64) {
+	return r.RegisterRunWithKind(ctx, runID, sessionKey, agentID, "", cancel)
+}
+
+// RegisterRunWithKind records an active run and preserves its routing kind so
+// user follow-ups cannot be injected into protected internal runs. It delegates
+// to RegisterRunWithOptions with a nil forced-abort callback — the common path
+// for callers (e.g. inbound) that have no WS RPC/turn lifecycle to settle at a
+// forced-abort boundary.
+func (r *Router) RegisterRunWithKind(ctx context.Context, runID, sessionKey, agentID, runKind string, cancel context.CancelFunc) (<-chan InjectedMessage, uint64) {
+	return r.RegisterRunWithOptions(ctx, runID, sessionKey, agentID, runKind, cancel, nil)
+}
+
+// RegisterRunWithOptions records an active run and preserves its routing kind so
+// user follow-ups cannot be injected into protected internal runs. It assigns a
+// fresh, monotonically increasing ownership generation (Phase 7 Decision 3):
+// storing sessionOwner{runID, generation} in the session index makes this run
+// the session's current owner, and a later replacement run receives a strictly
+// higher generation so ownership transfer is unambiguous. Returns the inject
+// channel and the assigned generation.
+//
+// onForcedAbort, when non-nil, is stored on the ActiveRun and invoked at most
+// once by AbortRun's 3s-timeout branch to settle a turn whose lifecycle only the
+// run goroutine knows (Phase 7 closure item 2). It must be short, non-blocking,
+// and idempotent.
+func (r *Router) RegisterRunWithOptions(ctx context.Context, runID, sessionKey, agentID, runKind string, cancel context.CancelFunc, onForcedAbort func()) (<-chan InjectedMessage, uint64) {
 	injectCh := make(chan InjectedMessage, injectBufferSize)
+	generation := r.ownerSeq.Add(1)
 	r.activeRuns.Store(runID, &ActiveRun{
-		RunID:      runID,
-		SessionKey: sessionKey,
-		AgentID:    agentID,
-		Cancel:     cancel,
-		StartedAt:  time.Now(),
-		InjectCh:   injectCh,
-		Done:       make(chan struct{}),
-		TenantID:   store.TenantIDFromContext(ctx),
+		RunID:         runID,
+		SessionKey:    sessionKey,
+		AgentID:       agentID,
+		RunKind:       runKind,
+		Cancel:        cancel,
+		StartedAt:     time.Now(),
+		InjectCh:      injectCh,
+		Done:          make(chan struct{}),
+		Generation:    generation,
+		TenantID:      store.TenantIDFromContext(ctx),
+		onForcedAbort: onForcedAbort,
 	})
-	r.sessionRuns.Store(sessionKey, runID)
-	return injectCh
+	// Claim session ownership under this run+generation. A concurrent replacement
+	// that already registered a higher generation must win: only overwrite if the
+	// slot is empty or still held by an older generation.
+	for {
+		prev, loaded := r.sessionRuns.LoadOrStore(sessionKey, sessionOwner{runID: runID, generation: generation})
+		if !loaded {
+			break
+		}
+		if prevOwner, ok := prev.(sessionOwner); ok && prevOwner.generation >= generation {
+			break // a newer (or equal) owner already holds the slot; do not clobber it
+		}
+		if r.sessionRuns.CompareAndSwap(sessionKey, prev, sessionOwner{runID: runID, generation: generation}) {
+			break
+		}
+		// CAS lost to a concurrent writer; re-evaluate.
+	}
+	return injectCh, generation
+}
+
+// IsCurrentOwner reports whether runID with the given ownership generation still
+// owns sessionKey (Phase 7 Decision 3). It is the typed fence the loop consults
+// before every user-visible commit: once a run is force-aborted, unregistered,
+// or superseded by a replacement run on the same session, the session index no
+// longer maps to this exact {runID, generation} and the check returns false, so
+// the zombie run suppresses its history append, session save, and final success
+// event. Cleanup, stale-attempt no-ops, and operational tracing are deliberately
+// NOT gated on this — they must still run for a lost-ownership run.
+func (r *Router) IsCurrentOwner(sessionKey, runID string, generation uint64) bool {
+	val, ok := r.sessionRuns.Load(sessionKey)
+	if !ok {
+		return false
+	}
+	owner, ok := val.(sessionOwner)
+	if !ok {
+		return false
+	}
+	return owner.runID == runID && owner.generation == generation
 }
 
 // SetRunTraceID associates a trace UUID with an active run.
@@ -309,19 +443,39 @@ func (r *Router) RegisterRun(ctx context.Context, runID, sessionKey, agentID str
 // can update the correct trace record on a 3s timeout.
 func (r *Router) SetRunTraceID(runID string, traceID uuid.UUID) {
 	if val, ok := r.activeRuns.Load(runID); ok {
-		val.(*ActiveRun).TraceID = traceID
+		val.(*ActiveRun).setTraceID(traceID)
 	}
 }
 
-// UnregisterRun removes a completed/cancelled run from tracking.
-// Closes Done BEFORE deleting from maps so any concurrent AbortRun waiting
-// on Done sees the signal before the entry disappears.
+// RunDone returns the completion channel for an active run, closed when the run
+// goroutine exits via UnregisterRun OR when a forced abort releases the run
+// (AbortRun's 3s-timeout path calls UnregisterRun to close it). Callers that
+// must not outlive a genuinely stuck run — the per-session WS FIFO worker —
+// wait on this instead of a local completion channel the stuck goroutine's
+// defer may never close (Phase 7 review mandatory fix #3). Returns (nil, false)
+// if the run is unknown (already completed and unregistered); a nil channel from
+// a closed <-chan receive is the caller's cue to proceed immediately.
+func (r *Router) RunDone(runID string) (<-chan struct{}, bool) {
+	if val, ok := r.activeRuns.Load(runID); ok {
+		return val.(*ActiveRun).Done, true
+	}
+	return nil, false
+}
+
+// UnregisterRun removes a completed/cancelled run from tracking. Ownership is
+// invalidated BEFORE Done is closed (Phase 7 Decision 3): the session index is
+// released first, so anything that wakes on Done — the FIFO worker admitting the
+// next run, deferred commit paths — already observes this run as a non-owner and
+// cannot append/save/emit under a lost ownership. CompareAndDelete keyed on the
+// exact {runID, generation} preserves a newer replacement run that already took
+// ownership of the same session: a force-aborted run's late UnregisterRun cannot
+// evict its successor.
 func (r *Router) UnregisterRun(runID string) {
 	if val, ok := r.activeRuns.Load(runID); ok {
 		run := val.(*ActiveRun)
 		run.State.Store(2) // mark done
+		r.sessionRuns.CompareAndDelete(run.SessionKey, sessionOwner{runID: run.RunID, generation: run.Generation})
 		safeClose(run.Done)
-		r.sessionRuns.Delete(run.SessionKey)
 	}
 	r.activeRuns.Delete(runID)
 }
@@ -369,6 +523,24 @@ func (r *Router) AbortRun(runID, sessionKey string) AbortResult {
 	case <-time.After(abortGraceTimeout):
 		// Goroutine is stuck; force trace status so the UI does not hang.
 		r.forceMarkTraceAborted(runID)
+		// Settle the turn whose RPC/lifecycle only the run goroutine knows (Phase 7
+		// closure item 2). A genuinely stuck WS run never returns to emit its own
+		// cancelled RPC + terminal, so we invoke the registered callback at the force
+		// boundary — AFTER the trace force-mark, BEFORE UnregisterRun. forceOnce makes
+		// it at-most-once under repeated/concurrent AbortRun. It runs here (not under a
+		// map-mutation lock; the router uses sync.Map) so it cannot deadlock, and must
+		// be short, non-blocking, and idempotent. A later stuck-goroutine return hits
+		// the ErrRunOwnershipLost path whose RPC/lifecycle latches suppress duplicates.
+		if run.onForcedAbort != nil {
+			run.forceOnce.Do(run.onForcedAbort)
+		}
+		// Release the run's reservation even though the goroutine has not exited
+		// (Phase 7 review 7A-C2). Without this, anything waiting on run.Done — the
+		// per-session FIFO worker and deferred chat.send responses — would block
+		// forever on a genuinely stuck run. UnregisterRun closes Done via safeClose
+		// and clears the session index; the real goroutine's later UnregisterRun is
+		// idempotent (safeClose swallows the double-close, Delete is a no-op).
+		r.UnregisterRun(runID)
 		res.Forced = true
 	}
 	return res
@@ -387,7 +559,8 @@ func (r *Router) forceMarkTraceAborted(runID string) {
 		return
 	}
 	run := val.(*ActiveRun)
-	if run.TraceID == uuid.Nil {
+	traceID := run.getTraceID()
+	if traceID == uuid.Nil {
 		return
 	}
 	ctx := context.Background()
@@ -396,7 +569,7 @@ func (r *Router) forceMarkTraceAborted(runID string) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	r.traceCollector.FinishTrace(ctx, run.TraceID, "cancelled", "force-aborted (3s grace exceeded)", "")
+	r.traceCollector.FinishTrace(ctx, traceID, "cancelled", "force-aborted (3s grace exceeded)", "")
 }
 
 // AbortRunsForSession cancels all active runs for a session key.
@@ -413,24 +586,66 @@ func (r *Router) AbortRunsForSession(sessionKey string) []AbortResult {
 	return results
 }
 
+// AbortAllRuns cancels every active run regardless of session, reusing AbortRun's
+// per-run 3s grace + force-release. Used by graceful shutdown (Phase 7 Decision 6
+// point 6) to give in-flight WS runs a bounded window to unwind: a run that exits
+// within grace resolves its own chat.send from runCtx.Err(); a stuck one is
+// force-released so nothing waiting on its Done wedges teardown. Returns one result
+// per run aborted.
+func (r *Router) AbortAllRuns() []AbortResult {
+	var results []AbortResult
+	r.activeRuns.Range(func(key, val any) bool {
+		run := val.(*ActiveRun)
+		results = append(results, r.AbortRun(run.RunID, ""))
+		return true
+	})
+	return results
+}
+
 // InjectMessage sends a user message to the running loop for a session.
 // Returns true if the message was accepted, false if no active run or channel full.
 func (r *Router) InjectMessage(sessionKey string, msg InjectedMessage) bool {
-	runIDVal, ok := r.sessionRuns.Load(sessionKey)
+	ownerVal, ok := r.sessionRuns.Load(sessionKey)
 	if !ok {
 		return false
 	}
-	runVal, ok := r.activeRuns.Load(runIDVal)
+	owner, ok := ownerVal.(sessionOwner)
+	if !ok {
+		return false
+	}
+	runVal, ok := r.activeRuns.Load(owner.runID)
 	if !ok {
 		return false
 	}
 	run := runVal.(*ActiveRun)
+	if run.RunKind == RunKindWorkflowFinalize || run.RunKind == RunKindWorkflowRecovery {
+		return false
+	}
 	select {
 	case run.InjectCh <- msg:
 		return true
 	default:
 		return false // channel full
 	}
+}
+
+// SessionActiveRun returns a stable snapshot of the run currently owning a
+// session. Done is closed before the run is removed from the router.
+func (r *Router) SessionActiveRun(sessionKey string) (ActiveRunInfo, bool) {
+	ownerVal, ok := r.sessionRuns.Load(sessionKey)
+	if !ok {
+		return ActiveRunInfo{}, false
+	}
+	owner, ok := ownerVal.(sessionOwner)
+	if !ok {
+		return ActiveRunInfo{}, false
+	}
+	runVal, ok := r.activeRuns.Load(owner.runID)
+	if !ok {
+		return ActiveRunInfo{}, false
+	}
+	run := runVal.(*ActiveRun)
+	return ActiveRunInfo{RunID: run.RunID, RunKind: run.RunKind, Done: run.Done}, true
 }
 
 // InvalidateUserWorkspace clears the cached workspace for a user across all cached agent loops.
@@ -493,5 +708,9 @@ func (r *Router) SessionRunID(sessionKey string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return val.(string), true
+	owner, ok := val.(sessionOwner)
+	if !ok {
+		return "", false
+	}
+	return owner.runID, true
 }

@@ -130,3 +130,69 @@ func WithContextInfo(ctx context.Context) TaskEventOption {
 func WithTimestamp(ts string) TaskEventOption {
 	return func(p *protocol.TeamTaskEventPayload) { p.Timestamp = ts }
 }
+
+// TeamTaskEventOptions carries the non-authoritative, caller-supplied fields for
+// BuildTeamTaskEventPayload. Everything that identifies the task or reflects its
+// committed state (team ID, task ID/number, subject, status, workflow ID/step,
+// plan revision, owner agent key) is derived from the task row, never from here.
+type TeamTaskEventOptions struct {
+	Reason, UserID, Channel, ChatID, PeerKind, LocalKey, CommentText string
+	ProgressPercent                                                  int
+	ProgressStep                                                     string
+	ActorType, ActorID                                               string
+}
+
+// BuildTeamTaskEventPayload constructs a TeamTaskEventPayload whose identity,
+// committed status, workflow linkage, plan revision, and owner agent key ALWAYS
+// come from the authoritative committed task row. Only routing/actor/reason/
+// progress context is taken from opts. The owner display name is supplied by the
+// caller (resolved via the authoritative agent lookup) so a stale request value
+// or a raw UUID can never land in the payload.
+//
+// OwnerAgentKey is overwritten from the row unconditionally — including when the
+// row has no owner — so an unassign clears any stale caller-supplied key. The
+// builder never queries the DB itself.
+func BuildTeamTaskEventPayload(task *store.TeamTaskData, ownerDisplayName string, opts TeamTaskEventOptions) protocol.TeamTaskEventPayload {
+	p := protocol.TeamTaskEventPayload{
+		Timestamp:       time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		Reason:          opts.Reason,
+		UserID:          opts.UserID,
+		Channel:         opts.Channel,
+		ChatID:          opts.ChatID,
+		PeerKind:        opts.PeerKind,
+		LocalKey:        opts.LocalKey,
+		CommentText:     opts.CommentText,
+		ProgressPercent: opts.ProgressPercent,
+		ProgressStep:    opts.ProgressStep,
+		ActorType:       opts.ActorType,
+		ActorID:         opts.ActorID,
+	}
+	applyAuthoritativeTaskIdentity(&p, task)
+	p.OwnerDisplayName = ""
+	if task.OwnerAgentKey != "" {
+		p.OwnerDisplayName = ownerDisplayName
+	}
+	return p
+}
+
+// applyAuthoritativeTaskIdentity overwrites every identity/status/workflow/owner
+// field on the payload from the committed task row. OwnerAgentKey is written
+// unconditionally (including empty) so a stale caller value never survives.
+func applyAuthoritativeTaskIdentity(p *protocol.TeamTaskEventPayload, task *store.TeamTaskData) {
+	if p == nil || task == nil {
+		return
+	}
+	p.TeamID = task.TeamID.String()
+	p.TaskID = task.ID.String()
+	p.TaskNumber = task.TaskNumber
+	p.Subject = task.Subject
+	p.Status = task.Status
+	p.PlanRevision = task.PlanRevision
+	p.WorkflowStepID = task.WorkflowStepID
+	if task.WorkflowID != nil {
+		p.WorkflowID = task.WorkflowID.String()
+	} else {
+		p.WorkflowID = ""
+	}
+	p.OwnerAgentKey = task.OwnerAgentKey
+}

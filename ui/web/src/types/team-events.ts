@@ -20,6 +20,18 @@ export interface TeamTaskEventPayload {
   progress_step?: string;
 }
 
+// --- Workflow invalidation events ---
+
+export interface TeamWorkflowUpdatedPayload {
+  tenant_id: string;
+  team_id: string;
+  workflow_id: string;
+  action: string;
+  status: string;
+  plan_revision: number;
+  outcome: string;
+}
+
 // --- Team message events ---
 
 export interface TeamMessageEventPayload {

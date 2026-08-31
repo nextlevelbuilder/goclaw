@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 
@@ -18,59 +17,7 @@ import (
 // wireEventSubscribers registers team task audit and team progress notification subscribers on the message bus.
 // Must be called after pgStores and msgBus are initialized.
 func (d *gatewayDeps) wireEventSubscribers() {
-	d.wireTeamTaskAuditSubscriber()
 	d.wireTeamProgressNotifySubscriber()
-}
-
-// wireTeamTaskAuditSubscriber persists team task lifecycle events to the team_task_events table.
-func (d *gatewayDeps) wireTeamTaskAuditSubscriber() {
-	if d.pgStores.Teams == nil {
-		return
-	}
-	teamEventStore := d.pgStores.Teams
-	d.msgBus.Subscribe(bus.TopicTeamTaskAudit, func(evt bus.Event) {
-		eventType := teamTaskEventType(evt.Name)
-		if eventType == "" {
-			return
-		}
-		payload, ok := evt.Payload.(protocol.TeamTaskEventPayload)
-		if !ok {
-			return
-		}
-		taskID, err := uuid.Parse(payload.TaskID)
-		if err != nil {
-			return
-		}
-
-		// Propagate tenant from bus event to ensure correct tenant isolation.
-		auditCtx := store.WithTenantID(context.Background(), evt.TenantID)
-
-		// Populate data field with event-specific context for audit trail.
-		var data json.RawMessage
-		switch evt.Name {
-		case protocol.EventTeamTaskFailed, protocol.EventTeamTaskRejected, protocol.EventTeamTaskCancelled:
-			if payload.Reason != "" {
-				data, _ = json.Marshal(map[string]string{"reason": payload.Reason})
-			}
-		case protocol.EventTeamTaskCommented:
-			if payload.CommentText != "" {
-				data, _ = json.Marshal(map[string]string{"comment_text": payload.CommentText})
-			}
-		case protocol.EventTeamTaskProgress:
-			data, _ = json.Marshal(map[string]any{"progress_percent": payload.ProgressPercent, "progress_step": payload.ProgressStep})
-		}
-
-		if err := teamEventStore.RecordTaskEvent(auditCtx, &store.TeamTaskEventData{
-			TaskID:    taskID,
-			EventType: eventType,
-			ActorType: payload.ActorType,
-			ActorID:   payload.ActorID,
-			Data:      data,
-		}); err != nil {
-			slog.Warn("team_task_audit.record_failed", "task_id", payload.TaskID, "event", eventType, "error", err)
-		}
-	})
-	slog.Info("team task event subscriber registered")
 }
 
 // wireTeamProgressNotifySubscriber forwards task events to chat channels.
@@ -83,36 +30,8 @@ func (d *gatewayDeps) wireTeamProgressNotifySubscriber() {
 	}
 	notifyTeamStore := d.pgStores.Teams
 	notifyAgentStore := d.pgStores.Agents
-	teamNotifyQueue := tools.NewTeamNotifyQueue(2000, func(items []string, meta tools.NotifyRoutingMeta) {
-		content := tools.FormatBatchedNotify(items)
-		if meta.Mode == "leader" {
-			leaderContent := fmt.Sprintf("[Auto-status — relay to user, NO task actions]\n%s\n\nBriefly inform the user. Do NOT create, retry, reassign, or modify any tasks.", content)
-			d.msgBus.TryPublishInbound(bus.InboundMessage{
-				Channel:  meta.Channel,
-				SenderID: "notification:progress",
-				ChatID:   meta.ChatID,
-				AgentID:  meta.LeadAgent,
-				UserID:   meta.UserID,
-				PeerKind: meta.PeerKind,
-				Content:  leaderContent,
-				Metadata: func() map[string]string {
-					m := map[string]string{"run_kind": tools.RunKindNotification}
-					if meta.LocalKey != "" {
-						m["local_key"] = meta.LocalKey
-					}
-					return m
-				}(),
-			})
-		} else {
-			d.msgBus.PublishOutbound(bus.OutboundMessage{
-				Channel:  meta.Channel,
-				ChatID:   meta.ChatID,
-				Content:  content,
-				Metadata: buildAnnounceOutMeta(meta.LocalKey),
-			})
-		}
-	})
-	d.msgBus.Subscribe("consumer.team-notify", func(evt bus.Event) {
+	teamNotifyQueue := tools.NewTeamNotifyQueue(2000, d.drainTeamProgressNotify)
+	deliverNotification := func(evt bus.Event) {
 		payload, ok := evt.Payload.(protocol.TeamTaskEventPayload)
 		if !ok || payload.TeamID == "" || payload.Channel == "" {
 			return
@@ -242,8 +161,9 @@ func (d *gatewayDeps) wireTeamProgressNotifySubscriber() {
 			return
 		}
 
-		batchKey := payload.TeamID + ":" + payload.ChatID
-		teamNotifyQueue.Enqueue(batchKey, content, tools.NotifyRoutingMeta{
+		teamNotifyQueue.Enqueue(content, tools.NotifyRoutingMeta{
+			TenantID:  evt.TenantID,
+			TeamID:    payload.TeamID,
 			Mode:      teamNotifyCfg.Mode,
 			Channel:   payload.Channel,
 			ChatID:    payload.ChatID,
@@ -252,8 +172,78 @@ func (d *gatewayDeps) wireTeamProgressNotifySubscriber() {
 			PeerKind:  payload.PeerKind,
 			LocalKey:  payload.LocalKey,
 		})
+	}
+	d.msgBus.Subscribe("consumer.team-notify", func(evt bus.Event) {
+		if isUserFacingTaskNotificationEvent(evt.Name) {
+			deliverNotification(evt)
+		}
 	})
 	slog.Info("team progress notification subscriber registered")
+}
+
+// drainTeamProgressNotify is the TeamNotifyQueue drain callback. In leader mode it
+// injects a batched auto-status hint into the lead agent's inbound session; in
+// direct mode it publishes the batched content outbound. Leader-mode injection is
+// best-effort: when TryPublishInbound rejects the message (buffer full / bus
+// shutting down) the batch is dropped and surfaced via slog.Warn so operators can
+// see leader relays going missing. Durable workflow escalation follows the separate
+// BlockWorkflowTaskAttempt path, not this status hint.
+func (d *gatewayDeps) drainTeamProgressNotify(items []string, meta tools.NotifyRoutingMeta) {
+	content := tools.FormatBatchedNotify(items)
+	if meta.Mode == "leader" {
+		leaderContent := fmt.Sprintf("[Auto-status — relay to user, NO task actions]\n%s\n\nBriefly inform the user. Do NOT create, retry, reassign, or modify any tasks.", content)
+		ok := d.msgBus.TryPublishInbound(bus.InboundMessage{
+			TenantID: meta.TenantID,
+			Channel:  meta.Channel,
+			SenderID: "notification:progress",
+			ChatID:   meta.ChatID,
+			AgentID:  meta.LeadAgent,
+			UserID:   meta.UserID,
+			PeerKind: meta.PeerKind,
+			Content:  leaderContent,
+			Metadata: func() map[string]string {
+				m := map[string]string{"run_kind": tools.RunKindNotification}
+				if meta.LocalKey != "" {
+					m["local_key"] = meta.LocalKey
+				}
+				return m
+			}(),
+		})
+		if !ok {
+			slog.Warn("team progress leader inject dropped",
+				"tenant_id", meta.TenantID.String(),
+				"team_id", meta.TeamID,
+				"lead_agent", meta.LeadAgent,
+				"channel", meta.Channel,
+				"peer_kind", meta.PeerKind,
+				"chat_id", meta.ChatID,
+				"local_key", meta.LocalKey,
+				"batch_size", len(items),
+			)
+		}
+		return
+	}
+	d.msgBus.PublishOutbound(bus.OutboundMessage{
+		Channel:  meta.Channel,
+		ChatID:   meta.ChatID,
+		Content:  content,
+		Metadata: buildAnnounceOutMeta(meta.LocalKey),
+	})
+}
+
+func isUserFacingTaskNotificationEvent(eventName string) bool {
+	switch eventName {
+	case protocol.EventTeamTaskDispatched,
+		protocol.EventTeamTaskAssigned,
+		protocol.EventTeamTaskProgress,
+		protocol.EventTeamTaskCompleted,
+		protocol.EventTeamTaskFailed,
+		protocol.EventTeamTaskCommented,
+		protocol.EventTeamTaskCreated:
+		return true
+	default:
+		return false
+	}
 }
 
 // wireAuditSubscriber sets up the audit log subscriber that persists events to activity_logs.
@@ -335,41 +325,4 @@ func (d *gatewayDeps) wireChannelStreamingSubscriber() {
 			}
 		}
 	})
-}
-
-// teamTaskEventType maps bus event names to team_task_events.event_type values.
-// Returns empty string for non-task events (caller should skip).
-func teamTaskEventType(eventName string) string {
-	switch eventName {
-	case protocol.EventTeamTaskCreated:
-		return "created"
-	case protocol.EventTeamTaskClaimed:
-		return "claimed"
-	case protocol.EventTeamTaskAssigned:
-		return "assigned"
-	case protocol.EventTeamTaskDispatched:
-		return "dispatched"
-	case protocol.EventTeamTaskCompleted:
-		return "completed"
-	case protocol.EventTeamTaskFailed:
-		return "failed"
-	case protocol.EventTeamTaskCancelled:
-		return "cancelled"
-	case protocol.EventTeamTaskReviewed:
-		return "reviewed"
-	case protocol.EventTeamTaskApproved:
-		return "approved"
-	case protocol.EventTeamTaskRejected:
-		return "rejected"
-	case protocol.EventTeamTaskCommented:
-		return "commented"
-	case protocol.EventTeamTaskProgress:
-		return "progress"
-	case protocol.EventTeamTaskUpdated:
-		return "updated"
-	case protocol.EventTeamTaskStale:
-		return "stale"
-	default:
-		return ""
-	}
 }

@@ -80,6 +80,29 @@ func TestPipeline_SetupRunsOnce(t *testing.T) {
 	}
 }
 
+func TestPipelineRefreshesContextBetweenIterationStages(t *testing.T) {
+	type contextKey string
+	const key contextKey = "version"
+	setup := &mockStage{name: "setup", execFn: func(_ context.Context, state *RunState) error {
+		state.Ctx = context.WithValue(context.Background(), key, "setup")
+		return nil
+	}}
+	think := &mockStage{name: "think", execFn: func(_ context.Context, state *RunState) error {
+		state.Ctx = context.WithValue(state.Ctx, key, "fallback")
+		return nil
+	}}
+	tool := &mockStage{name: "tool", execFn: func(ctx context.Context, _ *RunState) error {
+		if got := ctx.Value(key); got != "fallback" {
+			t.Fatalf("tool stage context=%v, want fallback", got)
+		}
+		return nil
+	}}
+	p := NewPipeline([]Stage{setup}, []Stage{think, tool}, nil, PipelineDeps{Config: PipelineConfig{MaxIterations: 1}})
+	if _, err := p.Run(context.Background(), buildMinimalRunState()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestNewDefaultPipeline_PrunesBeforeThink(t *testing.T) {
 	t.Parallel()
 

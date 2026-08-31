@@ -159,6 +159,8 @@ export const Methods = {
   TEAMS_WORKSPACE_READ: "teams.workspace.read",
   TEAMS_WORKSPACE_DELETE: "teams.workspace.delete",
   TEAMS_EVENTS_LIST: "teams.events.list",
+  TEAMS_WORKFLOW_GET: "teams.workflows.get",
+  TEAMS_WORKFLOW_ACTION: "teams.workflows.action",
 
   // Heartbeat
   HEARTBEAT_GET: "heartbeat.get",
@@ -230,6 +232,7 @@ export const Events = {
   // Team tasks
   TEAM_TASK_CREATED: "team.task.created",
   TEAM_TASK_CLAIMED: "team.task.claimed",
+  TEAM_TASK_BLOCKED: "team.task.blocked",
   TEAM_TASK_COMPLETED: "team.task.completed",
   TEAM_TASK_CANCELLED: "team.task.cancelled",
   TEAM_TASK_FAILED: "team.task.failed",
@@ -242,6 +245,7 @@ export const Events = {
   TEAM_TASK_DISPATCHED: "team.task.dispatched",
   TEAM_TASK_DELETED: "team.task.deleted",
   TEAM_TASK_ATTACHMENT_ADDED: "team.task.attachment_added",
+  TEAM_WORKFLOW_UPDATED: "team.workflow.updated",
 
   // Team leader processing (bridges gap between last task.completed and announce run.started)
   TEAM_LEADER_PROCESSING: "team.leader.processing",

@@ -7,7 +7,10 @@ import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { Pagination } from "@/components/shared/pagination";
 import { usePagination } from "@/hooks/use-pagination";
-import type { TeamTaskData, TeamTaskComment, TeamTaskEvent, TeamTaskAttachment } from "@/types/team";
+import type {
+  TeamTaskData, TeamTaskComment, TeamTaskEvent, TeamTaskAttachment,
+  TeamWorkflowDetailResponse, TeamWorkflowActionRequest, TeamWorkflowActionResponse,
+} from "@/types/team";
 import type { TeamMemberData } from "@/types/team";
 import { taskStatusBadgeVariant, isTerminalStatus } from "./task-utils";
 import { buildTaskLookup, buildMemberLookup } from "../board/board-utils";
@@ -27,6 +30,9 @@ interface TaskListProps {
     task: TeamTaskData; comments: TeamTaskComment[];
     events: TeamTaskEvent[]; attachments: TeamTaskAttachment[];
   }>;
+  getWorkflow: (teamId: string, workflowId: string) => Promise<TeamWorkflowDetailResponse>;
+  applyWorkflowAction: (params: TeamWorkflowActionRequest) => Promise<TeamWorkflowActionResponse>;
+  onWorkflowChanged?: () => void;
   deleteTask?: (teamId: string, taskId: string) => Promise<void>;
   deleteTasksBulk?: (teamId: string, taskIds: string[]) => Promise<number>;
   addTaskComment?: (teamId: string, taskId: string, content: string) => Promise<void>;
@@ -34,7 +40,8 @@ interface TaskListProps {
 
 export function TaskList({
   tasks, loading, teamId, members, isTeamV2, emojiLookup,
-  getTaskDetail, deleteTask, deleteTasksBulk, addTaskComment,
+  getTaskDetail, getWorkflow, applyWorkflowAction, onWorkflowChanged,
+  deleteTask, deleteTasksBulk, addTaskComment,
 }: TaskListProps) {
   const { t } = useTranslation("teams");
   const [selectedTask, setSelectedTask] = useState<TeamTaskData | null>(null);
@@ -205,9 +212,16 @@ export function TaskList({
                 {task.description && (
                   <p className="truncate text-xs text-muted-foreground/70">{task.description}</p>
                 )}
-                {task.task_type && task.task_type !== "general" && (
-                  <Badge variant="outline" className="mt-0.5 text-2xs">{task.task_type}</Badge>
-                )}
+                <div className="mt-0.5 flex flex-wrap gap-1">
+                  {task.task_type && task.task_type !== "general" && (
+                    <Badge variant="outline" className="text-2xs">{task.task_type}</Badge>
+                  )}
+                  {task.workflow_step_id && (
+                    <Badge variant="outline" className="text-2xs">
+                      {task.workflow_step_id} · r{task.plan_revision ?? 1}
+                    </Badge>
+                  )}
+                </div>
                 {((task.comment_count ?? 0) > 0 || (task.attachment_count ?? 0) > 0) && (
                   <div className="mt-0.5 flex items-center gap-2 text-2xs text-muted-foreground">
                     {(task.comment_count ?? 0) > 0 && (
@@ -232,7 +246,7 @@ export function TaskList({
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-1">
-                <Badge variant={taskStatusBadgeVariant(task.status)}>{task.status.replace(/_/g, " ")}</Badge>
+                <Badge variant={taskStatusBadgeVariant(task.status)}>{t(`taskStatus.${task.status}`)}</Badge>
                 {isTeamV2 && task.followup_at && task.status === "in_progress" && (
                   <Badge variant="outline" className="border-amber-500/50 bg-amber-500/10 text-2xs text-amber-700 dark:text-amber-400">
                     {t("tasks.badges.awaitingReply")}
@@ -276,6 +290,9 @@ export function TaskList({
             isTeamV2={isTeamV2}
             onClose={() => setSelectedTask(null)}
             getTaskDetail={getTaskDetail}
+            getWorkflow={getWorkflow}
+            applyWorkflowAction={applyWorkflowAction}
+            onWorkflowChanged={onWorkflowChanged}
             deleteTask={deleteTask}
             onAddComment={addTaskComment}
             taskLookup={taskLookup}

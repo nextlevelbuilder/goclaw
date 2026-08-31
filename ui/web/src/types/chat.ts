@@ -53,7 +53,7 @@ export interface AgentEventPayload {
   type: string; // "run.started" | "run.completed" | "run.failed" | "run.cancelled" | "chunk" | "tool.call" | "tool.result" | "activity" | "block.reply" | "run.retrying"
   agentId: string;
   runId: string;
-  runKind?: string; // "delegation" | "announce" — omitted for user-initiated runs
+  runKind?: string; // "delegation" | "announce" | "workflow_finalize" — omitted for user-initiated runs
   channel?: string; // "ws", "telegram", "cron", etc.
   sessionKey?: string; // session this event belongs to
   payload?: {

@@ -40,7 +40,7 @@ func (s *PGTeamStore) AssignTask(ctx context.Context, taskID, agentID, teamID uu
 	tid := tenantIDForInsert(ctx)
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE team_tasks SET status = $1, owner_agent_id = $2, locked_at = $3, lock_expires_at = $4, updated_at = $3
-		 WHERE id = $5 AND team_id = $6 AND status = $7 AND tenant_id = $8`,
+		 WHERE id = $5 AND team_id = $6 AND status = $7 AND tenant_id = $8 AND workflow_id IS NULL`,
 		store.TeamTaskStatusInProgress, agentID, now, lockExpires,
 		taskID, teamID, store.TeamTaskStatusPending, tid,
 	)

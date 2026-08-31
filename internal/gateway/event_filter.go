@@ -87,12 +87,12 @@ func clientCanReceiveEvent(c *Client, event bus.Event) bool {
 		return true
 	}
 
-	// Team events: filter by TeamID.
+	// Team events: filter by TeamID and fail closed when routing context is absent.
 	if strings.HasPrefix(event.Name, "team.") || strings.HasPrefix(event.Name, "delegation.") {
 		if tid := extractTeamID(event); tid != "" {
 			return c.hasTeamAccess(tid)
 		}
-		return true // no team context → broadcast
+		return false
 	}
 
 	// Tenant access revocation: deliver to the affected user only.
@@ -192,6 +192,10 @@ func extractTeamID(event bus.Event) string {
 	case protocol.TeamTaskEventPayload:
 		return te.TeamID
 	case *protocol.TeamTaskEventPayload:
+		return te.TeamID
+	case protocol.TeamWorkflowUpdatedPayload:
+		return te.TeamID
+	case *protocol.TeamWorkflowUpdatedPayload:
 		return te.TeamID
 	}
 	// Fallback: check map payloads.

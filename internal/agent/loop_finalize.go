@@ -56,6 +56,9 @@ func (l *Loop) finalizeRun(
 
 	// 6. Handle NO_REPLY: save to session for context but mark as silent.
 	isSilent := IsSilentReply(rs.finalContent)
+	if rs.stopAfterTool && rs.finalContent == "" {
+		isSilent = true
+	}
 
 	// 5b. Skill evolution: postscript suggestion after complex tasks.
 	if l.skillEvolve && l.skillNudgeInterval > 0 &&

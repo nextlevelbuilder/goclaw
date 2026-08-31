@@ -206,7 +206,7 @@ func NewDelegateToolWithAdmission(
 	}
 }
 
-func (t *DelegateTool) Name() string { return "delegate" }
+func (t *DelegateTool) Name() string { return ToolNameDelegate }
 
 func (t *DelegateTool) Description() string {
 	return "Delegate a task to a linked agent. The target agent must be connected via an agent link."

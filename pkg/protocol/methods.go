@@ -151,6 +151,8 @@ const (
 	MethodTeamsUpdate              = "teams.update"
 	MethodTeamsKnownUsers          = "teams.known_users"
 	MethodTeamsScopes              = "teams.scopes"
+	MethodTeamsWorkflowGet         = "teams.workflows.get"
+	MethodTeamsWorkflowAction      = "teams.workflows.action"
 )
 
 // Team workspace

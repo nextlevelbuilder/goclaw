@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useWsEvent } from "@/hooks/use-ws-event";
 import { Events } from "@/api/protocol";
 import type { TeamTaskData, ScopeEntry } from "@/types/team";
+import type { TeamWorkflowUpdatedPayload } from "@/types/team-events";
 
 type StatusFilter = "all" | "pending" | "in_progress" | "completed";
 
@@ -21,7 +22,7 @@ interface TaskEventPayload {
 function taskMatchesFilter(task: TeamTaskData, sf: StatusFilter, scope: ScopeEntry | null): boolean {
   switch (sf) {
     case "pending": if (task.status !== "pending") return false; break;
-    case "in_progress": if (task.status !== "in_progress") return false; break;
+    case "in_progress": if (task.status !== "in_progress" && task.status !== "dispatching") return false; break;
     case "completed": if (task.status !== "completed" && task.status !== "cancelled") return false; break;
   }
   if (scope) {
@@ -73,7 +74,7 @@ export function useBoardTasks({
       const res = await getTeamTasksRef.current(teamId, backendFilter, ss?.channel, ss?.chat_id);
       let result = res.tasks ?? [];
       if (sf === "pending") result = result.filter((t) => t.status === "pending");
-      else if (sf === "in_progress") result = result.filter((t) => t.status === "in_progress");
+      else if (sf === "in_progress") result = result.filter((t) => t.status === "in_progress" || t.status === "dispatching");
       setTasks(result);
       setInitialized(true);
     } catch (err) {
@@ -87,6 +88,7 @@ export function useBoardTasks({
   const fetchTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   // Progress debounce timer (1s, global — batches all progress patches)
   const progressTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const workflowTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const pendingProgressRef = useRef(new Map<string, { percent: number; step: string }>());
 
   // Cleanup timers on unmount
@@ -94,6 +96,7 @@ export function useBoardTasks({
     return () => {
       fetchTimersRef.current.forEach((t) => clearTimeout(t));
       clearTimeout(progressTimerRef.current);
+      clearTimeout(workflowTimerRef.current);
     };
   }, []);
 
@@ -167,11 +170,22 @@ export function useBoardTasks({
     debouncedFetchTask(p.task_id);
   }, [teamId, debouncedFetchTask]);
 
+  // Workflow events are refetch hints only. The authoritative task rows come
+  // from teams.tasks.list after the action transaction commits.
+  const onWorkflowUpdated = useCallback((payload: unknown) => {
+    const p = payload as TeamWorkflowUpdatedPayload;
+    if (p?.team_id !== teamId) return;
+    clearTimeout(workflowTimerRef.current);
+    workflowTimerRef.current = setTimeout(() => { void load(); }, 300);
+  }, [teamId, load]);
+
   useWsEvent(Events.TEAM_TASK_PROGRESS, onProgress);
   useWsEvent(Events.TEAM_TASK_DELETED, onDeleted);
   useWsEvent(Events.TEAM_TASK_CREATED, onFetchOne);
   useWsEvent(Events.TEAM_TASK_CLAIMED, onFetchOne);
+  useWsEvent(Events.TEAM_TASK_BLOCKED, onFetchOne);
   useWsEvent(Events.TEAM_TASK_COMPLETED, onFetchOne);
+  useWsEvent(Events.TEAM_TASK_FAILED, onFetchOne);
   useWsEvent(Events.TEAM_TASK_CANCELLED, onFetchOne);
   useWsEvent(Events.TEAM_TASK_REVIEWED, onFetchOne);
   useWsEvent(Events.TEAM_TASK_APPROVED, onFetchOne);
@@ -179,6 +193,8 @@ export function useBoardTasks({
   useWsEvent(Events.TEAM_TASK_ASSIGNED, onFetchOne);
   useWsEvent(Events.TEAM_TASK_DISPATCHED, onFetchOne);
   useWsEvent(Events.TEAM_TASK_COMMENTED, onFetchOne);
+  useWsEvent(Events.TEAM_TASK_ATTACHMENT_ADDED, onFetchOne);
+  useWsEvent(Events.TEAM_WORKFLOW_UPDATED, onWorkflowUpdated);
 
   return { tasks, initialized, refreshing, load };
 }

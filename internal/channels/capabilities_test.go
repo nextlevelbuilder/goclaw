@@ -43,6 +43,7 @@ type mockChannel struct {
 	channelType string
 	lastMsg     bus.OutboundMessage
 	sendErr     error
+	sendCount   int
 }
 
 func newMockChannel(name, channelType string) *mockChannel {
@@ -51,13 +52,14 @@ func newMockChannel(name, channelType string) *mockChannel {
 	return mc
 }
 
-func (m *mockChannel) Type() string                                     { return m.channelType }
-func (m *mockChannel) Start(_ context.Context) error                    { return nil }
-func (m *mockChannel) Stop(_ context.Context) error                     { return nil }
-func (m *mockChannel) IsRunning() bool                                  { return true }
-func (m *mockChannel) IsAllowed(_ string) bool                          { return true }
+func (m *mockChannel) Type() string                  { return m.channelType }
+func (m *mockChannel) Start(_ context.Context) error { return nil }
+func (m *mockChannel) Stop(_ context.Context) error  { return nil }
+func (m *mockChannel) IsRunning() bool               { return true }
+func (m *mockChannel) IsAllowed(_ string) bool       { return true }
 func (m *mockChannel) Send(_ context.Context, msg bus.OutboundMessage) error {
 	m.lastMsg = msg
+	m.sendCount++
 	return m.sendErr
 }
 

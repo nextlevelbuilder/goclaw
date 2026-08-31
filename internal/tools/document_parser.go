@@ -192,6 +192,10 @@ func (p *LocalExtractParser) kill(cmd *exec.Cmd, done <-chan error) {
 	_ = killProcessGroup(cmd, syscallSIGTERM)
 	select {
 	case <-done:
+		// The process-group leader may exit before its descendants have handled
+		// SIGTERM. Re-signal the still-existing group so no child survives merely
+		// because Wait returned first.
+		_ = killProcessGroup(cmd, syscallSIGKILL)
 	case <-time.After(killGrace):
 		_ = killProcessGroup(cmd, syscallSIGKILL)
 		<-done

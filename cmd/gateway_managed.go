@@ -30,9 +30,12 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
+	"github.com/nextlevelbuilder/goclaw/internal/teamworkclassify"
+	"github.com/nextlevelbuilder/goclaw/internal/teamworkconfig"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
+	"github.com/nextlevelbuilder/goclaw/internal/workflowactions"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -61,6 +64,7 @@ func wireExtras(
 	redisClient any, // nil when built without -tags redis or when Redis is unconfigured
 	domainBus eventbus.DomainEventBus,
 	usageCapSvc *usagecaps.Service,
+	teamWorkCfg *teamworkconfig.Resolver,
 	mcpOAuthProvider mcpbridge.OAuthTokenProvider, // nil = OAuth injection disabled
 	childRunAdmission *orchestration.ChildRunAdmission,
 ) (*tools.ContextFileInterceptor, *mcpbridge.Pool, *media.Store, tools.PostTurnProcessor) {
@@ -646,6 +650,20 @@ func wireExtras(
 	var postTurn tools.PostTurnProcessor
 	if stores.Teams != nil && stores.Agents != nil {
 		teamMgr := tools.NewTeamToolManager(stores.Teams, stores.Agents, msgBus, workspace)
+		profileStores := teamworkclassify.ProfileStores{
+			Agents: stores.Agents, Teams: stores.Teams, AgentLinks: stores.AgentLinks,
+			PinnedSkills: skillsLoader, MCP: teamWorkMCPBatchStore(stores.MCP),
+			BuiltinTools: stores.BuiltinTools, TenantToolConfigs: stores.BuiltinToolTenantCfgs,
+			ToolPolicy: toolPE, ToolRegistry: toolsReg,
+		}
+		teamMgr.SetWorkflowRevalidator(func(revalidateCtx context.Context, workflow *store.TeamWorkflowData) error {
+			return teamworkclassify.RevalidateStoredWorkflow(revalidateCtx, profileStores, workflow)
+		})
+		if workflowStore, ok := stores.Teams.(store.TeamWorkflowStore); ok {
+			teamMgr.SetWorkflowActionService(workflowactions.New(workflowStore, msgBus, teamMgr))
+		} else {
+			slog.Error("team workflow action service unavailable: store does not implement workflow actions")
+		}
 		postTurn = teamMgr
 		var teamPolicy tools.TeamActionPolicy = tools.FullTeamPolicy{}
 		if !edition.Current().TeamFullMode {

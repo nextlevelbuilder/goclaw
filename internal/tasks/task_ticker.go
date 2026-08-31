@@ -36,8 +36,17 @@ type TaskTicker struct {
 	stopCh chan struct{}
 	wg     sync.WaitGroup
 
-	mu               sync.Mutex
-	lastFollowupSent map[uuid.UUID]time.Time // taskID → last followup sent time
+	mu                sync.Mutex
+	lastFollowupSent  map[uuid.UUID]time.Time // taskID → last followup sent time
+	postTurn          tools.PostTurnProcessor
+	workflowFinalizer func(context.Context, uuid.UUID)
+	workflowRecoverer func(context.Context, store.EscalationClaim)
+}
+
+func (t *TaskTicker) SetWorkflowRuntime(postTurn tools.PostTurnProcessor, finalizer func(context.Context, uuid.UUID), recoverer func(context.Context, store.EscalationClaim)) {
+	t.postTurn = postTurn
+	t.workflowFinalizer = finalizer
+	t.workflowRecoverer = recoverer
 }
 
 func NewTaskTicker(teams store.TeamStore, agents store.AgentStore, msgBus *bus.MessageBus, intervalSec int) *TaskTicker {
@@ -98,8 +107,13 @@ func (t *TaskTicker) recoverAll(forceRecover bool) {
 	t.processFollowups(followupCtx)
 	followupCancel()
 
-	// Step 2: Batch recovery — single query across all v2 active teams.
-	// Separate timeout so followup duration doesn't eat into recovery budget.
+	// Step 2: Workflow recovery has its own budget. Finalizers are launched
+	// asynchronously so model latency cannot consume generic task recovery time.
+	workflowCtx, workflowCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.recoverWorkflows(workflowCtx, forceRecover)
+	workflowCancel()
+
+	// Step 3: Generic team-task recovery keeps its original independent budget.
 	recoverCtx, recoverCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer recoverCancel()
 
@@ -122,7 +136,7 @@ func (t *TaskTicker) recoverAll(forceRecover bool) {
 				"To view all tasks: use team_tasks(action=\"list\").")
 	}
 
-	// Step 3: Batch mark stale — pending tasks older than 2h.
+	// Step 4: Batch mark stale — pending tasks older than 2h.
 	staleThreshold := time.Now().Add(-defaultStaleThreshold)
 	stale, err := t.teams.MarkAllStaleTasks(recoverCtx, staleThreshold)
 	if err != nil {
@@ -138,7 +152,7 @@ func (t *TaskTicker) recoverAll(forceRecover bool) {
 		t.broadcastStaleEvents(recoverCtx, stale)
 	}
 
-	// Step 4: Mark in_review tasks stale after 4 hours.
+	// Step 5: Mark in_review tasks stale after 4 hours.
 	inReviewThreshold := time.Now().Add(-defaultInReviewThreshold)
 	staleReview, err := t.teams.MarkInReviewStaleTasks(recoverCtx, inReviewThreshold)
 	if err != nil {
@@ -154,7 +168,7 @@ func (t *TaskTicker) recoverAll(forceRecover bool) {
 		t.broadcastStaleEvents(recoverCtx, staleReview)
 	}
 
-	// Step 5: Fix orphaned blocked tasks where all blockers are terminal.
+	// Step 6: Fix orphaned blocked tasks where all blockers are terminal.
 	fixed, err := t.teams.FixOrphanedBlockedTasks(recoverCtx)
 	if err != nil {
 		slog.Warn("task_ticker: fix orphaned blocked tasks", "error", err)
@@ -166,8 +180,164 @@ func (t *TaskTicker) recoverAll(forceRecover bool) {
 				"They are now pending and will be dispatched if assigned.")
 	}
 
-	// Step 6: Prune old cooldown entries to prevent memory leak.
+	// Step 7: Prune old cooldown entries to prevent memory leak.
 	t.pruneCooldowns()
+}
+
+func (t *TaskTicker) recoverWorkflows(ctx context.Context, force bool) {
+	workflowStore, ok := t.teams.(store.TeamWorkflowStore)
+	if !ok {
+		return
+	}
+	crossCtx := store.WithCrossTenant(ctx)
+	now := time.Now()
+	if _, err := workflowStore.RequeueExpiredWorkflowDispatches(crossCtx, now); err != nil {
+		slog.Warn("task_ticker: requeue expired workflow dispatches", "error", err)
+	}
+	if _, err := workflowStore.RecoverWorkflowRuns(crossCtx, force, now); err != nil {
+		slog.Warn("task_ticker: recover workflow runs", "force", force, "error", err)
+	}
+	pending, err := workflowStore.ListPendingAutoExpandWorkflows(crossCtx, now)
+	if err != nil {
+		slog.Warn("task_ticker: list pending workflow expansion", "error", err)
+	} else {
+		for i := range pending {
+			workflow := &pending[i]
+			tenantCtx := store.WithTenantID(ctx, workflow.TenantID)
+			// Claim the expansion token FIRST, then validate under the lease. Every
+			// failure after the claim consumes one bounded attempt via
+			// FailWorkflowExpansion instead of the old silent `continue`, which
+			// retried forever. transient=true schedules a capped-backoff retry;
+			// transient=false (deterministic plan/roster/coordinator invalidation)
+			// moves the workflow to failing so the finalizer emits a user-visible
+			// summary. Even a misclassified transient error terminates once
+			// MaxWorkflowExpansionAttempts is reached, so expansion is always bounded.
+			expansionToken, claimErr := workflowStore.ClaimPendingWorkflowExpansion(tenantCtx, workflow.ID, workflow.CoordinatorAgentID, time.Now().Add(2*time.Minute))
+			if claimErr != nil {
+				slog.Debug("task_ticker: workflow expansion claim skipped", "workflow_id", workflow.ID, "error", claimErr)
+				continue
+			}
+			failExpansion := func(reason string, transient bool) {
+				if _, err := workflowStore.FailWorkflowExpansion(tenantCtx, workflow.ID, workflow.CoordinatorAgentID, expansionToken, reason, transient); err != nil {
+					slog.Warn("task_ticker: fail workflow expansion", "workflow_id", workflow.ID, "reason", reason, "error", err)
+				}
+			}
+			if t.postTurn != nil {
+				if validationErr := t.postTurn.RevalidateWorkflow(tenantCtx, workflow); validationErr != nil {
+					slog.Warn("task_ticker: pending workflow no longer executable", "workflow_id", workflow.ID, "error", validationErr)
+					failExpansion("workflow plan is no longer executable: "+validationErr.Error(), false)
+					continue
+				}
+			}
+			team, teamErr := t.teams.GetTeam(tenantCtx, workflow.TeamID)
+			if teamErr != nil {
+				// Ambiguous lookup failure (likely transient DB) — back off and retry.
+				slog.Warn("task_ticker: workflow team lookup failed", "workflow_id", workflow.ID, "error", teamErr)
+				failExpansion("team lookup failed: "+teamErr.Error(), true)
+				continue
+			}
+			if team == nil || team.LeadAgentID != workflow.CoordinatorAgentID {
+				slog.Warn("task_ticker: workflow coordinator no longer valid", "workflow_id", workflow.ID)
+				failExpansion("workflow coordinator is no longer the team lead", false)
+				continue
+			}
+			tasksToCreate, buildErr := tools.BuildWorkflowTasksFromStoredPlan(workflow)
+			if buildErr != nil {
+				slog.Warn("task_ticker: invalid pending workflow plan", "workflow_id", workflow.ID, "error", buildErr)
+				failExpansion("stored workflow plan is invalid: "+buildErr.Error(), false)
+				continue
+			}
+			if workflow.AuditTaskID != nil {
+				if auditTask, auditErr := t.teams.GetTask(tenantCtx, *workflow.AuditTaskID); auditErr == nil {
+					tools.InheritWorkflowTaskContext(tasksToCreate, auditTask)
+				}
+			}
+			members, memberErr := t.teams.ListMembers(tenantCtx, workflow.TeamID)
+			if memberErr != nil {
+				// Ambiguous lookup failure — back off and retry.
+				slog.Warn("task_ticker: workflow roster lookup failed", "workflow_id", workflow.ID, "error", memberErr)
+				failExpansion("roster lookup failed: "+memberErr.Error(), true)
+				continue
+			}
+			memberIDs := make(map[uuid.UUID]struct{}, len(members))
+			for _, member := range members {
+				memberIDs[member.AgentID] = struct{}{}
+			}
+			validRoster := true
+			for _, task := range tasksToCreate {
+				if task.OwnerAgentID == nil {
+					validRoster = false
+					break
+				}
+				if _, exists := memberIDs[*task.OwnerAgentID]; !exists {
+					validRoster = false
+					break
+				}
+			}
+			if !validRoster {
+				slog.Warn("task_ticker: pending workflow roster changed", "workflow_id", workflow.ID)
+				failExpansion("workflow roster changed; a planned owner is no longer a team member", false)
+				continue
+			}
+			if err := workflowStore.ExpandPendingWorkflow(tenantCtx, workflow.ID, workflow.CoordinatorAgentID, expansionToken, tasksToCreate); err != nil {
+				slog.Warn("task_ticker: workflow expansion failed", "workflow_id", workflow.ID, "error", err)
+				failExpansion("workflow expansion failed: "+err.Error(), true)
+			}
+		}
+	}
+	if t.postTurn != nil {
+		scopes, scopeErr := workflowStore.ListWorkflowDispatchScopes(crossCtx)
+		if scopeErr != nil {
+			slog.Warn("task_ticker: list workflow dispatch scopes", "error", scopeErr)
+		} else {
+			seen := make(map[store.TeamWorkflowDispatchScope]struct{}, len(scopes))
+			for _, scope := range scopes {
+				key := store.TeamWorkflowDispatchScope{TenantID: scope.TenantID, TeamID: scope.TeamID}
+				if _, exists := seen[key]; exists {
+					continue
+				}
+				seen[key] = struct{}{}
+				t.postTurn.DispatchUnblockedTasks(store.WithTenantID(ctx, scope.TenantID), scope.TeamID)
+			}
+		}
+	}
+	// Coordinator-escalation sweep. A blocked workflow work task arms a durable
+	// escalation; here we find the due ones and claim each for enqueue. A won
+	// claim (Claimed) enqueues a coordinator recovery run; an exhausted claim
+	// (Exhausted) has already moved the escalation → dead and the workflow →
+	// failing inside ClaimTaskEscalation, so the finalizer picks it up. This is
+	// the durable retry that replaces the July-14 fire-and-forget publish: an
+	// enqueue failure leaves the escalation pending/enqueuing so the next tick
+	// re-claims it, and the per-task CAS guarantees at-most-one live recovery run.
+	if t.workflowRecoverer != nil {
+		dueTasks, dueErr := workflowStore.ListEscalationDueTasks(crossCtx, now)
+		if dueErr != nil {
+			slog.Warn("task_ticker: list escalation due tasks", "error", dueErr)
+		} else {
+			for i := range dueTasks {
+				task := &dueTasks[i]
+				tenantCtx := store.WithTenantID(ctx, task.TenantID)
+				claim, claimErr := workflowStore.ClaimTaskEscalation(tenantCtx, task.ID, task.TeamID, now)
+				if claimErr != nil {
+					slog.Warn("task_ticker: claim task escalation", "task_id", task.ID, "error", claimErr)
+					continue
+				}
+				if claim.Claimed {
+					t.workflowRecoverer(tenantCtx, claim)
+				}
+			}
+		}
+	}
+	if t.workflowFinalizer != nil {
+		ready, readyErr := workflowStore.ListWorkflowsReadyToFinalize(crossCtx, now)
+		if readyErr != nil {
+			slog.Warn("task_ticker: list workflow finalizers", "error", readyErr)
+		} else {
+			for _, scope := range ready {
+				t.workflowFinalizer(store.WithTenantID(ctx, scope.TenantID), scope.WorkflowID)
+			}
+		}
+	}
 }
 
 // ============================================================
@@ -316,17 +486,16 @@ func (t *TaskTicker) broadcastStaleEvents(ctx context.Context, tasks []store.Rec
 	if t.msgBus == nil {
 		return
 	}
-	// Deduplicate by team_id — one event per team.
-	seen := map[uuid.UUID]bool{}
 	for _, task := range tasks {
-		if seen[task.TeamID] {
+		if task.ID == uuid.Nil {
 			continue
 		}
-		seen[task.TeamID] = true
-		bus.BroadcastForTenant(t.msgBus, protocol.EventTeamTaskStale, task.TenantID, tools.BuildTaskEventPayload(
-			task.TeamID.String(), "",
+		tools.PublishTaskEvent(t.teams, t.msgBus, protocol.EventTeamTaskStale, tools.BuildTaskEventPayload(
+			task.TeamID.String(), task.ID.String(),
 			store.TeamTaskStatusStale,
 			"system", "task_ticker",
+			tools.WithTaskNumber(task.TaskNumber),
+			tools.WithSubject(task.Subject),
 		))
 	}
 }

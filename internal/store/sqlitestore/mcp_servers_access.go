@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -73,6 +74,52 @@ func (s *SQLiteMCPServerStore) ListAgentGrants(ctx context.Context, agentID uuid
 		if err := rows.Scan(&g.ID, &g.ServerID, &g.AgentID, &g.Enabled,
 			&toolAllow, &toolDeny, &configOverrides, &g.GrantedBy, &createdAt); err != nil {
 			continue
+		}
+		if toolAllow != nil {
+			g.ToolAllow = json.RawMessage(*toolAllow)
+		}
+		if toolDeny != nil {
+			g.ToolDeny = json.RawMessage(*toolDeny)
+		}
+		if configOverrides != nil {
+			g.ConfigOverrides = json.RawMessage(*configOverrides)
+		}
+		g.CreatedAt = createdAt.Time
+		result = append(result, g)
+	}
+	return result, rows.Err()
+}
+
+func (s *SQLiteMCPServerStore) ListAgentGrantsByAgentIDs(ctx context.Context, agentIDs []uuid.UUID) ([]store.MCPAgentGrant, error) {
+	if len(agentIDs) == 0 {
+		return nil, nil
+	}
+	tClause, tArgs, err := scopeClause(ctx)
+	if err != nil {
+		return nil, err
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(agentIDs)), ",")
+	args := make([]any, 0, len(agentIDs)+len(tArgs))
+	for _, agentID := range agentIDs {
+		args = append(args, agentID)
+	}
+	args = append(args, tArgs...)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, server_id, agent_id, enabled, tool_allow, tool_deny, config_overrides, granted_by, created_at
+		 FROM mcp_agent_grants WHERE agent_id IN (`+placeholders+`)`+tClause, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []store.MCPAgentGrant
+	for rows.Next() {
+		var g store.MCPAgentGrant
+		var toolAllow, toolDeny, configOverrides *string
+		var createdAt sqliteTime
+		if err := rows.Scan(&g.ID, &g.ServerID, &g.AgentID, &g.Enabled,
+			&toolAllow, &toolDeny, &configOverrides, &g.GrantedBy, &createdAt); err != nil {
+			return nil, err
 		}
 		if toolAllow != nil {
 			g.ToolAllow = json.RawMessage(*toolAllow)

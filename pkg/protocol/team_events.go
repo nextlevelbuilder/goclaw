@@ -88,12 +88,28 @@ type DelegationAnnouncePayload struct {
 
 // TeamTaskEventPayload is the typed payload for team task lifecycle events
 // (created, claimed, completed, cancelled, approved, rejected).
+// TeamWorkflowUpdatedPayload is a token-free refetch hint emitted only after a
+// workflow recovery action commits. It deliberately omits reasons, canonical
+// plans, hashes, task graphs, routing metadata, tokens, and leases.
+type TeamWorkflowUpdatedPayload struct {
+	TenantID     string `json:"tenant_id"`
+	TeamID       string `json:"team_id"`
+	WorkflowID   string `json:"workflow_id"`
+	Action       string `json:"action"`
+	Status       string `json:"status"`
+	PlanRevision int    `json:"plan_revision"`
+	Outcome      string `json:"outcome"`
+}
+
 type TeamTaskEventPayload struct {
 	TeamID           string `json:"team_id"`
 	TaskID           string `json:"task_id"`
 	TaskNumber       int    `json:"task_number,omitempty"`
 	Subject          string `json:"subject,omitempty"`
 	Status           string `json:"status"`
+	WorkflowID       string `json:"workflow_id,omitempty"`
+	WorkflowStepID   string `json:"workflow_step_id,omitempty"`
+	PlanRevision     int    `json:"plan_revision,omitempty"`
 	OwnerAgentKey    string `json:"owner_agent_key,omitempty"`
 	OwnerDisplayName string `json:"owner_display_name,omitempty"`
 	Reason           string `json:"reason,omitempty"`

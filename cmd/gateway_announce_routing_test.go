@@ -1,8 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"testing"
 
+	"github.com/google/uuid"
+
+	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
@@ -18,7 +23,7 @@ import (
 // skips WithSenderID and the Lead's resume has empty sender attribution.
 func TestAnnounceRouting_PropagatesSenderAndRole(t *testing.T) {
 	const (
-		realSender = "5218954741"   // Telegram numeric user id
+		realSender = "5218954741" // Telegram numeric user id
 		realRole   = "admin"
 		realUserID = "group:telegram:-1003812294018"
 	)
@@ -70,5 +75,31 @@ func TestAnnounceRouting_EmptyMetaPropagatesEmpty(t *testing.T) {
 	}
 	if r.OriginRole != "" {
 		t.Errorf("OriginRole = %q, want empty", r.OriginRole)
+	}
+}
+
+type announceRoutingAgentStore struct {
+	store.AgentStore
+	agent *store.AgentData
+}
+
+func (s *announceRoutingAgentStore) GetByID(context.Context, uuid.UUID) (*store.AgentData, error) {
+	return s.agent, nil
+}
+
+func TestResolveTeammateLeadAgentUsesLeaderAgentIDBeforeFromAgent(t *testing.T) {
+	leadID := uuid.MustParse("20000000-0000-0000-0000-000000000001")
+	got := resolveTeammateLeadAgent(context.Background(), nil, map[string]string{
+		tools.MetaLeaderAgentID: leadID.String(),
+		tools.MetaFromAgent:     "khanh-developer",
+	}, &ConsumerDeps{
+		Cfg: &config.Config{},
+		AgentStore: &announceRoutingAgentStore{agent: &store.AgentData{
+			BaseModel: store.BaseModel{ID: leadID},
+			AgentKey:  "bao-an",
+		}},
+	})
+	if got != "bao-an" {
+		t.Fatalf("expected lead agent bao-an from leader_agent_id, got %q", got)
 	}
 }

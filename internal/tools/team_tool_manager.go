@@ -1,11 +1,14 @@
 package tools
 
 import (
+	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/workflowactions"
 )
 
 const teamCacheTTL = 5 * time.Minute
@@ -28,13 +31,34 @@ type agentCacheEntry struct {
 // the team store, agent store, and message bus.
 // Includes a TTL cache for team data to avoid DB queries on every tool call.
 type TeamToolManager struct {
-	teamStore     store.TeamStore
-	agentStore    store.AgentStore
-	msgBus        *bus.MessageBus
-	dataDir       string   // base data directory for workspace path resolution
-	teamCache     sync.Map // agentID (uuid.UUID) → *teamCacheEntry
-	agentCache    sync.Map // agentID (uuid.UUID) → *agentCacheEntry
-	agentKeyCache sync.Map // agentKey (string) → *agentCacheEntry
+	teamStore           store.TeamStore
+	agentStore          store.AgentStore
+	msgBus              *bus.MessageBus
+	dataDir             string   // base data directory for workspace path resolution
+	teamCache           sync.Map // agentID (uuid.UUID) → *teamCacheEntry
+	agentCache          sync.Map // agentID (uuid.UUID) → *agentCacheEntry
+	agentKeyCache       sync.Map // agentKey (string) → *agentCacheEntry
+	workflowRevalidator func(context.Context, *store.TeamWorkflowData) error
+	workflowActions     *workflowactions.Service
+}
+
+func (m *TeamToolManager) SetWorkflowRevalidator(revalidator func(context.Context, *store.TeamWorkflowData) error) {
+	m.workflowRevalidator = revalidator
+}
+
+func (m *TeamToolManager) SetWorkflowActionService(service *workflowactions.Service) {
+	m.workflowActions = service
+}
+
+func (m *TeamToolManager) WorkflowActionService() *workflowactions.Service {
+	return m.workflowActions
+}
+
+func (m *TeamToolManager) RevalidateWorkflow(ctx context.Context, workflow *store.TeamWorkflowData) error {
+	if m.workflowRevalidator == nil {
+		return fmt.Errorf("workflow revalidator is unavailable")
+	}
+	return m.workflowRevalidator(ctx, workflow)
 }
 
 func NewTeamToolManager(teamStore store.TeamStore, agentStore store.AgentStore, msgBus *bus.MessageBus, dataDir string) *TeamToolManager {
@@ -48,8 +72,8 @@ func NewTeamToolManager(teamStore store.TeamStore, agentStore store.AgentStore, 
 // (WorkspaceInterceptor, PostTurnProcessor, etc.).
 // ============================================================
 
-func (m *TeamToolManager) Store() store.TeamStore                { return m.teamStore }
-func (m *TeamToolManager) DataDir() string                       { return m.dataDir }
+func (m *TeamToolManager) Store() store.TeamStore { return m.teamStore }
+func (m *TeamToolManager) DataDir() string        { return m.dataDir }
 func (m *TeamToolManager) TryPublishInbound(msg bus.InboundMessage) bool {
 	if m.msgBus == nil {
 		return false

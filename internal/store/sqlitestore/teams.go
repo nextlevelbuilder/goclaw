@@ -61,18 +61,21 @@ func (s *SQLiteTeamStore) CreateTeam(ctx context.Context, team *store.TeamData) 
 }
 
 func (s *SQLiteTeamStore) GetTeam(ctx context.Context, teamID uuid.UUID) (*store.TeamData, error) {
+	query := `SELECT t.id, t.name, t.lead_agent_id, t.description, t.status, t.settings, t.created_by, t.created_at, t.updated_at,
+		COALESCE(a.agent_key, '') AS lead_agent_key,
+		COALESCE(a.display_name, '') AS lead_display_name
+		FROM agent_teams t
+		LEFT JOIN agents a ON a.id = t.lead_agent_id`
 	if store.IsCrossTenant(ctx) {
-		row := s.db.QueryRowContext(ctx,
-			`SELECT `+teamSelectCols+` FROM agent_teams WHERE id = ?`, teamID)
-		return scanTeamRow(row)
+		row := s.db.QueryRowContext(ctx, query+` WHERE t.id = ?`, teamID)
+		return scanTeamRowWithLead(row)
 	}
 	tenantID := store.TenantIDFromContext(ctx)
 	if tenantID == uuid.Nil {
 		return nil, nil
 	}
-	row := s.db.QueryRowContext(ctx,
-		`SELECT `+teamSelectCols+` FROM agent_teams WHERE id = ? AND tenant_id = ?`, teamID, tenantID)
-	d, err := scanTeamRow(row)
+	row := s.db.QueryRowContext(ctx, query+` WHERE t.id = ? AND t.tenant_id = ?`, teamID, tenantID)
+	d, err := scanTeamRowWithLead(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -245,6 +248,7 @@ func (s *SQLiteTeamStore) ListMembers(ctx context.Context, teamID uuid.UUID) ([]
 		 COALESCE(a.agent_key, '') AS agent_key,
 		 COALESCE(a.display_name, '') AS display_name,
 		 COALESCE(a.frontmatter, '') AS frontmatter,
+		 COALESCE(a.agent_description, '') AS agent_description,
 		 COALESCE(a.emoji, '') AS emoji
 		 FROM agent_team_members m
 		 JOIN agents a ON a.id = m.agent_id
@@ -273,7 +277,7 @@ func (s *SQLiteTeamStore) ListMembers(ctx context.Context, teamID uuid.UUID) ([]
 		var joinedAt sqliteTime
 		if err := rows.Scan(
 			&d.TeamID, &d.AgentID, &d.Role, &joinedAt,
-			&d.AgentKey, &d.DisplayName, &d.Frontmatter, &d.Emoji,
+			&d.AgentKey, &d.DisplayName, &d.Frontmatter, &d.AgentDescription, &d.Emoji,
 		); err != nil {
 			return nil, err
 		}
@@ -288,6 +292,7 @@ func (s *SQLiteTeamStore) ListIdleMembers(ctx context.Context, teamID uuid.UUID)
 		 COALESCE(a.agent_key, '') AS agent_key,
 		 COALESCE(a.display_name, '') AS display_name,
 		 COALESCE(a.frontmatter, '') AS frontmatter,
+		 COALESCE(a.agent_description, '') AS agent_description,
 		 COALESCE(a.emoji, '') AS emoji
 		 FROM agent_team_members m
 		 JOIN agents a ON a.id = m.agent_id
@@ -320,7 +325,7 @@ func (s *SQLiteTeamStore) ListIdleMembers(ctx context.Context, teamID uuid.UUID)
 		var joinedAt sqliteTime
 		if err := rows.Scan(
 			&d.TeamID, &d.AgentID, &d.Role, &joinedAt,
-			&d.AgentKey, &d.DisplayName, &d.Frontmatter, &d.Emoji,
+			&d.AgentKey, &d.DisplayName, &d.Frontmatter, &d.AgentDescription, &d.Emoji,
 		); err != nil {
 			return nil, err
 		}
@@ -331,8 +336,11 @@ func (s *SQLiteTeamStore) ListIdleMembers(ctx context.Context, teamID uuid.UUID)
 }
 
 func (s *SQLiteTeamStore) GetTeamForAgent(ctx context.Context, agentID uuid.UUID) (*store.TeamData, error) {
-	q := `SELECT t.id, t.name, t.lead_agent_id, t.description, t.status, t.settings, t.created_by, t.created_at, t.updated_at
+	q := `SELECT t.id, t.name, t.lead_agent_id, t.description, t.status, t.settings, t.created_by, t.created_at, t.updated_at,
+		 COALESCE(a.agent_key, '') AS lead_agent_key,
+		 COALESCE(a.display_name, '') AS lead_display_name
 		 FROM agent_teams t
+		 LEFT JOIN agents a ON a.id = t.lead_agent_id
 		 WHERE (
 		   t.lead_agent_id = ?
 		   OR EXISTS (SELECT 1 FROM agent_team_members m WHERE m.team_id = t.id AND m.agent_id = ?)
@@ -350,7 +358,7 @@ func (s *SQLiteTeamStore) GetTeamForAgent(ctx context.Context, agentID uuid.UUID
 	args = append(args, agentID)
 
 	row := s.db.QueryRowContext(ctx, q, args...)
-	d, err := scanTeamRow(row)
+	d, err := scanTeamRowWithLead(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -491,6 +499,39 @@ func (s *SQLiteTeamStore) ListUserTeams(ctx context.Context, userID string) ([]s
 	return teams, rows.Err()
 }
 
+// ListUserTeamIDs returns active team IDs granted to a user within the tenant
+// carried by ctx. It deliberately does not support cross-tenant reads: an event
+// access snapshot is always tenant-bound.
+func (s *SQLiteTeamStore) ListUserTeamIDs(ctx context.Context, userID string) ([]uuid.UUID, error) {
+	tenantID := store.TenantIDFromContext(ctx)
+	if tenantID == uuid.Nil || store.IsCrossTenant(ctx) {
+		return nil, nil
+	}
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT t.id
+		 FROM agent_teams t
+		 JOIN team_user_grants g ON g.team_id = t.id
+		 WHERE t.status = ? AND t.tenant_id = ? AND g.user_id = ?
+		 ORDER BY t.id`,
+		store.TeamStatusActive, tenantID, userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var teamIDs []uuid.UUID
+	for rows.Next() {
+		var teamID uuid.UUID
+		if err := rows.Scan(&teamID); err != nil {
+			return nil, err
+		}
+		teamIDs = append(teamIDs, teamID)
+	}
+	return teamIDs, rows.Err()
+}
+
 func (s *SQLiteTeamStore) HasTeamAccess(ctx context.Context, teamID uuid.UUID, userID string) (bool, error) {
 	tClause, tArgs, err := scopeClause(ctx)
 	if err != nil {
@@ -528,6 +569,28 @@ func scanTeamRow(row *sql.Row) (*store.TeamData, error) {
 	}
 	d.CreatedAt = createdAt.Time
 	d.UpdatedAt = updatedAt.Time
+	if desc.Valid {
+		d.Description = desc.String
+	}
+	return &d, nil
+}
+
+func scanTeamRowWithLead(row *sql.Row) (*store.TeamData, error) {
+	var d store.TeamData
+	var desc sql.NullString
+	var settings string
+	createdAt, updatedAt := scanTimePair()
+	err := row.Scan(
+		&d.ID, &d.Name, &d.LeadAgentID, &desc, &d.Status,
+		&settings, &d.CreatedBy, createdAt, updatedAt,
+		&d.LeadAgentKey, &d.LeadDisplayName,
+	)
+	if err != nil {
+		return nil, err
+	}
+	d.CreatedAt = createdAt.Time
+	d.UpdatedAt = updatedAt.Time
+	d.Settings = json.RawMessage(settings)
 	if desc.Valid {
 		d.Description = desc.String
 	}

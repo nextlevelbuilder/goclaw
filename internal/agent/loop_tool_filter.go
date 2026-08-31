@@ -2,6 +2,7 @@ package agent
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -50,6 +51,9 @@ func (l *Loop) toolVisibleForChannel(name, channelType string, telegramManagerPe
 // Returns tool definitions for the provider, an allowed-tools map for execution validation,
 // and the (potentially modified) messages slice when final-iteration stripping appends a hint.
 func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration, maxIter int, messages []providers.Message, userTools []tools.Tool) ([]providers.ToolDefinition, map[string]bool, []providers.Message) {
+	if req == nil {
+		req = &RunRequest{}
+	}
 	// Build provider request with policy-filtered tools.
 	var toolDefs []providers.ToolDefinition
 	var allowedTools map[string]bool
@@ -106,6 +110,8 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 		}
 		toolDefs = filtered
 	}
+
+	toolDefs, allowedTools = l.applyRunBlockedTools(toolDefs, allowedTools, req.BlockedTools)
 
 	// Per-tenant tool exclusions: remove tools disabled for this agent's tenant.
 	if len(l.disabledTools) > 0 {
@@ -185,4 +191,45 @@ func (l *Loop) buildFilteredTools(req *RunRequest, hadBootstrap bool, iteration,
 	}
 
 	return toolDefs, allowedTools, messages
+}
+
+// applyRunBlockedTools removes run-level blocked tools from the advertised tool
+// set. Both the blocked names and each advertised tool-def name are canonicalized
+// through the registry (alias → canonical, prefix stripped) before comparison, so
+// blocking "spawn" also hides an advertised alias like "sessions_spawn". This
+// matches the execution-time deny, which canonicalizes the same way — the model
+// must never SEE an orchestration tool it would be denied at call time.
+func (l *Loop) applyRunBlockedTools(toolDefs []providers.ToolDefinition, allowedTools map[string]bool, blockedTools []string) ([]providers.ToolDefinition, map[string]bool) {
+	if len(blockedTools) == 0 {
+		return toolDefs, allowedTools
+	}
+	blocked := make(map[string]bool, len(blockedTools))
+	for _, name := range blockedTools {
+		name = strings.TrimSpace(name)
+		if name != "" {
+			blocked[l.canonicalToolCallName(name)] = true
+		}
+	}
+	if len(blocked) == 0 {
+		return toolDefs, allowedTools
+	}
+	filtered := toolDefs[:0:0]
+	nextAllowed := allowedTools
+	if nextAllowed == nil {
+		nextAllowed = make(map[string]bool, len(toolDefs))
+	}
+	for _, td := range toolDefs {
+		if td.Function == nil {
+			filtered = append(filtered, td)
+			continue
+		}
+		name := td.Function.Name
+		if blocked[l.canonicalToolCallName(name)] {
+			delete(nextAllowed, name)
+			continue
+		}
+		filtered = append(filtered, td)
+		nextAllowed[name] = true
+	}
+	return filtered, nextAllowed
 }

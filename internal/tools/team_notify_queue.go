@@ -4,11 +4,21 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // NotifyRoutingMeta carries routing info for batched team notifications.
+//
+// Batching keys off the *entire* routing tuple (see notifyBatchKey), so two
+// notifications only merge into one batch when every routing dimension matches.
+// The previous opaque "teamID:chatID" string key could collide across tenants,
+// peer kinds, forum topics, target users, or leader agents whenever a chat ID
+// happened to contain a colon or two distinct scopes shared a chat ID.
 type NotifyRoutingMeta struct {
-	Mode      string // "direct" or "leader"
+	TenantID  uuid.UUID // tenant scope from the authoritative event
+	TeamID    string    // team UUID string
+	Mode      string    // "direct" or "leader"
 	Channel   string
 	ChatID    string
 	UserID    string
@@ -17,11 +27,56 @@ type NotifyRoutingMeta struct {
 	LocalKey  string // composite key with topic suffix for forum routing
 }
 
-// TeamNotifyQueue batches team task notifications per chat with debounce,
-// following the same pattern as AnnounceQueue for subagent results.
+// notifyBatchKey is the comparable batching key derived from a normalized
+// NotifyRoutingMeta. It is an ordinary struct (all comparable fields) so it can
+// key a map directly — no delimiter concatenation, so values containing ':'
+// (Telegram forum local keys, composite chat IDs) can never collide.
+type notifyBatchKey struct {
+	tenantID  uuid.UUID
+	teamID    string
+	mode      string
+	channel   string
+	peerKind  string
+	chatID    string
+	localKey  string
+	userID    string
+	leadAgent string
+}
+
+// normalizeNotifyMeta trims all fields and lowercases only the enum-like
+// dimensions (mode, channel, peerKind). Opaque identifiers (chat/local/user/
+// agent) are preserved verbatim — lowercasing them would merge distinct scopes.
+func normalizeNotifyMeta(meta NotifyRoutingMeta) NotifyRoutingMeta {
+	meta.TeamID = strings.TrimSpace(meta.TeamID)
+	meta.Mode = strings.ToLower(strings.TrimSpace(meta.Mode))
+	meta.Channel = strings.ToLower(strings.TrimSpace(meta.Channel))
+	meta.PeerKind = strings.ToLower(strings.TrimSpace(meta.PeerKind))
+	meta.ChatID = strings.TrimSpace(meta.ChatID)
+	meta.LocalKey = strings.TrimSpace(meta.LocalKey)
+	meta.UserID = strings.TrimSpace(meta.UserID)
+	meta.LeadAgent = strings.TrimSpace(meta.LeadAgent)
+	return meta
+}
+
+func notifyKeyOf(meta NotifyRoutingMeta) notifyBatchKey {
+	return notifyBatchKey{
+		tenantID:  meta.TenantID,
+		teamID:    meta.TeamID,
+		mode:      meta.Mode,
+		channel:   meta.Channel,
+		peerKind:  meta.PeerKind,
+		chatID:    meta.ChatID,
+		localKey:  meta.LocalKey,
+		userID:    meta.UserID,
+		leadAgent: meta.LeadAgent,
+	}
+}
+
+// TeamNotifyQueue batches team task notifications per full routing tuple with
+// debounce, following the same pattern as AnnounceQueue for subagent results.
 type TeamNotifyQueue struct {
 	mu       sync.Mutex
-	batches  map[string]*notifyBatch // key: "teamID:chatID"
+	batches  map[notifyBatchKey]*notifyBatch
 	debounce time.Duration
 	cap      int // immediate drain threshold
 	onDrain  func(items []string, meta NotifyRoutingMeta)
@@ -39,16 +94,21 @@ func NewTeamNotifyQueue(debounceMs int, onDrain func(items []string, meta Notify
 		debounceMs = 2000
 	}
 	return &TeamNotifyQueue{
-		batches:  make(map[string]*notifyBatch),
+		batches:  make(map[notifyBatchKey]*notifyBatch),
 		debounce: time.Duration(debounceMs) * time.Millisecond,
 		cap:      20,
 		onDrain:  onDrain,
 	}
 }
 
-// Enqueue adds a formatted notification line to the batch for the given key.
-// Resets debounce timer. Drains immediately if cap is reached.
-func (q *TeamNotifyQueue) Enqueue(key string, content string, meta NotifyRoutingMeta) {
+// Enqueue adds a formatted notification line to the batch keyed by the full
+// normalized routing tuple. Resets the debounce timer. Drains immediately if
+// cap is reached. The first enqueue for a key freezes the batch metadata; only
+// notifications whose entire routing tuple matches merge into it.
+func (q *TeamNotifyQueue) Enqueue(content string, meta NotifyRoutingMeta) {
+	meta = normalizeNotifyMeta(meta)
+	key := notifyKeyOf(meta)
+
 	q.mu.Lock()
 	defer q.mu.Unlock()
 

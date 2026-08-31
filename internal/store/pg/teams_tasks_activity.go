@@ -116,16 +116,45 @@ func (s *PGTeamStore) ListRecentTaskComments(ctx context.Context, taskID uuid.UU
 // ============================================================
 
 func (s *PGTeamStore) RecordTaskEvent(ctx context.Context, event *store.TeamTaskEventData) error {
+	_, err := s.ClaimTaskEvent(ctx, event)
+	return err
+}
+
+func (s *PGTeamStore) ClaimTaskEvent(ctx context.Context, event *store.TeamTaskEventData) (store.TaskEventClaimResult, error) {
 	if event.ID == uuid.Nil {
 		event.ID = store.GenNewID()
 	}
 	event.CreatedAt = time.Now()
-	_, err := s.db.ExecContext(ctx,
+	tenantID := tenantIDForInsert(ctx)
+	result, err := s.db.ExecContext(ctx,
 		`INSERT INTO team_task_events (id, task_id, event_type, actor_type, actor_id, data, created_at, tenant_id)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		event.ID, event.TaskID, event.EventType, event.ActorType, event.ActorID, event.Data, event.CreatedAt, tenantIDForInsert(ctx),
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING`,
+		event.ID, event.TaskID, event.EventType, event.ActorType, event.ActorID, event.Data, event.CreatedAt, tenantID,
 	)
-	return err
+	if err != nil {
+		return "", err
+	}
+	if affected, _ := result.RowsAffected(); affected == 1 {
+		return store.TaskEventClaimed, nil
+	}
+	var existingTenant, existingTask uuid.UUID
+	var existingType string
+	if err := s.db.QueryRowContext(ctx, `SELECT tenant_id, task_id, event_type FROM team_task_events WHERE id=$1`, event.ID).Scan(&existingTenant, &existingTask, &existingType); err != nil {
+		return "", err
+	}
+	if existingTenant == tenantID && existingTask == event.TaskID && existingType == event.EventType {
+		return store.TaskEventDuplicate, nil
+	}
+	return store.TaskEventConflict, nil
+}
+
+func (s *PGTeamStore) GetTaskEventIdentity(ctx context.Context, eventID uuid.UUID) (uuid.UUID, uuid.UUID, string, error) {
+	var tenantID, taskID uuid.UUID
+	var eventType string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT tenant_id, task_id, event_type FROM team_task_events WHERE id=$1`, eventID,
+	).Scan(&tenantID, &taskID, &eventType)
+	return tenantID, taskID, eventType, err
 }
 
 func (s *PGTeamStore) ListTaskEvents(ctx context.Context, taskID uuid.UUID) ([]store.TeamTaskEventData, error) {

@@ -45,6 +45,9 @@ type OutboundMessage struct {
 	TenantID         uuid.UUID         `json:"tenant_id,omitempty"`          // tenant scope for per-tenant TTS
 	AgentID          uuid.UUID         `json:"agent_id,omitempty"`           // agent scope for per-agent TTS voice override
 	AgentOtherConfig []byte            `json:"agent_other_config,omitempty"` // agent's other_config for TTS voice/model
+	// DeliveryAck is called by the channel dispatcher after the real Send call.
+	// It is runtime-only; durable retry state remains in the workflow store.
+	DeliveryAck func(error) `json:"-"`
 }
 
 // Metadata keys on OutboundMessage.Metadata used to track the origin chat of
@@ -68,6 +71,7 @@ type MediaAttachment struct {
 
 // Event represents a server-side event to broadcast to WebSocket clients.
 type Event struct {
+	EventID  uuid.UUID `json:"event_id,omitempty"`
 	Name     string    `json:"name"` // event name (e.g. "agent", "chat", "health")
 	Payload  any       `json:"payload,omitempty"`
 	TenantID uuid.UUID `json:"-"` // tenant scope for event filtering (not serialized to clients)

@@ -133,9 +133,16 @@ func init() {
 		MsgInvalidLinkStatus:  "статус должен быть active или disabled",
 
 		// Teams
-		MsgTeamsNotConfigured:   "команды не настроены",
-		MsgAgentIsTeamLead:      "агент уже является лидом команды",
-		MsgCannotRemoveTeamLead: "нельзя удалить лида команды",
+		MsgTeamsNotConfigured:             "команды не настроены",
+		MsgAgentIsTeamLead:                "агент уже является лидом команды",
+		MsgCannotRemoveTeamLead:           "нельзя удалить лида команды",
+		MsgWorkflowExpectedGuardsRequired: "expectedStatus and expectedPlanRevision are required",
+		MsgWorkflowInvalidTaskID:          "invalid taskId",
+		MsgWorkflowActionInvalid:          "invalid workflow action request",
+		MsgWorkflowAuthorizationDenied:    "you are not authorized to perform this workflow action",
+		MsgWorkflowNotFound:               "workflow not found",
+		MsgWorkflowActionFailed:           "workflow action failed",
+		MsgTeamNotExecutable:              "этот запрос требует скоординированной командной работы, но команда сейчас не настроена для его выполнения",
 
 		// Channels
 		MsgCannotDeleteDefaultInst: "нельзя удалить экземпляр канала по умолчанию",

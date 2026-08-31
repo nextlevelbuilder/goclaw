@@ -171,6 +171,13 @@ type MCPServerStore interface {
 	CacheToolDescriptions(ctx context.Context, serverID uuid.UUID, toolInfo map[string]CachedToolInfo) error
 }
 
+// MCPAgentGrantBatchStore is the read-only batch surface used by the Team Work
+// classifier. Keeping it separate avoids widening every MCP runtime/test mock.
+type MCPAgentGrantBatchStore interface {
+	ListServers(ctx context.Context) ([]MCPServerData, error)
+	ListAgentGrantsByAgentIDs(ctx context.Context, agentIDs []uuid.UUID) ([]MCPAgentGrant, error)
+}
+
 // CachedToolInfo is the cached, per-tool information stored under an MCP
 // server's settings "tool_cache" key. It is used to render prompt previews
 // without a live connection to the MCP server.

@@ -58,6 +58,7 @@ func (sm *SubagentManager) announceTask(
 			OriginTenantID:   task.OriginTenantID,
 			RootAgentID:      task.RootAgentID,
 			ParentAgent:      task.RootAgentKey,
+			TeamID:           task.TeamID,
 			OriginTraceID:    task.OriginTraceID.String(),
 			OriginRootSpanID: task.OriginRootSpanID.String(),
 		}

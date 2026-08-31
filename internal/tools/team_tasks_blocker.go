@@ -12,8 +12,12 @@ import (
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
-// handleBlockerComment auto-fails the task, cancels the member session via
-// EventTeamTaskFailed broadcast, and escalates to the leader agent.
+// handleBlockerComment resolves a blocker escalation. For a workflow work task
+// it transitions the step in_progress→blocked (attempt-fenced) and arms a
+// durable coordinator-escalation pending state — it does NOT fail the whole
+// workflow. For a non-workflow task it keeps the legacy behavior: auto-fail the
+// task, cancel the member session via an EventTeamTaskFailed broadcast, and
+// escalate to the leader agent.
 func (t *TeamTasksTool) handleBlockerComment(
 	ctx context.Context,
 	team *store.TeamData,
@@ -33,6 +37,65 @@ func (t *TeamTasksTool) handleBlockerComment(
 	reason := "Blocked: " + text
 	if len([]rune(reason)) > 500 {
 		reason = string([]rune(reason)[:500])
+	}
+	// Workflow work tasks do NOT mechanically fail the whole workflow on a blocker
+	// (the July-14 incident). The attempt-fenced CAS moves this step
+	// in_progress→blocked and arms a durable coordinator-escalation pending state;
+	// the recovery ticker then enqueues a coordinator recovery run (retrying the
+	// enqueue with capped backoff, so the escalation can never be silently dropped
+	// the way the incident's fire-and-forget publish was). Independent DAG branches
+	// keep running. We broadcast the authoritative team.task.blocked refetch hint,
+	// NOT team.task.failed — the latter fires the cancel subscriber and would
+	// mechanically fail the step.
+	if task.WorkflowID != nil && task.WorkflowKind == store.TeamWorkflowTaskKindWork {
+		workflowStore, ok := t.manager.Store().(store.TeamWorkflowStore)
+		if !ok {
+			return ErrorResult("team workflow store is unavailable")
+		}
+		attempt, ok := store.WorkflowTaskAttemptFromContext(ctx)
+		if !ok {
+			return ErrorResult("workflow attempt identity missing from run context")
+		}
+		transition, err := workflowStore.BlockWorkflowTaskAttempt(ctx, attempt, reason)
+		if err != nil {
+			return ErrorResult("failed to record workflow blocker: " + err.Error())
+		}
+		if transition.Stale() {
+			return ErrorResult("this workflow step was superseded by recovery/replan and can no longer be blocked")
+		}
+		if transition.Outcome == store.WorkflowMutationAlreadyApplied {
+			return NewResult(fmt.Sprintf("Workflow step %s is already blocked; the coordinator will resolve it.", task.WorkflowStepID))
+		}
+		recordTaskAction(ctx, func(f *TaskActionFlags) {
+			f.Commented = true
+			f.Escalated = true
+		})
+		blockerPeerKind := ""
+		if pk, ok := task.Metadata[TaskMetaPeerKind].(string); ok {
+			blockerPeerKind = pk
+		}
+		blockerLocalKey := ""
+		if lk, ok := task.Metadata[TaskMetaLocalKey].(string); ok {
+			blockerLocalKey = lk
+		}
+		ownerKey := t.manager.AgentKeyFromID(ctx, agentID)
+		t.manager.BroadcastTeamEvent(ctx, protocol.EventTeamTaskBlocked, BuildTaskEventPayload(
+			team.ID.String(), taskID.String(),
+			store.TeamTaskStatusBlocked,
+			"agent", ownerKey,
+			WithTaskInfo(task.TaskNumber, task.Subject),
+			WithOwnerAgentKey(ownerKey),
+			WithReason(reason),
+			WithUserID(store.ActorIDFromContext(ctx)),
+			WithChannel(task.Channel),
+			WithChatID(task.ChatID),
+			WithPeerKind(blockerPeerKind),
+			WithLocalKey(blockerLocalKey),
+			WithContextInfo(ctx),
+		))
+		return NewResult(fmt.Sprintf(
+			"Workflow step %s marked blocked. The workflow coordinator will resolve it (retry, replan, cancel, or fail) — independent steps keep running.",
+			task.WorkflowStepID))
 	}
 	if err := t.manager.Store().FailTask(ctx, taskID, team.ID, reason); err != nil {
 		slog.Warn("blocker: FailTask error", "task_id", taskID, "error", err)

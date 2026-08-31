@@ -119,6 +119,7 @@ func (m *TeamsMethods) handleDelete(ctx context.Context, client *gateway.Client,
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInternal, i18n.T(locale, i18n.MsgFailedToDelete, "team", err.Error())))
 		return
 	}
+	m.emitTeamAccessCacheInvalidate(ctx)
 
 	// Invalidate agent caches
 	if m.agentRouter != nil {
@@ -312,7 +313,7 @@ func (m *TeamsMethods) handleUpdate(ctx context.Context, client *gateway.Client,
 		EscalationActions     []string `json:"escalation_actions,omitempty"`
 		WorkspaceScope        string   `json:"workspace_scope,omitempty"`
 		WorkspaceQuotaMB      *int     `json:"workspace_quota_mb,omitempty"`
-		Notifications *struct {
+		Notifications         *struct {
 			Dispatched *bool  `json:"dispatched,omitempty"`
 			Progress   *bool  `json:"progress,omitempty"`
 			Failed     *bool  `json:"failed,omitempty"`

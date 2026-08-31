@@ -277,6 +277,7 @@ func isAdminMethod(method string) bool {
 		protocol.MethodTeamsMembersRemove,
 		protocol.MethodTeamsTaskDelete,
 		protocol.MethodTeamsTaskDeleteBulk,
+		protocol.MethodTeamsWorkflowAction,
 
 		// Tenants — write paths.
 		protocol.MethodTenantsCreate,
@@ -453,6 +454,7 @@ func isReadMethod(method string) bool {
 		protocol.MethodTeamsEventsList,
 		protocol.MethodTeamsKnownUsers,
 		protocol.MethodTeamsScopes,
+		protocol.MethodTeamsWorkflowGet,
 
 		// Hooks read
 		protocol.MethodHooksList,

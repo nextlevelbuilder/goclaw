@@ -214,6 +214,12 @@ func hasPendingToolResultAhead(msgs []providers.Message, start int, idQueue map[
 	return false
 }
 
+// persistTimeout bounds the store writes that follow summarization. It is
+// deliberately separate from the compaction timeout: the summarizer call is
+// allowed to burn its entire budget and still fail, and the persist step must
+// have a live context left to actually save the reduction.
+const persistTimeout = 30 * time.Second
+
 // maybeSummarize truncates+summarizes session history when it grows large.
 //
 // midLoopCompacted signals that the final-request guard already had to compact
@@ -378,7 +384,20 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string, midLoopCom
 		summaryContent, _, err := l.summarizeCompactionUnits(sctx, units, inputCap, 1)
 		if err != nil {
 			slog.Warn("summarization failed", "session", sessionKey, "error", err)
-			return
+			// Returning here left the stored history untruncated, so it kept
+			// growing and every later attempt had more to summarize and even less
+			// chance of finishing inside the timeout — a session that fails once
+			// tends to fail forever. Persist a deterministic extract instead so
+			// the stored history actually shrinks.
+			summaryContent = extractiveCompactionSummary(toSummarize, inputCap)
+			if strings.TrimSpace(summaryContent) == "" {
+				return
+			}
+			slog.Warn("summarization extractive fallback",
+				"session", sessionKey,
+				"summarized_msgs", len(toSummarize),
+				"summary_chars", len(summaryContent),
+			)
 		}
 		resp := &providers.ChatResponse{Content: summaryContent}
 
@@ -394,28 +413,46 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string, midLoopCom
 			}
 		}
 
-		l.sessions.SetSummary(sctx, sessionKey, SanitizeAssistantContent(resp.Content))
-		l.sessions.TruncateHistory(sctx, sessionKey, keepLast)
+		// Persist on a FRESH context, not sctx. sctx carries the compaction
+		// timeout, and the summarizer call above is exactly what exhausts it: on
+		// a large session the LLM request burns the full 120s and fails with
+		// "context deadline exceeded". Reusing sctx afterwards meant every write
+		// below ran on an already-dead context — Save's ExecContext failed
+		// immediately and its error was discarded, so the extractive fallback
+		// produced a summary that was never stored. History never shrank,
+		// compaction_count never advanced, and the next turn had to fall back
+		// again: the reduction worked and was thrown away.
+		pctx, pcancel := context.WithTimeout(context.WithoutCancel(ctx), persistTimeout)
+		defer pcancel()
+
+		l.sessions.SetSummary(pctx, sessionKey, SanitizeAssistantContent(resp.Content))
+		l.sessions.TruncateHistory(pctx, sessionKey, keepLast)
 
 		// Inject preserved MediaRefs into the first kept message so they survive truncation.
 		if len(preservedRefs) > 0 {
-			kept := l.sessions.GetHistory(sctx, sessionKey)
+			kept := l.sessions.GetHistory(pctx, sessionKey)
 			if len(kept) > 0 {
 				kept[0].MediaRefs = append(preservedRefs, kept[0].MediaRefs...)
 				// Cap total refs on this message at maxPreservedMediaRefs.
 				if len(kept[0].MediaRefs) > maxPreservedMediaRefs {
 					kept[0].MediaRefs = kept[0].MediaRefs[:maxPreservedMediaRefs]
 				}
-				l.sessions.SetHistory(sctx, sessionKey, kept)
+				l.sessions.SetHistory(pctx, sessionKey, kept)
 			}
 		}
-		l.sessions.IncrementCompaction(sctx, sessionKey)
+		l.sessions.IncrementCompaction(pctx, sessionKey)
 		// Mirror SessionMetaKeyLastCompactionAt from the v3 prune/compact path
 		// so the legacy v2 post-turn summarizer also surfaces compaction cadence.
-		l.sessions.SetSessionMetadata(sctx, sessionKey, map[string]string{
+		l.sessions.SetSessionMetadata(pctx, sessionKey, map[string]string{
 			SessionMetaKeyLastCompactionAt: time.Now().UTC().Format(time.RFC3339),
 		})
-		l.sessions.Save(sctx, sessionKey)
+		// A failed Save silently undoes the whole compaction: the in-memory cache
+		// shrank but the row did not, so the next load reads the old oversized
+		// history back. Surface it.
+		if err := l.sessions.Save(pctx, sessionKey); err != nil {
+			slog.Error("compaction persist failed; history not truncated in store",
+				"session", sessionKey, "error", err)
+		}
 	}()
 }
 

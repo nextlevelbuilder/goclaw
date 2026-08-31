@@ -10,6 +10,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/workflowactions"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -19,6 +20,13 @@ type PostTurnProcessor interface {
 	// DispatchUnblockedTasks finds pending tasks with an owner and dispatches them.
 	// Called by the consumer after auto-completing a task to unblock dependent work.
 	DispatchUnblockedTasks(ctx context.Context, teamID uuid.UUID)
+	RevalidateWorkflow(ctx context.Context, workflow *store.TeamWorkflowData) error
+}
+
+// WorkflowActionServiceProvider exposes the shared backend recovery service to
+// RPC wiring without coupling command setup to a concrete TeamToolManager.
+type WorkflowActionServiceProvider interface {
+	WorkflowActionService() *workflowactions.Service
 }
 
 // ProcessPendingTasks validates tasks created during a turn and dispatches unblocked ones.
@@ -40,6 +48,14 @@ func (m *TeamToolManager) ProcessPendingTasks(ctx context.Context, teamID uuid.U
 	}
 	if len(tasks) == 0 {
 		return nil
+	}
+	for _, task := range tasks {
+		if task.WorkflowID != nil {
+			// Workflow tasks use the persisted dispatch token/lease protocol. They
+			// must never pass through generic AssignTask below.
+			m.DispatchUnblockedTasks(ctx, teamID)
+			return nil
+		}
 	}
 
 	// Build lookup: taskID → task (for cycle/ref validation).

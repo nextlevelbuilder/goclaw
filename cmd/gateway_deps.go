@@ -11,10 +11,10 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
-	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/teamworkconfig"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 	"github.com/nextlevelbuilder/goclaw/internal/vault"
@@ -32,6 +32,7 @@ type gatewayDeps struct {
 	channelMemorySvc *channelmemory.Service
 	agentRouter      *agent.Router
 	toolsReg         *tools.Registry
+	toolPE           *tools.PolicyEngine
 	skillsLoader     *skills.Loader         // optional: enables skill creation in evolution approval
 	permCache        *cache.PermissionCache // nil if no tenant store; closed on shutdown to stop sweep goroutines
 	enrichProgress   *vault.EnrichProgress  // nil if enrichment worker not registered
@@ -42,5 +43,10 @@ type gatewayDeps struct {
 	usageCapSvc      *usagecaps.Service
 	audioMgr         *audio.Manager      // nil if TTS not configured; used by TTSHandler
 	ttsHandler       *httpapi.TTSHandler // nil if TTS not configured; for hot-reload
-	teamWorkEmbedder memory.EmbeddingProvider
+	// teamWorkCfg resolves the request-time Team Work classifier settings
+	// (gateway.team_work_classify + provider/model) per tenant, replacing the
+	// cross-tenant shared-cfg overlay. Shared by the WS (ChatMethods) and inbound
+	// (ConsumerDeps) surfaces so cache invalidation from system-config-changed
+	// hits the one instance both read.
+	teamWorkCfg *teamworkconfig.Resolver
 }

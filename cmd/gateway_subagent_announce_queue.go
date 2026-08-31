@@ -69,6 +69,7 @@ func makeDelegateAnnounceCallback(
 		// (bridges UI gap between last task.completed and announce run.started).
 		bus.BroadcastForTenant(msgBus, protocol.EventTeamLeaderProcessing, meta.OriginTenantID, map[string]any{
 			"agentId": meta.ParentAgent,
+			"teamId":  meta.TeamID,
 			"tasks":   len(items),
 		})
 

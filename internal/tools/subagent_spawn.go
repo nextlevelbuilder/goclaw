@@ -310,6 +310,7 @@ func newSubagentTask(
 		OriginTenantID:      scope.TenantID,
 		RootAgentID:         scope.RootAgentID,
 		RootAgentKey:        scope.RootAgentKey,
+		TeamID:              ToolTeamIDFromCtx(ctx),
 		OriginTraceID:       tracing.TraceIDFromContext(ctx),
 		OriginRootSpanID:    tracing.ParentSpanIDFromContext(ctx),
 		OriginContextWindow: store.AgentContextWindowFromContext(ctx),

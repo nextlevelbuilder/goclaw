@@ -13,8 +13,8 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-const listPageSize    = 30
-const searchPageSize  = 5
+const listPageSize = 30
+const searchPageSize = 5
 
 // blockerSummary is a compact view of a blocker task for blocked_by resolution.
 type blockerSummary struct {
@@ -83,6 +83,31 @@ func getTeamCreateLock(teamID, chatID string) *sync.Mutex {
 	key := teamID + ":" + chatID
 	v, _ := teamCreateLocks.LoadOrStore(key, &sync.Mutex{})
 	return v.(*sync.Mutex)
+}
+
+func beginTeamTaskListing(ctx context.Context, ptd *PendingTeamDispatch, teamID, chatID string) (*sync.Mutex, error) {
+	if ptd == nil || ptd.HasListed() {
+		return nil, nil
+	}
+	for {
+		winner, wait := ptd.BeginListing()
+		if winner {
+			lock := getTeamCreateLock(teamID, chatID)
+			lock.Lock()
+			return lock, nil
+		}
+		if wait == nil {
+			return nil, nil
+		}
+		select {
+		case <-wait:
+			if ptd.HasListed() {
+				return nil, nil
+			}
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 }
 
 // resolveBlockers batch-loads blocker tasks and returns slim summaries.
@@ -208,17 +233,21 @@ func (t *TeamTasksTool) executeList(ctx context.Context, args map[string]any) *R
 		listChatID = ""
 	}
 
-	// Acquire team create lock to serialize list→create flows across concurrent goroutines.
-	if ptd := PendingTeamDispatchFromCtx(ctx); ptd != nil && !ptd.HasListed() {
-		lock := getTeamCreateLock(team.ID.String(), chatID)
-		lock.Lock()
-		ptd.SetTeamLock(lock)
-		ptd.MarkListed()
+	ptd := PendingTeamDispatchFromCtx(ctx)
+	heldLock, lockErr := beginTeamTaskListing(ctx, ptd, team.ID.String(), chatID)
+	if lockErr != nil {
+		return ErrorResult("failed to coordinate task listing: " + lockErr.Error())
 	}
 
 	tasks, err := t.manager.Store().ListTasks(ctx, team.ID, "priority", statusFilter, filterUserID, "", listChatID, 0, offset)
 	if err != nil {
+		if ptd != nil && heldLock != nil {
+			ptd.FailListing(heldLock)
+		}
 		return ErrorResult("failed to list tasks: " + err.Error())
+	}
+	if ptd != nil && heldLock != nil {
+		ptd.MarkListedWithLock(heldLock)
 	}
 
 	hasMore := len(tasks) > listPageSize
@@ -380,18 +409,22 @@ func (t *TeamTasksTool) executeSearch(ctx context.Context, args map[string]any) 
 		filterUserID = store.UserIDFromContext(ctx)
 	}
 
-	// Acquire team create lock so search also satisfies the list-before-create gate.
 	chatID := ToolChatIDFromCtx(ctx)
-	if ptd := PendingTeamDispatchFromCtx(ctx); ptd != nil && !ptd.HasListed() {
-		lock := getTeamCreateLock(team.ID.String(), chatID)
-		lock.Lock()
-		ptd.SetTeamLock(lock)
-		ptd.MarkListed()
+	ptd := PendingTeamDispatchFromCtx(ctx)
+	heldLock, lockErr := beginTeamTaskListing(ctx, ptd, team.ID.String(), chatID)
+	if lockErr != nil {
+		return ErrorResult("failed to coordinate task search: " + lockErr.Error())
 	}
 
 	tasks, err := t.manager.Store().SearchTasks(ctx, team.ID, query, searchPageSize, filterUserID)
 	if err != nil {
+		if ptd != nil && heldLock != nil {
+			ptd.FailListing(heldLock)
+		}
 		return ErrorResult("failed to search tasks: " + err.Error())
+	}
+	if ptd != nil && heldLock != nil {
+		ptd.MarkListedWithLock(heldLock)
 	}
 
 	items := make([]taskListItem, 0, len(tasks))

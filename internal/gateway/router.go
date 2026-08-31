@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"slices"
 	"time"
@@ -24,10 +25,11 @@ type MethodHandler func(ctx context.Context, client *Client, req *protocol.Reque
 
 // MethodRouter maps method names to handlers.
 type MethodRouter struct {
-	handlers    map[string]MethodHandler
-	server      *Server
-	tenantStore store.TenantStore      // optional, for enriching connect response
-	permCache   *cache.PermissionCache // optional, for caching tenant membership checks
+	handlers        map[string]MethodHandler
+	server          *Server
+	tenantStore     store.TenantStore      // optional, for enriching connect response
+	permCache       *cache.PermissionCache // optional, for caching tenant membership checks
+	teamAccessStore store.UserTeamIDLister // optional; populates WS event access snapshots
 }
 
 func NewMethodRouter(server *Server) *MethodRouter {
@@ -44,6 +46,52 @@ func (r *MethodRouter) SetTenantStore(ts store.TenantStore) { r.tenantStore = ts
 
 // SetPermissionCache sets the permission cache for tenant membership checks.
 func (r *MethodRouter) SetPermissionCache(pc *cache.PermissionCache) { r.permCache = pc }
+
+// SetTeamAccessStore sets the narrowly-scoped reader used to populate the
+// per-client event access snapshot after authentication.
+func (r *MethodRouter) SetTeamAccessStore(ts store.UserTeamIDLister) { r.teamAccessStore = ts }
+
+// RefreshTeamAccessSnapshot reloads a client's tenant-bound team IDs. It is
+// intentionally fail-closed: a missing store, empty user ID, or load error
+// publishes an empty snapshot rather than retaining potentially stale access.
+func (r *MethodRouter) RefreshTeamAccessSnapshot(ctx context.Context, client *Client) error {
+	if client.TenantID() == uuid.Nil || client.UserID() == "" {
+		client.SetTeamAccess(nil)
+		return nil
+	}
+	if r.teamAccessStore == nil {
+		client.SetTeamAccess(nil)
+		return fmt.Errorf("team access store is not configured")
+	}
+
+	snapshotCtx := store.WithTenantID(ctx, client.TenantID())
+	teamIDs, err := r.teamAccessStore.ListUserTeamIDs(snapshotCtx, client.UserID())
+	if err != nil {
+		client.SetTeamAccess(nil)
+		return err
+	}
+
+	ids := make([]string, len(teamIDs))
+	for i, teamID := range teamIDs {
+		ids[i] = teamID.String()
+	}
+	client.SetTeamAccess(ids)
+	return nil
+}
+
+// HandleTeamAccessInvalidation refreshes access snapshots only for clients in
+// the affected tenant. A reload failure clears the client's snapshot.
+func (r *MethodRouter) HandleTeamAccessInvalidation(ctx context.Context, tenantID uuid.UUID) {
+	for _, client := range r.server.ClientList() {
+		if tenantID != uuid.Nil && client.TenantID() != tenantID {
+			continue
+		}
+		if err := r.RefreshTeamAccessSnapshot(ctx, client); err != nil {
+			slog.Warn("security.team_access_snapshot_refresh_failed",
+				"client", client.ID(), "tenant_id", client.TenantID(), "user_id", client.UserID(), "error", err)
+		}
+	}
+}
 
 // Register adds a method handler.
 func (r *MethodRouter) Register(method string, handler MethodHandler) {
@@ -345,6 +393,29 @@ func (r *MethodRouter) handleConnect(ctx context.Context, client *Client, req *p
 }
 
 func (r *MethodRouter) sendConnectResponse(ctx context.Context, client *Client, reqID string) {
+	// Populate the immutable, tenant-bound event access snapshot before reporting
+	// a successful connection. A storage failure must not leave an authenticated
+	// client with a stale or unknown authorization view.
+	if err := r.RefreshTeamAccessSnapshot(ctx, client); err != nil {
+		// Capture the authenticated identity for the security log before scrubbing
+		// every client routing field below.
+		tenantID := client.TenantID()
+		userID := client.UserID()
+		// The client was registered with the event bus before connect. Clear every
+		// routing field as well as authenticated so it cannot receive a scoped
+		// event while observing the error response or retrying authentication.
+		client.authenticated = false
+		client.role = ""
+		client.userID = ""
+		client.tenantID = uuid.Nil
+		slog.Warn("security.team_access_snapshot_load_failed",
+			"client", client.ID(), "tenant_id", tenantID, "user_id", userID, "error", err)
+		locale := i18n.Normalize(client.locale)
+		client.SendResponse(protocol.NewErrorResponse(reqID, protocol.ErrInternal,
+			i18n.T(locale, i18n.MsgInternalError, err.Error())))
+		return
+	}
+
 	// Now that the client is authenticated, promote the upgrade-request URL
 	// into the gateway-wide PublicURLSnapshot. RPC methods that advertise URLs
 	// back to external systems (e.g. bitrix.portals.create) read from this

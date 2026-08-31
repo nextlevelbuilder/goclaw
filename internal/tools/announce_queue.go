@@ -44,6 +44,7 @@ type AnnounceMetadata struct {
 	OriginSessionKey string    // exact parent session key (WS uses non-standard format)
 	OriginTenantID   uuid.UUID // parent tenant for announce routing
 	RootAgentID      uuid.UUID
+	TeamID           string    // optional team scope for Team Work UI events
 	ParentAgent      string
 	OriginTraceID    string // parent trace UUID for announce linking
 	OriginRootSpanID string // parent agent's root span UUID

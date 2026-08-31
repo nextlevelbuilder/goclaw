@@ -133,9 +133,16 @@ func init() {
 		MsgInvalidLinkStatus:  "trạng thái phải là active hoặc disabled",
 
 		// Teams
-		MsgTeamsNotConfigured:   "nhóm chưa được cấu hình",
-		MsgAgentIsTeamLead:      "agent đã là trưởng nhóm",
-		MsgCannotRemoveTeamLead: "không thể xóa trưởng nhóm",
+		MsgTeamsNotConfigured:             "nhóm chưa được cấu hình",
+		MsgAgentIsTeamLead:                "agent đã là trưởng nhóm",
+		MsgCannotRemoveTeamLead:           "không thể xóa trưởng nhóm",
+		MsgWorkflowExpectedGuardsRequired: "expectedStatus và expectedPlanRevision là bắt buộc",
+		MsgWorkflowInvalidTaskID:          "taskId không hợp lệ",
+		MsgWorkflowActionInvalid:          "yêu cầu thao tác workflow không hợp lệ",
+		MsgWorkflowAuthorizationDenied:    "bạn không có quyền thực hiện thao tác workflow này",
+		MsgWorkflowNotFound:               "không tìm thấy workflow",
+		MsgWorkflowActionFailed:           "thao tác workflow thất bại",
+		MsgTeamNotExecutable:              "yêu cầu này cần làm việc nhóm phối hợp, nhưng nhóm hiện chưa được thiết lập để thực hiện",
 
 		// Channels
 		MsgCannotDeleteDefaultInst: "không thể xóa phiên bản channel mặc định",

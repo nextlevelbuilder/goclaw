@@ -407,5 +407,98 @@
     "updated": "Đã cập nhật liên kết",
     "updateFailed": "Cập nhật liên kết thất bại",
     "sameAgentError": "Agent nguồn và đích phải khác nhau."
+  },
+  "taskStatus": {
+    "pending": "Chờ xử lý",
+    "dispatching": "Đang phân phối",
+    "blocked": "Bị chặn",
+    "in_progress": "Đang thực hiện",
+    "in_review": "Đang duyệt",
+    "completed": "Đã hoàn thành",
+    "failed": "Thất bại",
+    "cancelled": "Đã hủy",
+    "stale": "Đã lỗi thời"
+  },
+  "workflow": {
+    "title": "Quy trình",
+    "step": "Bước",
+    "revision": "Bản sửa đổi {{revision}}",
+    "actionUnavailable": "Thao tác quy trình không khả dụng",
+    "actionFailed": "Không thể áp dụng thao tác quy trình",
+    "status": {
+      "pending_expansion": "Chờ mở rộng",
+      "running": "Đang chạy",
+      "needs_revision": "Cần sửa kế hoạch",
+      "failing": "Đang chuyển sang thất bại",
+      "cancelling": "Đang hủy",
+      "completed": "Đã hoàn thành",
+      "failed": "Thất bại",
+      "cancelled": "Đã hủy"
+    },
+    "delivery": {
+      "label": "Phân phối: {{status}}",
+      "pending": "Đang chờ",
+      "enqueuing": "Đang xếp hàng",
+      "delivered": "Đã gửi",
+      "dead": "Đã hết lượt thử"
+    },
+    "attempts": {
+      "expansion": "Số lần mở rộng: {{count}}",
+      "delivery": "Số lần phân phối: {{count}}"
+    },
+    "reason": {
+      "label": "Lý do",
+      "placeholder": "Giải thích vì sao cần thao tác này",
+      "required": "Bắt buộc nhập lý do"
+    },
+    "reasons": {
+      "blocker": "Lý do chặn",
+      "expansionError": "Lỗi mở rộng",
+      "deliveryError": "Lỗi phân phối",
+      "cancellation": "Lý do hủy",
+      "failure": "Lý do thất bại"
+    },
+    "actions": {
+      "cancel": "Hủy",
+      "confirm": "Xác nhận",
+      "applying": "Đang áp dụng...",
+      "retry_blocked": {
+        "label": "Thử lại bước bị chặn",
+        "description": "Thử lại bước bị chặn với hướng dẫn đã chỉnh sửa.",
+        "confirm": "Thử lại bước bị chặn này ngay?"
+      },
+      "cancel_workflow": {
+        "label": "Hủy quy trình",
+        "description": "Hủy toàn bộ công việc còn lại trong quy trình.",
+        "confirm": "Hủy quy trình này? Công việc còn lại sẽ bị dừng."
+      },
+      "fail_workflow": {
+        "label": "Đánh dấu quy trình thất bại",
+        "description": "Đánh dấu quy trình thất bại và dừng công việc còn lại.",
+        "confirm": "Đánh dấu quy trình này thất bại? Công việc còn lại sẽ bị dừng."
+      },
+      "retry_expansion": {
+        "label": "Thử mở rộng lại",
+        "description": "Thử mở rộng lại trong giới hạn lượt thử còn lại.",
+        "confirm": "Thử mở rộng quy trình ngay?"
+      },
+      "retry_delivery": {
+        "label": "Thử phân phối lại",
+        "description": "Bắt đầu chu kỳ phân phối có giới hạn mới cho kết quả cuối.",
+        "confirm": "Thử phân phối lại kết quả cuối ngay?"
+      }
+    },
+    "toast": {
+      "applied": "Đã áp dụng thao tác quy trình",
+      "already_applied": "Thao tác quy trình đã được áp dụng trước đó",
+      "conflict": "Quy trình đã thay đổi",
+      "refreshed": "Đã tải trạng thái chính thức mới nhất của quy trình.",
+      "error": "Không thể áp dụng thao tác quy trình"
+    },
+    "outcomes": {
+      "applied": "Đã áp dụng thao tác quy trình",
+      "already_applied": "Thao tác quy trình đã được áp dụng trước đó",
+      "conflict": "Quy trình đã thay đổi; đã tải trạng thái mới nhất"
+    }
   }
 }
