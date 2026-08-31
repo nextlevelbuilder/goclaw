@@ -71,10 +71,16 @@ func wireExtras(
 		contextFileInterceptor = tools.NewContextFileInterceptor(stores.Agents, workspace, agentCtxCache, userCtxCache)
 	}
 
-	// 1c. Persistent media storage for cross-turn image/document access
-	mediaStore, err := media.NewStore(filepath.Join(workspace, ".media"))
+	// 1c. Persistent media storage for cross-turn image/document access.
+	// Default is the historical filesystem-backed store under
+	// {workspace}/.media. Set GOCLAW_MEDIA_BACKEND=s3 (plus the matching
+	// _S3_* env vars) to switch to S3 without touching call sites — the
+	// Store façade hides the backend choice from the rest of the code.
+	mediaCfg := media.LoadConfigFromEnv(filepath.Join(workspace, ".media"))
+	mediaStore, err := media.NewStoreFromConfig(context.Background(), mediaCfg)
 	if err != nil {
-		slog.Warn("media store creation failed, images will not persist across turns", "error", err)
+		slog.Warn("media store creation failed, images will not persist across turns",
+			"backend", mediaCfg.Backend, "error", err)
 	}
 
 	// Wire media cleanup on session delete.
