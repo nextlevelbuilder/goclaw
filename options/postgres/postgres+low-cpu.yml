@@ -1,0 +1,12 @@
+# Low CPU settings for postgres
+services:
+  postgres:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=10"
