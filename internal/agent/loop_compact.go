@@ -56,18 +56,7 @@ func (l *Loop) compactMessagesInPlace(ctx context.Context, messages []providers.
 		keepCount = minKeep
 	}
 
-	splitIdx := len(messages) - keepCount
-
-	// Walk backward from splitIdx to find a clean boundary —
-	// avoid splitting tool_use → tool_result pairs.
-	for splitIdx > 0 {
-		m := messages[splitIdx]
-		if m.Role == "tool" || (m.Role == "assistant" && len(m.ToolCalls) > 0) {
-			splitIdx--
-			continue
-		}
-		break
-	}
+	splitIdx := toolChainSplitIndex(messages, len(messages)-keepCount)
 	if splitIdx <= 1 {
 		return nil
 	}
@@ -131,6 +120,27 @@ func (l *Loop) compactMessagesInPlace(ctx context.Context, messages []providers.
 		"kept", len(result))
 
 	return result
+}
+
+// toolChainSplitIndex walks backward from splitIdx to the nearest clean
+// boundary so the kept tail (messages[splitIdx:]) never starts mid tool-chain.
+// A tail starting with a tool result — or splitting an assistant(tool_calls) →
+// tool sequence — produces an orphaned role:"tool" message, which OpenAI
+// rejects with a 400 on the next request. Used by both mid-loop compaction
+// and the background summarizer's truncation.
+func toolChainSplitIndex(messages []providers.Message, splitIdx int) int {
+	if splitIdx > len(messages) {
+		splitIdx = len(messages)
+	}
+	for splitIdx > 0 && splitIdx < len(messages) {
+		m := messages[splitIdx]
+		if m.Role == "tool" || (m.Role == "assistant" && len(m.ToolCalls) > 0) {
+			splitIdx--
+			continue
+		}
+		break
+	}
+	return splitIdx
 }
 
 // dynamicSummaryMax returns the output-token budget for a compaction or

@@ -242,8 +242,18 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 			return
 		}
 
+		// Adjust the split so the kept tail never starts mid tool-chain —
+		// a tail beginning with a tool result (or splitting assistant(tool_calls)
+		// from its results) persists an orphaned role:"tool" message that
+		// OpenAI rejects with a 400 on the next request.
+		splitIdx := toolChainSplitIndex(history, len(history)-keepLast)
+		if splitIdx <= 0 {
+			return
+		}
+		effectiveKeep := len(history) - splitIdx
+
 		summary := l.sessions.GetSummary(sctx, sessionKey)
-		toSummarize := history[:len(history)-keepLast]
+		toSummarize := history[:splitIdx]
 
 		var sb strings.Builder
 		var mediaKinds []string
@@ -308,7 +318,7 @@ func (l *Loop) maybeSummarize(ctx context.Context, sessionKey string) {
 		}
 
 		l.sessions.SetSummary(sctx, sessionKey, SanitizeAssistantContent(resp.Content))
-		l.sessions.TruncateHistory(sctx, sessionKey, keepLast)
+		l.sessions.TruncateHistory(sctx, sessionKey, effectiveKeep)
 
 		// Inject preserved MediaRefs into the first kept message so they survive truncation.
 		if len(preservedRefs) > 0 {
