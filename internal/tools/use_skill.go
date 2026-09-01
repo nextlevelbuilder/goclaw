@@ -4,15 +4,23 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+
+	"github.com/nextlevelbuilder/goclaw/internal/skills"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // UseSkillTool is a marker tool for observability.
 // It generates tool.call / tool.result events in spans and realtime
-// so skill activation is visible in tracing. The actual skill content
-// is still loaded via read_file — this tool is a deliberate no-op.
-type UseSkillTool struct{}
+// so skill activation is visible in tracing. For agents that have read_file,
+// the actual skill content is still loaded via read_file — this tool stays a
+// no-op for them. Agents without read_file in their resolved tool set (see
+// store.AvailableToolNamesFromContext) have no way to follow up, so this tool
+// inlines the skill content directly instead.
+type UseSkillTool struct {
+	loader *skills.Loader
+}
 
-func NewUseSkillTool() *UseSkillTool { return &UseSkillTool{} }
+func NewUseSkillTool(loader *skills.Loader) *UseSkillTool { return &UseSkillTool{loader: loader} }
 
 func (t *UseSkillTool) Name() string { return "use_skill" }
 
@@ -37,13 +45,24 @@ func (t *UseSkillTool) Parameters() map[string]any {
 	}
 }
 
-func (t *UseSkillTool) Execute(_ context.Context, args map[string]any) *Result {
+func (t *UseSkillTool) Execute(ctx context.Context, args map[string]any) *Result {
 	name, _ := args["name"].(string)
 	if name == "" {
 		return ErrorResult("name parameter is required")
 	}
 
 	slog.Info("skill.activated", "skill", name)
+
+	// nil AvailableToolNames means "no restriction known" (see
+	// store.AvailableToolNamesFromContext) — only inline when we can positively
+	// confirm read_file is missing from this agent's resolved tool set.
+	if available := store.AvailableToolNamesFromContext(ctx); available != nil && !available["read_file"] {
+		content, ok := t.loader.LoadSkill(ctx, name)
+		if !ok {
+			return ErrorResult(fmt.Sprintf("skill %q not found", name))
+		}
+		return NewResult(content)
+	}
 
 	return NewResult(fmt.Sprintf("Skill %q activated. Proceed to read the skill's SKILL.md with read_file.", name))
 }

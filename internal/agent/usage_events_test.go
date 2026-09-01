@@ -100,7 +100,7 @@ func TestRecordToolUsageEvent_RuntimeAliasUsesCanonicalName(t *testing.T) {
 func TestRecordToolUsageEvent_UseSkillCountsSkillName(t *testing.T) {
 	storeSpy := newFakeUsageEventStore()
 	registry := tools.NewRegistry()
-	registry.Register(tools.NewUseSkillTool())
+	registry.Register(tools.NewUseSkillTool(nil)) // Execute() not exercised by this test — nil loader is safe
 	loop := &Loop{registry: registry, usageEvents: storeSpy, agentUUID: uuid.New(), tenantID: uuid.New()}
 	ctx := tracing.WithTraceID(store.WithTenantID(t.Context(), loop.tenantID), uuid.New())
 

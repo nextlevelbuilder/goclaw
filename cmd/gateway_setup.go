@@ -579,7 +579,7 @@ func setupSkillsSystem(
 	skillsLoader := skills.NewLoader(workspace, globalSkillsDir, builtinSkillsDir)
 	skillSearchTool := tools.NewSkillSearchTool(skillsLoader)
 	toolsReg.Register(skillSearchTool)
-	toolsReg.Register(tools.NewUseSkillTool())
+	toolsReg.Register(tools.NewUseSkillTool(skillsLoader))
 	slog.Info("skill_search tool registered", "skills", len(skillsLoader.ListSkills(context.Background())))
 
 	// Wire skills-store directory into filesystem loader so agents
