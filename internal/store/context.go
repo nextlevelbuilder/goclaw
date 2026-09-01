@@ -49,6 +49,9 @@ const (
 	TenantSlugKey contextKey = "goclaw_tenant_slug"
 	// RoleKey is the context key for the caller's permission role (e.g. "admin", "operator", "viewer").
 	RoleKey contextKey = "goclaw_role"
+	// AvailableToolNamesKey carries this iteration's policy-resolved tool allowlist
+	// (canonical registry names) so a tool can introspect its own sibling tools.
+	AvailableToolNamesKey contextKey = "goclaw_available_tool_names"
 	// CredentialUserIDKey holds the resolved tenant user identity for credential lookups.
 	// Falls back to UserIDFromContext if not set.
 	CredentialUserIDKey contextKey = "goclaw_credential_user_id"
@@ -495,4 +498,23 @@ func RoleFromContext(ctx context.Context) string {
 		return v
 	}
 	return ""
+}
+
+// WithAvailableToolNames returns a new context carrying this iteration's
+// policy-resolved tool allowlist, so a tool can check whether a sibling tool
+// is available to the calling agent.
+func WithAvailableToolNames(ctx context.Context, names map[string]bool) context.Context {
+	return context.WithValue(ctx, AvailableToolNamesKey, names)
+}
+
+// AvailableToolNamesFromContext extracts the tool allowlist from context.
+// Returns nil when not set — callers MUST treat nil as "no restriction known"
+// (every tool available), matching the same nil convention already used by
+// RunState.Tool.AllowedTools (see ThinkStage.Execute): nil means either the
+// agent has no tool policy configured, or the caller never populated this key
+// at all (e.g. a code path outside the pipeline's per-iteration tool dispatch).
+// Never treat nil as "no tools available".
+func AvailableToolNamesFromContext(ctx context.Context) map[string]bool {
+	v, _ := ctx.Value(AvailableToolNamesKey).(map[string]bool)
+	return v
 }
