@@ -237,6 +237,15 @@ func (l *Loop) injectContext(ctx context.Context, req *RunRequest) (contextSetup
 		}
 		ctx = tools.WithDelegationArtifactInputs(ctx, req.DelegateInputsPath)
 		ctx = tools.WithToolWorkspace(ctx, req.DelegateOutputsPath)
+		// A delegated lead is otherwise the only team agent running without its
+		// own team in context, leaving the team's deliverables unreadable to it
+		// (#1535). Read allowance only: the active workspace set above stays the
+		// exchange outputs directory, and req.TeamWorkspace is still rejected as
+		// an override by the guard above.
+		if read := l.resolveDelegatedLeadTeamRead(ctx, req); read.ok() {
+			ctx = tools.WithToolTeamWorkspace(ctx, read.workspace)
+			ctx = tools.WithToolTeamRoot(ctx, read.root)
+		}
 	}
 
 	// Team workspace: dispatched task overrides default workspace.
