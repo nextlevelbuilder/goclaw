@@ -145,6 +145,7 @@ func SeedDefaultModels(r *InMemoryRegistry) {
 	for _, s := range []ModelSpec{
 		// TokenizerID "cl100k_base" is an approximation — Claude uses a proprietary tokenizer.
 		// Used for rough token estimation; actual counting should use provider-specific logic.
+		{ID: "claude-fable-5", Provider: "anthropic", ContextWindow: 200_000, MaxTokens: 32_000, Reasoning: true, Vision: true, TokenizerID: "cl100k_base"},
 		{ID: "claude-opus-4-6", Provider: "anthropic", ContextWindow: 200_000, MaxTokens: 32_000, Reasoning: true, Vision: true, TokenizerID: "cl100k_base"},
 		{ID: "claude-sonnet-4-6", Provider: "anthropic", ContextWindow: 200_000, MaxTokens: 16_000, Reasoning: true, Vision: true, TokenizerID: "cl100k_base"},
 		{ID: "claude-haiku-4-5-20251001", Provider: "anthropic", ContextWindow: 200_000, MaxTokens: 8_192, Reasoning: false, Vision: true, TokenizerID: "cl100k_base"},

@@ -221,16 +221,28 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 
 	// Enable extended thinking if thinking_level is set
 	if level, ok := req.Options[OptThinkingLevel].(string); ok && level != "" && level != "off" {
-		budget := anthropicThinkingBudget(level)
-		body["thinking"] = map[string]any{
-			"type":          "enabled",
-			"budget_tokens": budget,
-		}
-		// Anthropic requires no temperature when thinking is enabled
-		delete(body, "temperature")
-		// Ensure max_tokens accommodates thinking budget + response
-		if maxTok, ok := body["max_tokens"].(int); !ok || maxTok < budget+4096 {
-			body["max_tokens"] = budget + 8192
+		if anthropicUsesAdaptiveThinking(model) {
+			// Opus 4.6/4.7/4.8, Sonnet 4.6, Fable 5+: adaptive thinking +
+			// output_config.effort. The older {type:enabled,budget_tokens} format
+			// returns HTTP 400 on these models.
+			body["thinking"] = map[string]any{"type": "adaptive"}
+			body["output_config"] = map[string]any{"effort": anthropicEffort(level)}
+			delete(body, "temperature") // adaptive thinking rejects sampling params
+			if maxTok, ok := body["max_tokens"].(int); !ok || maxTok < 16384 {
+				body["max_tokens"] = 16384
+			}
+		} else {
+			budget := anthropicThinkingBudget(level)
+			body["thinking"] = map[string]any{
+				"type":          "enabled",
+				"budget_tokens": budget,
+			}
+			// Anthropic requires no temperature when thinking is enabled
+			delete(body, "temperature")
+			// Ensure max_tokens accommodates thinking budget + response
+			if maxTok, ok := body["max_tokens"].(int); !ok || maxTok < budget+4096 {
+				body["max_tokens"] = budget + 8192
+			}
 		}
 	}
 
@@ -238,10 +250,14 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 }
 
 // anthropicSkipsTemperature reports whether the Messages API rejects sampling
-// parameters for this model. Claude Opus/Sonnet 4.6+ and Opus 4.7+ return HTTP
-// 400 when temperature (and top_p/top_k) are included; omit them entirely.
+// parameters for this model. Claude Opus/Sonnet 4.6+, Opus 4.7+, and the Fable
+// family return HTTP 400 when temperature (and top_p/top_k) are included; omit
+// them entirely.
 func anthropicSkipsTemperature(model string) bool {
 	m := strings.ToLower(model)
+	if strings.HasPrefix(m, "claude-fable-") {
+		return true
+	}
 	for _, family := range []string{"claude-opus-4-", "claude-sonnet-4-"} {
 		after, ok := strings.CutPrefix(m, family)
 		if !ok {
@@ -259,6 +275,33 @@ func anthropicSkipsTemperature(model string) bool {
 		}
 	}
 	return false
+}
+
+// anthropicUsesAdaptiveThinking reports whether the model uses the "adaptive"
+// thinking format (Opus 4.6/4.7/4.8, Sonnet 4.6, Fable 5+) instead of the
+// older {type:enabled,budget_tokens} format.
+func anthropicUsesAdaptiveThinking(model string) bool {
+	m := strings.ToLower(model)
+	if strings.HasPrefix(m, "claude-fable-") {
+		return true
+	}
+	for _, family := range []string{"opus-4-6", "opus-4-7", "opus-4-8", "sonnet-4-6"} {
+		if strings.Contains(m, family) {
+			return true
+		}
+	}
+	return false
+}
+
+// anthropicEffort maps a thinking level to the adaptive-thinking API's
+// output_config.effort value.
+func anthropicEffort(level string) string {
+	switch level {
+	case "low", "medium", "high":
+		return level
+	default:
+		return "high"
+	}
 }
 
 // anthropicThinkingBudget maps a thinking level to a token budget.

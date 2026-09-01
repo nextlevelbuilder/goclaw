@@ -153,7 +153,7 @@ func TestAnthropicAdapterToRequest_Thinking(t *testing.T) {
 func TestAnthropicAdapterToRequest_SkipsTemperatureForClaude46(t *testing.T) {
 	adapter, _ := NewAnthropicAdapter(ProviderConfig{APIKey: "sk-test"})
 
-	for _, model := range []string{"claude-opus-4-6", "claude-sonnet-4-6", "claude-opus-4-7-20260501"} {
+	for _, model := range []string{"claude-opus-4-6", "claude-sonnet-4-6", "claude-opus-4-7-20260501", "claude-fable-5"} {
 		t.Run(model, func(t *testing.T) {
 			req := ChatRequest{
 				Model:    model,
@@ -189,6 +189,64 @@ func TestAnthropicAdapterToRequest_SkipsTemperatureForClaude46(t *testing.T) {
 	}
 	if body["temperature"] != 0.7 {
 		t.Errorf("sonnet 4.5 should keep temperature, got %v", body["temperature"])
+	}
+}
+
+func TestAnthropicAdapterToRequest_AdaptiveThinkingModels(t *testing.T) {
+	adapter, _ := NewAnthropicAdapter(ProviderConfig{APIKey: "sk-test"})
+
+	// Opus 4.6/4.7/4.8, Sonnet 4.6, and Fable 5+ use the "adaptive" thinking
+	// format (output_config.effort) — the older {type:enabled,budget_tokens}
+	// format returns HTTP 400 on these models.
+	for _, model := range []string{"claude-opus-4-6", "claude-opus-4-8", "claude-sonnet-4-6", "claude-fable-5"} {
+		t.Run(model, func(t *testing.T) {
+			req := ChatRequest{
+				Model:    model,
+				Messages: []Message{{Role: "user", Content: "hi"}},
+				Options:  map[string]any{OptThinkingLevel: "high"},
+			}
+			data, _, err := adapter.ToRequest(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var body map[string]any
+			if err := json.Unmarshal(data, &body); err != nil {
+				t.Fatal(err)
+			}
+			thinking, _ := body["thinking"].(map[string]any)
+			if thinking["type"] != "adaptive" {
+				t.Errorf("model %q: expected thinking.type=adaptive, got %v", model, thinking["type"])
+			}
+			outputConfig, _ := body["output_config"].(map[string]any)
+			if outputConfig["effort"] != "high" {
+				t.Errorf("model %q: expected output_config.effort=high, got %v", model, outputConfig["effort"])
+			}
+			if _, hasBudget := thinking["budget_tokens"]; hasBudget {
+				t.Errorf("model %q: adaptive thinking should not set budget_tokens", model)
+			}
+		})
+	}
+
+	// Older models keep the {type:enabled,budget_tokens} format.
+	req := ChatRequest{
+		Model:    "claude-sonnet-4-5-20250929",
+		Messages: []Message{{Role: "user", Content: "hi"}},
+		Options:  map[string]any{OptThinkingLevel: "high"},
+	}
+	data, _, err := adapter.ToRequest(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(data, &body); err != nil {
+		t.Fatal(err)
+	}
+	thinking, _ := body["thinking"].(map[string]any)
+	if thinking["type"] != "enabled" {
+		t.Errorf("sonnet 4.5 should use enabled format, got %v", thinking["type"])
+	}
+	if _, hasEffort := body["output_config"]; hasEffort {
+		t.Error("sonnet 4.5 should not set output_config")
 	}
 }
 
