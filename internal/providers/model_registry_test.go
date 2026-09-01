@@ -2,6 +2,7 @@ package providers
 
 import (
 	"testing"
+	"time"
 )
 
 func TestInMemoryRegistryRegisterAndResolve(t *testing.T) {
@@ -363,6 +364,31 @@ func TestAnthropicForwardCompatNoMatch(t *testing.T) {
 
 	if resolved != nil {
 		t.Errorf("expected nil for non-matching format, got %v", resolved)
+	}
+}
+
+func TestAnthropicForwardCompatDatestampGuard(t *testing.T) {
+	registry := NewInMemoryRegistry()
+	resolver := &AnthropicForwardCompat{}
+	registry.RegisterResolver("anthropic", resolver)
+
+	// A model ID where the datestamp lands where a minor version is expected
+	// (e.g. "claude-opus-4-20260501", no "-N-" separating major from date)
+	// used to be parsed as version=20260501 and decremented in an unbounded
+	// recursive loop (ResolveForwardCompat -> CloneFromTemplate -> Resolve ->
+	// ResolveForwardCompat), crashing the gateway with a stack overflow. Real
+	// minor versions are always < 100 — anything larger must return nil.
+	done := make(chan *ModelSpec, 1)
+	go func() {
+		done <- registry.Resolve("anthropic", "claude-opus-4-20260501")
+	}()
+	select {
+	case resolved := <-done:
+		if resolved != nil {
+			t.Errorf("expected nil for datestamp-as-version, got %v", resolved)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Resolve did not return within 5s — likely unbounded recursion")
 	}
 }
 

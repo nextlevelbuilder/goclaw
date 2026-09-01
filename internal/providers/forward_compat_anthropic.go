@@ -30,6 +30,13 @@ func (r *AnthropicForwardCompat) ResolveForwardCompat(modelID string, registry M
 	if ver <= 0 {
 		return nil
 	}
+	// Guard: a "version" with many digits is a datestamp (e.g. 20260501), not a
+	// real minor version. Decrementing it recurses without bound
+	// (ResolveForwardCompat -> CloneFromTemplate -> Resolve -> ResolveForwardCompat)
+	// and overflows the stack. Real minor versions are always < 100.
+	if ver > 99 {
+		return nil
+	}
 
 	// Build template candidates: try with same suffix first, then without
 	var templates []string
