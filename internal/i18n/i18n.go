@@ -11,6 +11,7 @@ const (
 	LocaleEN = "en"
 	LocaleVI = "vi"
 	LocaleZH = "zh"
+	LocaleJA = "ja"
 
 	DefaultLocale = LocaleEN
 )
@@ -58,7 +59,7 @@ func lookup(locale, key string) string {
 // IsSupported returns true if the locale is a known language.
 func IsSupported(locale string) bool {
 	switch locale {
-	case LocaleEN, LocaleVI, LocaleZH:
+	case LocaleEN, LocaleVI, LocaleZH, LocaleJA:
 		return true
 	}
 	return false

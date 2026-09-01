@@ -1,0 +1,190 @@
+{
+  "title": "メモリ",
+  "description": "エージェントのメモリドキュメント、チャンク、埋め込みを閲覧・管理",
+  "search": "検索",
+  "create": "作成",
+  "indexAll": "すべてインデックス",
+  "indexing": "インデックス中...",
+  "emptyTitle": "メモリドキュメントがありません",
+  "emptyAgentDescription": "このエージェントにはまだメモリドキュメントがありません。",
+  "emptyGlobalDescription": "どのエージェントにもメモリドキュメントが見つかりません。",
+  "filters": {
+    "agent": "エージェント",
+    "allAgents": "すべてのエージェント",
+    "scope": "スコープ",
+    "allScope": "すべて（グローバル＋個人）",
+    "selectAgent": "エージェントを選択"
+  },
+  "tabs": {
+    "documents": "ドキュメント",
+    "knowledgeGraph": "ナレッジグラフ"
+  },
+  "columns": {
+    "path": "パス",
+    "agent": "エージェント",
+    "scope": "スコープ",
+    "hash": "ハッシュ",
+    "updated": "更新日時",
+    "actions": "操作"
+  },
+  "scopeLabel": {
+    "personal": "個人",
+    "global": "グローバル"
+  },
+  "delete": {
+    "title": "メモリドキュメントを削除",
+    "description": "「{{path}}」を削除しますか？関連するすべてのチャンクと埋め込みも削除されます。",
+    "confirmLabel": "削除"
+  },
+  "createDialog": {
+    "title": "メモリドキュメントを作成",
+    "path": "パス *",
+    "pathPlaceholder": "例: notes/project-overview.md",
+    "content": "コンテンツ *",
+    "contentPlaceholder": "ドキュメントの内容...",
+    "agentId": "エージェント *",
+    "agentIdPlaceholder": "エージェントを選択...",
+    "scope": "スコープ",
+    "existingScope": "既存のスコープ",
+    "customScope": "カスタム",
+    "selectGroupUser": "グループ/ユーザーを選択...",
+    "scopeHint": "グローバル = すべてのユーザーで共有。個人 = 特定のユーザーまたはグループチャットにスコープ。",
+    "autoIndex": "作成後に自動インデックス",
+    "agentRequired": "エージェントを選択してください",
+    "pathRequired": "パスは必須です",
+    "contentRequired": "コンテンツは必須です",
+    "cancel": "キャンセル",
+    "create": "作成",
+    "creating": "作成中..."
+  },
+  "documentDialog": {
+    "title": "メモリドキュメント",
+    "path": "パス:",
+    "agent": "エージェント:",
+    "scope": "スコープ:",
+    "hash": "ハッシュ:",
+    "updated": "更新日時:",
+    "content": "コンテンツ",
+    "chunks": "チャンク ({{count}})",
+    "chunkIndex": "チャンク {{index}}",
+    "noChunks": "チャンクがありません",
+    "embedded": "埋め込み済み",
+    "noEmbedding": "埋め込みなし"
+  },
+  "searchDialog": {
+    "title": "メモリを検索",
+    "query": "検索クエリ",
+    "queryPlaceholder": "検索クエリを入力...",
+    "agentId": "エージェントID",
+    "agentIdPlaceholder": "エージェントでフィルター...",
+    "limit": "件数",
+    "search": "検索",
+    "searching": "検索中...",
+    "results": "結果",
+    "noResults": "結果が見つかりません",
+    "similarity": "類似度",
+    "path": "パス:"
+  },
+  "kg": {
+    "pageTitle": "ナレッジグラフ",
+    "pageDescription": "エージェントのメモリから抽出されたエンティティと関係を探索。",
+    "selectAgentTitle": "エージェントを選択",
+    "selectAgentDescription": "ナレッジグラフを表示するエージェントを選択してください。",
+    "emptyTitle": "エンティティがありません",
+    "emptyDescription": "このエージェントのナレッジグラフエンティティがまだありません。",
+    "emptySearchDescription": "検索に一致するエンティティがありません。",
+    "stats": {
+      "entities": "エンティティ: {{count}}",
+      "relations": "関係: {{count}}"
+    },
+    "search": {
+      "placeholder": "エンティティを検索...",
+      "button": "検索",
+      "clear": "クリア"
+    },
+    "refresh": "更新",
+    "extract": "抽出",
+    "columns": {
+      "name": "名前",
+      "type": "タイプ",
+      "description": "説明",
+      "confidence": "信頼度",
+      "actions": "操作",
+      "observations": "観察",
+      "relations": "関係"
+    },
+    "deleteEntity": {
+      "title": "エンティティを削除",
+      "description": "「{{name}}」を削除しますか？関連するすべての関係も削除されます。",
+      "confirmLabel": "削除"
+    },
+    "entity": {
+      "externalId": "外部ID:",
+      "confidence": "信頼度:",
+      "description": "説明:",
+      "source": "ソース:",
+      "properties": "プロパティ:",
+      "relations": "関係",
+      "traverse": "トラバース（2ホップ）",
+      "traversing": "トラバース中...",
+      "loading": "読み込み中...",
+      "noRelations": "関係が見つかりません。",
+      "traversalResults": "トラバース結果 ({{count}})",
+      "direction": {
+        "outgoing": "→ 送信",
+        "incoming": "← 受信"
+      },
+      "columns": {
+        "direction": "方向",
+        "relation": "関係",
+        "target": "ターゲット",
+        "confidence": "信頼度"
+      }
+    },
+    "extractDialog": {
+      "title": "テキストからエンティティを抽出",
+      "providerLabel": "抽出プロバイダー",
+      "modelLabel": "抽出モデル",
+      "textLabel": "抽出元テキスト",
+      "textPlaceholder": "会話テキスト、メモ、またはエンティティと関係を抽出するコンテンツを貼り付けてください...",
+      "extract": "抽出",
+      "extracting": "抽出中...",
+      "cancel": "キャンセル",
+      "agentId": "エージェントID",
+      "agentIdPlaceholder": "グローバルの場合は空白のまま"
+    },
+    "graphView": {
+      "loading": "グラフを読み込み中...",
+      "empty": "可視化するエンティティがありません",
+      "nodes": "{{count}}ノード",
+      "edges": "{{count}}エッジ"
+    }
+  },
+  "toast": {
+    "created": "メモリドキュメントが作成されました",
+    "deleted": "メモリドキュメントが削除されました",
+    "indexed": "すべてのドキュメントがインデックスされました",
+    "failedCreate": "ドキュメントの作成に失敗しました",
+    "failedDelete": "ドキュメントの削除に失敗しました",
+    "failedIndex": "ドキュメントのインデックスに失敗しました",
+    "entitySaved": "エンティティが保存されました",
+    "entitySaveFailed": "エンティティの保存に失敗しました",
+    "entityDeleted": "エンティティが削除されました",
+    "entityDeleteFailed": "エンティティの削除に失敗しました",
+    "extractionComplete": "抽出が完了しました",
+    "extractionFailed": "抽出に失敗しました",
+    "traversalFailed": "トラバースに失敗しました",
+    "unknownError": "不明なエラー",
+    "docCreated": "ドキュメントが作成されました",
+    "docCreateFailed": "ドキュメントの作成に失敗しました",
+    "docUpdated": "ドキュメントが更新されました",
+    "docUpdateFailed": "ドキュメントの更新に失敗しました",
+    "docDeleted": "ドキュメントが削除されました",
+    "docDeleteFailed": "ドキュメントの削除に失敗しました",
+    "docIndexed": "ドキュメントがインデックスされました",
+    "docIndexFailed": "ドキュメントのインデックスに失敗しました",
+    "allIndexed": "すべてのドキュメントがインデックスされました",
+    "allIndexFailed": "すべてのインデックスに失敗しました",
+    "searchFailed": "検索に失敗しました"
+  }
+}

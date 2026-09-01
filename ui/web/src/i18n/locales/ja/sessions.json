@@ -1,0 +1,45 @@
+{
+  "title": "セッション",
+  "description": "会話セッションを閲覧",
+  "searchPlaceholder": "セッションを検索...",
+  "emptyTitle": "セッションがまだありません",
+  "emptyDescription": "チャットを始めるとセッションがここに表示されます。",
+  "noMatchTitle": "一致するセッションがありません",
+  "noMatchDescription": "別の検索キーワードをお試しください。",
+  "columns": {
+    "session": "セッション",
+    "agent": "エージェント",
+    "context": "コンテキスト",
+    "messages": "メッセージ",
+    "updated": "更新日時"
+  },
+  "contextBar": {
+    "compacted": "{{count}}回圧縮済み"
+  },
+  "detail": {
+    "reset": "リセット",
+    "delete": "削除",
+    "deleteTitle": "セッションを削除",
+    "deleteDescription": "このセッションのすべてのメッセージが完全に削除されます。",
+    "resetTitle": "セッションをリセット",
+    "resetDescription": "すべてのメッセージをクリアしますが、セッションは保持されます。",
+    "confirmDelete": "削除",
+    "confirmReset": "リセット",
+    "noMessages": "このセッションにメッセージがありません",
+    "summary": "要約",
+    "showMore": "もっと表示",
+    "showLess": "表示を減らす",
+    "showDetails": "詳細を表示",
+    "hide": "非表示",
+    "systemMessage": "システムメッセージ",
+    "messages": "メッセージ"
+  },
+  "toast": {
+    "deleted": "セッションが削除されました",
+    "deleteFailed": "セッションの削除に失敗しました",
+    "reset": "セッションがリセットされました",
+    "resetFailed": "セッションのリセットに失敗しました",
+    "updated": "セッションが更新されました",
+    "updateFailed": "セッションの更新に失敗しました"
+  }
+}

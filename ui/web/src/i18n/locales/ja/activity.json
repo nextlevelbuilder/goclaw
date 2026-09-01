@@ -1,0 +1,26 @@
+{
+  "title": "アクティビティログ",
+  "description": "管理者および設定変更の監査記録。",
+  "filters": {
+    "action": "アクション",
+    "allActions": "すべてのアクション",
+    "agentCreated": "エージェント作成",
+    "agentUpdated": "エージェント更新",
+    "agentDeleted": "エージェント削除",
+    "entityType": "エンティティタイプ",
+    "allEntities": "すべてのエンティティ",
+    "agent": "エージェント"
+  },
+  "table": {
+    "action": "アクション",
+    "actor": "実行者",
+    "entity": "エンティティ",
+    "entityId": "エンティティID",
+    "ip": "IPアドレス",
+    "time": "時刻"
+  },
+  "empty": {
+    "title": "アクティビティログがありません",
+    "description": "管理操作が行われるとアクティビティログがここに表示されます。"
+  }
+}

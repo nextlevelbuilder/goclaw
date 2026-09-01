@@ -1,0 +1,20 @@
+{
+  "expandSidebar": "サイドバーを展開",
+  "collapseSidebar": "サイドバーを折りたたむ",
+  "openMenu": "メニューを開く",
+  "toggleTheme": "テーマを切り替える",
+  "logout": "ログアウト",
+  "logoutConfirm": "ログアウトしますか？",
+  "language": "言語",
+  "timezone": "タイムゾーン",
+  "pairingRequests": "ペアリングリクエスト",
+  "pendingPairingRequest": "{{count}}件のペアリングリクエスト待ち",
+  "pendingPairingRequests": "{{count}}件のペアリングリクエスト待ち",
+  "apiKeys": "APIキー",
+  "languages": {
+    "en": "English",
+    "vi": "Tiếng Việt",
+    "zh": "中文",
+    "ja": "日本語"
+  }
+}

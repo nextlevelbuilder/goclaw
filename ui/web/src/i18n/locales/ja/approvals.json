@@ -1,0 +1,33 @@
+{
+  "title": "承認",
+  "description": "実行承認待ち",
+  "pending": "{{count}}件保留中",
+  "emptyTitle": "保留中の承認はありません",
+  "emptyDescription": "すべての実行リクエストが解決されました。新しいリクエストはリアルタイムでここに表示されます。",
+  "allowOnce": "今回のみ許可",
+  "allowAlways": "常に許可",
+  "deny": "拒否",
+  "confirmAllowOnce": {
+    "title": "今回のみ許可",
+    "description": "エージェント「{{agentId}}」による「{{command}}」の実行を許可しますか？"
+  },
+  "confirmAllowAlways": {
+    "title": "常に許可",
+    "description": "エージェント「{{agentId}}」に対して「{{command}}」を永続的に許可しますか？このコマンドは今後自動承認されます。"
+  },
+  "confirmDeny": {
+    "title": "実行を拒否",
+    "description": "エージェント「{{agentId}}」からの実行リクエスト「{{command}}」を拒否しますか？",
+    "confirmLabel": "拒否"
+  },
+  "toast": {
+    "approved": "承認済み",
+    "approvedAlways": "コマンドが常に許可されました",
+    "approvedOnce": "コマンドが承認されました",
+    "approveFailed": "承認に失敗しました",
+    "denied": "拒否済み",
+    "deniedDesc": "コマンドが拒否されました",
+    "denyFailed": "拒否に失敗しました",
+    "unknownError": "不明なエラー"
+  }
+}

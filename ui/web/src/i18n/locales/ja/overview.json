@@ -1,0 +1,80 @@
+{
+  "title": "ダッシュボード",
+  "description": "ゲートウェイの概要とクォータ使用状況",
+  "tabs": {
+    "overview": "概要",
+    "usage": "使用状況"
+  },
+  "statCards": {
+    "requestsToday": "本日のリクエスト",
+    "tokensToday": "本日のトークン",
+    "costToday": "本日のコスト",
+    "agents": "エージェント",
+    "channels": "チャンネル",
+    "running": "実行中",
+    "online": "オンライン",
+    "users": "{{count}}ユーザー",
+    "inOut": "{{input}} 入力 / {{output}} 出力"
+  },
+  "providers": {
+    "noProvidersTitle": "LLMプロバイダーが設定されていません",
+    "noEnabledTitle": "有効なLLMプロバイダーがありません",
+    "noProvidersDesc": "エージェントが動作するには少なくとも1つのLLMプロバイダーを追加する必要があります。",
+    "noEnabledDesc": "すべてのプロバイダーが現在無効です。エージェントを使用するには少なくとも1つを有効にしてください。",
+    "goToSettings": "プロバイダー設定へ"
+  },
+  "systemHealth": {
+    "title": "システムヘルス",
+    "uptime": "稼働時間",
+    "database": "データベース",
+    "providers": "プロバイダー",
+    "tools": "ツール",
+    "sessions": "セッション",
+    "clients": "クライアント",
+    "channels": "チャンネル",
+    "active": "{{count}}件アクティブ",
+    "none": "なし",
+    "runtimes": "ランタイム"
+  },
+  "connectedClients": {
+    "title": "接続中のクライアント",
+    "noClients": "接続中のクライアントがありません",
+    "columns": {
+      "ip": "IP",
+      "user": "ユーザー",
+      "role": "ロール",
+      "connected": "接続時刻"
+    },
+    "you": "あなた"
+  },
+  "cronJobs": {
+    "title": "Cronジョブ",
+    "manage": "管理",
+    "noJobs": "Cronジョブが設定されていません",
+    "disabled": "無効"
+  },
+  "recentRequests": {
+    "title": "最近のリクエスト",
+    "viewAll": "すべて表示",
+    "noRequests": "最近のリクエストがありません",
+    "columns": {
+      "time": "時刻",
+      "name": "名前",
+      "user": "ユーザー",
+      "channel": "チャンネル",
+      "tokens": "トークン",
+      "duration": "所要時間",
+      "status": "ステータス"
+    }
+  },
+  "quotaUsage": {
+    "title": "クォータ使用状況",
+    "columns": {
+      "userGroup": "ユーザー / グループ",
+      "hour": "時間",
+      "day": "日",
+      "week": "週"
+    },
+    "noLimit": "制限なし"
+  }
+}

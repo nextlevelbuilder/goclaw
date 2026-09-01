@@ -1,0 +1,54 @@
+{
+  "title": "コンタクト",
+  "description": "すべてのチャンネルインタラクションから自動収集されたコンタクト。",
+  "searchPlaceholder": "名前、ユーザー名、またはIDで検索...",
+  "filter": "フィルター",
+  "emptyTitle": "コンタクトがありません",
+  "emptyDescription": "ユーザーがチャンネルを通じてエージェントと対話するとコンタクトが表示されます。",
+  "noMatchTitle": "一致するコンタクトがありません",
+  "noMatchDescription": "別の検索キーワードまたはフィルターをお試しください。",
+  "columns": {
+    "name": "名前",
+    "username": "ユーザー名",
+    "senderId": "送信者ID",
+    "channelType": "チャンネル",
+    "peerKind": "タイプ",
+    "lastSeen": "最終確認",
+    "merged": "統合済み"
+  },
+  "permissionsNote": {
+    "title": "コンタクト名のチャンネル権限",
+    "telegram": "Telegram — 名前とユーザー名は自動的に利用可能。",
+    "discord": "Discord — 表示名とユーザー名は自動的に利用可能。",
+    "zalo": "Zalo — 表示名は自動的に利用可能。",
+    "slack": "Slack — 表示名はSlack API経由で解決（ボットがワークスペースに参加している必要あり）。",
+    "feishu": "Feishu/Lark — contact:user.base:readonly権限が必要です。この権限がないと名前は空になります。"
+  },
+  "selectedCount": "{{count}}件選択済み",
+  "merge": {
+    "button": "統合",
+    "unmergeButton": "統合解除",
+    "dialogTitle": "コンタクトを統合",
+    "dialogDescription": "選択したコンタクトをテナントユーザーのIDに紐付けます。これにより、チャンネルをまたいで同一人物として識別されます。",
+    "linkExisting": "既存ユーザーに紐付け",
+    "createNew": "新規ユーザーを作成",
+    "selectUser": "テナントユーザーを選択...",
+    "displayName": "表示名",
+    "displayNamePlaceholder": "例: 山田 太郎",
+    "userId": "ユーザーID",
+    "userIdPlaceholder": "一意の識別子",
+    "confirm": "統合",
+    "cancel": "キャンセル",
+    "success": "コンタクトが正常に統合されました",
+    "unmergeSuccess": "コンタクトの統合が正常に解除されました",
+    "error": "コンタクトの統合に失敗しました",
+    "unmergeError": "コンタクトの統合解除に失敗しました",
+    "comingSoon": "この機能は開発中でまだ利用できません。"
+  },
+  "filters": {
+    "allChannels": "すべてのチャンネル",
+    "allTypes": "すべてのタイプ",
+    "direct": "ダイレクト",
+    "group": "グループ"
+  }
+}
