@@ -195,9 +195,15 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 		return result, fmt.Errorf("%s: stream read error: %w", p.name, err)
 	}
 
-	// Parse accumulated tool call arguments
-	for i := 0; i < len(accumulators); i++ {
-		acc := accumulators[i]
+	// Parse accumulated tool call arguments.
+	// Iterate the map directly (not 0..len(accumulators)-1): providers are not
+	// guaranteed to emit contiguous zero-based tc.Index values in delta.ToolCalls,
+	// so indexing by position can miss populated slots and hit a nil accumulator,
+	// causing a nil-pointer panic (observed with the point-p1/9router provider).
+	for _, acc := range accumulators {
+		if acc == nil {
+			continue
+		}
 		args := make(map[string]any)
 		if err := json.Unmarshal([]byte(acc.rawArgs), &args); err != nil && acc.rawArgs != "" {
 			slog.Warn("openai_stream: failed to parse tool call arguments",
