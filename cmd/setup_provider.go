@@ -47,6 +47,7 @@ func addProvider() {
 	typeOptions := []SelectOption[string]{
 		{"Anthropic", "anthropic"},
 		{"OpenAI", "openai"},
+		{"API Route", "api_route"},
 		{"OpenRouter", "openrouter"},
 		{"DashScope (Alibaba)", "dashscope"},
 		{"OpenAI-compatible", "openai-compat"},
@@ -68,8 +69,12 @@ func addProvider() {
 	}
 
 	baseURL := ""
-	if providerType == "openai-compat" {
-		baseURL, err = promptString("Base URL", "e.g. https://api.example.com/v1", "")
+	if providerType == "openai-compat" || providerType == "api_route" {
+		defaultURL := ""
+		if providerType == "api_route" {
+			defaultURL = "https://global.api-route.com/v1"
+		}
+		baseURL, err = promptString("Base URL", "e.g. https://api.example.com/v1", defaultURL)
 		if err != nil {
 			return
 		}

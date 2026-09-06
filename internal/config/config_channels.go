@@ -247,6 +247,7 @@ type FeishuConfig struct {
 type ProvidersConfig struct {
 	Anthropic      ProviderConfig  `json:"anthropic"`
 	OpenAI         ProviderConfig  `json:"openai"`
+	APIRoute       ProviderConfig  `json:"api_route"`  // API Route (OpenAI-compatible endpoint)
 	OpenRouter     ProviderConfig  `json:"openrouter"`
 	Groq           ProviderConfig  `json:"groq"`
 	Gemini         ProviderConfig  `json:"gemini"`
@@ -319,6 +320,8 @@ func (p *ProvidersConfig) APIBaseForType(providerType string) string {
 		return p.Anthropic.APIBase
 	case "openai", "openai_compat":
 		return p.OpenAI.APIBase
+	case "api_route":
+		return p.APIRoute.APIBase
 	case "openrouter":
 		return p.OpenRouter.APIBase
 	case "groq":
@@ -366,6 +369,7 @@ func (c *Config) HasAnyProvider() bool {
 	p := c.Providers
 	return p.Anthropic.APIKey != "" ||
 		p.OpenAI.APIKey != "" ||
+		p.APIRoute.APIKey != "" ||
 		p.OpenRouter.APIKey != "" ||
 		p.Groq.APIKey != "" ||
 		p.Gemini.APIKey != "" ||

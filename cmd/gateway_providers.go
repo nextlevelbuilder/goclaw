@@ -43,6 +43,17 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 		slog.Info("registered provider", "name", "openai")
 	}
 
+	if cfg.Providers.APIRoute.APIKey != "" {
+		base := cfg.Providers.APIRoute.APIBase
+		if base == "" {
+			base = store.APIRouteDefaultAPIBase
+		}
+		prov := providers.NewOpenAIProvider("api_route", cfg.Providers.APIRoute.APIKey, base, store.APIRouteDefaultModel)
+		prov.WithProviderType(store.ProviderAPIRoute)
+		registry.Register(prov)
+		slog.Info("registered provider", "name", "api_route")
+	}
+
 	if cfg.Providers.OpenRouter.APIKey != "" {
 		orProv := providers.NewOpenAIProvider("openrouter", cfg.Providers.OpenRouter.APIKey, "https://openrouter.ai/api/v1", "anthropic/claude-sonnet-4-5-20250929")
 		orProv.WithSiteInfo("https://goclaw.sh", "GoClaw")
@@ -409,6 +420,14 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			prov.WithExtraHeaders(map[string]string{
 				"User-Agent": store.KimiCodingRequiredUserAgent,
 			})
+			registry.RegisterForTenant(p.TenantID, prov)
+		case store.ProviderAPIRoute:
+			base := p.APIBase
+			if base == "" {
+				base = store.APIRouteDefaultAPIBase
+			}
+			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.APIRouteDefaultModel)
+			prov.WithProviderType(p.ProviderType)
 			registry.RegisterForTenant(p.TenantID, prov)
 		default:
 			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, p.APIBase, "")

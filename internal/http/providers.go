@@ -284,6 +284,11 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRu
 	}
 	apiBase := h.resolveAPIBase(p)
 	switch p.ProviderType {
+	case store.ProviderAPIRoute:
+		if apiBase == "" {
+			apiBase = store.APIRouteDefaultAPIBase
+		}
+		h.providerReg.RegisterForTenant(p.TenantID, providers.NewOpenAIProvider(p.Name, p.APIKey, apiBase, store.APIRouteDefaultModel).WithProviderType(p.ProviderType))
 	case store.ProviderChatGPTOAuth:
 		ts := oauth.NewDBTokenSource(h.store, h.secretStore, p.Name).WithTenantID(p.TenantID)
 		codex := providers.NewCodexProvider(p.Name, ts, apiBase, "")
