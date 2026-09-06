@@ -7,6 +7,7 @@ import (
 	"os"
 	"text/tabwriter"
 
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -123,6 +124,7 @@ func runProvidersAdd() {
 	typeOptions := []SelectOption[string]{
 		{"Anthropic", "anthropic"},
 		{"OpenAI", "openai"},
+		{"API Route", "api_route"},
 		{"OpenRouter", "openrouter"},
 		{"DashScope (Alibaba)", "dashscope"},
 		{"OpenAI-compatible", "openai-compat"},
@@ -150,7 +152,7 @@ func runProvidersAdd() {
 	// Step 4: Base URL (pre-fill per type, editable)
 	defaultURL := defaultBaseURL(providerType)
 	baseURL := ""
-	if providerType == "openai-compat" {
+	if providerType == "openai-compat" || providerType == "api_route" {
 		baseURL, err = promptString("Base URL", "e.g. https://api.example.com/v1", defaultURL)
 		if err != nil {
 			fmt.Println("Cancelled.")
@@ -310,6 +312,8 @@ func defaultBaseURL(providerType string) string {
 		return "https://api.anthropic.com"
 	case "openai":
 		return "https://api.openai.com/v1"
+	case "api_route":
+		return store.APIRouteDefaultAPIBase
 	case "openrouter":
 		return "https://openrouter.ai/api/v1"
 	case "dashscope":

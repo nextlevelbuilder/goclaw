@@ -156,6 +156,8 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_ANTHROPIC_BASE_URL", &c.Providers.Anthropic.APIBase)
 	envStr("GOCLAW_OPENAI_API_KEY", &c.Providers.OpenAI.APIKey)
 	envStr("GOCLAW_OPENAI_BASE_URL", &c.Providers.OpenAI.APIBase)
+	envStr("GOCLAW_API_ROUTE_API_KEY", &c.Providers.APIRoute.APIKey)
+	envStr("GOCLAW_API_ROUTE_BASE_URL", &c.Providers.APIRoute.APIBase)
 	envStr("GOCLAW_OPENROUTER_API_KEY", &c.Providers.OpenRouter.APIKey)
 	envStr("GOCLAW_GROQ_API_KEY", &c.Providers.Groq.APIKey)
 	envStr("GOCLAW_DEEPSEEK_API_KEY", &c.Providers.DeepSeek.APIKey)

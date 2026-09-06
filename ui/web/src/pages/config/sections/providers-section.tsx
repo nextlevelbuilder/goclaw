@@ -17,6 +17,7 @@ type ProvidersData = Record<string, ProviderEntry>;
 const KNOWN_PROVIDERS = [
   { key: "anthropic", label: "Anthropic", envKey: "GOCLAW_ANTHROPIC_API_KEY" },
   { key: "openai", label: "OpenAI", envKey: "GOCLAW_OPENAI_API_KEY" },
+  { key: "api_route", label: "API Route", envKey: "GOCLAW_API_ROUTE_API_KEY" },
   { key: "openrouter", label: "OpenRouter", envKey: "GOCLAW_OPENROUTER_API_KEY" },
   { key: "groq", label: "Groq", envKey: "GOCLAW_GROQ_API_KEY" },
   { key: "gemini", label: "Gemini", envKey: "GOCLAW_GEMINI_API_KEY" },

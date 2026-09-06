@@ -98,10 +98,12 @@ func runDoctor() {
 		checkDBProviders(db)
 		checkProvider("Anthropic (env)", cfg.Providers.Anthropic.APIKey)
 		checkProvider("OpenAI (env)", cfg.Providers.OpenAI.APIKey)
+		checkProvider("API Route (env)", cfg.Providers.APIRoute.APIKey)
 		checkProvider("OpenRouter (env)", cfg.Providers.OpenRouter.APIKey)
 	} else {
 		checkProvider("Anthropic", cfg.Providers.Anthropic.APIKey)
 		checkProvider("OpenAI", cfg.Providers.OpenAI.APIKey)
+		checkProvider("API Route", cfg.Providers.APIRoute.APIKey)
 		checkProvider("OpenRouter", cfg.Providers.OpenRouter.APIKey)
 		checkProvider("Gemini", cfg.Providers.Gemini.APIKey)
 		checkProvider("Groq", cfg.Providers.Groq.APIKey)
