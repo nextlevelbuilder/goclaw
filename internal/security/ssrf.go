@@ -250,6 +250,14 @@ func isBlocked(ip net.IP) bool {
 	return false
 }
 
+// ErrBlockedDial is returned by the safe dialer when the resolved destination
+// IP of a connection falls in a blocked range. net.OpError and url.Error both
+// wrap it on the way back to an http.Client caller and both implement Unwrap,
+// so callers classify the failure with errors.Is rather than matching on error
+// text. Text matching is brittle in the unsafe direction: a reworded message
+// would silently downgrade a real SSRF block to a generic network failure.
+var ErrBlockedDial = errors.New("ssrf: dial IP is in a blocked range")
+
 // IsBlocked reports whether ip falls within any blocked CIDR (loopback,
 // link-local including cloud-metadata 169.254.169.254, RFC 1918 private,
 // multicast, and unspecified 0.0.0.0/:: ranges).
@@ -258,6 +266,15 @@ func isBlocked(ip net.IP) bool {
 // duplicating the CIDR list across packages.
 func IsBlocked(ip net.IP) bool {
 	return isBlocked(ip)
+}
+
+// RedactURL exposes redactURL to other packages so a caller URL can be logged
+// or persisted without its query string — a presigned URL's signature is a
+// bearer credential and must not be written to an audit row. Exported as a
+// wrapper for the same reason IsBlocked is: keep the redaction rule in one
+// place rather than reimplemented per caller.
+func RedactURL(rawURL string) string {
+	return redactURL(rawURL)
 }
 
 // redactURL strips query string and userinfo for safe logging.
