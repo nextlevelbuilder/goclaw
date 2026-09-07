@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 )
 
 // SchemaStatus represents the result of a schema compatibility check.
@@ -90,4 +91,52 @@ func FormatError(s *SchemaStatus) string {
 			"  Docker/CI: set GOCLAW_AUTO_UPGRADE=true to upgrade automatically on startup.\n",
 		s.CurrentVersion, s.RequiredVersion,
 	)
+}
+
+// EnsureExtensions checks if pgcrypto and pgvector extensions exist.
+// If they don't exist, attempts to create them. If creation fails due to
+// permission errors, returns a clear error message for the DBA.
+func EnsureExtensions(db *sql.DB) error {
+	extensions := []string{"pgcrypto", "vector"}
+
+	for _, ext := range extensions {
+		exists, err := extensionExists(db, ext)
+		if err != nil {
+			return fmt.Errorf("check extension %q: %w", ext, err)
+		}
+
+		if !exists {
+			if err := createExtension(db, ext); err != nil {
+				return fmt.Errorf(
+					"extension %q is required but missing.\n"+
+						"Attempted to create it, but got permission error: %v\n\n"+
+						"Ask your database administrator to run:\n"+
+						"  CREATE EXTENSION IF NOT EXISTS \"%s\";\n\n"+
+						"The goclaw database role may need explicit CREATE privilege on pgcrypto and pgvector.\n",
+					ext, err, ext,
+				)
+			}
+			slog.Info("created missing extension", "extension", ext)
+		}
+	}
+
+	return nil
+}
+
+// extensionExists checks if an extension is installed in the current database.
+func extensionExists(db *sql.DB, name string) (bool, error) {
+	var exists bool
+	err := db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM pg_extension WHERE extname = $1
+		)
+	`, name).Scan(&exists)
+	return exists, err
+}
+
+// createExtension attempts to create an extension. Returns error if the
+// current role lacks CREATE privilege.
+func createExtension(db *sql.DB, name string) error {
+	_, err := db.Exec(fmt.Sprintf(`CREATE EXTENSION IF NOT EXISTS "%s"`, name))
+	return err
 }
