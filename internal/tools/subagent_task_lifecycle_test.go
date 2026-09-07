@@ -144,6 +144,10 @@ func (s *recordingSubagentTaskStore) ListByParent(context.Context, uuid.UUID, st
 	return nil, nil
 }
 
+func (s *recordingSubagentTaskStore) ListDelegationsByChat(context.Context, uuid.UUID, string) ([]store.SubagentTaskData, error) {
+	return nil, nil
+}
+
 func (s *recordingSubagentTaskStore) ListBySession(context.Context, uuid.UUID, string) ([]store.SubagentTaskData, error) {
 	return nil, nil
 }

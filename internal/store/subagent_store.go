@@ -76,6 +76,12 @@ type SubagentTaskStore interface {
 	// ListBySession returns tasks for a session owned by the tenant and immutable root-agent UUID.
 	ListBySession(ctx context.Context, rootAgentID uuid.UUID, sessionKey string) ([]SubagentTaskData, error)
 
+	// ListDelegationsByChat returns delegation tasks raised in one chat, owned by
+	// the tenant and immutable root-agent UUID. ListByParent and ListBySession
+	// both exclude delegations on purpose — they serve spawn — so this is the
+	// only listing that returns them. Ordered by created_at DESC.
+	ListDelegationsByChat(ctx context.Context, rootAgentID uuid.UUID, chatID string) ([]SubagentTaskData, error)
+
 	// Archive marks at most limit old terminal tasks owned by the tenant and
 	// immutable root-agent UUID as archived. Returns the number of rows affected.
 	Archive(ctx context.Context, rootAgentID uuid.UUID, olderThan time.Duration, limit int) (int64, error)

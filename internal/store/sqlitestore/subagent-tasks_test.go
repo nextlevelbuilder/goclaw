@@ -584,3 +584,111 @@ func assertSQLiteArchivedCount(
 		t.Fatalf("archived tasks for %s/%s = %d, want %d", tenantID, rootAgentID, got, want)
 	}
 }
+
+// createSQLiteDelegation persists a delegation row: completion_kind=delegate and
+// an origin chat, which is what ListDelegationsByChat selects on.
+func createSQLiteDelegation(
+	t *testing.T,
+	taskStore *SQLiteSubagentTaskStore,
+	ctx context.Context,
+	rootAgentID uuid.UUID,
+	rootAgentKey, chatID string,
+) uuid.UUID {
+	t.Helper()
+
+	id := uuid.Must(uuid.NewV7())
+	chat := chatID
+	session := "session-" + chatID
+	task := &store.SubagentTaskData{
+		RootAgentID:    rootAgentID,
+		ParentAgentKey: rootAgentKey,
+		SessionKey:     &session,
+		OriginChatID:   &chat,
+		Subject:        "Delegate to brain",
+		Description:    "verify delegation listing",
+		Status:         "completed",
+		Depth:          1,
+		Metadata:       map[string]any{"completion_kind": "delegate"},
+	}
+	task.ID = id
+	if err := taskStore.Create(ctx, task); err != nil {
+		t.Fatalf("Create(%s): %v", id, err)
+	}
+	return id
+}
+
+// ListDelegationsByChat is the only listing that returns delegations at all:
+// ListByParent and ListBySession both carry "completion_kind <> 'delegate'" to
+// serve spawn. This pins that complementarity against the real SQL — a unit test
+// over a fake store cannot see it, and the first version of the delegate list
+// action shipped green and returned nothing in production because of exactly
+// that gap.
+func TestSQLiteListDelegationsByChatIsTheOnlyListingThatSeesDelegations(t *testing.T) {
+	db := newHookTestDB(t)
+	tenantA, rootAID := seedHookTenantAgent(t, db)
+	tenantB, tenantBRootID := seedHookTenantAgent(t, db)
+	ctxA := sqliteTenantCtx(tenantA)
+	ctxB := sqliteTenantCtx(tenantB)
+	taskStore := NewSQLiteSubagentTaskStore(db)
+
+	const rootA = "root-a"
+	wanted := createSQLiteDelegation(t, taskStore, ctxA, rootAID, rootA, "chat-a")
+	_ = createSQLiteDelegation(t, taskStore, ctxA, rootAID, rootA, "chat-b")
+	spawned := createSQLiteSubagentTask(t, taskStore, ctxA, rootAID, rootA, "session-chat-a", "completed")
+	_ = createSQLiteDelegation(t, taskStore, ctxB, tenantBRootID, rootA, "chat-a")
+
+	got, err := taskStore.ListDelegationsByChat(ctxA, rootAID, "chat-a")
+	if err != nil {
+		t.Fatalf("ListDelegationsByChat: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != wanted {
+		t.Fatalf("returned %d rows (%v), want exactly the delegation from chat-a (%s)", len(got), got, wanted)
+	}
+
+	// The spawn in the same chat is not a delegation.
+	for _, task := range got {
+		if task.ID == spawned {
+			t.Errorf("a spawned subagent leaked into the delegation listing")
+		}
+	}
+
+	// Another tenant's delegation in a chat of the same name stays invisible.
+	crossTenant, err := taskStore.ListDelegationsByChat(ctxB, rootAID, "chat-a")
+	if err != nil {
+		t.Fatalf("ListDelegationsByChat(other tenant): %v", err)
+	}
+	if len(crossTenant) != 0 {
+		t.Errorf("listing crossed a tenant boundary: %v", crossTenant)
+	}
+
+	// And the complement: the spawn-facing listings must not return it, which is
+	// why this method has to exist in the first place.
+	byParent, err := taskStore.ListByParent(ctxA, rootAID, "")
+	if err != nil {
+		t.Fatalf("ListByParent: %v", err)
+	}
+	for _, task := range byParent {
+		if task.ID == wanted {
+			t.Fatalf("ListByParent returned a delegation; if that is now intended, " +
+				"ListDelegationsByChat and this test need revisiting")
+		}
+	}
+	bySession, err := taskStore.ListBySession(ctxA, rootAID, "session-chat-a")
+	if err != nil {
+		t.Fatalf("ListBySession: %v", err)
+	}
+	for _, task := range bySession {
+		if task.ID == wanted {
+			t.Fatalf("ListBySession returned a delegation")
+		}
+	}
+
+	// No chat, nothing listed — never a fallback to every delegation.
+	empty, err := taskStore.ListDelegationsByChat(ctxA, rootAID, "")
+	if err != nil {
+		t.Fatalf("ListDelegationsByChat(no chat): %v", err)
+	}
+	if len(empty) != 0 {
+		t.Errorf("empty chat returned %d rows", len(empty))
+	}
+}

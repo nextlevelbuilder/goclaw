@@ -285,7 +285,12 @@ func (t *DelegateTool) executeListCompletions(ctx context.Context) *Result {
 	}
 
 	dbCtx := store.WithTenantID(context.WithoutCancel(ctx), tenantID)
-	tasks, err := t.taskStore.ListByParent(dbCtx, fromAgentID, "")
+	// ListDelegationsByChat, not ListByParent: the latter serves spawn and carries
+	// "completion_kind <> 'delegate'" in its SQL, so it can never return a
+	// delegation. Both the chat scope and the delegate-only predicate live in the
+	// query — do not re-filter here, or a change to the query goes unnoticed the
+	// way that one did.
+	tasks, err := t.taskStore.ListDelegationsByChat(dbCtx, fromAgentID, chatID)
 	if err != nil {
 		slog.Warn("delegate.list.failed", "agent_id", fromAgentID, "error", err)
 		return ErrorResult("failed to list delegations")
@@ -294,13 +299,6 @@ func (t *DelegateTool) executeListCompletions(ctx context.Context) *Result {
 	items := make([]map[string]any, 0, delegateListLimit)
 	for i := range tasks {
 		task := &tasks[i]
-		// Spawned subagents share this table; only delegations belong here.
-		if completionKind(task.Metadata) != asyncCompletionKindDelegate {
-			continue
-		}
-		if task.OriginChatID == nil || *task.OriginChatID != chatID {
-			continue
-		}
 		item := map[string]any{
 			"delegation_id": task.ID.String(),
 			"status":        task.Status,

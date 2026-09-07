@@ -204,6 +204,37 @@ func (s *PGSubagentTaskStore) ListBySession(
 	return collectTasks(rows)
 }
 
+// ListDelegationsByChat returns delegations raised in one chat (tenant-scoped).
+// The inverse of the predicate ListByParent and ListBySession carry: those serve
+// spawn and filter delegations out, so without this there is no way to list a
+// delegation at all — only Get by ID reaches one.
+func (s *PGSubagentTaskStore) ListDelegationsByChat(
+	ctx context.Context, rootAgentID uuid.UUID, chatID string,
+) ([]store.SubagentTaskData, error) {
+	tid, err := requireTenantID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if rootAgentID == uuid.Nil {
+		return nil, store.ErrSubagentRootAgentIDRequired
+	}
+	if chatID == "" {
+		return nil, nil
+	}
+
+	q := fmt.Sprintf(`SELECT %s FROM subagent_tasks
+		WHERE tenant_id = $1 AND root_agent_id = $2 AND origin_chat_id = $3
+		AND COALESCE(metadata->>'completion_kind', 'subagent') = 'delegate'
+		ORDER BY created_at DESC LIMIT 50`, subagentTaskSelectCols)
+	rows, err := s.db.QueryContext(ctx, q, tid, rootAgentID, chatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return collectTasks(rows)
+}
+
 // Archive marks a bounded batch of old terminal tasks as archived.
 func (s *PGSubagentTaskStore) Archive(
 	ctx context.Context, rootAgentID uuid.UUID, olderThan time.Duration, limit int,

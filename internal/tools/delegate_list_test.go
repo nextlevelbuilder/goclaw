@@ -12,21 +12,44 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// chatScopedTaskStore serves ListByParent and records that it was asked. The
-// embedded interface is nil on purpose: if the implementation reaches for
-// ListBySession — the scope this deliberately moved away from — the test panics
-// instead of quietly passing.
+// chatScopedTaskStore serves ListDelegationsByChat and records what it was asked
+// for. The embedded interface is nil on purpose, and ListByParent/ListBySession
+// panic outright: both carry "completion_kind <> 'delegate'" in their real SQL
+// and can never return a delegation, so a regression to either must fail loudly
+// here rather than quietly return nothing — which is exactly how the first
+// version of this shipped green and did nothing in production.
 type chatScopedTaskStore struct {
 	store.SubagentTaskStore
 	rows       []store.SubagentTaskData
 	listCalls  int
 	askedAgent uuid.UUID
+	askedChat  string
 }
 
-func (s *chatScopedTaskStore) ListByParent(_ context.Context, rootAgentID uuid.UUID, _ string) ([]store.SubagentTaskData, error) {
+func (s *chatScopedTaskStore) ListDelegationsByChat(
+	_ context.Context, rootAgentID uuid.UUID, chatID string,
+) ([]store.SubagentTaskData, error) {
 	s.listCalls++
 	s.askedAgent = rootAgentID
-	return s.rows, nil
+	s.askedChat = chatID
+	// Stand in for the query's own chat predicate, so the fixtures can carry
+	// rows from other chats and this still behaves like the real store.
+	var out []store.SubagentTaskData
+	for _, r := range s.rows {
+		if r.OriginChatID != nil && *r.OriginChatID == chatID &&
+			completionKind(r.Metadata) == asyncCompletionKindDelegate {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+func (s *chatScopedTaskStore) ListByParent(context.Context, uuid.UUID, string) ([]store.SubagentTaskData, error) {
+	panic("delegate list must not use ListByParent: its SQL excludes delegations")
+}
+
+func (s *chatScopedTaskStore) ListBySession(context.Context, uuid.UUID, string) ([]store.SubagentTaskData, error) {
+	panic("delegate list must not use ListBySession: its SQL excludes delegations")
 }
 
 func delegationRow(chatID, sessionKey, target string, created time.Time) store.SubagentTaskData {
@@ -86,13 +109,15 @@ func newListTool(rows []store.SubagentTaskData) (*DelegateTool, *chatScopedTaskS
 // carried into another chat with the same agent, and spawned subagents sharing
 // the table are not delegations.
 func TestDelegateListIsScopedToItsChat(t *testing.T) {
-	tool, _ := newListTool([]store.SubagentTaskData{
+	tool, s := newListTool([]store.SubagentTaskData{
 		delegationRow("chat-a", "session-1", "brain", time.Unix(200, 0)),
 		delegationRow("chat-b", "session-1", "brain", time.Unix(300, 0)),
 		spawnRow("chat-a"),
 	})
-
 	got := decodeList(t, tool.executeListCompletions(listCtx("chat-a")))
+	if s.askedChat != "chat-a" {
+		t.Errorf("store was asked for chat %q, want the caller's chat", s.askedChat)
+	}
 	if len(got) != 1 {
 		t.Fatalf("listed %d entries, want only this chat's delegation: %v", len(got), got)
 	}

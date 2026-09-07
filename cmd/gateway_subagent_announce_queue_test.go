@@ -25,6 +25,9 @@ func (*recordingGatewayTaskStore) Get(context.Context, uuid.UUID, uuid.UUID) (*s
 func (*recordingGatewayTaskStore) UpdateStatus(context.Context, uuid.UUID, uuid.UUID, string, *string, int, int64, int64) error {
 	return nil
 }
+func (*recordingGatewayTaskStore) ListDelegationsByChat(context.Context, uuid.UUID, string) ([]store.SubagentTaskData, error) {
+	return nil, nil
+}
 func (*recordingGatewayTaskStore) ListByParent(context.Context, uuid.UUID, string) ([]store.SubagentTaskData, error) {
 	return nil, nil
 }
