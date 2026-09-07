@@ -236,3 +236,94 @@ func (t *DelegateTool) executeGetCompletion(ctx context.Context, args map[string
 	}
 	return NewResult(string(encoded))
 }
+
+// delegateListLimit caps how many delegations action=list reports. The point is
+// to re-acquire a handle you just lost, not to page through history.
+const delegateListLimit = 20
+
+// executeListCompletions reports the delegations started in this chat, newest
+// first, so a caller that lost a delegation ID can recover it.
+//
+// Without this, a delegation result was addressable only by a UUID the calling
+// model had to transcribe by hand across turns; one wrong character orphaned a
+// completed, durably stored result with no way back (#1545).
+//
+// Scope is tenant (via dbCtx) and calling agent, as action=get already resolves,
+// plus the origin chat. Three things follow from choosing the chat:
+//
+//   - It survives a session reset. Deferring long work, clearing the context and
+//     coming back to ask for status is ordinary use; scoping by SessionKey would
+//     return nothing exactly then, which is when the handle is most likely gone.
+//   - It keeps chats apart, which is the enumeration boundary #1525 is about:
+//     there, spawn's list filters on the parent agent key alone and ignores the
+//     session, so one chat reads another chat's task text.
+//   - It does not carry a conversation between chats. A delegation started in a
+//     team chat stays visible in that team chat, not in someone's DM with the
+//     same agent. The chat is the unit of visibility, and history stays where it
+//     began.
+//
+// In a direct chat this separates users too, since the chat ID is then per
+// person. Group chats deliberately show the whole group what the group started.
+//
+// ToolChatIDFromCtx is the same accessor createDelegateCompletion writes from,
+// not OriginChatIDFromCtx — the latter prefers the workspace chat ID and would
+// disagree with the stored value on delegated runs.
+func (t *DelegateTool) executeListCompletions(ctx context.Context) *Result {
+	tenantID := store.TenantIDFromContext(ctx)
+	fromAgentID := store.AgentIDFromContext(ctx)
+	if tenantID == uuid.Nil || fromAgentID == uuid.Nil {
+		return ErrorResult("delegate list requires tenant and agent context")
+	}
+	if t.taskStore == nil {
+		return ErrorResult("durable delegation task tracking is unavailable")
+	}
+	chatID := ToolChatIDFromCtx(ctx)
+	if chatID == "" {
+		// No chat means nothing can be scoped to one. Listing every delegation
+		// this agent ever made would cross the boundary this predicate draws.
+		return ErrorResult("delegate list requires a chat context")
+	}
+
+	dbCtx := store.WithTenantID(context.WithoutCancel(ctx), tenantID)
+	tasks, err := t.taskStore.ListByParent(dbCtx, fromAgentID, "")
+	if err != nil {
+		slog.Warn("delegate.list.failed", "agent_id", fromAgentID, "error", err)
+		return ErrorResult("failed to list delegations")
+	}
+
+	items := make([]map[string]any, 0, delegateListLimit)
+	for i := range tasks {
+		task := &tasks[i]
+		// Spawned subagents share this table; only delegations belong here.
+		if completionKind(task.Metadata) != asyncCompletionKindDelegate {
+			continue
+		}
+		if task.OriginChatID == nil || *task.OriginChatID != chatID {
+			continue
+		}
+		item := map[string]any{
+			"delegation_id": task.ID.String(),
+			"status":        task.Status,
+			"created_at":    task.CreatedAt.UTC().Format(time.RFC3339),
+		}
+		if target, ok := task.Metadata[delegateCompletionTargetKey].(string); ok && target != "" {
+			item["agent"] = target
+		}
+		if task.CompletedAt != nil {
+			item["completed_at"] = task.CompletedAt.UTC().Format(time.RFC3339)
+		}
+		items = append(items, item)
+		if len(items) == delegateListLimit {
+			break
+		}
+	}
+
+	encoded, err := json.Marshal(map[string]any{
+		"delegations": items,
+		"count":       len(items),
+	})
+	if err != nil {
+		return ErrorResult("failed to encode delegation list")
+	}
+	return NewResult(string(encoded))
+}

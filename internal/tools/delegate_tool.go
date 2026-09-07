@@ -226,12 +226,12 @@ func (t *DelegateTool) Parameters() map[string]any {
 			},
 			"action": map[string]any{
 				"type":        "string",
-				"enum":        []string{"delegate", "get"},
-				"description": "delegate (default) starts work; get retrieves a durable async result",
+				"enum":        []string{"delegate", "get", "list"},
+				"description": "delegate (default) starts work; get retrieves a durable async result by id; list shows the delegations started in this chat, newest first — use it when you no longer have the id",
 			},
 			"delegation_id": map[string]any{
 				"type":        "string",
-				"description": "Delegation UUID returned by async mode (required for action=get)",
+				"description": "Delegation UUID returned by async mode (required for action=get). If you no longer have it, call action=list rather than guessing — a wrong id cannot be recovered from",
 			},
 			"task": map[string]any{
 				"type":        "string",
@@ -263,6 +263,9 @@ func (t *DelegateTool) Execute(ctx context.Context, args map[string]any) *Result
 	}
 	if action == "get" {
 		return t.executeGetCompletion(ctx, args)
+	}
+	if action == "list" {
+		return t.executeListCompletions(ctx)
 	}
 	if action != "delegate" {
 		return ErrorResult(fmt.Sprintf("unknown delegate action %q", action))
