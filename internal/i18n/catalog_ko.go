@@ -183,5 +183,14 @@ func init() {
 		MsgTenantUserNotFound:  "테넌트 사용자를 찾을 수 없습니다",
 		MsgTenantMismatch:      "테넌트 사용자가 이 테넌트에 속하지 않습니다",
 		MsgTenantScopeRequired: "이 작업에는 테넌트 범위가 필요합니다",
+
+		// Webhook inbound media. ko is a partial catalog and falls back to
+		// English for keys it omits; these four are the ones POST
+		// /v1/webhooks/llm can return for a media attachment.
+		MsgWebhookMediaSSRFBlocked:     "미디어 URL이 SSRF 정책에 의해 차단되었습니다",
+		MsgWebhookMediaTooLarge:        "미디어 파일이 크기 제한을 초과했습니다",
+		MsgWebhookMediaMIMEDenied:      "허용되지 않는 미디어 MIME 유형입니다",
+		MsgWebhookMediaDownloadFailed:  "미디어를 다운로드하지 못했습니다",
+		MsgWebhookMediaBudgetExhausted: "미디어 다운로드 용량이 일시적으로 소진되었습니다. 잠시 후 다시 시도하세요",
 	})
 }

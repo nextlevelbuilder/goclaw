@@ -285,6 +285,8 @@ func init() {
 		MsgWebhookMediaSSRFBlocked:            "URL медиа заблокирован политикой SSRF",
 		MsgWebhookMediaTooLarge:               "медиафайл превышает ограничение по размеру",
 		MsgWebhookMediaMIMEDenied:             "MIME-тип медиа не разрешён",
+		MsgWebhookMediaDownloadFailed:         "не удалось загрузить медиафайл",
+		MsgWebhookMediaBudgetExhausted:        "ёмкость загрузки медиа временно исчерпана, повторите попытку позже",
 		MsgWebhookCallbackURLInvalid:          "URL обратного вызова недействителен или заблокирован",
 		MsgWebhookLLMTimeout:                  "истекло время обработки LLM",
 		MsgWebhookLaneSaturated:               "линия обработки вебхуков заполнена",

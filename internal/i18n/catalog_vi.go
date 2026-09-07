@@ -276,6 +276,8 @@ func init() {
 		MsgWebhookMediaSSRFBlocked:            "URL media bị chặn bởi chính sách SSRF",
 		MsgWebhookMediaTooLarge:               "tệp media vượt quá giới hạn kích thước",
 		MsgWebhookMediaMIMEDenied:             "loại MIME của media không được phép",
+		MsgWebhookMediaDownloadFailed:         "không tải được tệp media",
+		MsgWebhookMediaBudgetExhausted:        "dung lượng tải media tạm thời đã hết, vui lòng thử lại sau",
 		MsgWebhookCallbackURLInvalid:          "URL callback không hợp lệ hoặc bị chặn",
 		MsgWebhookLLMTimeout:                  "LLM xử lý hết thời gian chờ",
 		MsgWebhookLaneSaturated:               "làn xử lý webhook đã đầy",

@@ -13,11 +13,13 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
+	media "github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
 	"github.com/nextlevelbuilder/goclaw/internal/security"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/webhooks"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -40,8 +42,13 @@ const (
 // Input accepts either a plain string or a message array [{role,content}...].
 type webhookLLMReq struct {
 	// Input is the user prompt. Either a plain string or message array.
-	// Required.
+	// Required unless Media is non-empty.
 	Input json.RawMessage `json:"input"`
+
+	// Media is an optional list of remote attachments the gateway fetches
+	// server-side and hands to the agent as local files. Max 10 items, 25 MB
+	// each. Sync mode only - see the async guard in handle().
+	Media []webhooks.InboundMediaItem `json:"media,omitempty"`
 
 	// SessionKey is an optional stable conversation anchor for multi-turn conversations.
 	// If omitted, a per-call ephemeral key is generated.
@@ -188,8 +195,10 @@ func (h *WebhookLLMHandler) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate input field is present.
-	if len(req.Input) == 0 || string(req.Input) == "null" {
+	// input is optional when media is present: an image with no caption is a
+	// legitimate request. A request carrying neither is still rejected.
+	hasInput := len(req.Input) > 0 && string(req.Input) != "null"
+	if !hasInput && len(req.Media) == 0 {
 		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest,
 			i18n.T(locale, i18n.MsgRequired, "input"))
 		return
@@ -211,14 +220,31 @@ func (h *WebhookLLMHandler) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse and build user message + optional extra system prompt from input.
-	userMessage, extraSystemPrompt, err := buildInput(req.Input)
-	if err != nil {
+	// Async + media is refused, not deferred. requestPayload is frozen below,
+	// before the mode dispatch, and handleAsync stores that byte slice
+	// verbatim - so server-computed local paths have no way to reach the
+	// worker. An accepted request would run the agent with no media and no
+	// media tag, then answer confidently about an image nobody sent, with
+	// status "done" and nothing in last_error. Rejecting here means nothing is
+	// downloaded and no row is enqueued for a call that could never succeed.
+	if len(req.Media) > 0 && mode == "async" {
 		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest,
-			i18n.T(locale, i18n.MsgInvalidRequest, err.Error()))
+			i18n.T(locale, i18n.MsgInvalidRequest, "media is not supported in async mode"))
 		return
 	}
-	if userMessage == "" {
+
+	// Parse and build user message + optional extra system prompt from input.
+	var userMessage, extraSystemPrompt string
+	if hasInput {
+		var err error
+		userMessage, extraSystemPrompt, err = buildInput(req.Input)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest,
+				i18n.T(locale, i18n.MsgInvalidRequest, err.Error()))
+			return
+		}
+	}
+	if userMessage == "" && len(req.Media) == 0 {
 		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest,
 			i18n.T(locale, i18n.MsgRequired, "input"))
 		return
@@ -258,16 +284,101 @@ func (h *WebhookLLMHandler) handle(w http.ResponseWriter, r *http.Request) {
 	if reqBytes == nil {
 		reqBytes, _ = json.Marshal(req)
 	}
-	requestPayload, _ := buildAuditPayload(reqBytes, req)
+	// meta is surfaced verbatim by GET /v1/webhooks/{id}/calls/{callId} and kept
+	// for the 30-day retention window. The whole point of media[] is short-lived
+	// signed CDN URLs, and that signature is a bearer credential - store the URL
+	// with its query stripped, never raw. This stays cheap only because media is
+	// carried by URL; a future base64 option must drop the field here entirely.
+	requestPayload, _ := buildAuditPayload(reqBytes, redactedAuditReq(req))
 	idempotencyKey := optionalIdempotencyKey(r)
+
+	// ONE deadline covers the download and the agent run, so a sync request
+	// never outlives gateway.webhook_sync_timeout_sec no matter how the time is
+	// split. Without it the fetch would run on the bare request context, bounded
+	// only by the fetcher's 5-minute-per-item client timeout — ten items in
+	// sequence is nearly an hour of request-goroutine occupancy that no
+	// operator setting could shorten.
+	deadline := time.Now().Add(h.effectiveSyncTimeout())
+
+	// Fetch media BEFORE a lane slot is taken. The webhook lane's concurrency
+	// budget is small (4 by default) and a slow download must not hold a slot.
+	// Disk is bounded by the fetcher's own byte budget rather than by the rate
+	// limiter, whose allow() returns true whenever rpm <= 0.
+	var fetched webhooks.InboundMediaResult
+	if len(req.Media) > 0 {
+		fetchCtx, cancelFetch := context.WithDeadline(ctx, deadline)
+		fetched = webhooks.FetchInboundMedia(fetchCtx, req.Media)
+		cancelFetch()
+		if len(fetched.Failures) > 0 {
+			// All-or-nothing: FetchInboundMedia already removed its own temps.
+			writeMediaFailure(w, locale, webhooks.WorstFailure(fetched.Failures))
+			return
+		}
+	}
 
 	// Dispatch based on mode.
 	switch mode {
 	case "async":
 		h.handleAsync(w, r, ctx, locale, webhook, ag, agentID, req, callID, deliveryID, now, requestPayload, idempotencyKey, userMessage, extraSystemPrompt)
 	default: // "sync"
-		h.handleSync(w, r, ctx, locale, webhook, ag, agentID, req, callID, deliveryID, now, requestPayload, idempotencyKey, userMessage, extraSystemPrompt)
+		h.handleSync(w, r, ctx, locale, webhook, ag, agentID, req, callID, deliveryID, now, requestPayload, idempotencyKey, userMessage, extraSystemPrompt, fetched, deadline)
 	}
+}
+
+// effectiveSyncTimeout is the configured budget for one sync call
+// (gateway.webhook_sync_timeout_sec), falling back to the package default.
+func (h *WebhookLLMHandler) effectiveSyncTimeout() time.Duration {
+	if h.syncTimeout > 0 {
+		return h.syncTimeout
+	}
+	return webhookLLMTimeout
+}
+
+// writeMediaFailure maps a media failure to a status code deterministically.
+//
+// The code comes from WorstFailure, which applies a fixed severity order across
+// every failed item, so the status never depends on which array slot happened
+// to fail. The i18n message is the ONLY thing the caller sees: no hostname, no
+// IP, no port, no error string. The detail is already in slog.
+func writeMediaFailure(w http.ResponseWriter, locale string, f webhooks.InboundMediaFailure) {
+	switch f.Code {
+	case webhooks.FailSSRF:
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest,
+			i18n.T(locale, i18n.MsgWebhookMediaSSRFBlocked))
+	case webhooks.FailTooLarge:
+		writeError(w, http.StatusRequestEntityTooLarge, protocol.ErrInvalidRequest,
+			i18n.T(locale, i18n.MsgWebhookMediaTooLarge))
+	case webhooks.FailMIMEDenied:
+		writeError(w, http.StatusUnsupportedMediaType, protocol.ErrInvalidRequest,
+			i18n.T(locale, i18n.MsgWebhookMediaMIMEDenied))
+	case webhooks.FailBudgetExhausted:
+		// Transient and server-side: the caller should retry, not rewrite the
+		// request. Ranked lowest by WorstFailure so a genuinely bad item is
+		// never reported as retryable.
+		w.Header().Set("Retry-After", "5")
+		writeError(w, http.StatusServiceUnavailable, protocol.ErrInternal,
+			i18n.T(locale, i18n.MsgWebhookMediaBudgetExhausted))
+	default:
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest,
+			i18n.T(locale, i18n.MsgWebhookMediaDownloadFailed))
+	}
+}
+
+// redactedAuditReq returns a copy of req whose media URLs have query string and
+// userinfo stripped, for persistence into the audit row.
+func redactedAuditReq(req webhookLLMReq) webhookLLMReq {
+	if len(req.Media) == 0 {
+		return req
+	}
+	safe := make([]webhooks.InboundMediaItem, len(req.Media))
+	for i, item := range req.Media {
+		safe[i] = webhooks.InboundMediaItem{
+			URL:      security.RedactURL(item.URL),
+			Filename: item.Filename,
+		}
+	}
+	req.Media = safe
+	return req
 }
 
 // handleSync invokes the agent within a 30s timeout and returns the response directly.
@@ -285,6 +396,8 @@ func (h *WebhookLLMHandler) handleSync(
 	requestPayload []byte,
 	idempotencyKey *string,
 	userMessage, extraSystemPrompt string,
+	fetched webhooks.InboundMediaResult,
+	deadline time.Time,
 ) {
 	runID := uuid.NewString()
 	sessionKey := resolveWebhookSessionKey(req.SessionKey, agentID, webhook.ID, runID)
@@ -304,12 +417,36 @@ func (h *WebhookLLMHandler) handleSync(
 	}
 	callReserved, handled := reserveIdempotentCall(w, r, h.callStore, callRecord)
 	if handled {
+		// The run never starts, so nothing downstream will own these files.
+		webhooks.CleanupInboundMedia(fetched.Files)
 		return
+	}
+
+	// Media tags are load-bearing, not cosmetic. enrichImageIDs rewrites an
+	// EXISTING <media:image> tag via replaceFirstMediaTag; it never inserts one.
+	// When the agent has a dedicated read_image provider (file-ref vision mode)
+	// the images are not attached to the main LLM at all, so the tag is the only
+	// thing telling the model an image exists. No tag means a silent no-op: no
+	// error, no log, wrong answer - and only on that configuration, so it works
+	// on a dev box and fails at a customer.
+	//
+	// No skip annotations: all-or-nothing means the run only starts once every
+	// item succeeded, so fetched.Failures is empty here by construction.
+	message := userMessage
+	if len(fetched.Infos) > 0 {
+		if tags := media.BuildMediaTags(fetched.Infos); tags != "" {
+			if message != "" {
+				message = tags + "\n\n" + message
+			} else {
+				message = tags
+			}
+		}
 	}
 
 	rr := agent.RunRequest{
 		SessionKey:        sessionKey,
-		Message:           userMessage,
+		Message:           message,
+		Media:             fetched.Files,
 		Channel:           "webhook",
 		ChatID:            webhook.ID.String(),
 		RunID:             runID,
@@ -337,20 +474,29 @@ func (h *WebhookLLMHandler) handleSync(
 	}
 	outCh := make(chan runOutcome, 1)
 
-	// Determine the effective timeout (30s in production; overridable in tests).
-	timeout := webhookLLMTimeout
-	if h.syncTimeout > 0 {
-		timeout = h.syncTimeout
-	}
+	// deadline was set in handle() before the media fetch, so whatever the
+	// download consumed is already subtracted from the run's share.
 
 	// Acquire a webhook-lane slot; if full, return 503.
-	laneCtx, laneCancel := context.WithTimeout(ctx, timeout)
+	laneCtx, laneCancel := context.WithDeadline(ctx, deadline)
 	defer laneCancel()
 
 	submitErr := h.lane.Submit(laneCtx, func() {
-		// Each sync run gets its own hard timeout, isolated from request context
-		// so the HTTP response write path does not race with run cancellation.
-		runCtx, runCancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+		// Cleanup belongs to the RUN, not to the handler. Submit runs fn in a
+		// detached goroutine and returns immediately; handleSync then selects on
+		// outCh or laneCtx.Done(), and laneCtx derives from the REQUEST context
+		// while the run below uses context.WithoutCancel. A deferred cleanup in
+		// the handler would therefore delete these files on client disconnect or
+		// lane timeout while ag.Run is still executing - persistMedia would fail
+		// its copy, log a warning, drop the ref, and the agent would spend
+		// minutes answering about a <media:image> tag with no image behind it.
+		defer webhooks.CleanupInboundMedia(fetched.Files)
+
+		// Each sync run gets its own hard deadline, isolated from the request
+		// context so the HTTP response write path does not race with run
+		// cancellation. Same instant as laneCtx, so download plus run share one
+		// budget rather than each getting a full one.
+		runCtx, runCancel := context.WithDeadline(context.WithoutCancel(ctx), deadline)
 		defer runCancel()
 
 		result, err := ag.Run(runCtx, rr)
@@ -358,6 +504,8 @@ func (h *WebhookLLMHandler) handleSync(
 	})
 
 	if submitErr != nil {
+		// The closure never ran, so its deferred cleanup never will either.
+		webhooks.CleanupInboundMedia(fetched.Files)
 		completedAt := time.Now()
 		errMsg := submitErr.Error()
 		callRecord.Status = "failed"
