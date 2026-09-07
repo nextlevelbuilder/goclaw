@@ -357,6 +357,14 @@ func (h *ProvidersHandler) registerInMemory(p *store.LLMProviderData) providerRu
 		prov := providers.NewAIMLAPIProvider(p.Name, p.APIKey, apiBase)
 		prov.WithProviderType(p.ProviderType)
 		h.providerReg.RegisterForTenant(p.TenantID, prov)
+	case store.ProviderOrcaRouter:
+		base := apiBase
+		if base == "" {
+			base = store.OrcaRouterDefaultAPIBase
+		}
+		prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.OrcaRouterDefaultModel)
+		prov.WithProviderType(p.ProviderType)
+		h.providerReg.RegisterForTenant(p.TenantID, prov)
 	case store.ProviderOllamaCloud:
 		base := apiBase
 		if base == "" {

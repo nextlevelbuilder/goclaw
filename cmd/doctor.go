@@ -99,10 +99,12 @@ func runDoctor() {
 		checkProvider("Anthropic (env)", cfg.Providers.Anthropic.APIKey)
 		checkProvider("OpenAI (env)", cfg.Providers.OpenAI.APIKey)
 		checkProvider("OpenRouter (env)", cfg.Providers.OpenRouter.APIKey)
+		checkProvider("OrcaRouter (env)", cfg.Providers.OrcaRouter.APIKey)
 	} else {
 		checkProvider("Anthropic", cfg.Providers.Anthropic.APIKey)
 		checkProvider("OpenAI", cfg.Providers.OpenAI.APIKey)
 		checkProvider("OpenRouter", cfg.Providers.OpenRouter.APIKey)
+		checkProvider("OrcaRouter", cfg.Providers.OrcaRouter.APIKey)
 		checkProvider("Gemini", cfg.Providers.Gemini.APIKey)
 		checkProvider("Groq", cfg.Providers.Groq.APIKey)
 		checkProvider("DeepSeek", cfg.Providers.DeepSeek.APIKey)
