@@ -174,8 +174,8 @@ func (m *TeamToolManager) notifyLeaderCycleError(ctx context.Context, teamID uui
 	content := fmt.Sprintf("[System] %s\nPlease recreate these tasks with corrected dependencies.\nUse team_tasks(action=\"list\") to view current task board.", cycleDesc)
 
 	// Resolve routing: use context channel/chatID if available, fallback to dashboard.
-	channel := ToolChannelFromCtx(ctx)
-	chatID := ToolChatIDFromCtx(ctx)
+	channel := OriginChannelFromCtx(ctx)
+	chatID := OriginChatIDFromCtx(ctx)
 	if channel == "" || channel == ChannelSystem || channel == ChannelTeammate {
 		channel = "dashboard"
 		chatID = teamID.String()

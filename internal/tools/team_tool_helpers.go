@@ -195,10 +195,10 @@ func (m *TeamToolManager) createEscalationTask(ctx context.Context, team *store.
 		Description:      description,
 		Status:           store.TeamTaskStatusPending,
 		UserID:           store.UserIDFromContext(ctx),
-		Channel:          ToolChannelFromCtx(ctx),
+		Channel:          OriginChannelFromCtx(ctx),
 		TaskType:         "escalation",
 		CreatedByAgentID: &agentID,
-		ChatID:           ToolChatIDFromCtx(ctx),
+		ChatID:           OriginChatIDFromCtx(ctx),
 	}
 	if err := m.teamStore.CreateTask(ctx, task); err != nil {
 		return ErrorResult("failed to create escalation task: " + err.Error())

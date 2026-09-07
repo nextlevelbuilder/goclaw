@@ -23,7 +23,7 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 
 	// Determine if caller is a lead or a member.
 	isLead := agentID == team.LeadAgentID
-	channel := ToolChannelFromCtx(ctx)
+	channel := OriginChannelFromCtx(ctx)
 	if channel == ChannelTeammate || channel == ChannelSystem {
 		isLead = true // system/teammate channels act on behalf of the lead
 	}
@@ -139,7 +139,7 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 	memberCfgForDispatch := ParseMemberRequestConfig(team.Settings)
 	skipAutoDispatch := !isLead && taskType == "request" && !memberCfgForDispatch.AutoDispatch
 
-	chatID := ToolChatIDFromCtx(ctx)
+	chatID := OriginChatIDFromCtx(ctx)
 
 	// Compute team workspace via layered pipeline: tenant → team → user/chat.
 	shared := IsSharedWorkspace(team.Settings)
@@ -226,7 +226,7 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 		// this same UserID. Migrating to ActorIDFromContext would hide group
 		// members' shared work from each other.
 		UserID:           store.UserIDFromContext(ctx),
-		Channel:          ToolChannelFromCtx(ctx),
+		Channel:          OriginChannelFromCtx(ctx),
 		TaskType:         taskType,
 		CreatedByAgentID: &agentID,
 		ChatID:           chatID,
