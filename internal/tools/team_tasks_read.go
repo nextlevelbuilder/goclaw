@@ -197,11 +197,11 @@ func (t *TeamTasksTool) executeList(ctx context.Context, args map[string]any) *R
 
 	// Teammate/system channels see all tasks; end users only see their own.
 	filterUserID := ""
-	channel := ToolChannelFromCtx(ctx)
+	channel := OriginChannelFromCtx(ctx)
 	if channel != ChannelTeammate && channel != ChannelSystem {
 		filterUserID = store.UserIDFromContext(ctx)
 	}
-	chatID := ToolChatIDFromCtx(ctx)
+	chatID := OriginChatIDFromCtx(ctx)
 	// Shared workspace: show all tasks across chats.
 	listChatID := chatID
 	if IsSharedWorkspace(team.Settings) {
@@ -375,13 +375,13 @@ func (t *TeamTasksTool) executeSearch(ctx context.Context, args map[string]any) 
 
 	// Teammate/system channels see all tasks; end users only see their own.
 	filterUserID := ""
-	channel := ToolChannelFromCtx(ctx)
+	channel := OriginChannelFromCtx(ctx)
 	if channel != ChannelTeammate && channel != ChannelSystem {
 		filterUserID = store.UserIDFromContext(ctx)
 	}
 
 	// Acquire team create lock so search also satisfies the list-before-create gate.
-	chatID := ToolChatIDFromCtx(ctx)
+	chatID := OriginChatIDFromCtx(ctx)
 	if ptd := PendingTeamDispatchFromCtx(ctx); ptd != nil && !ptd.HasListed() {
 		lock := getTeamCreateLock(team.ID.String(), chatID)
 		lock.Lock()
