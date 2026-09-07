@@ -199,6 +199,9 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_SLACK_APP_TOKEN", &c.Channels.Slack.AppToken)
 	envStr("GOCLAW_SLACK_USER_TOKEN", &c.Channels.Slack.UserToken)
 
+	// Cron
+	envStr("GOCLAW_CRON_JOB_TIMEOUT", &c.Cron.JobTimeout)
+
 	// TTS secrets
 	envStr("GOCLAW_TTS_OPENAI_API_KEY", &c.Tts.OpenAI.APIKey)
 	envStr("GOCLAW_TTS_ELEVENLABS_API_KEY", &c.Tts.ElevenLabs.APIKey)
