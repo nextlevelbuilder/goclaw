@@ -138,7 +138,8 @@
     "retryTitle": "작업 재시도",
     "retryDescription": "작업이 담당자에게 새 실행으로 다시 전달됩니다. 댓글은 작업에 기록되고 배정 내용에 포함됩니다. 답변이나 누락된 지시를 여기에 적으세요.",
     "retryCommentPlaceholder": "담당자가 무엇을 다르게 해야 하나요, 또는 어떤 답변을 기다리고 있었나요?",
-    "retryCommentRequired": "재시도하려면 댓글이 필요합니다."
+    "retryCommentRequired": "재시도하려면 댓글이 필요합니다.",
+    "retryAssignee": "담당자"
   },
   "delegations": {
     "noTitle": "위임 없음",

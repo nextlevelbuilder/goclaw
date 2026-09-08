@@ -138,7 +138,8 @@
     "retryTitle": "Retry this task",
     "retryDescription": "The task goes back to its assignee as a new run. Your comment is posted on the task and included in the assignment — this is where the answer or missing instruction goes.",
     "retryCommentPlaceholder": "What should the assignee do differently, or what was the answer they were waiting for?",
-    "retryCommentRequired": "A comment is required to retry."
+    "retryCommentRequired": "A comment is required to retry.",
+    "retryAssignee": "Assignee"
   },
   "delegations": {
     "noTitle": "No delegations",

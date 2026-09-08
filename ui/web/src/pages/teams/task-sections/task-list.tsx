@@ -10,7 +10,7 @@ import { usePagination } from "@/hooks/use-pagination";
 import type { TeamTaskData, TeamTaskComment, TeamTaskEvent, TeamTaskAttachment } from "@/types/team";
 import type { TeamMemberData } from "@/types/team";
 import { taskStatusBadgeVariant, isTerminalStatus } from "./task-utils";
-import { buildTaskLookup, buildMemberLookup } from "../board/board-utils";
+import { buildTaskLookup, buildMemberLookup, buildAssigneeOptions } from "../board/board-utils";
 
 const TaskDetailDialog = lazy(() =>
   import("./task-detail-dialog").then((m) => ({ default: m.TaskDetailDialog }))
@@ -31,7 +31,7 @@ interface TaskListProps {
   deleteTasksBulk?: (teamId: string, taskIds: string[]) => Promise<number>;
   addTaskComment?: (teamId: string, taskId: string, content: string) => Promise<void>;
   cancelTask?: (teamId: string, taskId: string, reason?: string) => Promise<void>;
-  retryTask?: (teamId: string, taskId: string, comment: string) => Promise<void>;
+  retryTask?: (teamId: string, taskId: string, comment: string, agentId?: string) => Promise<void>;
 }
 
 export function TaskList({
@@ -47,6 +47,7 @@ export function TaskList({
   const [singleDeleting, setSingleDeleting] = useState(false);
   const taskLookup = useMemo(() => buildTaskLookup(tasks), [tasks]);
   const memberLookup = useMemo(() => buildMemberLookup(members), [members]);
+  const assigneeOptions = useMemo(() => buildAssigneeOptions(members), [members]);
   const { pageItems, pagination, setPage, setPageSize } = usePagination(tasks, { defaultPageSize: 20 });
 
   // "Select all" applies to terminal tasks on the current page only.
@@ -281,6 +282,7 @@ export function TaskList({
             deleteTask={deleteTask}
             cancelTask={cancelTask}
             retryTask={retryTask}
+            assignees={assigneeOptions}
             onAddComment={addTaskComment}
             taskLookup={taskLookup}
             memberLookup={memberLookup}

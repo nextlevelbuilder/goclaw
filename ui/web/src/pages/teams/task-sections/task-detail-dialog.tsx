@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import {
   Trash2, ArrowUp, ArrowDown, ArrowRight, AlertTriangle, Copy, Check, Ban, RotateCcw,
@@ -91,6 +92,8 @@ function MetaItem({ label, children }: { label: string; children: React.ReactNod
 
 /* ── Action dialog (cancel with optional reason / retry with required comment) ── */
 
+export interface TaskAssigneeOption { id: string; name: string }
+
 interface TaskActionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -102,17 +105,26 @@ interface TaskActionDialogProps {
   requiredHint?: string;
   variant?: "default" | "destructive";
   loading?: boolean;
-  onConfirm: (text: string) => void;
+  /** When set, an assignee select is shown above the textarea (retry). */
+  assignees?: TaskAssigneeOption[];
+  assigneeLabel?: string;
+  defaultAssigneeId?: string;
+  onConfirm: (text: string, assigneeId?: string) => void;
 }
 
 function TaskActionDialog({
   open, onOpenChange, title, description, placeholder, confirmLabel,
-  required, requiredHint, variant = "default", loading, onConfirm,
+  required, requiredHint, variant = "default", loading,
+  assignees, assigneeLabel, defaultAssigneeId, onConfirm,
 }: TaskActionDialogProps) {
   const { t } = useTranslation("common");
   const [text, setText] = useState("");
-  useEffect(() => { if (open) setText(""); }, [open]);
-  const missing = !!required && text.trim() === "";
+  const [assigneeId, setAssigneeId] = useState<string>("");
+  useEffect(() => {
+    if (open) { setText(""); setAssigneeId(defaultAssigneeId ?? ""); }
+  }, [open, defaultAssigneeId]);
+  const withAssignee = !!assignees && assignees.length > 0;
+  const missing = (!!required && text.trim() === "") || (withAssignee && assigneeId === "");
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!loading) onOpenChange(v); }}>
@@ -121,6 +133,21 @@ function TaskActionDialog({
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">{description}</p>
+        {withAssignee && (
+          <div className="space-y-1">
+            {assigneeLabel && <p className="text-xs text-muted-foreground">{assigneeLabel}</p>}
+            <Select value={assigneeId} onValueChange={setAssigneeId} disabled={loading}>
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {assignees!.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         <Textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -136,7 +163,7 @@ function TaskActionDialog({
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={loading}>
             {t("cancel")}
           </Button>
-          <Button variant={variant} size="sm" onClick={() => onConfirm(text.trim())} disabled={loading || missing}>
+          <Button variant={variant} size="sm" onClick={() => onConfirm(text.trim(), assigneeId || undefined)} disabled={loading || missing}>
             {loading ? "..." : confirmLabel}
           </Button>
         </div>
@@ -158,7 +185,9 @@ interface TaskDetailDialogProps {
   }>;
   deleteTask?: (teamId: string, taskId: string) => Promise<void>;
   cancelTask?: (teamId: string, taskId: string, reason?: string) => Promise<void>;
-  retryTask?: (teamId: string, taskId: string, comment: string) => Promise<void>;
+  retryTask?: (teamId: string, taskId: string, comment: string, agentId?: string) => Promise<void>;
+  /** Team members a retried task may be (re)assigned to; the lead is excluded. */
+  assignees?: TaskAssigneeOption[];
   onAddComment?: (teamId: string, taskId: string, content: string) => Promise<void>;
   taskLookup?: Map<string, string>;
   memberLookup?: Map<string, string>;
@@ -168,7 +197,7 @@ interface TaskDetailDialogProps {
 
 export function TaskDetailDialog({
   task, teamId, isTeamV2, onClose,
-  getTaskDetail, deleteTask, cancelTask, retryTask, onAddComment, taskLookup, memberLookup, emojiLookup, onNavigateTask,
+  getTaskDetail, deleteTask, cancelTask, retryTask, assignees, onAddComment, taskLookup, memberLookup, emojiLookup, onNavigateTask,
 }: TaskDetailDialogProps) {
   const { t } = useTranslation("teams");
   const [events, setEvents] = useState<TeamTaskEvent[]>([]);
@@ -217,10 +246,14 @@ export function TaskDetailDialog({
     finally { setCancelling(false); setCancelOpen(false); }
   };
 
-  const handleRetry = async (comment: string) => {
+  const handleRetry = async (comment: string, assigneeId?: string) => {
     if (!retryTask || !comment) return;
+    // Only send agentId when it actually changes the assignee; the backend
+    // keeps the current owner otherwise.
+    const agentId = assigneeId && assigneeId !== task.owner_agent_id ? assigneeId : undefined;
+    if (!task.owner_agent_id && !agentId) return;
     setRetrying(true);
-    try { await retryTask(teamId, task.id, comment); onClose(); }
+    try { await retryTask(teamId, task.id, comment, agentId); onClose(); }
     catch { /* toast handled by hook */ }
     finally { setRetrying(false); setRetryOpen(false); }
   };
@@ -228,7 +261,9 @@ export function TaskDetailDialog({
   const ownerEmoji = resolveEmoji(task.owner_agent_id);
   const canDelete = deleteTask && isTerminalStatus(task.status);
   const canCancel = !!cancelTask && canCancelTask(task.status);
-  const canRetry = !!retryTask && canRetryTask(task);
+  // Without an owner the backend needs agentId, so retry is offered only when
+  // there is someone to pick.
+  const canRetry = !!retryTask && canRetryTask(task) && (!!task.owner_agent_id || (assignees?.length ?? 0) > 0);
 
   const handleAddComment = onAddComment
     ? async (content: string) => { await onAddComment(teamId, task.id, content); await loadDetail(); }
@@ -393,6 +428,9 @@ export function TaskDetailDialog({
           confirmLabel={t("tasks.retry")}
           required
           requiredHint={t("tasks.retryCommentRequired")}
+          assignees={assignees}
+          assigneeLabel={t("tasks.retryAssignee")}
+          defaultAssigneeId={task.owner_agent_id}
           loading={retrying}
           onConfirm={handleRetry}
         />

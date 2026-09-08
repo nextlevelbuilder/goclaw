@@ -65,6 +65,15 @@ export function buildMemberLookup(
   return map;
 }
 
+/** Members a task can be handed to on retry: everyone but the lead */
+export function buildAssigneeOptions(
+  members: TeamMemberData[],
+): { id: string; name: string }[] {
+  return members
+    .filter((m) => m.role !== "lead")
+    .map((m) => ({ id: m.agent_id, name: m.display_name || m.agent_key || m.agent_id.slice(0, 8) }));
+}
+
 /** Build agent_id -> emoji lookup from members */
 export function buildEmojiLookup(
   members: TeamMemberData[],

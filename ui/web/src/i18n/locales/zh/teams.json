@@ -138,7 +138,8 @@
     "retryTitle": "重试此任务",
     "retryDescription": "任务将作为新一轮运行返回给执行者。您的评论会发布到任务并包含在派发内容中——请在此写下答复或缺失的说明。",
     "retryCommentPlaceholder": "执行者应当如何调整，或者他们在等待什么答复？",
-    "retryCommentRequired": "重试需要填写评论。"
+    "retryCommentRequired": "重试需要填写评论。",
+    "retryAssignee": "执行者"
   },
   "delegations": {
     "noTitle": "暂无委托",

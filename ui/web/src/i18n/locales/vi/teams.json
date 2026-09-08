@@ -138,7 +138,8 @@
     "retryTitle": "Thử lại tác vụ này",
     "retryDescription": "Tác vụ sẽ được giao lại cho người thực hiện trong một lượt chạy mới. Bình luận của bạn được đăng lên tác vụ và đưa vào nội dung giao việc — hãy ghi câu trả lời hoặc hướng dẫn còn thiếu tại đây.",
     "retryCommentPlaceholder": "Người thực hiện cần làm gì khác đi, hoặc họ đang chờ câu trả lời nào?",
-    "retryCommentRequired": "Cần có bình luận để thử lại."
+    "retryCommentRequired": "Cần có bình luận để thử lại.",
+    "retryAssignee": "Người thực hiện"
   },
   "delegations": {
     "noTitle": "Không có ủy quyền",

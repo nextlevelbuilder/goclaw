@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, memo, lazy, Suspense
 import { useTranslation } from "react-i18next";
 import { useBoardStore } from "../stores/use-board-store";
 import { toast } from "@/stores/use-toast-store";
-import { buildTaskLookup, buildMemberLookup, buildEmojiLookup } from "./board-utils";
+import { buildTaskLookup, buildMemberLookup, buildEmojiLookup, buildAssigneeOptions } from "./board-utils";
 import { BoardToolbar } from "./board-toolbar";
 import { KanbanBoard } from "./kanban-board";
 import { TaskList } from "../task-sections";
@@ -31,7 +31,7 @@ interface BoardContainerProps {
   deleteTasksBulk?: (teamId: string, taskIds: string[]) => Promise<number>;
   addTaskComment?: (teamId: string, taskId: string, content: string) => Promise<void>;
   cancelTask?: (teamId: string, taskId: string, reason?: string) => Promise<void>;
-  retryTask?: (teamId: string, taskId: string, comment: string) => Promise<void>;
+  retryTask?: (teamId: string, taskId: string, comment: string, agentId?: string) => Promise<void>;
   onWorkspace?: () => void;
 }
 
@@ -60,6 +60,7 @@ export const BoardContainer = memo(function BoardContainer({
   // Lookups for name resolution
   const taskLookup = useMemo(() => buildTaskLookup(tasks), [tasks]);
   const memberLookup = useMemo(() => buildMemberLookup(members), [members]);
+  const assigneeOptions = useMemo(() => buildAssigneeOptions(members), [members]);
   const emojiLookup = useMemo(() => buildEmojiLookup(members), [members]);
 
   useEffect(() => { load(); }, [load]);
@@ -168,6 +169,7 @@ export const BoardContainer = memo(function BoardContainer({
             deleteTask={deleteTask}
             cancelTask={cancelTask}
             retryTask={retryTask}
+            assignees={assigneeOptions}
             taskLookup={taskLookup}
             memberLookup={memberLookup}
             emojiLookup={emojiLookup}
