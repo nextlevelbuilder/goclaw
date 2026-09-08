@@ -59,6 +59,9 @@ func TestBuildRequestBody_TemperatureSkippedForReasoningModels(t *testing.T) {
 	// These model families don't support custom temperature (locked to default).
 	// This is a model-level constraint, not provider-specific.
 	models := []string{
+		"gpt-5",
+		"gpt-5-chat",
+		"gpt-5-chat-latest",
 		"gpt-5-mini",
 		"gpt-5-mini-2025-01",
 		"gpt-5-nano",
@@ -68,6 +71,8 @@ func TestBuildRequestBody_TemperatureSkippedForReasoningModels(t *testing.T) {
 		"o3",
 		"o3-mini",
 		"o4-mini",
+		"openai/gpt-5",
+		"openai/gpt-5-chat-latest",
 		"openai/gpt-5-mini",
 		"openai/o3-mini",
 	}
@@ -96,7 +101,6 @@ func TestBuildRequestBody_TemperatureKeptForNonReasoningModels(t *testing.T) {
 		"gpt-4",
 		"gpt-4o",
 		"gpt-4-turbo",
-		"gpt-5",
 		"gpt-5.1",
 		"gpt-5.4",
 		"openai/gpt-5.4",
