@@ -22,8 +22,11 @@ import (
 // channel manager, so HandleAgentEvent drops its chunks and nothing reaches a
 // user incrementally — the task result keeps coming from the final RunResult.
 func TestHandleTeammateMessageSchedulesStreamedRun(t *testing.T) {
-	var gotReq agent.RunRequest
-	ran := make(chan struct{})
+	// The scheduler runs its RunFunc on its own goroutine, and the announce loop
+	// schedules a second run after the teammate one, so a shared variable here is
+	// written concurrently with the assertions below. Hand the requests over a
+	// channel instead: no shared state, and a second run cannot clobber the first.
+	scheduled := make(chan agent.RunRequest, 4)
 
 	sched := scheduler.NewScheduler(
 		scheduler.DefaultLanes(),
@@ -34,8 +37,10 @@ func TestHandleTeammateMessageSchedulesStreamedRun(t *testing.T) {
 			MaxConcurrent: 1,
 		},
 		func(_ context.Context, req agent.RunRequest) (*agent.RunResult, error) {
-			gotReq = req
-			close(ran)
+			select {
+			case scheduled <- req:
+			default:
+			}
 			return &agent.RunResult{Content: "member deliverable"}, nil
 		},
 	)
@@ -47,6 +52,14 @@ func TestHandleTeammateMessageSchedulesStreamedRun(t *testing.T) {
 		Sched:      sched,
 		ChannelMgr: channelMgr,
 	}
+	// handleTeammateMessage hands the announce loop to a background goroutine that
+	// keeps calling Schedule after this function returns. Drain it before the
+	// deferred Stop above runs, mirroring the shutdown order the gateway itself
+	// uses (gateway_consumer.go waits on BgWg; sched.Stop is an outer defer in
+	// gateway.go). Without this the teardown races the announce loop inside the
+	// lane's WaitGroup — Submit's Add against Stop's Wait — and -race fails the
+	// test intermittently.
+	defer deps.BgWg.Wait()
 
 	msg := bus.InboundMessage{
 		Channel:  tools.ChannelSystem,
@@ -65,8 +78,9 @@ func TestHandleTeammateMessageSchedulesStreamedRun(t *testing.T) {
 		t.Fatal("handleTeammateMessage() = false, want true for a teammate: message on the system channel")
 	}
 
+	var gotReq agent.RunRequest
 	select {
-	case <-ran:
+	case gotReq = <-scheduled:
 	case <-time.After(5 * time.Second):
 		t.Fatal("teammate run was never scheduled")
 	}
