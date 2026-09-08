@@ -82,6 +82,34 @@ func TestResolveDelegatedLeadTeamRead(t *testing.T) {
 		}
 	})
 
+	// l.dataDir arrives already tenant-scoped from resolver.go
+	// (config.TenantDataDir), which is why the resolver must not apply
+	// TenantLayer itself. Nothing pinned that: reapplying it would double-join
+	// the tenant segment and hand the lead a directory its own tasks never use,
+	// and the resulting path is plausible enough to survive review. The sibling
+	// branch in injectContext carries the same warning in a comment.
+	t.Run("TenantSegmentIsNotDoubled", func(t *testing.T) {
+		tenantScoped := filepath.Join(root, "tenants", "acme")
+		s := &mockTeamStoreLead{teams: []store.TeamData{
+			leadTeam(teamA, lead, store.TeamStatusActive, ""),
+		}}
+		// A tenant in context is what a reapplied TenantLayer would act on.
+		ctx := store.WithTenantSlug(store.WithTenantID(context.Background(), uuid.New()), "acme")
+		got := newLeadTestLoop(tenantScoped, lead, s).resolveDelegatedLeadTeamRead(ctx, req)
+		if !got.ok() {
+			t.Fatal("nothing resolved from a tenant-scoped data dir")
+		}
+		want := filepath.Join(tenantScoped, "teams", teamA.String(), "chat-1")
+		if got.workspace != want {
+			t.Errorf("workspace = %q, want %q", got.workspace, want)
+		}
+		if n := strings.Count(got.workspace, filepath.Join("tenants", "acme")); n != 1 {
+			t.Errorf("tenant segment appears %d times in %q, want exactly once — "+
+				"l.dataDir is already tenant-scoped, so TenantLayer must not be reapplied",
+				n, got.workspace)
+		}
+	})
+
 	t.Run("SharedTeamCollapsesToRoot", func(t *testing.T) {
 		s := &mockTeamStoreLead{teams: []store.TeamData{
 			leadTeam(teamA, lead, store.TeamStatusActive, `{"workspace_scope":"shared"}`),
