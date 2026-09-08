@@ -129,7 +129,16 @@
     "deleteBulkConfirm": "此操作将永久删除 {{count}} 个任务。输入「delete」确认。",
     "badges": {
       "awaitingReply": "等待回复"
-    }
+    },
+    "cancel": "取消任务",
+    "cancelTitle": "取消此任务？",
+    "cancelDescription": "任务将标记为已取消，被它阻塞的任务将变为待处理。如填写原因，将作为评论发布。",
+    "cancelReasonPlaceholder": "原因（可选）",
+    "retry": "重试",
+    "retryTitle": "重试此任务",
+    "retryDescription": "任务将作为新一轮运行返回给执行者。您的评论会发布到任务并包含在派发内容中——请在此写下答复或缺失的说明。",
+    "retryCommentPlaceholder": "执行者应当如何调整，或者他们在等待什么答复？",
+    "retryCommentRequired": "重试需要填写评论。"
   },
   "delegations": {
     "noTitle": "暂无委托",
@@ -352,7 +361,11 @@
     "failedRejectTask": "拒绝任务失败",
     "failedBulkDeleteTasks": "批量删除任务失败",
     "workspaceFileDeleted": "文件已删除",
-    "failedDeleteWorkspaceFile": "删除文件失败"
+    "failedDeleteWorkspaceFile": "删除文件失败",
+    "taskCancelled": "任务已取消",
+    "failedCancelTask": "取消任务失败",
+    "taskRetried": "任务已返回给执行者",
+    "failedRetryTask": "重试任务失败"
   },
   "board": {
     "kanban": "看板",

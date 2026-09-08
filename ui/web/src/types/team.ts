@@ -79,7 +79,7 @@ export interface TeamTaskData {
   team_id: string;
   subject: string;
   description?: string;
-  status: "pending" | "in_progress" | "completed" | "blocked" | "failed" | "in_review" | "cancelled";
+  status: "pending" | "in_progress" | "completed" | "blocked" | "failed" | "in_review" | "cancelled" | "stale";
   owner_agent_id?: string;
   owner_agent_key?: string;
   blocked_by?: string[];

@@ -129,7 +129,16 @@
     "deleteBulkConfirm": "This will permanently delete {{count}} task(s). Type \"delete\" to confirm.",
     "badges": {
       "awaitingReply": "awaiting reply"
-    }
+    },
+    "cancel": "Cancel task",
+    "cancelTitle": "Cancel this task?",
+    "cancelDescription": "The task is marked cancelled and tasks it was blocking become pending. The reason, if given, is posted as a comment.",
+    "cancelReasonPlaceholder": "Reason (optional)",
+    "retry": "Retry",
+    "retryTitle": "Retry this task",
+    "retryDescription": "The task goes back to its assignee as a new run. Your comment is posted on the task and included in the assignment — this is where the answer or missing instruction goes.",
+    "retryCommentPlaceholder": "What should the assignee do differently, or what was the answer they were waiting for?",
+    "retryCommentRequired": "A comment is required to retry."
   },
   "delegations": {
     "noTitle": "No delegations",
@@ -352,7 +361,11 @@
     "failedRejectTask": "Failed to reject task",
     "failedBulkDeleteTasks": "Failed to delete tasks",
     "workspaceFileDeleted": "File deleted",
-    "failedDeleteWorkspaceFile": "Failed to delete file"
+    "failedDeleteWorkspaceFile": "Failed to delete file",
+    "taskCancelled": "Task cancelled",
+    "failedCancelTask": "Failed to cancel task",
+    "taskRetried": "Task sent back to its assignee",
+    "failedRetryTask": "Failed to retry task"
   },
   "board": {
     "kanban": "Board",

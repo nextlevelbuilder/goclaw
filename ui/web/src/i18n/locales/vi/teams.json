@@ -129,7 +129,16 @@
     "deleteBulkConfirm": "Thao tác này sẽ xoá vĩnh viễn {{count}} task. Nhập \"delete\" để xác nhận.",
     "badges": {
       "awaitingReply": "chờ trả lời"
-    }
+    },
+    "cancel": "Hủy tác vụ",
+    "cancelTitle": "Hủy tác vụ này?",
+    "cancelDescription": "Tác vụ sẽ được đánh dấu đã hủy, các tác vụ bị nó chặn sẽ chuyển sang chờ xử lý. Lý do (nếu có) sẽ được đăng dưới dạng bình luận.",
+    "cancelReasonPlaceholder": "Lý do (không bắt buộc)",
+    "retry": "Thử lại",
+    "retryTitle": "Thử lại tác vụ này",
+    "retryDescription": "Tác vụ sẽ được giao lại cho người thực hiện trong một lượt chạy mới. Bình luận của bạn được đăng lên tác vụ và đưa vào nội dung giao việc — hãy ghi câu trả lời hoặc hướng dẫn còn thiếu tại đây.",
+    "retryCommentPlaceholder": "Người thực hiện cần làm gì khác đi, hoặc họ đang chờ câu trả lời nào?",
+    "retryCommentRequired": "Cần có bình luận để thử lại."
   },
   "delegations": {
     "noTitle": "Không có ủy quyền",
@@ -352,7 +361,11 @@
     "failedRejectTask": "Không thể từ chối task",
     "failedBulkDeleteTasks": "Không thể xóa các task",
     "workspaceFileDeleted": "Đã xóa file",
-    "failedDeleteWorkspaceFile": "Không thể xóa file"
+    "failedDeleteWorkspaceFile": "Không thể xóa file",
+    "taskCancelled": "Đã hủy tác vụ",
+    "failedCancelTask": "Không thể hủy tác vụ",
+    "taskRetried": "Đã giao lại tác vụ cho người thực hiện",
+    "failedRetryTask": "Không thể thử lại tác vụ"
   },
   "board": {
     "kanban": "Bảng",

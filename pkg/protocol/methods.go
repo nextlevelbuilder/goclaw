@@ -145,6 +145,8 @@ const (
 	MethodTeamsTaskDelete          = "teams.tasks.delete"
 	MethodTeamsTaskDeleteBulk      = "teams.tasks.delete-bulk"
 	MethodTeamsTaskAssign          = "teams.tasks.assign"
+	MethodTeamsTaskCancel          = "teams.tasks.cancel"
+	MethodTeamsTaskRetry           = "teams.tasks.retry"
 	MethodTeamsTaskActiveBySession = "teams.tasks.active-by-session"
 	MethodTeamsMembersAdd          = "teams.members.add"
 	MethodTeamsMembersRemove       = "teams.members.remove"

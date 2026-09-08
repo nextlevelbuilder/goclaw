@@ -23,6 +23,7 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
   const {
     getTeam, getTeamTasks, getTeamScopes, addMember, removeMember, deleteTeam,
     getTaskDetail, getTaskLight, deleteTask, deleteTasksBulk, addTaskComment, updateTeam,
+    cancelTask, retryTask,
   } = useTeams();
 
   // Wrap addTaskComment to match (teamId, taskId, content) signature expected by UI components.
@@ -122,6 +123,8 @@ export function TeamDetailPage({ teamId, onBack }: TeamDetailPageProps) {
         deleteTask={deleteTask}
         deleteTasksBulk={deleteTasksBulk}
         addTaskComment={handleAddComment}
+        cancelTask={cancelTask}
+        retryTask={retryTask}
         onWorkspace={() => setWorkspaceOpen(true)}
       />
 

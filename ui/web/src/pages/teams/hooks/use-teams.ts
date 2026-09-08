@@ -230,6 +230,34 @@ export function useTeams() {
     [ws],
   );
 
+  const cancelTask = useCallback(
+    async (teamId: string, taskId: string, reason?: string) => {
+      try {
+        await ws.call(Methods.TEAMS_TASK_CANCEL, { teamId, taskId, reason });
+        toast.success(i18next.t("teams:toast.taskCancelled"));
+      } catch (err) {
+        toast.error(i18next.t("teams:toast.failedCancelTask"), userFriendlyError(err));
+        throw err;
+      }
+    },
+    [ws],
+  );
+
+  // Retry always carries a human comment: it is the answer the assignee was
+  // missing, and the backend rejects an empty one.
+  const retryTask = useCallback(
+    async (teamId: string, taskId: string, comment: string, agentId?: string) => {
+      try {
+        await ws.call(Methods.TEAMS_TASK_RETRY, { teamId, taskId, comment, agentId });
+        toast.success(i18next.t("teams:toast.taskRetried"));
+      } catch (err) {
+        toast.error(i18next.t("teams:toast.failedRetryTask"), userFriendlyError(err));
+        throw err;
+      }
+    },
+    [ws],
+  );
+
   const addMember = useCallback(
     async (teamId: string, agent: string, role?: string) => {
       try {
@@ -272,7 +300,7 @@ export function useTeams() {
   return {
     teams, loading, load, createTeam, deleteTeam, getTeam, getTeamTasks, getTeamScopes,
     getTaskDetail, getTaskLight, approveTask, rejectTask, addTaskComment, getTaskComments, getTaskEvents,
-    createTask, deleteTask, deleteTasksBulk, assignTask,
+    createTask, deleteTask, deleteTasksBulk, assignTask, cancelTask, retryTask,
     addMember, removeMember, updateTeam,
   };
 }

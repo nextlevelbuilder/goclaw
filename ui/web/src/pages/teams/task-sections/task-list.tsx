@@ -30,11 +30,13 @@ interface TaskListProps {
   deleteTask?: (teamId: string, taskId: string) => Promise<void>;
   deleteTasksBulk?: (teamId: string, taskIds: string[]) => Promise<number>;
   addTaskComment?: (teamId: string, taskId: string, content: string) => Promise<void>;
+  cancelTask?: (teamId: string, taskId: string, reason?: string) => Promise<void>;
+  retryTask?: (teamId: string, taskId: string, comment: string) => Promise<void>;
 }
 
 export function TaskList({
   tasks, loading, teamId, members, isTeamV2, emojiLookup,
-  getTaskDetail, deleteTask, deleteTasksBulk, addTaskComment,
+  getTaskDetail, deleteTask, deleteTasksBulk, addTaskComment, cancelTask, retryTask,
 }: TaskListProps) {
   const { t } = useTranslation("teams");
   const [selectedTask, setSelectedTask] = useState<TeamTaskData | null>(null);
@@ -277,6 +279,8 @@ export function TaskList({
             onClose={() => setSelectedTask(null)}
             getTaskDetail={getTaskDetail}
             deleteTask={deleteTask}
+            cancelTask={cancelTask}
+            retryTask={retryTask}
             onAddComment={addTaskComment}
             taskLookup={taskLookup}
             memberLookup={memberLookup}

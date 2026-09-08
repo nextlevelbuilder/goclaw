@@ -129,7 +129,16 @@
     "deleteBulkConfirm": "{{count}}개 태스크가 영구적으로 삭제됩니다. 확인하려면 \"delete\"를 입력하세요.",
     "badges": {
       "awaitingReply": "응답 대기 중"
-    }
+    },
+    "cancel": "작업 취소",
+    "cancelTitle": "이 작업을 취소할까요?",
+    "cancelDescription": "작업은 취소됨으로 표시되고, 이 작업이 차단하던 작업은 대기 상태가 됩니다. 사유를 입력하면 댓글로 기록됩니다.",
+    "cancelReasonPlaceholder": "사유(선택)",
+    "retry": "재시도",
+    "retryTitle": "작업 재시도",
+    "retryDescription": "작업이 담당자에게 새 실행으로 다시 전달됩니다. 댓글은 작업에 기록되고 배정 내용에 포함됩니다. 답변이나 누락된 지시를 여기에 적으세요.",
+    "retryCommentPlaceholder": "담당자가 무엇을 다르게 해야 하나요, 또는 어떤 답변을 기다리고 있었나요?",
+    "retryCommentRequired": "재시도하려면 댓글이 필요합니다."
   },
   "delegations": {
     "noTitle": "위임 없음",
@@ -344,7 +353,11 @@
     "failedRejectTask": "태스크 거부 실패",
     "failedBulkDeleteTasks": "태스크 삭제 실패",
     "workspaceFileDeleted": "파일 삭제됨",
-    "failedDeleteWorkspaceFile": "파일 삭제 실패"
+    "failedDeleteWorkspaceFile": "파일 삭제 실패",
+    "taskCancelled": "작업이 취소되었습니다",
+    "failedCancelTask": "작업 취소 실패",
+    "taskRetried": "작업이 담당자에게 다시 전달되었습니다",
+    "failedRetryTask": "작업 재시도 실패"
   },
   "board": {
     "kanban": "보드",

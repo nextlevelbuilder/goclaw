@@ -288,6 +288,8 @@ flowchart TD
 | `teams.tasks.delete` | Delete a task |
 | `teams.tasks.claim` | Claim a task (mark as in-progress) |
 | `teams.tasks.assign` | Assign task to member |
+| `teams.tasks.cancel` | Cancel an unfinished task from the dashboard |
+| `teams.tasks.retry` | Re-dispatch a stuck task to its assignee with a required human comment |
 | `teams.tasks.approve` | Approve completed task |
 | `teams.tasks.reject` | Reject task submission |
 | `teams.tasks.comment` | Add comment to task |

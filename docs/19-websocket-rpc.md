@@ -431,6 +431,8 @@ sequenceDiagram
 | `teams.tasks.comments` | List comments |
 | `teams.tasks.events` | List task events |
 | `teams.tasks.assign` | Assign to member |
+| `teams.tasks.cancel` | Cancel an unfinished task (human); optional `reason` is posted as a comment |
+| `teams.tasks.retry` | Send a stale/failed/cancelled/blocked task back to its assignee; `comment` required, optional `agentId` reassigns |
 | `teams.tasks.delete` | Delete task |
 | `teams.tasks.delete-bulk` | Bulk delete tasks |
 

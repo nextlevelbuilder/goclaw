@@ -57,6 +57,8 @@ func (m *TeamsMethods) RegisterTasks(router *gateway.MethodRouter) {
 	router.Register(protocol.MethodTeamsTaskDelete, m.handleTaskDelete)
 	router.Register(protocol.MethodTeamsTaskDeleteBulk, m.handleTaskDeleteBulk)
 	router.Register(protocol.MethodTeamsTaskAssign, m.handleTaskAssign)
+	router.Register(protocol.MethodTeamsTaskCancel, m.handleTaskCancel)
+	router.Register(protocol.MethodTeamsTaskRetry, m.handleTaskRetry)
 }
 
 // --- Task Get (with comments + events + attachments) ---

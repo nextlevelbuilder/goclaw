@@ -21,6 +21,15 @@ All notable changes to GoClaw are documented here. For full documentation, see [
   the UUID, while the agent-facing `team_tasks` tool and RPCs take the full
   UUID, so a human had no way to name a task to the lead from the dashboard.
 
+- **Dashboard can cancel and retry stuck team tasks** — new WS RPCs
+  `teams.tasks.cancel` (any task not yet completed/cancelled; optional reason is
+  posted as a comment) and `teams.tasks.retry` (stale / failed / cancelled /
+  in_review, and blocked tasks that nothing blocks any more; a human comment is
+  required and is both posted on the task and appended to the assignment prompt).
+  Task detail dialog gets Retry and Cancel buttons. Previously these transitions
+  were reachable only through the lead agent's `team_tasks` tool, so a task that
+  ended up blocked or stale could not be recovered from the UI (#506).
+
 - **Behavior UX sidecar delivery overrides** — Adds sidecar-generated Quick
   Acknowledgement and Intermediate Replies with provider/model, timeout, token,
   and char caps. Effective config resolves Channel > Agent > Workspace, with

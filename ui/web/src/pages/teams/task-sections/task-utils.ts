@@ -23,3 +23,20 @@ const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"]);
 export function isTerminalStatus(status: string) {
   return TERMINAL_STATUSES.has(status);
 }
+
+/** Whether a human can cancel the task (teams.tasks.cancel): anything not completed/cancelled */
+export function canCancelTask(status: string) {
+  return status !== "completed" && status !== "cancelled";
+}
+
+const RETRYABLE_STATUSES = new Set(["stale", "failed", "cancelled", "in_review", "blocked"]);
+
+/**
+ * Whether a human can restart the task (teams.tasks.retry). Mirrors the
+ * backend: blocked tasks qualify only once nothing blocks them any more.
+ */
+export function canRetryTask(task: { status: string; blocked_by?: string[] | null }) {
+  if (!RETRYABLE_STATUSES.has(task.status)) return false;
+  if (task.status === "blocked" && task.blocked_by && task.blocked_by.length > 0) return false;
+  return true;
+}
