@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import {
-  Trash2, ArrowUp, ArrowDown, ArrowRight, AlertTriangle,
+  Trash2, ArrowUp, ArrowDown, ArrowRight, AlertTriangle, Copy, Check,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatDate } from "@/lib/format";
@@ -39,6 +39,42 @@ function PriorityIcon({ priority }: { priority?: number }) {
 
 function priorityLabel(priority?: number) {
   return priority != null ? (PRIORITY_CONFIG[priority]?.label ?? String(priority)) : "\u2014";
+}
+
+/* ── Task UUID with copy ──────────────────────────────────────── */
+
+// The short identifier (T-015-cc8e) carries only the last four hex chars of
+// the UUID, while every agent-facing tool (team_tasks get/retry/cancel, comments)
+// takes the full UUID. Show it in full and make it one click to copy so a
+// human can hand the exact task to the lead in chat.
+function TaskIdCopy({ id, label, copiedLabel }: { id: string; label: string; copiedLabel: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(id);
+      setCopied(true);
+    } catch { /* clipboard unavailable (insecure context) — the text is still selectable */ }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title={copied ? copiedLabel : label}
+      className="inline-flex items-center gap-1 rounded px-1 font-mono text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground select-all"
+    >
+      <span className="truncate max-w-[16rem] sm:max-w-none">{id}</span>
+      {copied
+        ? <Check className="h-3 w-3 shrink-0 text-green-600" />
+        : <Copy className="h-3 w-3 shrink-0" />}
+    </button>
+  );
 }
 
 /* ── Metadata item ────────────────────────────────────────────── */
@@ -129,6 +165,7 @@ export function TaskDetailDialog({
             <Badge variant={taskStatusBadgeVariant(task.status)} className="text-xs">
               {task.status.replace(/_/g, " ")}
             </Badge>
+            <TaskIdCopy id={task.id} label={t("tasks.detail.copyId")} copiedLabel={t("tasks.detail.copied")} />
           </div>
           <DialogTitle className="text-base sm:text-lg">{task.subject}</DialogTitle>
         </DialogHeader>

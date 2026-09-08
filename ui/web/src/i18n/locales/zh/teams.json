@@ -117,7 +117,9 @@
       "followupCountMax": "已提醒：{{count}}/{{max}} 次",
       "followupNext": "下次提醒：",
       "followupDone": "已全部提醒",
-      "download": "下载"
+      "download": "下载",
+      "copyId": "复制任务 ID",
+      "copied": "已复制"
     },
     "delete": "删除",
     "deleteConfirm": "删除此任务？此操作无法撤消。",

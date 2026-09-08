@@ -117,7 +117,9 @@
       "followupCountMax": "Reminders sent: {{count}}/{{max}}",
       "followupNext": "Next reminder:",
       "followupDone": "All reminders sent",
-      "download": "Download"
+      "download": "Download",
+      "copyId": "Copy task ID",
+      "copied": "Copied"
     },
     "delete": "Delete",
     "deleteConfirm": "Delete this task? This cannot be undone.",

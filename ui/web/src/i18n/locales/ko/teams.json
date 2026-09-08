@@ -117,7 +117,9 @@
       "followupCountMax": "알림 발송: {{count}}/{{max}}회",
       "followupNext": "다음 알림:",
       "followupDone": "모든 알림 발송됨",
-      "download": "다운로드"
+      "download": "다운로드",
+      "copyId": "작업 ID 복사",
+      "copied": "복사됨"
     },
     "delete": "삭제",
     "deleteConfirm": "이 태스크를 삭제하시겠습니까? 취소할 수 없습니다.",

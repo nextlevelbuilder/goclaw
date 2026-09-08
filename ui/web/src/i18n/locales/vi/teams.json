@@ -117,7 +117,9 @@
       "followupCountMax": "Đã nhắc: {{count}}/{{max}} lần",
       "followupNext": "Nhắc tiếp:",
       "followupDone": "Đã nhắc hết",
-      "download": "Tải xuống"
+      "download": "Tải xuống",
+      "copyId": "Sao chép ID tác vụ",
+      "copied": "Đã sao chép"
     },
     "delete": "Xoá",
     "deleteConfirm": "Xoá task này? Không thể hoàn tác.",
