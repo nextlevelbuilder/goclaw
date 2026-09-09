@@ -61,6 +61,17 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 		slog.Info("registered provider", "name", "openrouter")
 	}
 
+	if cfg.Providers.OrcaRouter.APIKey != "" {
+		base := cfg.Providers.OrcaRouter.APIBase
+		if base == "" {
+			base = store.OrcaRouterDefaultAPIBase
+		}
+		prov := providers.NewOpenAIProvider("orcarouter", cfg.Providers.OrcaRouter.APIKey, base, store.OrcaRouterDefaultModel)
+		prov.WithProviderType(store.ProviderOrcaRouter)
+		registry.Register(prov)
+		slog.Info("registered provider", "name", "orcarouter")
+	}
+
 	if cfg.Providers.Groq.APIKey != "" {
 		registry.Register(providers.NewOpenAIProvider("groq", cfg.Providers.Groq.APIKey, "https://api.groq.com/openai/v1", "llama-3.3-70b-versatile"))
 		slog.Info("registered provider", "name", "groq")
@@ -449,6 +460,14 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			registry.RegisterForTenant(p.TenantID, prov)
 		case store.ProviderAIMLAPI:
 			prov := providers.NewAIMLAPIProvider(p.Name, p.APIKey, p.APIBase)
+			prov.WithProviderType(p.ProviderType)
+			registry.RegisterForTenant(p.TenantID, prov)
+		case store.ProviderOrcaRouter:
+			base := p.APIBase
+			if base == "" {
+				base = store.OrcaRouterDefaultAPIBase
+			}
+			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, store.OrcaRouterDefaultModel)
 			prov.WithProviderType(p.ProviderType)
 			registry.RegisterForTenant(p.TenantID, prov)
 		default:

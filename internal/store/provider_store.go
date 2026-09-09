@@ -37,6 +37,11 @@ const (
 	ProviderVertex          = "vertex"          // Google Cloud Vertex AI (OAuth2 service account + ADC)
 	ProviderKimiCoding      = "kimi_coding"     // Moonshot Kimi Coding (OpenAI-compat, requires fixed User-Agent)
 	ProviderAtlasCloud      = "atlascloud"      // Atlas Cloud (OpenAI-compatible endpoint)
+	ProviderOrcaRouter      = "orcarouter"      // OrcaRouter (OpenAI-compatible gateway, provider-prefixed model IDs)
+
+	// OrcaRouter defaults.
+	OrcaRouterDefaultAPIBase = "https://api.orcarouter.ai/v1"
+	OrcaRouterDefaultModel   = "orcarouter/auto"
 
 	// MiniMax defaults.
 	MiniMaxDefaultAPIBase = "https://api.minimax.io/v1"
@@ -102,6 +107,7 @@ var ValidProviderTypes = map[string]bool{
 	ProviderVertex:          true,
 	ProviderKimiCoding:      true,
 	ProviderAtlasCloud:      true,
+	ProviderOrcaRouter:      true,
 }
 
 // VertexProviderSettings holds Vertex-specific config stored in llm_providers.settings JSONB.

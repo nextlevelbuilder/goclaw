@@ -25,6 +25,7 @@ func (c *Config) MaskedCopy() *Config {
 	maskNonEmpty(&cp.Providers.OpenAI.APIKey)
 	maskNonEmpty(&cp.Providers.AtlasCloud.APIKey)
 	maskNonEmpty(&cp.Providers.OpenRouter.APIKey)
+	maskNonEmpty(&cp.Providers.OrcaRouter.APIKey)
 	maskNonEmpty(&cp.Providers.Groq.APIKey)
 	maskNonEmpty(&cp.Providers.DeepSeek.APIKey)
 	maskNonEmpty(&cp.Providers.Gemini.APIKey)
@@ -75,6 +76,7 @@ func (c *Config) StripSecrets() {
 	c.Providers.OpenAI.APIKey = ""
 	c.Providers.AtlasCloud.APIKey = ""
 	c.Providers.OpenRouter.APIKey = ""
+	c.Providers.OrcaRouter.APIKey = ""
 	c.Providers.Groq.APIKey = ""
 	c.Providers.DeepSeek.APIKey = ""
 	c.Providers.Gemini.APIKey = ""
@@ -130,6 +132,7 @@ func (c *Config) StripMaskedSecrets() {
 	stripIfMasked(&c.Providers.OpenAI.APIKey)
 	stripIfMasked(&c.Providers.AtlasCloud.APIKey)
 	stripIfMasked(&c.Providers.OpenRouter.APIKey)
+	stripIfMasked(&c.Providers.OrcaRouter.APIKey)
 	stripIfMasked(&c.Providers.Groq.APIKey)
 	stripIfMasked(&c.Providers.DeepSeek.APIKey)
 	stripIfMasked(&c.Providers.Gemini.APIKey)

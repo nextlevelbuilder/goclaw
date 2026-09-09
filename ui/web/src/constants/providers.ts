@@ -19,6 +19,7 @@ export const PROVIDER_TYPES: ProviderTypeInfo[] = [
   { value: "gemini_native", label: "Google Gemini", apiBase: "https://generativelanguage.googleapis.com/v1beta/openai", placeholder: "" },
   { value: "vertex", label: "Google Vertex AI", apiBase: "", placeholder: "Auto-computed from project_id + region (settings)" },
   { value: "openrouter", label: "OpenRouter", apiBase: "https://openrouter.ai/api/v1", placeholder: "" },
+  { value: "orcarouter", label: "OrcaRouter", apiBase: "https://api.orcarouter.ai/v1", placeholder: "" },
   { value: "groq", label: "Groq", apiBase: "https://api.groq.com/openai/v1", placeholder: "" },
   { value: "deepseek", label: "DeepSeek", apiBase: "https://api.deepseek.com/v1", placeholder: "" },
   { value: "mistral", label: "Mistral AI", apiBase: "https://api.mistral.ai/v1", placeholder: "" },
