@@ -970,8 +970,8 @@ func TestCodexBuildRequestBodyImageGenerationTool(t *testing.T) {
 	if tool["action"] != "generate" {
 		t.Errorf("tool[action] = %v, want generate", tool["action"])
 	}
-	if tool["model"] != "gpt-image-2" {
-		t.Errorf("tool[model] = %v, want gpt-image-2", tool["model"])
+	if tool["model"] != DefaultImageModel {
+		t.Errorf("tool[model] = %v, want %v", tool["model"], DefaultImageModel)
 	}
 	if tool["output_format"] != "png" {
 		t.Errorf("tool[output_format] = %v, want png", tool["output_format"])
@@ -1039,8 +1039,8 @@ func TestCodexBuildRequestBodyMixedTools(t *testing.T) {
 	if img["action"] != "generate" {
 		t.Errorf("tools[1] action = %v, want generate", img["action"])
 	}
-	if img["model"] != "gpt-image-2" {
-		t.Errorf("tools[1] model = %v, want gpt-image-2", img["model"])
+	if img["model"] != DefaultImageModel {
+		t.Errorf("tools[1] model = %v, want %v", img["model"], DefaultImageModel)
 	}
 	// Function field must not bleed into image tool.
 	if _, has := img["name"]; has {

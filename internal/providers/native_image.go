@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // NativeImageProvider is implemented by OAuth-backed providers whose upstream
@@ -14,17 +15,29 @@ type NativeImageProvider interface {
 }
 
 // DefaultImageModel is the image model used by the Responses API image_generation
-// tool when the caller does not specify one. gpt-image-2 is the current (2026-Q2)
-// quality baseline; gpt-image-1.5 is available as a legacy fallback.
-const DefaultImageModel = "gpt-image-2"
+// tool when the caller does not specify one. GPT Image 2.5 (2026-09-08) ships as
+// two model IDs instead of one: "flare" tuned for speed, "sunburst" tuned for
+// editing precision. Flare is the default because it beats gpt-image-2 on quality
+// at roughly half the latency, which suits the one-shot create_image path.
+const DefaultImageModel = "gpt-image-2.5-flare"
 
 // allowedImageModels enumerates the image models the native ChatGPT Responses API
 // image_generation tool will accept. Constraining to this whitelist prevents
-// silent upstream rejections from arbitrary model names (e.g. "dall-e-3") and
-// keeps the PR's motivation — gpt-image-2 quality — as the default everywhere.
+// silent upstream rejections from arbitrary model names (e.g. "dall-e-3").
 var allowedImageModels = map[string]bool{
-	"gpt-image-2":   true, // default — latest quality
-	"gpt-image-1.5": true, // legacy fallback
+	"gpt-image-2.5-flare":    true, // default - fastest at high quality
+	"gpt-image-2.5-sunburst": true, // most capable at editing precision
+	"gpt-image-2":            true, // previous generation
+	"gpt-image-1.5":          true, // legacy fallback
+}
+
+// allowedImageModelList is the whitelist rendered for error messages, ordered
+// newest first so the suggestion a caller sees leads with the recommended model.
+var allowedImageModelList = []string{
+	"gpt-image-2.5-flare (default)",
+	"gpt-image-2.5-sunburst",
+	"gpt-image-2",
+	"gpt-image-1.5 (legacy)",
 }
 
 // ValidateImageModel returns the model to use, or an error if the caller
@@ -34,7 +47,7 @@ func ValidateImageModel(model string) (string, error) {
 		return DefaultImageModel, nil
 	}
 	if !allowedImageModels[model] {
-		return "", fmt.Errorf("unsupported image model %q; allowed: gpt-image-2 (default), gpt-image-1.5 (legacy)", model)
+		return "", fmt.Errorf("unsupported image model %q; allowed: %s", model, strings.Join(allowedImageModelList, ", "))
 	}
 	return model, nil
 }
@@ -47,7 +60,7 @@ type NativeImageRequest struct {
 	Model string
 
 	// ImageModel is the image-generation model attached to the image_generation
-	// tool (e.g. "gpt-image-2"). Must be a value accepted by ValidateImageModel;
+	// tool (e.g. "gpt-image-2.5-flare"). Must be a value accepted by ValidateImageModel;
 	// empty falls back to DefaultImageModel.
 	ImageModel string
 

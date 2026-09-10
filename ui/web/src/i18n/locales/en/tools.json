@@ -246,7 +246,9 @@
       "save": "Save",
       "saving": "Saving...",
       "imageModelLabel": "Image model",
-      "imageModelDefaultOption": "Default · gpt-image-2 (recommended)",
+      "imageModelFlareOption": "Default · gpt-image-2.5-flare (recommended)",
+      "imageModelSunburstOption": "Precise · gpt-image-2.5-sunburst",
+      "imageModelPreviousOption": "Previous · gpt-image-2",
       "imageModelLegacyOption": "Legacy · gpt-image-1.5"
     },
     "toast": {

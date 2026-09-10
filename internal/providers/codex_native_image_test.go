@@ -53,7 +53,7 @@ func mockImageServer(t *testing.T, captured *[]byte) *httptest.Server {
 // asserts each required field is present and well-formed.
 //
 // Sub-cases:
-//   - Default (empty ImageModel) → tools[0].model == "gpt-image-2"
+//   - Default (empty ImageModel) → tools[0].model == DefaultImageModel
 //   - Legacy (ImageModel: "gpt-image-1.5") → tools[0].model == "gpt-image-1.5"
 //   - Rejected (ImageModel: "dall-e-3") → GenerateImage returns error containing "unsupported image model"
 func TestCodexGenerateImage_BuildsNativeRequest(t *testing.T) {
@@ -163,7 +163,7 @@ func TestCodexGenerateImage_BuildsNativeRequest(t *testing.T) {
 }
 
 // TestCodexGenerateImage_ImageModelDefault verifies that an empty ImageModel results
-// in the default gpt-image-2 model in the outbound tools[0].model field.
+// in DefaultImageModel in the outbound tools[0].model field.
 func TestCodexGenerateImage_ImageModelDefault(t *testing.T) {
 	var captured []byte
 	server := mockImageServer(t, &captured)
@@ -174,7 +174,7 @@ func TestCodexGenerateImage_ImageModelDefault(t *testing.T) {
 
 	_, err := p.GenerateImage(context.Background(), NativeImageRequest{
 		Prompt:      "test",
-		ImageModel:  "", // explicitly empty — should default to gpt-image-2
+		ImageModel:  "", // explicitly empty - should fall back to DefaultImageModel
 		AspectRatio: "1:1",
 	})
 	if err != nil {
@@ -190,8 +190,8 @@ func TestCodexGenerateImage_ImageModelDefault(t *testing.T) {
 		t.Fatal("tools array is empty")
 	}
 	tool, _ := tools[0].(map[string]any)
-	if imgModel, _ := tool["model"].(string); imgModel != "gpt-image-2" {
-		t.Errorf("tools[0].model = %q, want gpt-image-2 (default)", imgModel)
+	if imgModel, _ := tool["model"].(string); imgModel != DefaultImageModel {
+		t.Errorf("tools[0].model = %q, want %q (default)", imgModel, DefaultImageModel)
 	}
 }
 

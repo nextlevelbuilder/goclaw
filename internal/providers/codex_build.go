@@ -118,7 +118,7 @@ func (p *CodexProvider) buildRequestBody(req ChatRequest, stream bool) map[strin
 				tools = append(tools, map[string]any{
 					"type":           "image_generation",
 					"action":         "generate",
-					"model":          "gpt-image-2",
+					"model":          DefaultImageModel,
 					"output_format":  "png",
 					"partial_images": 1,
 				})

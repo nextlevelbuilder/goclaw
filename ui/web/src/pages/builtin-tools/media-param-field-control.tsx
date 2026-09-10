@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -20,9 +21,14 @@ export function ParamFieldControl({
   value: unknown;
   onChange: (v: unknown) => void;
 }) {
+  const { t } = useTranslation("tools");
+  // Schema labels are English literals; labelKey opts a field into i18n.
+  const label = (f: { label: string; labelKey?: string }) =>
+    f.labelKey ? t(f.labelKey, { defaultValue: f.label }) : f.label;
+
   return (
     <div className="space-y-1">
-      <Label className="text-xs">{field.label}</Label>
+      <Label className="text-xs">{label(field)}</Label>
       {field.type === "select" && field.options && (
         <Select value={String(value ?? "")} onValueChange={onChange}>
           <SelectTrigger className="h-8 text-sm">
@@ -31,7 +37,7 @@ export function ParamFieldControl({
           <SelectContent>
             {field.options.map((opt) => (
               <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
+                {label(opt)}
               </SelectItem>
             ))}
           </SelectContent>

@@ -171,7 +171,12 @@
       "addProvider": "공급자 추가",
       "cancel": "취소",
       "save": "저장",
-      "saving": "저장 중..."
+      "saving": "저장 중...",
+      "imageModelLabel": "이미지 모델",
+      "imageModelFlareOption": "기본 · gpt-image-2.5-flare (권장)",
+      "imageModelSunburstOption": "정밀 · gpt-image-2.5-sunburst",
+      "imageModelPreviousOption": "이전 · gpt-image-2",
+      "imageModelLegacyOption": "레거시 · gpt-image-1.5"
     },
     "toast": {
       "toggled": "도구 업데이트됨",

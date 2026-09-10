@@ -201,7 +201,7 @@ func TestCreateImageTool_ThreadsImageModel(t *testing.T) {
 		{
 			name:            "default (empty params.image_model)",
 			chainImageModel: "",
-			wantImageModel:  "", // provider validator defaults to gpt-image-2
+			wantImageModel:  "", // passed through empty; the provider validator applies the default
 		},
 		{
 			name:            "legacy gpt-image-1.5",
