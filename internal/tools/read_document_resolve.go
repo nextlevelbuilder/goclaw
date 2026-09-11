@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nextlevelbuilder/goclaw/internal/mediabudget"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
@@ -109,6 +110,7 @@ func (t *ReadDocumentTool) callProvider(ctx context.Context, cp credentialProvid
 	prompt := GetParamString(params, "prompt", "Analyze this document and describe its contents.")
 	data, _ := params["data"].([]byte)
 	mime := GetParamString(params, "mime", "application/octet-stream")
+	docPath, _ := params[documentLocalPathParam].(string)
 
 	// Gemini: use native API (requires credentials; OpenAI-compat endpoint doesn't support non-image MIME types).
 	ptype := GetParamString(params, "_provider_type", providerTypeFromName(providerName))
@@ -125,7 +127,7 @@ func (t *ReadDocumentTool) callProvider(ctx context.Context, cp credentialProvid
 			Model:   model,
 			Options: map[string]any{"max_tokens": 16384},
 		}
-		reservation, reserveErr := reserveToolLLMUsageWithMedia(ctx, t.usageCaps, t.Name(), providerName, model, chatReq, mime, data)
+		reservation, reserveErr := reserveToolLLMUsageWithMedia(ctx, t.usageCaps, t.Name(), providerName, model, chatReq, mediabudget.Payload{Kind: mediabudget.KindDocument, MIME: mime, Size: int64(len(data)), Path: docPath, Head: data})
 		if reserveErr != nil {
 			return nil, nil, reserveErr
 		}
@@ -170,7 +172,11 @@ func (t *ReadDocumentTool) callProvider(ctx context.Context, cp credentialProvid
 		Model:   model,
 		Options: opts,
 	}
-	reservation, reserveErr := reserveToolLLMUsage(ctx, t.usageCaps, t.Name(), providerName, model, chatReq)
+	// Charged on the same terms as the Gemini branch: the base64 document
+	// rides in a content part the token counter does not price, so an
+	// unpriced branch here is a way round the gate the Gemini branch applies.
+	payload := mediabudget.Payload{Kind: mediabudget.KindDocument, MIME: mime, Size: int64(len(data)), Path: docPath, Head: data}
+	reservation, reserveErr := reserveToolLLMUsageWithMedia(ctx, t.usageCaps, t.Name(), providerName, model, chatReq, payload)
 	if reserveErr != nil {
 		return nil, nil, reserveErr
 	}

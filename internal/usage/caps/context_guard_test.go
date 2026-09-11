@@ -150,3 +150,32 @@ func TestCapsChat_AgentBudgetSameRequestDiffersByWindow(t *testing.T) {
 		t.Fatal("200k agent: provider should have been called")
 	}
 }
+
+// TestGuardContextWindowWithMediaTokens_AddsMediaToCompleteInput proves an
+// out-of-band payload counts toward completeInput even though the ChatRequest
+// never shows it. The same request passes without the media charge and fails
+// with it.
+func TestGuardContextWindowWithMediaTokens_AddsMediaToCompleteInput(t *testing.T) {
+	req := providers.ChatRequest{
+		Model:    "gemini-2.0-flash",
+		Messages: []providers.Message{{Role: "user", Content: "describe this video"}},
+		Options:  map[string]any{providers.OptMaxTokens: 1000},
+	}
+	budget := AgentBudget{ContextWindow: 5_000, MaxTokens: 1_000}
+
+	if err := GuardContextWindowWithMediaTokens(req, "gemini", req.Model, "tool:read_video", budget, 0); err != nil {
+		t.Fatalf("text-only request must fit a 5k window: %v", err)
+	}
+
+	err := GuardContextWindowWithMediaTokens(req, "gemini", req.Model, "tool:read_video", budget, 4_500)
+	if err == nil {
+		t.Fatal("expected abort: 4500 media tokens plus a 1000 output reserve exceed a 5k window")
+	}
+	var exceeded *ContextWindowExceededError
+	if !errors.As(err, &exceeded) {
+		t.Fatalf("expected *ContextWindowExceededError, got %T: %v", err, err)
+	}
+	if exceeded.InputTokens < 4_500 {
+		t.Fatalf("InputTokens = %d, want at least the 4500 media tokens", exceeded.InputTokens)
+	}
+}

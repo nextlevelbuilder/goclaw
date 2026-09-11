@@ -52,6 +52,9 @@ func MediaDocRefsFromCtx(ctx context.Context) []providers.MediaRef {
 // documentMaxBytes is the max file size for document analysis (20MB).
 const documentMaxBytes = 20 * 1024 * 1024
 
+// documentLocalPathParam forwards the resolved local file path so the budget estimator can measure the real file.
+const documentLocalPathParam = "_local_path"
+
 // documentProviderPriority is the order in which providers are tried for document analysis.
 // Gemini has best native PDF support (50MB, 258 tokens/page). claude-cli is
 // included so installations with only Claude CLI configured can still analyze
@@ -204,6 +207,7 @@ func (t *ReadDocumentTool) Execute(ctx context.Context, args map[string]any) *Re
 		chain[i].Params["prompt"] = prompt
 		chain[i].Params["data"] = data
 		chain[i].Params["mime"] = docMime
+		chain[i].Params[documentLocalPathParam] = docPath
 	}
 
 	chainResult, err := ExecuteWithChain(ctx, chain, t.registry, t.callProvider)

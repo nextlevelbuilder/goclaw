@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/mediabudget"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
@@ -74,6 +75,7 @@ func (t *ReadAudioTool) callProvider(ctx context.Context, cp credentialProvider,
 	prompt := GetParamString(params, "prompt", "Analyze this audio and describe its contents.")
 	data, _ := params["data"].([]byte)
 	mime := GetParamString(params, "mime", "audio/mpeg")
+	audioPath, _ := params[audioLocalPathParam].(string)
 
 	// Provider-specific paths require API credentials. Fail-fast (no silent
 	// fallback to chat/completions) for any path we know won't work without
@@ -95,7 +97,7 @@ func (t *ReadAudioTool) callProvider(ctx context.Context, cp credentialProvider,
 				Model:    model,
 				Options:  map[string]any{"max_tokens": 16384},
 			}
-			reservation, reserveErr := reserveToolLLMUsageWithMedia(ctx, t.usageCaps, t.Name(), providerName, model, chatReq, mime, data)
+			reservation, reserveErr := reserveToolLLMUsageWithMedia(ctx, t.usageCaps, t.Name(), providerName, model, chatReq, mediabudget.Payload{Kind: mediabudget.KindAudio, MIME: mime, Size: int64(len(data)), Path: audioPath})
 			if reserveErr != nil {
 				return nil, nil, reserveErr
 			}
@@ -117,7 +119,7 @@ func (t *ReadAudioTool) callProvider(ctx context.Context, cp credentialProvider,
 				Model:    model,
 				Options:  map[string]any{"max_tokens": 16384},
 			}
-			reservation, reserveErr := reserveToolLLMUsageWithMedia(ctx, t.usageCaps, t.Name(), providerName, model, chatReq, mime, data)
+			reservation, reserveErr := reserveToolLLMUsageWithMedia(ctx, t.usageCaps, t.Name(), providerName, model, chatReq, mediabudget.Payload{Kind: mediabudget.KindAudio, MIME: mime, Size: int64(len(data)), Path: audioPath})
 			if reserveErr != nil {
 				return nil, nil, reserveErr
 			}
@@ -139,7 +141,7 @@ func (t *ReadAudioTool) callProvider(ctx context.Context, cp credentialProvider,
 				Model:    model,
 				Options:  map[string]any{"max_tokens": 16384},
 			}
-			reservation, reserveErr := reserveToolLLMUsageWithMedia(ctx, t.usageCaps, t.Name(), providerName, model, chatReq, mime, data)
+			reservation, reserveErr := reserveToolLLMUsageWithMedia(ctx, t.usageCaps, t.Name(), providerName, model, chatReq, mediabudget.Payload{Kind: mediabudget.KindAudio, MIME: mime, Size: int64(len(data)), Path: audioPath})
 			if reserveErr != nil {
 				return nil, nil, reserveErr
 			}

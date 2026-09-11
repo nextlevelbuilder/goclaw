@@ -163,6 +163,7 @@ type ChainResult struct {
 // ExecuteWithChain tries each provider in the chain sequentially.
 // For each provider, it retries up to MaxRetries times (with the configured timeout).
 // Returns the first successful result or the last error encountered.
+// A budget refusal ends the chain immediately: see the check inside the retry loop.
 func ExecuteWithChain(
 	ctx context.Context,
 	chain []MediaProviderEntry,
@@ -220,6 +221,16 @@ func ExecuteWithChain(
 			}
 
 			lastErr = callErr
+
+			// A budget refusal is a decision about this payload, not a sick
+			// provider: falling through would hand the same bytes to the next
+			// entry and bill them there instead.
+			if isBudgetRefusal(callErr) {
+				slog.Warn("media_chain: budget refused the payload, not falling through",
+					"provider", entry.Provider, "model", entry.Model,
+					"error", truncateError(callErr))
+				return nil, callErr
+			}
 
 			// Don't retry on context cancellation (parent ctx cancelled)
 			if ctx.Err() != nil {

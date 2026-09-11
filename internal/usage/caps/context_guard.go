@@ -53,6 +53,13 @@ func (e *ContextWindowExceededError) ContextBudgetExceeded() bool { return true 
 // GuardContextWindow enforces completeInput + agentMaxTokens <= agentWindow.
 // Provider/model are retained only for diagnostics.
 func GuardContextWindow(req providers.ChatRequest, providerName, model, purpose string, budget AgentBudget) error {
+	return GuardContextWindowWithMediaTokens(req, providerName, model, purpose, budget, 0)
+}
+
+// GuardContextWindowWithMediaTokens is GuardContextWindow for a call that also
+// carries media out-of-band, where the payload never appears in the request the
+// counter can see. mediaTokens is that payload's budget charge.
+func GuardContextWindowWithMediaTokens(req providers.ChatRequest, providerName, model, purpose string, budget AgentBudget, mediaTokens int) error {
 	if !budget.valid() {
 		missing := "agent_context_window,agent_max_tokens"
 		switch {
@@ -67,6 +74,9 @@ func GuardContextWindow(req providers.ChatRequest, providerName, model, purpose 
 	if err != nil {
 		return fmt.Errorf("count complete request: %w", err)
 	}
+	if mediaTokens > 0 {
+		input += mediaTokens
+	}
 	if input+budget.MaxTokens <= budget.ContextWindow {
 		return nil
 	}
@@ -75,6 +85,7 @@ func GuardContextWindow(req providers.ChatRequest, providerName, model, purpose 
 		"model", model,
 		"purpose", purpose,
 		"input_tokens", input,
+		"media_tokens", mediaTokens,
 		"output_reserve_tokens", budget.MaxTokens,
 		"context_window", budget.ContextWindow,
 		"action", "abort",

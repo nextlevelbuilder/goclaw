@@ -424,6 +424,7 @@ type fakeUsageCapStore struct {
 	resolveErr           error
 	resolveCalls         int
 	reserveErr           error
+	enforceTokenCaps     bool
 	reserved             store.UsageReserveRequest
 	reconciled           store.UsageReconcileRequest
 	reconcileCalls       int
@@ -469,6 +470,13 @@ func (s *fakeUsageCapStore) ReserveUsage(_ context.Context, req store.UsageReser
 	s.reserved = req
 	if s.reserveErr != nil {
 		return nil, s.reserveErr
+	}
+	if s.enforceTokenCaps {
+		for _, p := range policies {
+			if p.MaxTokens != nil && req.EstimatedTokens > *p.MaxTokens {
+				return nil, &store.UsageCapExceededError{PolicyID: p.ID, Reason: "max_tokens"}
+			}
+		}
 	}
 	return &store.UsageReservationResult{ReservationKey: req.ReservationKey, Policies: policies}, nil
 }
@@ -525,3 +533,88 @@ func (s *fakeProviderStore) UpdateProvider(context.Context, uuid.UUID, map[strin
 func (s *fakeProviderStore) DeleteProvider(context.Context, uuid.UUID) error { return nil }
 
 func int64Ptr(v int64) *int64 { return &v }
+
+// TestPreflightCountsExtraInputTokens proves an out-of-band media charge reaches
+// the reservation, not just the context-window guard. Without it the reservation
+// under-reserves by the whole payload.
+func TestPreflightCountsExtraInputTokens(t *testing.T) {
+	providerID := uuid.New()
+	tenantID := uuid.New()
+	newService := func() (*Service, *fakeUsageCapStore) {
+		policy := store.UsageCapPolicy{ID: uuid.New(), TenantID: tenantID, MaxTokens: int64Ptr(1_000_000), Enabled: true}
+		usageStore := &fakeUsageCapStore{policies: []store.UsageCapPolicy{policy}, resolveErr: sql.ErrNoRows}
+		providerStore := &fakeProviderStore{provider: &store.LLMProviderData{
+			BaseModel:    store.BaseModel{ID: providerID},
+			Name:         "openrouter",
+			ProviderType: store.ProviderOpenRouter,
+			APIKey:       "sk-test",
+		}}
+		return NewService(usageStore, providerStore), usageStore
+	}
+	request := func(extra int) Request {
+		return Request{
+			TenantID: tenantID, ProviderName: "openrouter", ModelID: "some/model",
+			ReservationKey: "extra-input", Messages: []providers.Message{{Role: "user", Content: "describe this video"}},
+			MaxOutputTokens: 10, ExtraInputTokens: extra,
+		}
+	}
+
+	svcBase, storeBase := newService()
+	if _, err := svcBase.Preflight(context.Background(), request(0)); err != nil {
+		t.Fatalf("Preflight without extra tokens returned error: %v", err)
+	}
+
+	svcExtra, storeExtra := newService()
+	if _, err := svcExtra.Preflight(context.Background(), request(1600)); err != nil {
+		t.Fatalf("Preflight with extra tokens returned error: %v", err)
+	}
+
+	if got := storeExtra.reserved.EstimatedTokens - storeBase.reserved.EstimatedTokens; got != 1600 {
+		t.Fatalf("EstimatedTokens grew by %d, want 1600", got)
+	}
+}
+
+// TestPreflightDeniesWhenMediaChargeExceedsTokenCap proves an out-of-band media
+// payload is refused by a tenant token cap the same request passes without it.
+// Counting the charge is not enough on its own: what has to hold is that the
+// call is denied before transport.
+func TestPreflightDeniesWhenMediaChargeExceedsTokenCap(t *testing.T) {
+	providerID := uuid.New()
+	tenantID := uuid.New()
+	policyID := uuid.New()
+	newService := func() *Service {
+		policy := store.UsageCapPolicy{ID: policyID, TenantID: tenantID, MaxTokens: int64Ptr(1_000), Enabled: true}
+		usageStore := &fakeUsageCapStore{
+			policies:         []store.UsageCapPolicy{policy},
+			resolveErr:       sql.ErrNoRows,
+			enforceTokenCaps: true,
+		}
+		providerStore := &fakeProviderStore{provider: &store.LLMProviderData{
+			BaseModel:    store.BaseModel{ID: providerID},
+			Name:         "openrouter",
+			ProviderType: store.ProviderOpenRouter,
+			APIKey:       "sk-test",
+		}}
+		return NewService(usageStore, providerStore)
+	}
+	request := func(extra int) Request {
+		return Request{
+			TenantID: tenantID, ProviderName: "openrouter", ModelID: "some/model",
+			ReservationKey: "media-cap", Messages: []providers.Message{{Role: "user", Content: "describe this video"}},
+			MaxOutputTokens: 10, ExtraInputTokens: extra,
+		}
+	}
+
+	if _, err := newService().Preflight(context.Background(), request(0)); err != nil {
+		t.Fatalf("Preflight without the media charge must pass the 1000-token cap, got %v", err)
+	}
+
+	reservation, err := newService().Preflight(context.Background(), request(5_000))
+	if !errors.Is(err, ErrCapExceeded) {
+		t.Fatalf("Preflight with the media charge returned %v, want ErrCapExceeded", err)
+	}
+	metadata := reservation.TraceMetadata()
+	if metadata.Decision != store.UsageCapEventBlock {
+		t.Fatalf("Decision = %q, want block", metadata.Decision)
+	}
+}

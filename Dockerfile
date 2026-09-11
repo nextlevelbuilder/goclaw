@@ -74,6 +74,7 @@ ARG ENABLE_PYTHON=false
 ARG ENABLE_NODE=false
 ARG ENABLE_FULL_SKILLS=false
 ARG ENABLE_CLAUDE_CLI=false
+ARG ENABLE_MEDIA_PROBES=true
 
 # Copy pinned Python deps (cleaned up after install).
 # requirements-base.txt: shared deps for ENABLE_PYTHON and ENABLE_FULL_SKILLS.
@@ -84,8 +85,18 @@ COPY docker/requirements-base.txt docker/requirements-skills.txt /tmp/
 # time.LoadLocation and Python zoneinfo in skill scripts) + optional runtimes.
 # ENABLE_FULL_SKILLS=true pre-installs all skill deps (larger image, no on-demand install needed).
 # Otherwise, skill packages are installed on-demand via the admin UI.
+# ENABLE_MEDIA_PROBES=true installs ffmpeg (for ffprobe) and poppler-utils (for pdfinfo), the
+# two binaries the media budget guard measures with. Without them read_video and read_audio
+# refuse the call and read_document falls back to the provider's 1000-page ceiling.
+# poppler-utils is skipped here when ENABLE_FULL_SKILLS already installs it below.
 RUN set -eux; \
     apk add --no-cache ca-certificates wget su-exec tzdata; \
+    if [ "$ENABLE_MEDIA_PROBES" = "true" ]; then \
+        apk add --no-cache ffmpeg; \
+        if [ "$ENABLE_FULL_SKILLS" != "true" ]; then \
+            apk add --no-cache poppler-utils; \
+        fi; \
+    fi; \
     if [ "$ENABLE_SANDBOX" = "true" ]; then \
         apk add --no-cache docker-cli; \
     fi; \

@@ -289,12 +289,14 @@ jobs:
             enable_embedui: "true"
             enable_python: "true"
             enable_full_skills: "false"
+            enable_media_probes: "true"
           - variant: full
             suffix: "-full"
             enable_otel: "false"
             enable_embedui: "true"
             enable_python: "true"
             enable_full_skills: "true"
+            enable_media_probes: "true"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -348,6 +350,7 @@ jobs:
             ENABLE_EMBEDUI=${{ matrix.enable_embedui }}
             ENABLE_PYTHON=${{ matrix.enable_python }}
             ENABLE_FULL_SKILLS=${{ matrix.enable_full_skills }}
+            ENABLE_MEDIA_PROBES=${{ matrix.enable_media_probes }}
             VERSION=${{ needs.beta_version.outputs.tag }}
           cache-from: type=gha,scope=dev-beta-${{ matrix.variant }}
           cache-to: type=gha,mode=max,scope=dev-beta-${{ matrix.variant }}

@@ -223,7 +223,7 @@ When `GOCLAW_*_API_KEY` environment variables are set, the gateway auto-onboards
 > | Image | Description |
 > |-------|-------------|
 > | `latest` | Backend + embedded web UI + Python (**recommended**) |
-> | `latest-base` | Backend API-only, no web UI, no runtimes |
+> | `latest-base` | Backend API-only, no web UI, no runtimes, no media probes (`read_video` and `read_audio` refuse without `ffprobe`; `read_document` falls back to the 1000-page ceiling without `pdfinfo`) |
 > | `latest-full` | All runtimes + skill dependencies pre-installed |
 > | `latest-otel` | Latest + OpenTelemetry tracing |
 > | `goclaw-web` | Standalone nginx + React SPA (for custom reverse proxy) |

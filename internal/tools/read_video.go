@@ -3,11 +3,13 @@ package tools
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/security"
@@ -36,6 +38,9 @@ const videoMaxBytes = 100 * 1024 * 1024
 
 const videoURLPinnedIPParam = "_pinned_ip"
 
+// videoLocalPathParam forwards the resolved local file path so the budget probe can read the real file.
+const videoLocalPathParam = "_local_path"
+
 // videoProviderPriority is the order in which providers are tried for video analysis.
 // OpenAI excluded — no native video upload in chat completions.
 var videoProviderPriority = []string{"gemini", "openrouter"}
@@ -52,10 +57,21 @@ type ReadVideoTool struct {
 	registry    *providers.Registry
 	mediaLoader MediaPathLoader
 	usageCaps   *usagecaps.Service
+	// streamToGemini is injected per instance rather than through a package
+	// global, so parallel tests cannot race each other over one seam.
+	streamToGemini geminiStreamFn
 }
 
+// geminiStreamFn is the upload a gate-passing URL is handed to.
+type geminiStreamFn func(ctx context.Context, apiKey, model, prompt string, reader io.Reader, contentLength int64, mime string, httpTimeout time.Duration) (*providers.ChatResponse, error)
+
 func NewReadVideoTool(registry *providers.Registry, mediaLoader MediaPathLoader) *ReadVideoTool {
-	return &ReadVideoTool{registry: registry, mediaLoader: mediaLoader}
+	return &ReadVideoTool{registry: registry, mediaLoader: mediaLoader, streamToGemini: geminiFileAPICallStream}
+}
+
+// setStreamToGeminiForTest observes what reaches the upload without contacting a provider.
+func (t *ReadVideoTool) setStreamToGeminiForTest(fn geminiStreamFn) {
+	t.streamToGemini = fn
 }
 
 func (t *ReadVideoTool) SetUsageCapService(svc *usagecaps.Service) {
@@ -119,6 +135,7 @@ func (t *ReadVideoTool) Execute(ctx context.Context, args map[string]any) *Resul
 
 	var data []byte
 	var videoMime string
+	var videoPath string
 	var pinnedIP net.IP
 
 	if videoURL != "" {
@@ -132,7 +149,7 @@ func (t *ReadVideoTool) Execute(ctx context.Context, args map[string]any) *Resul
 		ext := filepath.Ext(validatedURL.Path)
 		videoMime = mimeFromVideoExt(ext)
 	} else {
-		var videoPath, mime string
+		var mime string
 		var err error
 		if videoArg != "" {
 			videoPath, err = resolveStructuredMediaPath(ctx, videoArg, "video")
@@ -171,6 +188,7 @@ func (t *ReadVideoTool) Execute(ctx context.Context, args map[string]any) *Resul
 		chain[i].Params["data"] = data
 		chain[i].Params["url"] = videoURL
 		chain[i].Params["mime"] = videoMime
+		chain[i].Params[videoLocalPathParam] = videoPath
 		if pinnedIP != nil {
 			chain[i].Params[videoURLPinnedIPParam] = pinnedIP
 		}

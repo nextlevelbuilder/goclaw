@@ -50,6 +50,9 @@ type ReadAudioTool struct {
 	usageCaps   *usagecaps.Service
 }
 
+// audioLocalPathParam forwards the resolved local file path so the budget estimator can measure the real file.
+const audioLocalPathParam = "_local_path"
+
 func NewReadAudioTool(registry *providers.Registry, mediaLoader MediaPathLoader) *ReadAudioTool {
 	return &ReadAudioTool{registry: registry, mediaLoader: mediaLoader}
 }
@@ -134,6 +137,7 @@ func (t *ReadAudioTool) Execute(ctx context.Context, args map[string]any) *Resul
 		chain[i].Params["prompt"] = prompt
 		chain[i].Params["data"] = data
 		chain[i].Params["mime"] = audioMime
+		chain[i].Params[audioLocalPathParam] = audioPath
 	}
 
 	chainResult, err := ExecuteWithChain(ctx, chain, t.registry, t.callProvider)

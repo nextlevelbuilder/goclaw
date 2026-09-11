@@ -41,6 +41,9 @@ type Request struct {
 	ReservationKey  string
 	Messages        []providers.Message
 	MaxOutputTokens int
+	// ExtraInputTokens is input the Messages do not show, such as a media
+	// payload uploaded out-of-band.
+	ExtraInputTokens int
 }
 
 type Reservation struct {
@@ -90,7 +93,7 @@ func (s *Service) Preflight(ctx context.Context, req Request) (*Reservation, err
 		return skippedScopedReservation(req, scope, "no_policy"), nil
 	}
 	usage := pricing.BillableUsage{
-		InputTokens:  int64(EstimateInputTokens(req.Messages)),
+		InputTokens:  int64(EstimateInputTokens(req.Messages) + req.ExtraInputTokens),
 		OutputTokens: int64(req.MaxOutputTokens),
 		ImageCount:   int64(CountImages(req.Messages)),
 	}

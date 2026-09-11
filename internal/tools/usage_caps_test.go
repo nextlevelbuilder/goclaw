@@ -1,12 +1,13 @@
 package tools
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/mediabudget"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
@@ -79,36 +80,38 @@ func TestReserveToolLLMUsage_FailsClosedWithoutAgentBudget(t *testing.T) {
 	}
 }
 
-// TestReserveToolLLMUsageWithMedia_CountsNativeMediaBytes proves the out-of-band
-// media payload is part of completeInput. The fixed BudgetCounter counts the
-// standard-base64 representation of the raw bytes (a model/provider-independent
-// rule), so a small prompt with a large native-media payload is blocked when it
-// no longer fits the CALLING agent's window. The bytes are counted, never
-// transported — the guard copy carries them, the real request does not.
-func TestReserveToolLLMUsageWithMedia_CountsNativeMediaBytes(t *testing.T) {
+// stubMediaProbes fixes what the external binaries report, so a charge under test is the policy's arithmetic and not whatever is installed on the runner.
+func stubMediaProbes(t *testing.T, seconds int, pages int) {
+	t.Helper()
+	t.Cleanup(mediabudget.SetProbesForTest(
+		func(context.Context, string) (time.Duration, bool) {
+			return time.Duration(seconds) * time.Second, true
+		},
+		func(context.Context, string) (int, bool) { return pages, true },
+	))
+}
+
+// An hour of video is 946,800 tokens at the published rate: far past a 20k
+// window, comfortably inside a 2M one.
+func bigVideoPayload() mediabudget.Payload {
+	return mediabudget.Payload{Kind: mediabudget.KindVideo, MIME: "video/mp4", Size: 200_000_000, Path: "/does/not/matter"}
+}
+
+func mediaTestRequest(model string) providers.ChatRequest {
+	return providers.ChatRequest{
+		Model:    model,
+		Messages: []providers.Message{{Role: "user", Content: "Describe this video."}},
+		Options:  map[string]any{providers.OptMaxTokens: 8},
+	}
+}
+
+func TestReserveToolLLMUsageWithMedia_LargePayloadTripsContextWindowGuard(t *testing.T) {
+	stubMediaProbes(t, 3600, 1)
 	model := "gpt-4o"
-	req := func() providers.ChatRequest {
-		return providers.ChatRequest{
-			Model:    model,
-			Messages: []providers.Message{{Role: "user", Content: "Transcribe this."}},
-			Options:  map[string]any{providers.OptMaxTokens: 4096},
-		}
-	}
-
-	// A small media payload under a large agent window is allowed.
-	small := bytes.Repeat([]byte{0xAB}, 1024)
-	ctxBig := withToolAgentBudget(128_000, 8_192)
-	if _, err := reserveToolLLMUsageWithMedia(ctxBig, nil, "read_document", "openai", model, req(), "application/pdf", small); err != nil {
-		t.Fatalf("small native media must fit a 128k window, got %v", err)
-	}
-
-	// A large media payload against a small agent window is blocked BEFORE
-	// transport: base64(256 KiB) is well over the 20k window's input cap.
-	big := bytes.Repeat([]byte{0xCD}, 256*1024)
-	ctxSmall := withToolAgentBudget(20_000, 8_192)
-	_, err := reserveToolLLMUsageWithMedia(ctxSmall, nil, "read_document", "openai", model, req(), "application/pdf", big)
+	ctxSmall := withToolAgentBudget(20_000, 8)
+	_, err := reserveToolLLMUsageWithMedia(ctxSmall, nil, "read_video", "openai", model, mediaTestRequest(model), bigVideoPayload())
 	if err == nil {
-		t.Fatal("expected abort: large native media must exceed a 20k agent window")
+		t.Fatal("expected abort: an hour of measured video must exceed a 20k window")
 	}
 	var ctxErr *usagecaps.ContextWindowExceededError
 	if !errors.As(err, &ctxErr) {
@@ -119,41 +122,124 @@ func TestReserveToolLLMUsageWithMedia_CountsNativeMediaBytes(t *testing.T) {
 	}
 }
 
-// TestReserveToolLLMUsageUnverifiableMedia_FailsClosedUnderAgentBudget proves a
-// native-media call whose payload cannot be buffered (a streamed remote URL)
-// fails closed under an agent budget rather than undercounting — the
-// complete-input invariant cannot be proven, so it refuses to send.
-func TestReserveToolLLMUsageUnverifiableMedia_FailsClosedUnderAgentBudget(t *testing.T) {
-	model := "gemini-2.0-flash"
-	req := providers.ChatRequest{
-		Model:    model,
-		Messages: []providers.Message{{Role: "user", Content: "Analyze this video."}},
-		Options:  map[string]any{providers.OptMaxTokens: 4096},
+func TestReserveToolLLMUsageWithMedia_LargePayloadAllowedUnderLargeWindow(t *testing.T) {
+	stubMediaProbes(t, 3600, 1)
+	model := "gpt-4o"
+	ctxBig := withToolAgentBudget(2_000_000, 8)
+	if _, err := reserveToolLLMUsageWithMedia(ctxBig, nil, "read_video", "openai", model, mediaTestRequest(model), bigVideoPayload()); err != nil {
+		t.Fatalf("expected allow under a 2M window, got %v", err)
+	}
+}
+
+// Valid because reserveToolLLMUsageWithMediaTokens feeds the same mediaTokens value to both the guard and Request.ExtraInputTokens.
+func TestReserveToolLLMUsageWithMedia_ChargesSummedMediaBudgetEstimate(t *testing.T) {
+	stubMediaProbes(t, 12, 1)
+	model := "gpt-4o"
+	video := mediabudget.Payload{Kind: mediabudget.KindVideo, MIME: "video/mp4", Size: 32_000, Path: "/does/not/matter"}
+	audio := mediabudget.Payload{Kind: mediabudget.KindAudio, MIME: "audio/mpeg", Size: 6_000, Path: "/does/not/matter"}
+	videoTokens, err := mediabudget.Tokens(context.Background(), video)
+	if err != nil {
+		t.Fatalf("pricing the video payload: %v", err)
+	}
+	audioTokens, err := mediabudget.Tokens(context.Background(), audio)
+	if err != nil {
+		t.Fatalf("pricing the audio payload: %v", err)
+	}
+	wantMediaTokens := videoTokens + audioTokens
+
+	ctxTiny := withToolAgentBudget(1, 1)
+
+	_, textOnlyErr := reserveToolLLMUsage(ctxTiny, nil, "read_video", "openai", model, mediaTestRequest(model))
+	var textOnlyErrCtx *usagecaps.ContextWindowExceededError
+	if !errors.As(textOnlyErr, &textOnlyErrCtx) {
+		t.Fatalf("expected text-only call to abort under a 1-token window, got %v", textOnlyErr)
 	}
 
-	// Under an agent budget: no in-memory payload to count -> refuse with an
-	// explicit streaming error (not a wiring error).
-	ctx := withToolAgentBudget(200_000, 8_192)
-	_, err := reserveToolLLMUsageUnverifiableMedia(ctx, nil, "read_video", "gemini", model, req)
-	if err == nil {
-		t.Fatal("expected fail-closed for unverifiable streamed media under an agent budget")
-	}
-	var wiringErr *usagecaps.AgentBudgetWiringError
-	if errors.As(err, &wiringErr) {
-		t.Fatalf("under a valid agent budget the failure must be the streaming refusal, not a wiring error: %v", err)
-	}
-	if !strings.Contains(err.Error(), "refusing to send") {
-		t.Fatalf("expected an explicit streaming refusal, got %v", err)
+	_, mediaErr := reserveToolLLMUsageWithMedia(ctxTiny, nil, "read_video", "openai", model, mediaTestRequest(model), video, audio)
+	var mediaErrCtx *usagecaps.ContextWindowExceededError
+	if !errors.As(mediaErr, &mediaErrCtx) {
+		t.Fatalf("expected media call to abort under a 1-token window, got %v", mediaErr)
 	}
 
-	// Without a propagated agent budget it falls through to the text path, which
-	// itself fails closed with a wiring error — every tool LLM call is
-	// agent-scoped, so no path here reaches transport uncounted.
-	_, err = reserveToolLLMUsageUnverifiableMedia(context.Background(), nil, "read_video", "gemini", model, req)
-	if err == nil {
-		t.Fatal("expected fail-closed without a propagated agent budget")
+	gotMediaTokens := mediaErrCtx.InputTokens - textOnlyErrCtx.InputTokens
+	if gotMediaTokens != wantMediaTokens {
+		t.Fatalf("media charge reaching the guard = %d, want %d (sum of mediabudget.Tokens per payload)", gotMediaTokens, wantMediaTokens)
 	}
-	if !errors.As(err, &wiringErr) {
-		t.Fatalf("expected *AgentBudgetWiringError without a budget, got %T: %v", err, err)
+}
+
+// mediaChargeIsTheBlocker runs one payload through the media reservation under a
+// window an identical text-only request passes, so a refusal can only come from
+// the media charge.
+func mediaChargeIsTheBlocker(t *testing.T, window int, payload mediabudget.Payload) {
+	t.Helper()
+	model := "gpt-4o"
+	ctx := withToolAgentBudget(window, 8)
+
+	if _, err := reserveToolLLMUsage(ctx, nil, "read_media", "openai", model, mediaTestRequest(model)); err != nil {
+		t.Fatalf("the same request without media must pass under a %d-token window, got %v", window, err)
+	}
+
+	_, err := reserveToolLLMUsageWithMedia(ctx, nil, "read_media", "openai", model, mediaTestRequest(model), payload)
+	var ctxErr *usagecaps.ContextWindowExceededError
+	if !errors.As(err, &ctxErr) {
+		t.Fatalf("expected *ContextWindowExceededError from the media charge, got %T: %v", err, err)
+	}
+	if ctxErr.ContextWindow != window {
+		t.Fatalf("guard used window %d, want %d", ctxErr.ContextWindow, window)
+	}
+}
+
+// Two hours of measured podcast is 230,400 tokens, which no 200k window holds.
+func TestReserveToolLLMUsageWithMedia_LargeAudioCannotProceed(t *testing.T) {
+	stubMediaProbes(t, 7200, 1)
+	mediaChargeIsTheBlocker(t, 200_000, mediabudget.Payload{Kind: mediabudget.KindAudio, MIME: "audio/mpeg", Size: 40_000_000, Path: "/does/not/matter"})
+}
+
+// A PDF whose page count cannot be measured is charged the provider's
+// 1000-page maximum, and 258,000 tokens does not fit a 200k window.
+func TestReserveToolLLMUsageWithMedia_UnmeasurablePDFCannotProceed(t *testing.T) {
+	mediaChargeIsTheBlocker(t, 200_000, mediabudget.Payload{Kind: mediabudget.KindDocument, MIME: "application/pdf", Size: 5_000_000})
+}
+
+// The same 1000-page ceiling must stay reachable: an agent whose window can
+// hold 258,000 tokens still gets to read an unmeasurable PDF.
+func TestReserveToolLLMUsageWithMedia_UnmeasurablePDFAllowedUnderLargeWindow(t *testing.T) {
+	model := "gpt-4o"
+	ctx := withToolAgentBudget(400_000, 8)
+	pdf := mediabudget.Payload{Kind: mediabudget.KindDocument, MIME: "application/pdf", Size: 5_000_000}
+	if _, err := reserveToolLLMUsageWithMedia(ctx, nil, "read_document", "openai", model, mediaTestRequest(model), pdf); err != nil {
+		t.Fatalf("expected the 1000-page ceiling to fit a 400k window, got %v", err)
+	}
+}
+
+// A few hundred KB of docx is priced as text, well inside an ordinary window.
+func TestReserveToolLLMUsageWithMedia_NonPDFDocumentFitsOrdinaryWindow(t *testing.T) {
+	model := "gpt-4o"
+	ctx := withToolAgentBudget(200_000, 8)
+	docx := mediabudget.Payload{
+		Kind: mediabudget.KindDocument,
+		MIME: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		Size: 400_000,
+	}
+	if _, err := reserveToolLLMUsageWithMedia(ctx, nil, "read_document", "openai", model, mediaTestRequest(model), docx); err != nil {
+		t.Fatalf("expected a 400KB docx to pass under a 200k window, got %v", err)
+	}
+}
+
+// A video nothing can measure is refused outright, with the missing binary
+// named, rather than charged a number derived from its bytes.
+func TestReserveToolLLMUsageWithMedia_UnmeasurableVideoIsRefused(t *testing.T) {
+	t.Cleanup(mediabudget.SetProbesForTest(nil, nil))
+
+	model := "gpt-4o"
+	ctx := withToolAgentBudget(2_000_000, 8)
+	video := mediabudget.Payload{Kind: mediabudget.KindVideo, MIME: "video/mp4", Size: 20_000, Path: "/does/not/matter"}
+
+	_, err := reserveToolLLMUsageWithMedia(ctx, nil, "read_video", "openai", model, mediaTestRequest(model), video)
+	if !errors.Is(err, mediabudget.ErrDurationUnmeasurable) {
+		t.Fatalf("expected ErrDurationUnmeasurable even under a 2M window, got %T: %v", err, err)
+	}
+	if !strings.Contains(err.Error(), "ffprobe") {
+		t.Fatalf("error %q does not name the missing probe", err)
 	}
 }
