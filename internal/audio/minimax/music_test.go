@@ -104,7 +104,7 @@ func TestMusicProvider_GenerateMusic(t *testing.T) {
 
 	t.Run("vocal_with_lyrics", func(t *testing.T) {
 		apiSrv, dlSrv := makeServers(t, map[string]any{
-			"model":            "music-2.5+",
+			"model":            "music-3.0",
 			"prompt":           "happy pop song",
 			"is_instrumental":  false,
 			"lyrics_optimizer": false,
@@ -130,6 +130,44 @@ func TestMusicProvider_GenerateMusic(t *testing.T) {
 		}
 		if res.MimeType != "audio/mpeg" {
 			t.Errorf("mimetype: want audio/mpeg, got %s", res.MimeType)
+		}
+	})
+
+	t.Run("hex_audio_payload", func(t *testing.T) {
+		apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data":      map[string]any{"audio": "4d503344415441", "status": 2},
+				"base_resp": map[string]any{"status_code": 0},
+			})
+		}))
+		defer apiSrv.Close()
+
+		p := NewMusicProvider(MusicConfig{APIKey: "test-key", APIBase: apiSrv.URL})
+		res, err := p.GenerateMusic(context.Background(), audio.MusicOptions{Prompt: "hex response"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if string(res.Audio) != "MP3DATA" {
+			t.Fatalf("audio bytes: got %q", res.Audio)
+		}
+	})
+
+	t.Run("in_progress_status", func(t *testing.T) {
+		apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data":      map[string]any{"status": 1},
+				"base_resp": map[string]any{"status_code": 0},
+			})
+		}))
+		defer apiSrv.Close()
+
+		_, err := NewMusicProvider(MusicConfig{APIKey: "test-key", APIBase: apiSrv.URL}).GenerateMusic(
+			context.Background(), audio.MusicOptions{Prompt: "pending"},
+		)
+		if err == nil || !strings.Contains(err.Error(), "still in progress") {
+			t.Fatalf("expected in-progress error, got %v", err)
 		}
 	})
 

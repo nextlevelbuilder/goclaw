@@ -3,6 +3,7 @@ package minimax
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,8 +19,8 @@ const maxMusicDownloadBytes = 200 * 1024 * 1024
 // MusicConfig configures the MiniMax music provider.
 type MusicConfig struct {
 	APIKey  string
-	APIBase string // default "https://api.minimaxi.chat/v1"
-	Model   string // default "music-2.5+"
+	APIBase string // default "https://api.minimax.io/v1"; use api.minimaxi.com for China
+	Model   string // default "music-3.0"
 }
 
 // MusicProvider generates music via the MiniMax music generation API.
@@ -34,10 +35,10 @@ type MusicProvider struct {
 // NewMusicProvider returns a MiniMax music provider.
 func NewMusicProvider(cfg MusicConfig) *MusicProvider {
 	if cfg.APIBase == "" {
-		cfg.APIBase = "https://api.minimaxi.chat/v1"
+		cfg.APIBase = "https://api.minimax.io/v1"
 	}
 	if cfg.Model == "" {
-		cfg.Model = "music-2.5+"
+		cfg.Model = "music-3.0"
 	}
 	return &MusicProvider{
 		apiKey:  cfg.APIKey,
@@ -109,8 +110,9 @@ func (p *MusicProvider) GenerateMusic(ctx context.Context, opts audio.MusicOptio
 
 	var mmResp struct {
 		Data *struct {
-			Audio string `json:"audio"`
-			Music string `json:"music"`
+			Audio  string `json:"audio"`
+			Music  string `json:"music"`
+			Status int    `json:"status"`
 		} `json:"data"`
 		BaseResp *struct {
 			StatusCode int    `json:"status_code"`
@@ -128,13 +130,28 @@ func (p *MusicProvider) GenerateMusic(ctx context.Context, opts audio.MusicOptio
 	if mmResp.Data == nil {
 		return nil, fmt.Errorf("no data in MiniMax music response")
 	}
+	if mmResp.Data.Status == 1 {
+		return nil, fmt.Errorf("MiniMax music generation is still in progress")
+	}
 
 	audioURL := mmResp.Data.Audio
 	if audioURL == "" {
 		audioURL = mmResp.Data.Music
 	}
 	if audioURL == "" {
-		return nil, fmt.Errorf("no audio URL in MiniMax music response")
+		return nil, fmt.Errorf("no audio data in MiniMax music response")
+	}
+
+	// music-3.0 may return raw audio as a hexadecimal string even when URL
+	// output is requested. Preserve URL downloads while accepting both forms.
+	if !strings.HasPrefix(audioURL, "http://") && !strings.HasPrefix(audioURL, "https://") {
+		audioBytes, err := decodeHexAudio(audioURL)
+		if err != nil {
+			return nil, fmt.Errorf("decode MiniMax music audio: %w", err)
+		}
+		return &audio.AudioResult{
+			Audio: audioBytes, Extension: "mp3", MimeType: "audio/mpeg", Model: model, Provider: "minimax",
+		}, nil
 	}
 
 	// Download the audio file from the returned URL.
@@ -165,6 +182,25 @@ func (p *MusicProvider) GenerateMusic(ctx context.Context, opts audio.MusicOptio
 		Model:     model,
 		Provider:  "minimax",
 	}, nil
+}
+
+func decodeHexAudio(value string) ([]byte, error) {
+	value = strings.TrimSpace(value)
+	value = strings.TrimPrefix(value, "0x")
+	if value == "" {
+		return nil, fmt.Errorf("empty hexadecimal audio payload")
+	}
+	if len(value)%2 != 0 {
+		return nil, fmt.Errorf("hexadecimal audio payload has odd length")
+	}
+	decoded, err := hex.DecodeString(value)
+	if err != nil {
+		return nil, fmt.Errorf("invalid hexadecimal audio payload: %w", err)
+	}
+	if len(decoded) > maxMusicDownloadBytes {
+		return nil, fmt.Errorf("audio response exceeds %d MB limit", maxMusicDownloadBytes/(1024*1024))
+	}
+	return decoded, nil
 }
 
 func truncate(b []byte, n int) string {
