@@ -100,6 +100,11 @@ func WithLocalKey(lk string) TaskEventOption {
 	return func(p *protocol.TeamTaskEventPayload) { p.LocalKey = lk }
 }
 
+// WithResult sets Result on the payload (used for task completion reports).
+func WithResult(r string) TaskEventOption {
+	return func(p *protocol.TeamTaskEventPayload) { p.Result = r }
+}
+
 // WithCommentText sets CommentText on the payload.
 func WithCommentText(t string) TaskEventOption {
 	return func(p *protocol.TeamTaskEventPayload) { p.CommentText = t }
