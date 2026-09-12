@@ -46,7 +46,7 @@ func (s *PGSystemConfigStore) Get(ctx context.Context, key string) (string, erro
 		return "", fmt.Errorf("system config get: %w", err)
 	}
 
-	return "", fmt.Errorf("system config not found: %s", key)
+	return "", fmt.Errorf("%w: %s", store.ErrSystemConfigNotFound, key)
 }
 
 func (s *PGSystemConfigStore) Set(ctx context.Context, key, value string) error {

@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"regexp"
 
@@ -54,12 +55,13 @@ func (h *SystemConfigsHandler) handleList(w http.ResponseWriter, r *http.Request
 }
 
 func (h *SystemConfigsHandler) handleGet(w http.ResponseWriter, r *http.Request) {
-	locale := extractLocale(r)
 	key := r.PathValue("key")
 	val, err := h.store.Get(r.Context(), key)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "config", key)})
-		return
+		if !errors.Is(err, store.ErrSystemConfigNotFound) {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"key": key, "value": val})
 }

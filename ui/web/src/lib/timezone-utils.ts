@@ -78,12 +78,17 @@ export function getAllIanaTimezones(): TzOption[] {
   return _cachedTimezones;
 }
 
-let _cachedTzSet: Set<string> | undefined;
-
-/** Check if a value is a valid IANA timezone from the dynamic list. */
+/** Validate via Intl directly — accepts canonical + deprecated aliases that
+ * the browser's tz database knows (e.g. Asia/Saigon ↔ Asia/Ho_Chi_Minh).
+ * The earlier Set-based check rejected names whose canonical form differed
+ * from the user's stored value across browser/OS combos.
+ */
 export function isValidIanaTimezone(tz: string): boolean {
-  if (!_cachedTzSet) {
-    _cachedTzSet = new Set(getAllIanaTimezones().map((t) => t.value));
+  if (!tz) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
   }
-  return _cachedTzSet.has(tz);
 }

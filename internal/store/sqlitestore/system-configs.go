@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // SQLiteSystemConfigStore implements store.SystemConfigStore backed by SQLite.
@@ -36,7 +38,7 @@ func (s *SQLiteSystemConfigStore) Get(ctx context.Context, key string) (string, 
 		return val, nil
 	}
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", fmt.Errorf("system config not found: %s", key)
+		return "", fmt.Errorf("%w: %s", store.ErrSystemConfigNotFound, key)
 	}
 	return "", fmt.Errorf("system config get: %w", err)
 }
