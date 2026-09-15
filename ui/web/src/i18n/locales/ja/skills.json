@@ -1,0 +1,115 @@
+{
+  "title": "スキル",
+  "description": "エージェントのスキルと機能を管理",
+  "searchPlaceholder": "スキルを検索...",
+  "emptyTitle": "スキルがありません",
+  "emptyDescription": "スキルがまだ登録されていません。",
+  "noMatchTitle": "一致するスキルがありません",
+  "noMatchDescription": "別の検索キーワードをお試しください。",
+  "columns": {
+    "name": "名前",
+    "description": "説明",
+    "source": "ソース",
+    "author": "作成者",
+    "visibility": "可視性",
+    "status": "ステータス",
+    "actions": "操作"
+  },
+  "noDescription": "説明なし",
+  "visibility": {
+    "clickToCycle": "クリックして可視性を変更"
+  },
+  "delete": {
+    "title": "スキルを削除",
+    "description": "「{{name}}」を削除しますか？この操作は取り消せません。",
+    "confirmLabel": "削除"
+  },
+  "upload": {
+    "title": "スキルをアップロード",
+    "description": "YAMLフロントマター（name、description、slug）を含むSKILL.mdが入ったZIPファイルをアップロードしてください。",
+    "button": "アップロード",
+    "uploading": "アップロード中...",
+    "dropOrClick": "クリックまたは.zipファイルをドラッグ&ドロップ",
+    "dropHere": ".zipファイルをここにドロップ",
+    "onlyZip": ".zipファイルのみ受け付けます",
+    "cancel": "キャンセル",
+    "done": "完了",
+    "tooLarge": "ファイルが20MBの制限を超えています",
+    "invalidZip": "ZIPファイルが無効です",
+    "noSkillMd": "ZIPのルートにSKILL.mdが必要です",
+    "emptySkillMd": "SKILL.mdが空です",
+    "noFrontmatter": "SKILL.mdにYAMLフロントマターがありません",
+    "nameRequired": "SKILL.mdフロントマターにnameが必要です",
+    "invalidSlug": "スラグ形式が無効です",
+    "failed": "アップロードに失敗しました",
+    "validating": "検証中...",
+    "validCount": "{{total}}件中{{valid}}件が有効",
+    "uploadCount": "アップロード ({{count}})",
+    "successCount": "{{total}}件中{{success}}件が正常にアップロードされました",
+    "remove": "ファイルを削除"
+  },
+  "edit": {
+    "title": "スキルを編集",
+    "name": "名前",
+    "description": "説明",
+    "visibility": "可視性",
+    "tags": "タグ",
+    "addTag": "タグを追加...",
+    "add": "追加",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "saving": "保存中...",
+    "privateOption": "プライベート（オーナーのみ）",
+    "internalOption": "内部（付与されたエージェント/ユーザー）",
+    "publicOption": "パブリック（すべてのエージェント）"
+  },
+  "system": "システム",
+  "tabs": {
+    "core": "コア",
+    "custom": "カスタム"
+  },
+  "toggle": {
+    "enable": "スキルを有効化",
+    "disable": "スキルを無効化",
+    "disabled": "無効"
+  },
+  "deps": {
+    "rescan": "依存関係を再スキャン",
+    "rescanning": "スキャン中...",
+    "rescanSuccess": "{{count}}件のスキルを更新しました",
+    "missing": "不足: {{deps}}",
+    "install": "依存関係をインストール",
+    "installing": "インストール中...",
+    "installSuccess": "依存関係が正常にインストールされました",
+    "installPartial": "一部の依存関係のインストールに失敗しました",
+    "installItem": "インストール",
+    "itemSuccess": "インストール済み",
+    "itemError": "失敗",
+    "missingTitle": "不足している依存関係",
+    "systemLabel": "システム",
+    "pythonLabel": "Python",
+    "nodeLabel": "Node.js",
+    "statusActive": "アクティブ",
+    "statusArchived": "依存関係が不足",
+    "runtimeMissing": "ランタイム前提条件が不足しています",
+    "runtimeMissingDesc": "コアスキルにはPythonおよび/またはNode.jsランタイムが必要です。ENABLE_PYTHON=true、ENABLE_NODE=true、またはENABLE_FULL_SKILLS=trueでリビルドするか、手動でインストールしてください。",
+    "runtimeRequired": "先にランタイムをインストールしてください"
+  },
+  "detail": {
+    "title": "スキル詳細",
+    "content": "コンテンツ",
+    "files": "ファイル",
+    "version": "バージョン:",
+    "current": "（現在）",
+    "noContent": "コンテンツがありません。"
+  },
+  "toast": {
+    "updated": "スキルが更新されました",
+    "updateFailed": "スキルの更新に失敗しました",
+    "deleted": "スキルが削除されました",
+    "deleteFailed": "スキルの削除に失敗しました",
+    "rescanUpdated": "{{count}}件のスキルが更新されました",
+    "rescanNoChanges": "すべてのスキルが最新です",
+    "rescanFailed": "依存関係の再スキャンに失敗しました"
+  }
+}

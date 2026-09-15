@@ -1,0 +1,35 @@
+{
+  "title": "ノード",
+  "description": "ペアリング済みデバイスと保留中のペアリングリクエストを管理",
+  "emptyTitle": "デバイスがありません",
+  "emptyDescription": "ペアリング済みデバイスまたは保留中のペアリングリクエストがありません。",
+  "pendingRequests": "保留中のリクエスト ({{count}})",
+  "pairedDevices": "ペアリング済みデバイス ({{count}})",
+  "sender": "送信者:",
+  "chat": "チャット:",
+  "columns": {
+    "channel": "チャンネル",
+    "senderId": "送信者ID",
+    "paired": "ペアリング済み",
+    "by": "承認者",
+    "actions": "操作"
+  },
+  "approve": "承認",
+  "deny": "拒否",
+  "revoke": "失効",
+  "confirmApprove": {
+    "title": "ペアリングを承認",
+    "description": "{{channel}}:{{senderId}}（コード: {{code}}）からのペアリングリクエストを承認しますか？このデバイスはエージェントと対話できるようになります。",
+    "confirmLabel": "承認"
+  },
+  "confirmDeny": {
+    "title": "ペアリングを拒否",
+    "description": "{{channel}}:{{senderId}}（コード: {{code}}）からのペアリングリクエストを拒否しますか？リクエストは削除されます。",
+    "confirmLabel": "拒否"
+  },
+  "confirmRevoke": {
+    "title": "デバイスを失効",
+    "description": "{{channel}}:{{senderId}}のペアリングを失効しますか？デバイスは再ペアリングが必要になります。",
+    "confirmLabel": "失効"
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "title": "トレース",
+  "description": "LLM呼び出しトレースとパフォーマンスデータ",
+  "filterPlaceholder": "エージェントIDでフィルター...",
+  "filter": "フィルター",
+  "allAgents": "すべてのエージェント",
+  "allChannels": "すべてのチャンネル",
+  "emptyTitle": "トレースがありません",
+  "emptyDescription": "トレースが見つかりません。エージェントがリクエストを処理するとトレースが記録されます。",
+  "columns": {
+    "name": "名前",
+    "status": "ステータス",
+    "duration": "所要時間",
+    "tokens": "トークン",
+    "spans": "スパン",
+    "time": "時刻"
+  },
+  "unnamed": "名前なし",
+  "cached": "キャッシュ済み",
+  "detail": {
+    "title": "トレース詳細",
+    "copyTraceId": "トレースIDをコピー",
+    "notFound": "トレースが見つかりません。",
+    "name": "名前:",
+    "status": "ステータス:",
+    "duration": "所要時間:",
+    "channel": "チャンネル:",
+    "tokens": "トークン:",
+    "spans": "スパン:",
+    "started": "開始:",
+    "delegatedFrom": "委任元:",
+    "createdAt": "作成日:",
+    "input": "入力",
+    "output": "出力",
+    "copy": "コピー",
+    "spansCount": "スパン ({{count}})",
+    "llmCalls": "LLM",
+    "toolCalls": "ツール",
+    "export": "トレースをエクスポート"
+  },
+  "span": {
+    "model": "モデル:",
+    "tokens": "トークン:",
+    "createdAt": "作成日:",
+    "input": "入力:",
+    "output": "出力:",
+    "copy": "コピー",
+    "startTime": "開始:",
+    "endTime": "終了:",
+    "cacheRead": "読み取り",
+    "cacheWrite": "書き込み",
+    "thinking": "思考中",
+    "cached": "キャッシュ済み"
+  },
+  "toast": {
+    "failedLoad": "トレースの読み込みに失敗しました"
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "layout": {
+    "subtitle": "ゲートウェイをセットアップしましょう"
+  },
+  "steps": {
+    "provider": "プロバイダー",
+    "model": "モデル",
+    "agent": "エージェント",
+    "channel": "チャンネル",
+    "channelOptional": "（任意）"
+  },
+  "complete": {
+    "title": "セットアップ完了！",
+    "ready": "システムが使用可能になりました！",
+    "description": "プロバイダー、エージェント、チャンネルが設定されました。ダッシュボードからいつでも管理できます。",
+    "goToDashboard": "ダッシュボードへ"
+  },
+  "provider": {
+    "title": "LLMプロバイダーを設定",
+    "descriptionCli": "ローカルのClaude CLIを使用して接続します。APIキー不要。",
+    "descriptionOauth": "OAuthでChatGPTアカウントにサインインしてサブスクリプションを使用します。APIキー不要。",
+    "description": "エージェントを動かすためのAIプロバイダーに接続します。APIキーが必要です。",
+    "providerType": "プロバイダータイプ",
+    "providerTypeHint": "接続するLLMサービス。複数モデルへのアクセスにはOpenRouterを推奨します。",
+    "name": "名前",
+    "nameHint": "このプロバイダーの内部識別子。プロバイダータイプから自動生成されます。",
+    "apiKey": "APIキー *",
+    "apiKeyHint": "プロバイダーのシークレットキー。サーバー側で暗号化され、APIレスポンスに露出されません。",
+    "apiBase": "APIベースURL",
+    "apiBaseHint": "APIリクエストのエンドポイントURL。プロバイダータイプに基づいて自動入力されます。カスタムプロキシを使用する場合のみ上書きしてください。",
+    "creating": "作成中...",
+    "create": "プロバイダーを作成",
+    "errors": {
+      "apiKeyRequired": "APIキーは必須です",
+      "oauthProviderNotFound": "OAuth認証に成功しましたが、プロバイダーが見つかりませんでした。もう一度お試しください。",
+      "failedCreate": "プロバイダーの作成に失敗しました"
+    }
+  },
+  "model": {
+    "title": "モデルを選択して確認",
+    "description": "モデルを選択してプロバイダー接続が機能することを確認します。",
+    "provider": "プロバイダー:",
+    "model": "モデル *",
+    "modelHint": "使用するAIモデル。リストから選択するか、リストにない場合はモデルIDを手動で入力してください。",
+    "loadingModels": "モデルを読み込み中...",
+    "selectModel": "モデルIDを選択または入力",
+    "noModelsHint": "このプロバイダーはモデルを一覧表示しません — モデルIDを手動で入力してください。",
+    "verified": "確認済み",
+    "verify": "確認",
+    "verifying": "確認中...",
+    "continue": "続行",
+    "modelVerified": "モデルが確認されました",
+    "modelVerifiedDesc": "{{model}}は正常に動作しています",
+    "verificationFailed": "確認に失敗しました。APIキーとモデルを確認してください。"
+  },
+  "agent": {
+    "title": "最初のエージェントを作成",
+    "description": "エージェントはAIアシスタントです。名前と個性をカスタマイズしてください。",
+    "provider": "プロバイダー:",
+    "model": "モデル:",
+    "displayName": "表示名",
+    "displayNameHint": "召喚中にエージェントの個性に基づいて自動生成されます。",
+    "agentKey": "エージェントキー",
+    "agentKeyHint": "エージェントの一意の識別子。小文字、数字、ハイフンのみ。",
+    "agentKeyPlaceholder": "my-agent",
+    "personality": "エージェントの個性",
+    "personalityHint": "エージェントの役割と動作を説明してください。AIが召喚中にこれからコンテキストファイルを生成します。",
+    "personalityPlaceholder": "エージェントの個性、目的、動作を説明してください...",
+    "personalityHintBottom": "このプロンプトをカスタマイズしてエージェントの個性と専門知識を形成してください。",
+    "selfEvolve": "自己進化",
+    "selfEvolveDesc": "エージェントがSOUL.mdを通じてコミュニケーションスタイルを時間をかけて進化させることを許可",
+    "creating": "作成中...",
+    "create": "エージェントを作成",
+    "summoningFailed": "召喚に失敗しました。設定を調整して再試行してください。",
+    "errors": {
+      "noProvider": "プロバイダーが利用できません",
+      "failedCreate": "エージェントの作成に失敗しました"
+    }
+  },
+  "channel": {
+    "title": "チャンネルを接続",
+    "description": "エージェントにメッセージングプラットフォームを接続します。後でいつでもチャンネルを追加できます。",
+    "skip": "スキップ",
+    "skipFinish": "スキップして完了",
+    "agent": "エージェント:",
+    "channelType": "チャンネルタイプ",
+    "channelTypeHint": "接続するメッセージングプラットフォーム（例: Telegram、Discord、Zalo）。",
+    "name": "名前",
+    "nameHint": "このチャンネルインスタンスの内部識別子。チャンネルタイプから自動生成されます。",
+    "namePlaceholder": "my-telegram",
+    "displayName": "表示名",
+    "displayNameHint": "UIに表示されるフレンドリーな名前。任意です。",
+    "displayNamePlaceholder": "Sales Bot",
+    "credentials": "クレデンシャル",
+    "credentialsHint": "サーバー側で暗号化されます。APIレスポンスには返されません。",
+    "creating": "作成中...",
+    "create": "チャンネルを作成",
+    "errors": {
+      "noAgent": "エージェントが利用できません",
+      "requiredFields": "必須: {{fields}}",
+      "failedCreate": "チャンネルの作成に失敗しました"
+    }
+  },
+  "common": {
+    "back": "戻る"
+  },
+  "skipSetup": "セットアップをスキップしてダッシュボードへ",
+  "skipSetupConfirm": "セットアップをスキップしますか？プロバイダーとエージェントは後でダッシュボードから設定できます。",
+  "switchTenant": "切り替え",
+  "allTenants": "すべてのテナント"
+}

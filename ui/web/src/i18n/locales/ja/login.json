@@ -1,0 +1,40 @@
+{
+  "subtitle": "ゲートウェイダッシュボードにサインイン",
+  "selectTenant": "テナントを選択",
+  "selectTenantDescription": "続行するテナントを選択してください",
+  "allTenantsOption": "すべてのテナント",
+  "allTenantsDescription": "すべてのテナントのデータを表示",
+  "noAccess": "アクセスなし",
+  "noAccessDescription": "テナントへのアクセス権がありません。管理者にお問い合わせください。",
+  "tabs": {
+    "token": "トークン",
+    "pairing": "ペアリング"
+  },
+  "token": {
+    "userId": "ユーザーID",
+    "userIdPlaceholder": "your-user-id",
+    "gatewayToken": "ゲートウェイトークン",
+    "tokenPlaceholder": "Bearerトークン",
+    "connect": "接続",
+    "connecting": "接続中...",
+    "errorInvalidCredentials": "認証情報が無効です。トークンとユーザーIDをご確認ください。",
+    "errorServer": "サーバーが{{status}}を返しました。再試行してください。",
+    "errorCannotConnect": "ゲートウェイに接続できません。サーバーが起動しているかご確認ください。"
+  },
+  "pairing": {
+    "userId": "ユーザーID",
+    "userIdPlaceholder": "your-user-id",
+    "noTokenNeeded": "トークン不要。管理者が承認するためのペアリングコードが生成されます。",
+    "requestAccess": "アクセスをリクエスト",
+    "connecting": "接続中...",
+    "errorConnectionLost": "接続が切断されました。再試行してください。",
+    "errorCannotConnect": "ゲートウェイに接続できませんでした。",
+    "askAdmin": "管理者にこのコードの承認を依頼してください:",
+    "orRun": "または実行:",
+    "waitingForApproval": "承認待ち...",
+    "cancel": "キャンセル",
+    "approved": "アクセスが承認されました！リダイレクト中..."
+  },
+  "noAccessHint": "管理者にテナントへの追加を依頼するか、別のアカウントを使用してください。",
+  "logout": "サインアウト"
+}

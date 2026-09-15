@@ -1,0 +1,97 @@
+{
+  "title": "使用状況",
+  "description": "エージェント別のトークン使用量とコスト",
+  "emptyTitle": "使用データがありません",
+  "emptyDescription": "エージェントがリクエストを処理すると使用データがここに表示されます。",
+  "summary": {
+    "sessions": "{{count}}セッション",
+    "inputTokens": "入力トークン",
+    "outputTokens": "出力トークン",
+    "total": "合計"
+  },
+  "recentRecords": "最近の記録",
+  "columns": {
+    "agent": "エージェント",
+    "model": "モデル",
+    "provider": "プロバイダー",
+    "input": "入力",
+    "output": "出力",
+    "total": "合計",
+    "channel": "チャンネル",
+    "cost": "コスト",
+    "status": "ステータス"
+  },
+  "analytics": {
+    "title": "使用状況分析",
+    "period24h": "24時間",
+    "period7d": "7日",
+    "period30d": "30日",
+    "periodCustom": "カスタム",
+    "allAgents": "すべてのエージェント",
+    "allProviders": "すべてのプロバイダー",
+    "allChannels": "すべてのチャンネル",
+    "activeFilters": "アクティブなフィルター",
+    "clearAll": "すべてクリア",
+    "exportCsv": "CSVをエクスポート",
+    "requests": "リクエスト",
+    "tokens": "トークン",
+    "cost": "コスト",
+    "errors": "エラー",
+    "uniqueUsers": "ユニークユーザー",
+    "llmCalls": "LLM呼び出し",
+    "toolCalls": "ツール呼び出し",
+    "trendUp": "+{{value}}%",
+    "trendDown": "{{value}}%",
+    "vsPrevious": "前期間との比較",
+    "configurePricing": "コスト追跡のためのモデル価格を設定",
+    "noData": "選択した期間のデータがありません",
+    "tokenChart": {
+      "title": "時間別トークン使用量",
+      "input": "入力トークン",
+      "output": "出力トークン",
+      "cache": "キャッシュ読み取りトークン",
+      "thinking": "思考トークン",
+      "total": "合計"
+    },
+    "requestChart": {
+      "title": "リクエスト量とエラー",
+      "requests": "リクエスト",
+      "errors": "エラー",
+      "errorRate": "エラー率"
+    },
+    "distribution": {
+      "provider": "プロバイダー分布",
+      "model": "モデル分布",
+      "channel": "チャンネル分布",
+      "other": "その他",
+      "calls": "呼び出し"
+    },
+    "durationChart": {
+      "title": "所要時間とパフォーマンス",
+      "avgDuration": "平均所要時間",
+      "errorRate": "エラー率 %"
+    },
+    "knowledgeChart": {
+      "title": "メモリとナレッジグラフの成長",
+      "memoryDocs": "メモリドキュメント",
+      "memoryChunks": "メモリチャンク",
+      "kgEntities": "KGエンティティ",
+      "kgRelations": "KGリレーション"
+    },
+    "topModels": {
+      "title": "トップモデル",
+      "model": "モデル",
+      "provider": "プロバイダー",
+      "llmCalls": "LLM呼び出し",
+      "inputTokens": "入力トークン",
+      "outputTokens": "出力トークン",
+      "avgDuration": "平均所要時間",
+      "cost": "コスト"
+    },
+    "tooltip": {
+      "date": "日付",
+      "total": "合計",
+      "errorRate": "{{value}}% エラー率"
+    }
+  }
+}

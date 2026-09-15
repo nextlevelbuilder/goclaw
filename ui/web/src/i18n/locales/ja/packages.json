@@ -1,0 +1,43 @@
+{
+  "title": "ランタイム＆パッケージ",
+  "description": "システムランタイムとインストール済みパッケージを管理",
+  "runtimes": {
+    "title": "ランタイム",
+    "available": "利用可能",
+    "missing": "未インストール"
+  },
+  "system": {
+    "title": "システムパッケージ",
+    "placeholder": "パッケージ名（例: github-cli）"
+  },
+  "pip": {
+    "title": "Pythonパッケージ",
+    "placeholder": "パッケージ名（例: pandas）"
+  },
+  "npm": {
+    "title": "Nodeパッケージ",
+    "placeholder": "パッケージ名（例: typescript）"
+  },
+  "actions": {
+    "install": "インストール",
+    "uninstall": "アンインストール",
+    "installing": "インストール中...",
+    "uninstalling": "削除中..."
+  },
+  "messages": {
+    "installSuccess": "{{name}}が正常にインストールされました",
+    "installError": "{{name}}のインストールに失敗しました",
+    "uninstallSuccess": "{{name}}が正常に削除されました",
+    "uninstallError": "{{name}}の削除に失敗しました"
+  },
+  "confirmUninstall": {
+    "title": "アンインストールの確認",
+    "description": "{{name}}を削除しますか？この操作は取り消せません。"
+  },
+  "table": {
+    "name": "名前",
+    "version": "バージョン",
+    "actions": "操作",
+    "empty": "パッケージがインストールされていません"
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "title": "APIキー",
+  "description": "詳細な権限を持つゲートウェイAPIキーを管理します。",
+  "addKey": "APIキーを作成",
+  "searchPlaceholder": "キーを検索...",
+  "emptyTitle": "APIキーがありません",
+  "emptyDescription": "ゲートウェイで認証するための最初のAPIキーを作成してください。",
+  "columns": {
+    "name": "名前",
+    "prefix": "キー",
+    "scopes": "スコープ",
+    "lastUsed": "最終使用",
+    "created": "作成日",
+    "status": "ステータス",
+    "actions": "操作"
+  },
+  "status": {
+    "active": "有効",
+    "revoked": "失効",
+    "expired": "期限切れ"
+  },
+  "form": {
+    "title": "APIキーを作成",
+    "name": "名前",
+    "namePlaceholder": "例: ci-deploy, dashboard-readonly",
+    "scopes": "スコープ",
+    "scopeDescriptions": {
+      "operator.admin": "フル管理者アクセス",
+      "operator.read": "読み取り専用アクセス",
+      "operator.write": "読み取り＋書き込みアクセス",
+      "operator.approvals": "実行承認の管理",
+      "operator.pairing": "デバイスペアリングの管理",
+      "operator.provision": "新規テナントのプロビジョニング"
+    },
+    "tenant": "テナント",
+    "tenantSystem": "システム（全テナント）",
+    "expiry": "有効期限",
+    "expiryOptions": {
+      "never": "なし",
+      "7d": "7日",
+      "30d": "30日",
+      "90d": "90日"
+    },
+    "cancel": "キャンセル",
+    "create": "作成",
+    "creating": "作成中..."
+  },
+  "created": {
+    "title": "APIキーが作成されました",
+    "description": "今すぐこのキーをコピーしてください — 再表示されません。",
+    "copied": "コピーしました！",
+    "copy": "クリップボードにコピー",
+    "done": "完了"
+  },
+  "revoke": {
+    "title": "APIキーを失効",
+    "description": "\"{{name}}\"を失効させますか？この操作は取り消せません。",
+    "confirmLabel": "失効"
+  },
+  "toast": {
+    "created": "APIキーが作成されました",
+    "revoked": "APIキーが失効しました",
+    "failedCreate": "APIキーの作成に失敗しました",
+    "failedRevoke": "APIキーの失効に失敗しました"
+  },
+  "never": "なし",
+  "neverUsed": "未使用",
+  "tenantBadgeSystem": "システム",
+  "tenantBadgeUnknown": "不明",
+  "columns.expiry": "有効期限",
+  "codeDialog": {
+    "title": "APIキーの使用方法",
+    "description": "このAPIキーを使用してゲートウェイHTTP APIで認証します。",
+    "copy": "コピー",
+    "copied": "コピーしました！",
+    "tabs": {
+      "curl": "cURL",
+      "typescript": "TypeScript",
+      "go": "Go"
+    },
+    "comments": {
+      "chat": "エージェントとチャット（OpenAI互換）",
+      "listAgents": "エージェント一覧",
+      "listSessions": "セッション一覧"
+    }
+  }
+}

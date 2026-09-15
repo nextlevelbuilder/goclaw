@@ -1,0 +1,71 @@
+{
+  "title": "テキスト読み上げ",
+  "description": "TTSプロバイダーと自動適用設定を構成",
+  "save": "保存",
+  "saving": "保存中...",
+  "saveChanges": "変更を保存",
+  "status": {
+    "title": "ステータス",
+    "configured": "設定済み",
+    "disabled": "無効",
+    "noProvider": "TTSプロバイダーが設定されていません",
+    "activeProvider": "プライマリプロバイダー: {{provider}}、自動: {{auto}}"
+  },
+  "general": {
+    "title": "一般設定",
+    "primaryProvider": "プライマリプロバイダー",
+    "autoApplyMode": "自動適用モード",
+    "replyMode": "返信モード",
+    "maxTextLength": "最大テキスト長",
+    "timeout": "タイムアウト（ミリ秒）"
+  },
+  "providers": {
+    "none": "なし（無効）",
+    "openai": "OpenAI",
+    "elevenlabs": "ElevenLabs",
+    "edge": "Edge（無料）",
+    "minimax": "MiniMax"
+  },
+  "autoModes": {
+    "off": "オフ",
+    "offDesc": "エージェントは手動でTTSツールを使用できます",
+    "always": "常に",
+    "alwaysDesc": "すべての返信に音声を付与",
+    "inbound": "受信時",
+    "inboundDesc": "ユーザーが音声/オーディオを送信した時のみ",
+    "tagged": "タグ付き",
+    "taggedDesc": "返信に[[tts]]タグが含まれている時のみ"
+  },
+  "replyModes": {
+    "final": "最終のみ",
+    "finalDesc": "最終返信のみ",
+    "all": "すべて",
+    "allDesc": "ツール/ブロックを含むすべての返信"
+  },
+  "providerSettings": "{{provider}}の設定",
+  "openai": {
+    "apiKey": "APIキー",
+    "apiBase": "APIベースURL",
+    "model": "モデル",
+    "voice": "音声"
+  },
+  "elevenlabs": {
+    "apiKey": "APIキー",
+    "baseUrl": "ベースURL",
+    "voiceId": "音声ID",
+    "modelId": "モデルID"
+  },
+  "edge": {
+    "voice": "音声",
+    "speechRate": "スピーチレート",
+    "hint": "Edge TTSは無料でAPIキーは不要です。pip install edge-ttsでインストールしてください。"
+  },
+  "minimax": {
+    "apiKey": "APIキー",
+    "groupId": "グループID *",
+    "groupIdPlaceholder": "MiniMaxに必須",
+    "apiBase": "APIベース",
+    "model": "モデル",
+    "voiceId": "音声ID"
+  }
+}

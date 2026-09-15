@@ -1,0 +1,333 @@
+{
+  "title": "チャンネル",
+  "description": "チャンネルインスタンスを管理",
+  "statusDescription": "通信チャンネルのステータス",
+  "addChannel": "チャンネルを追加",
+  "refresh": "更新",
+  "searchPlaceholder": "チャンネルを検索...",
+  "emptyTitle": "チャンネルがありません",
+  "emptyDescription": "最初のチャンネルインスタンスを追加して始めましょう。",
+  "emptyStatusDescription": "通信チャンネルが設定されていません。",
+  "noMatchTitle": "一致するチャンネルがありません",
+  "noMatchDescription": "別の検索キーワードをお試しください。",
+  "columns": {
+    "name": "名前",
+    "type": "タイプ",
+    "agent": "エージェント",
+    "status": "ステータス",
+    "enabled": "有効",
+    "actions": "操作"
+  },
+  "status": {
+    "running": "実行中",
+    "stopped": "停止中"
+  },
+  "enabled": "有効",
+  "disabled": "無効",
+  "actions": {
+    "reauthenticate": "再認証",
+    "authenticate": "チャンネルを開始するために認証"
+  },
+  "delete": {
+    "title": "チャンネルインスタンスを削除",
+    "description": "「{{name}}」を削除しますか？この操作は取り消せません。",
+    "confirmLabel": "削除"
+  },
+  "form": {
+    "createTitle": "チャンネルインスタンスを作成",
+    "editTitle": "チャンネルインスタンスを編集",
+    "key": "キー *",
+    "keyPlaceholder": "my-telegram-bot",
+    "keyHint": "チャンネル識別子として使用される一意のスラグ",
+    "displayName": "表示名",
+    "displayNamePlaceholder": "Sales Bot",
+    "channelType": "チャンネルタイプ *",
+    "agent": "エージェント *",
+    "selectAgent": "エージェントを選択",
+    "credentials": "クレデンシャル",
+    "credentialsHint": "（現在の値を保持するには空白のまま）",
+    "credentialsEncrypted": "サーバー側で暗号化されます。APIレスポンスには返されません。",
+    "configuration": "設定",
+    "enabled": "有効",
+    "cancel": "キャンセル",
+    "create": "作成",
+    "update": "更新",
+    "saving": "保存中...",
+    "step": "ステップ {{current}} / {{total}}",
+    "authenticate": "認証 — {{label}}",
+    "configure": "設定 — {{label}}",
+    "skip": "スキップ",
+    "done": "完了",
+    "errors": {
+      "keyRequired": "キーは必須です",
+      "keySlug": "キーは有効なスラグ（小文字、数字、ハイフンのみ）でなければなりません",
+      "agentRequired": "エージェントは必須です",
+      "requiredFields": "必須: {{fields}}",
+      "failedSave": "保存に失敗しました",
+      "failedSaveConfig": "設定の保存に失敗しました"
+    },
+    "authStatus": {
+      "authenticated": "認証済み",
+      "notAuthenticated": "未認証",
+      "useQrHint": "— チャンネルテーブルのQRログインボタンを使用してください"
+    }
+  },
+  "detail": {
+    "agent": "エージェント: {{name}}",
+    "advanced": "詳細設定",
+    "advancedTitle": "詳細設定",
+    "policies": "ポリシー",
+    "policiesDesc": "メッセージ処理ポリシー",
+    "network": "ネットワーク",
+    "networkDesc": "サーバーおよびプロキシ設定",
+    "limits": "制限",
+    "limitsDesc": "メッセージおよびメディアの制約",
+    "streaming": "ストリーミング",
+    "streamingDesc": "リアルタイムメッセージストリーミングオプション",
+    "behavior": "動作",
+    "behaviorDesc": "応答動作の設定",
+    "accessControl": "アクセス制御",
+    "accessControlDesc": "ユーザーアクセス制限",
+    "tabs": {
+      "general": "一般",
+      "config": "設定",
+      "credentials": "クレデンシャル",
+      "groups": "グループ",
+      "managers": "マネージャー"
+    },
+    "general": {
+      "identity": "ID情報",
+      "name": "名前",
+      "nameHint": "一意のスラグ（読み取り専用）",
+      "channelType": "チャンネルタイプ",
+      "displayName": "表示名",
+      "displayNamePlaceholder": "フレンドリーな名前",
+      "agent": "エージェント",
+      "selectAgent": "エージェントを選択",
+      "enabled": "有効",
+      "saved": "保存済み",
+      "saveChanges": "変更を保存",
+      "saving": "保存中..."
+    },
+    "credentials": {
+      "hint": "現在の値を保持するにはフィールドを空白のままにしてください。クレデンシャルはサーバー側で暗号化され、APIレスポンスには返されません。",
+      "noSchema": "このチャンネルタイプのクレデンシャルスキーマがありません。",
+      "noCredentials": "更新するクレデンシャルがありません",
+      "failedSave": "保存に失敗しました",
+      "saved": "保存済み",
+      "updateCredentials": "クレデンシャルを更新",
+      "saving": "保存中..."
+    },
+    "config": {
+      "noSchema": "このチャンネルタイプの設定スキーマがありません。",
+      "saved": "保存済み",
+      "saveConfig": "設定を保存",
+      "saving": "保存中...",
+      "webhookUrlLabel": "LarkアプリのイベントリクエストURLとして設定してください:",
+      "copyPath": "パスをコピー"
+    },
+    "groups": {
+      "saved": "保存済み",
+      "saveGroups": "グループを保存",
+      "saving": "保存中..."
+    },
+    "managers": {
+      "description": "グループチャットでマネージャー権限を持つユーザーを管理します。",
+      "groups": "グループ",
+      "noManagerGroups": "マネージャーグループがありません",
+      "noManagerGroupsHint": "以下のフォームを使用してグループにマネージャーを追加してください。",
+      "loadingManagers": "マネージャーを読み込み中...",
+      "noManagers": "このグループにマネージャーがいません。",
+      "managersCount": "{{count}}名のマネージャー",
+      "managersCountPlural": "{{count}}名のマネージャー",
+      "searchContacts": "コンタクトを検索...",
+      "noResults": "コンタクトが見つかりません",
+      "columns": {
+        "userId": "ユーザーID",
+        "name": "名前",
+        "username": "ユーザー名"
+      },
+      "addForm": {
+        "title": "新しいグループにマネージャーを追加",
+        "hint": "上のリストに表示されていないグループにマネージャーを追加します。",
+        "groupId": "グループID *",
+        "groupIdPlaceholder": "例: group:telegram:-100123456",
+        "userId": "ユーザーID *",
+        "userIdPlaceholder": "ユーザーIDを検索または入力",
+        "displayName": "表示名",
+        "username": "ユーザー名",
+        "optional": "任意",
+        "usernameWithout": "任意（@なし）",
+        "adding": "追加中...",
+        "addManager": "マネージャーを追加",
+        "add": "追加",
+        "errors": {
+          "groupUserRequired": "グループIDとユーザーIDは必須です",
+          "failedAdd": "マネージャーの追加に失敗しました"
+        }
+      }
+    }
+  },
+  "fieldConfig": {
+    "token": { "label": "ボットトークン", "help": "@BotFatherから取得" },
+    "bot_token": { "label": "ボットトークン" },
+    "app_token": { "label": "アプリレベルトークン", "help": "connections:writeスコープを持つアプリレベルトークン（ソケットモードに必要）" },
+    "user_token": { "label": "ユーザートークン（任意）", "help": "任意: カスタムボットアイデンティティ用のユーザーOAuthトークン。デフォルトのボットアイデンティティを使用する場合は空のまま。" },
+    "app_id": { "label": "アプリID" },
+    "app_secret": { "label": "アプリシークレット" },
+    "encrypt_key": { "label": "暗号化キー", "help": "Webhookモード用" },
+    "verification_token": { "label": "検証トークン", "help": "Webhookモード用" },
+    "webhook_secret": { "label": "Webhookシークレット" },
+    "bridge_url": { "label": "ブリッジURL" },
+    "api_server": { "label": "APIサーバーURL", "help": "大きなファイルのアップロード（最大2GB）のためのカスタムTelegram Bot APIサーバー。デフォルトを使用する場合は空のまま。" },
+    "proxy": { "label": "HTTPプロキシ", "help": "HTTPプロキシ経由でボットトラフィックをルーティング" },
+    "dm_policy": { "label": "DMポリシー" },
+    "group_policy": { "label": "グループポリシー" },
+    "require_mention": { "label": "グループで@メンションを必須にする" },
+    "history_limit": { "label": "グループ履歴制限", "help": "コンテキスト用の最大保留グループメッセージ数（0 = 無効）" },
+    "dm_stream": { "label": "DMストリーミング", "help": "DMで応答を段階的にストリーム" },
+    "group_stream": { "label": "グループストリーミング", "help": "グループで応答を段階的にストリーム" },
+    "draft_transport": { "label": "ドラフトプレビュー", "help": "DMで回答ストリームにステルスドラフトプレビューを使用 — 編集ごとに通知なし（DMストリーミングが必要）" },
+    "reasoning_stream": { "label": "推論を表示", "help": "回答の前にAIの思考を別のメッセージとして表示（ストリーミングが必要）" },
+    "reaction_level": { "label": "リアクションレベル" },
+    "media_max_mb": { "label": "最大メディアサイズ（MB）" },
+    "link_preview": { "label": "リンクプレビュー" },
+    "allow_from": { "label": "許可ユーザー" },
+    "block_reply": { "label": "返信をブロック", "help": "ツール繰り返し中に中間テキストを配信" },
+    "domain": { "label": "ドメイン" },
+    "connection_mode": { "label": "接続モード", "help": "WebSocketはパブリックIPが不要です — アウトバウンド接続のみ" },
+    "webhook_port": { "label": "Webhookポート", "help": "0 = メインゲートウェイポートを共有（推奨）" },
+    "webhook_path": { "label": "Webhookパス", "help": "Larkイベント用のメインサーバーのパス" },
+    "webhook_url": { "label": "Webhook URL" },
+    "topic_session_mode": { "label": "トピックセッションモード", "help": "セッション分離にスレッドroot_idを使用" },
+    "render_mode": { "label": "レンダーモード" },
+    "text_chunk_limit": { "label": "テキストチャンク制限", "help": "メッセージあたりの最大文字数" },
+    "group_allow_from": { "label": "グループ許可ユーザー", "help": "グループ送信者用の個別許可リスト" },
+    "native_stream": { "label": "ネイティブストリーミング（エージェントとAIアプリ）", "help": "SlackのChatStreamer APIを使用したネイティブストリーミング。利用不可の場合はその場での編集にフォールバック。" },
+    "debounce_delay": { "label": "デバウンス遅延（ミリ秒）", "help": "高速メッセージを送信する前に待機するミリ秒数。0に設定すると無効。" },
+    "thread_ttl": { "label": "スレッド参加TTL（時間）", "help": "ボットが参加したスレッドで自動返信を停止するまでの時間。0 = 常に@メンションが必要。" },
+    "skills": { "label": "スキルフィルター", "help": "このグループの利用可能なスキルを制限" },
+    "tools": { "label": "ツール許可リスト", "help": "このグループでエージェントが使用できるツールを制限" },
+    "system_prompt": { "label": "システムプロンプト" }
+  },
+  "fieldOptions": {
+    "block_reply": {
+      "inherit": "ゲートウェイから継承",
+      "true": "有効",
+      "false": "無効"
+    },
+    "dm_policy": {
+      "pairing": "ペアリング（コード必須）",
+      "open": "オープン（すべて受け入れ）",
+      "allowlist": "許可リストのみ",
+      "disabled": "無効"
+    },
+    "group_policy": {
+      "open": "オープン（すべて受け入れ）",
+      "pairing": "ペアリング（承認必須）",
+      "allowlist": "許可リストのみ",
+      "disabled": "無効"
+    },
+    "reaction_level": {
+      "off": "オフ",
+      "minimal": "最小",
+      "full": "フル"
+    },
+    "domain": {
+      "lark": "Lark（グローバル）",
+      "feishu": "Feishu（中国）"
+    },
+    "connection_mode": {
+      "webhook": "Webhook",
+      "websocket": "WebSocket（推奨）"
+    },
+    "topic_session_mode": {
+      "disabled": "無効",
+      "enabled": "有効"
+    },
+    "render_mode": {
+      "auto": "自動",
+      "raw": "Raw",
+      "card": "カード"
+    }
+  },
+  "groupOverrides": {
+    "title": "グループ＆トピックのオーバーライド",
+    "hint": "グループチャットまたはフォーラムトピックごとにチャンネルのデフォルトをオーバーライドします。ワイルドカードのデフォルトにはグループIDとして「*」を使用してください。",
+    "groupLabel": "グループ: {{id}}",
+    "groupWildcard": "* （ワイルドカード）",
+    "addGroupPlaceholder": "チャットID（例: -100123456）または *",
+    "addGroup": "グループを追加",
+    "knownGroups": "既知のグループ",
+    "topicOverrides": "トピックのオーバーライド",
+    "topicLabel": "トピック: {{id}}",
+    "addTopicPlaceholder": "トピックスレッドID",
+    "addTopic": "トピックを追加",
+    "fieldConfig": {
+      "dm_stream": { "label": "DMストリーミング", "help": "DMで応答を段階的にストリーム" },
+      "group_stream": { "label": "グループストリーミング", "help": "グループで応答を段階的にストリーム" },
+      "draft_transport": { "label": "ドラフトプレビュー", "help": "DMで回答ストリームにステルスドラフトプレビューを使用 — 編集ごとに通知なし（DMストリーミングが必要）" },
+      "reasoning_stream": { "label": "推論を表示", "help": "回答の前にAIの思考を別のメッセージとして表示（ストリーミングが必要）" }
+    },
+    "fields": {
+      "groupPolicy": "グループポリシー",
+      "requireMention": "@メンションを必須にする",
+      "enabled": "有効",
+      "allowedUsers": "許可ユーザー",
+      "allowedUsersPlaceholder": "1行に1ユーザーIDまたはカンマ区切り",
+      "skillsFilter": "スキルフィルター",
+      "skillsPlaceholder": "1行に1スキル名（空 = 継承）",
+      "toolAllow": "ツール許可",
+      "toolAllowPlaceholder": "許可するツールを選択（空 = すべて継承）...",
+      "toolAllowHint": "このグループで利用可能なツールを制限します。「group:web」、「group:fs」などのグループ名をサポートします。空 = すべてのツールを継承。",
+      "systemPrompt": "システムプロンプト",
+      "systemPromptPlaceholder": "このグループ/トピック用の追加システムプロンプト",
+      "inherit": "継承（チャンネルのデフォルト）",
+      "yes": "はい",
+      "no": "いいえ"
+    }
+  },
+  "wizard": {
+    "zaloPersonal": {
+      "createLabel": "作成して認証",
+      "formBanner": "作成後、QRコードで認証し、許可ユーザーを設定します。"
+    }
+  },
+  "scopes": {
+    "title": "必要なAPI権限",
+    "description": "LarkまたはFeishuアプリにはDeveloper Consoleでこれらのスコープが有効になっている必要があります。権限追加後に新しいアプリバージョンを公開してください。",
+    "publishReminder": "スコープ追加後、連絡先範囲を「全メンバー」に設定し、変更を有効にするために新しいアプリバージョンを公開してください。"
+  },
+  "toast": {
+    "created": "チャンネルが作成されました",
+    "createdDesc": "{{name}}が追加されました",
+    "updated": "チャンネルが更新されました",
+    "deleted": "チャンネルが削除されました",
+    "failedCreate": "チャンネルの作成に失敗しました",
+    "failedUpdate": "チャンネルの更新に失敗しました",
+    "failedDelete": "チャンネルの削除に失敗しました"
+  },
+  "zalo": {
+    "allowedUsers": "許可ユーザー",
+    "loadContacts": "コンタクトを読み込む",
+    "loading": "読み込み中...",
+    "searchContacts": "コンタクトを検索...",
+    "friends": "友達",
+    "groups": "グループ",
+    "membersCount": "{{count}}名のメンバー",
+    "noContacts": "コンタクトが見つかりません",
+    "noContactsMatch": "「{{search}}」に一致するコンタクトがありません",
+    "addManualPlaceholder": "IDを手動で追加",
+    "add": "追加",
+    "zaloIdsHint": "ZaloのユーザーIDまたはグループID",
+    "completeQrLogin": "コンタクトを読み込むにはQRログインを完了してください",
+    "loginQr": "QRでログイン — {{name}}",
+    "loginSuccessful": "ログイン成功！チャンネルを開始中...",
+    "generatingQr": "QRコードを生成中...",
+    "scanHint": "Zaloアプリでスキャン（約100秒で期限切れ）",
+    "loginSuccessLoading": "ログイン成功！コンタクトを読み込み中...",
+    "retry": "再試行",
+    "close": "閉じる",
+    "skip": "スキップ"
+  }
+}

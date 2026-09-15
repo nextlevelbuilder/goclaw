@@ -1,0 +1,36 @@
+{
+  "title": "リアルタイムイベント",
+  "description": "すべてのチームとエージェントにわたるライブWebSocketイベント",
+  "live": "ライブ",
+  "paused": "一時停止",
+  "resume": "再開",
+  "pause": "一時停止",
+  "clear": "クリア",
+  "scrollToBottom": "最下部にスクロール",
+  "eventCount": "{{count}}件のイベント",
+  "eventCountPlural": "{{count}}件のイベント",
+  "categories": {
+    "all": "すべて",
+    "task": "タスク",
+    "message": "メッセージ",
+    "agent": "エージェント",
+    "teamCrud": "チームCRUD",
+    "agentLink": "エージェントリンク"
+  },
+  "filters": {
+    "allTeams": "すべてのチーム",
+    "allUsers": "すべてのユーザー",
+    "allChats": "すべてのチャット"
+  },
+  "global": "グローバル",
+  "emptyTitle": "イベントがまだありません",
+  "emptyPaused": "イベントキャプチャが一時停止されています。再開して新しいイベントを確認してください。",
+  "emptyWaiting": "リアルタイムイベントを待機中... エージェントが作業するとイベントが表示されます。",
+  "detail": {
+    "copy": "コピー",
+    "copied": "コピーしました"
+  },
+  "toolBadge": { "error": "エラー", "activated": "有効化済み", "ok": "OK" },
+  "moreArgs": "...{{count}}件以上",
+  "parentLabel": "親:"
+}
