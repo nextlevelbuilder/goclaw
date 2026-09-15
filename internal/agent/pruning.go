@@ -384,9 +384,19 @@ func findAssistantCutoff(msgs []providers.Message, keepLast int) int {
 	return -1
 }
 
-// estimateMessageChars returns the character count of a message's content.
+// estimateMessageChars returns the character count of a message's content sections.
+// Includes Thinking content and ToolCalls to ensure pruning is accurate for
+// reasoning models and tool-heavy agents.
 func estimateMessageChars(m providers.Message) int {
-	return utf8.RuneCountInString(m.Content)
+	chars := utf8.RuneCountInString(m.Content)
+	if m.Thinking != "" {
+		chars += utf8.RuneCountInString(m.Thinking)
+	}
+	for _, tc := range m.ToolCalls {
+		// Include tool name plus a small overhead buffer for JSON arguments
+		chars += utf8.RuneCountInString(tc.Name) + 100
+	}
+	return chars
 }
 
 // hasImportantTail checks if the last ~500 chars of content contain error/summary keywords.
