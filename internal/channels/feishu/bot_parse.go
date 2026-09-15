@@ -236,19 +236,27 @@ func extractPostImageKeys(rawContent string) []string {
 }
 
 // resolveMentions replaces mention placeholders (@_user_1, @_user_2, etc.) in content.
-// Bot mention is stripped entirely; other user mentions become @Name.
+// Bot mention is stripped entirely (both token and @Name) to ensure slash commands work
+// in group chats. Others are resolved to @Name.
 func resolveMentions(text string, mentions []mentionInfo, botOpenID string) string {
 	for _, m := range mentions {
 		if m.Key == "" {
 			continue
 		}
-		if botOpenID != "" && m.OpenID == botOpenID {
-			// Strip bot mention
+		isBot := botOpenID != "" && m.OpenID == botOpenID
+
+		if isBot {
+			// Aggressively strip bot mention in all forms (token and resolved name)
+			// to ensure slash commands like "/reset" have no leading markers.
 			text = strings.ReplaceAll(text, m.Key, "")
+			if m.Name != "" {
+				text = strings.ReplaceAll(text, "@"+m.Name, "")
+			}
 		} else if m.Name != "" {
-			// Replace with @Name
+			// Resolve Peer mentions to @Name
 			text = strings.ReplaceAll(text, m.Key, "@"+m.Name)
 		}
 	}
+	// Aggressive trim: ensure slash commands ("/reset") are detected at the very start.
 	return strings.TrimSpace(text)
 }
