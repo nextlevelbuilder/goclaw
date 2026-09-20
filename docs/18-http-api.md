@@ -124,7 +124,7 @@ CRUD operations for agent management. Requires `X-GoClaw-User-Id` header for mul
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
 | `GET` | `/v1/agents` | List agents accessible by user | Bearer |
-| `POST` | `/v1/agents` | Create new agent | Bearer |
+| `POST` | `/v1/agents` | Create new agent (`"summon": false` skips background summoning) | Bearer |
 | `GET` | `/v1/agents/{id}` | Get agent by ID or key | Bearer |
 | `PUT` | `/v1/agents/{id}` | Update agent (owner only) | Bearer |
 | `DELETE` | `/v1/agents/{id}` | Delete agent (owner only) | Bearer |

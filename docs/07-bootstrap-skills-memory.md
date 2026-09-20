@@ -242,6 +242,18 @@ The LLM outputs structured XML with each file in a tagged block. Parsing is done
 
 **Why not `write_file`?** The `ContextFileInterceptor` blocks predefined file writes from chat by design. Bypassing it would create a security hole. Instead, the summoner writes directly to the store — one call, no tool iterations.
 
+**Opting out: `"summon": false` on `POST /v1/agents`.** Summoning runs in the
+background and finishes 10-20s after create returns, overwriting the agent's
+context files and `frontmatter` when it does. That is what you want for an
+agent described in prose, and exactly what you do not want for an agent kept
+as code: such a client writes its own files through `agents.files.set` right
+after create, and summoning silently replaces them — no error, nothing in the
+logs, the agent simply runs on generated text instead of the committed one.
+Passing `"summon": false` creates the agent `active` with the seeded template
+files and starts no LLM call. The field is optional and defaults to true, so
+clients that do not send it keep the current behaviour. Summoning can still be
+triggered later via `POST /v1/agents/{id}/resummon`.
+
 ---
 
 ## 8. Skills -- 5-Tier Hierarchy
