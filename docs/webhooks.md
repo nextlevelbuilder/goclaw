@@ -583,7 +583,8 @@ Relevant for `POST /v1/webhooks/message` with `media_url`.
 | `zalo_personal` | yes | yes |
 | `pancake` | yes | yes |
 | `facebook` | yes | yes |
-| `zalo_oa` | yes | no |
+| `zalo_oa` | yes | yes (image/gif/file via OA upload endpoints) |
+| `zalo_bot` | yes | no |
 
 When `media_url` is sent to a non-media-capable channel:
 - `fallback_to_text=true` → text content delivered, `warning` field set

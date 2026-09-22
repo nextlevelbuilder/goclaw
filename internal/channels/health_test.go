@@ -531,3 +531,24 @@ func TestMergeChannelHealthTracksFailureTimelineAndRecovery(t *testing.T) {
 		t.Fatalf("expected cumulative failure count 3, got %d", third.FailureCount)
 	}
 }
+
+func TestMergeChannelHealth_DoesNotInheritBootstrapAfterHealthy(t *testing.T) {
+	boot := NewChannelHealth(ChannelHealthStateDegraded, "awaiting webhook secret", "", ChannelFailureKindConfig, true)
+	boot.BootstrapState = ChannelBootstrapAwaitingSecret
+	boot = mergeChannelHealth(ChannelHealth{}, boot)
+	if boot.BootstrapState != ChannelBootstrapAwaitingSecret {
+		t.Fatalf("bootstrap snapshot lost state: %q", boot.BootstrapState)
+	}
+
+	healthy := NewChannelHealth(ChannelHealthStateHealthy, "Connected", "", ChannelFailureKindUnknown, false)
+	healthy = mergeChannelHealth(boot, healthy)
+	if healthy.BootstrapState != "" {
+		t.Fatalf("healthy recovery inherited bootstrap %q", healthy.BootstrapState)
+	}
+
+	stopped := NewChannelHealth(ChannelHealthStateStopped, "Stopped", "", ChannelFailureKindUnknown, false)
+	stopped = mergeChannelHealth(boot, stopped)
+	if stopped.BootstrapState != "" {
+		t.Fatalf("stopped recovery inherited bootstrap %q", stopped.BootstrapState)
+	}
+}

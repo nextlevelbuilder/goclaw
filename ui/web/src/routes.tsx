@@ -12,6 +12,9 @@ import { lazyWithRetry } from "@/lib/lazy-with-retry";
 const LoginPage = lazyWithRetry(() =>
   import("@/pages/login/login-page").then((m) => ({ default: m.LoginPage })),
 );
+const ZaloOACallbackPage = lazyWithRetry(() =>
+  import("@/pages/channels/zalo/zalo-oa-callback-page").then((m) => ({ default: m.ZaloOACallbackPage })),
+);
 const OverviewPage = lazyWithRetry(() =>
   import("@/pages/overview/overview-page").then((m) => ({ default: m.OverviewPage })),
 );
@@ -139,6 +142,10 @@ export function AppRoutes() {
       <Routes>
         <Route path={ROUTES.LOGIN} element={<LoginPage />} />
 
+        {/* Zalo OA OAuth callback — public, no redirect (catch-all would
+            otherwise rewrite the URL and drop the ?code= query). */}
+        <Route path="/oauth/zalo/callback" element={<ZaloOACallbackPage />} />
+        <Route path="/zalo/callback" element={<ZaloOACallbackPage />} />
         {/* Tenant selector — accessible when authenticated but tenant not yet selected */}
         <Route path={ROUTES.SELECT_TENANT} element={<TenantSelectorPage />} />
 

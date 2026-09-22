@@ -30,6 +30,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo"
+	zalooa "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/oa"
 	zalopersonal "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/consolidation"
@@ -532,6 +533,11 @@ func runGateway() {
 
 	// Create gateway server and wire enforcement
 	server := gateway.NewServer(cfg, msgBus, agentRouter, pgStores.Sessions, toolsReg)
+	channelPublicURL := server.PublicURLSnapshot().Get
+	if publicURL := strings.TrimRight(strings.TrimSpace(cfg.Gateway.PublicURL), "/"); publicURL != "" && server.PublicURLSnapshot().SetIfPublic(publicURL) {
+		// Explicit operator configuration must win over later request-host inference.
+		channelPublicURL = func() string { return publicURL }
+	}
 	server.SetVersion(Version)
 	server.SetDB(pgStores.DB)
 	server.SetPolicyEngine(permPE)
@@ -815,6 +821,10 @@ func runGateway() {
 	cfgPermsMethods.SetMemberResolver(channelMgr)
 	if channelInstancesH != nil {
 		channelInstancesH.SetMemberResolver(channelMgr)
+		channelInstancesH.SetPublicURLSource(
+			channelPublicURL,
+			server.PublicURLSnapshot().UpdateIfPublic,
+		)
 		// Setter (not constructor) because wireHTTP runs before channelMgr is
 		// created — required for handleDelete to invoke ChannelDestroyer on
 		// Bitrix24 channels (imbot.unregister bot cleanup).
@@ -906,7 +916,8 @@ func runGateway() {
 		instanceLoader.RegisterFactory(channels.TypeTelegram, telegram.FactoryWithStoresAndAudio(pgStores.Agents, pgStores.ConfigPermissions, pgStores.Teams, pgStores.SubagentTasks, pgStores.PendingMessages, audioMgr))
 		instanceLoader.RegisterFactory(channels.TypeDiscord, discord.FactoryWithStoresAndAudio(pgStores.Agents, pgStores.ConfigPermissions, pgStores.PendingMessages, audioMgr))
 		instanceLoader.RegisterFactory(channels.TypeFeishu, feishu.FactoryWithStoresAndAudio(pgStores.Agents, pgStores.ConfigPermissions, pgStores.PendingMessages, audioMgr))
-		instanceLoader.RegisterFactory(channels.TypeZaloOA, zalo.Factory)
+		instanceLoader.RegisterFactory(channels.TypeZaloOA, zalooa.Factory(pgStores.ChannelInstances))
+		instanceLoader.RegisterFactory(channels.TypeZaloBot, zalo.Factory)
 		instanceLoader.RegisterFactory(channels.TypeZaloPersonal, zalopersonal.FactoryWithPendingStore(pgStores.PendingMessages))
 		instanceLoader.RegisterFactory(channels.TypeWhatsApp, whatsapp.FactoryWithDBAudio(pgStores.DB, pgStores.PendingMessages, "pgx", audioMgr, pgStores.BuiltinTools))
 		instanceLoader.RegisterFactory(channels.TypeSlack, slackchannel.FactoryWithPendingStore(pgStores.PendingMessages))
@@ -969,6 +980,34 @@ func runGateway() {
 
 	// Register channels/instances/links/teams RPC methods
 	chInstancesM := wireChannelRPCMethods(server, pgStores, channelMgr, instanceLoader, agentRouter, msgBus, cfg, workspace)
+
+	// One coordinator owns single-use consent state for both transports.
+	if pgStores.ChannelInstances != nil {
+		zaloOAAuth := methods.NewZaloOAMethods(pgStores.ChannelInstances, msgBus)
+		zaloOAAuth.SetPublicURL(channelPublicURL)
+		zaloOAAuth.Register(server.Router())
+		if channelInstancesH != nil {
+			channelInstancesH.SetZaloOAAuthFlow(
+				func(ctx context.Context, tenantID uuid.UUID, instanceID string) (map[string]any, *httpapi.ZaloOAFlowError) {
+					result, flowErr := zaloOAAuth.ConsentURL(ctx, tenantID, instanceID)
+					if flowErr != nil {
+						return nil, &httpapi.ZaloOAFlowError{Code: flowErr.Code, Message: flowErr.Message}
+					}
+					return map[string]any{"url": result.URL, "state": result.State}, nil
+				},
+				func(ctx context.Context, tenantID uuid.UUID, instanceID, code, state, oaID string) (map[string]any, *httpapi.ZaloOAFlowError) {
+					result, flowErr := zaloOAAuth.ExchangeCode(ctx, tenantID, instanceID, code, state, oaID)
+					if flowErr != nil {
+						return nil, &httpapi.ZaloOAFlowError{Code: flowErr.Code, Message: flowErr.Message}
+					}
+					return map[string]any{
+						"ok": result.OK, "oa_id": result.OAID,
+						"expires_at": result.ExpiresAt, "message": result.Message,
+					}, nil
+				},
+			)
+		}
+	}
 
 	// Bitrix24 orphan-bot cleaner. Fires from channel_instances delete handler
 	// when the channel is no longer loaded in the Manager (typical scenario:

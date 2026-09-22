@@ -112,11 +112,14 @@ const (
 
 // Channel instances management
 const (
-	MethodChannelInstancesList   = "channels.instances.list"
-	MethodChannelInstancesGet    = "channels.instances.get"
-	MethodChannelInstancesCreate = "channels.instances.create"
-	MethodChannelInstancesUpdate = "channels.instances.update"
-	MethodChannelInstancesDelete = "channels.instances.delete"
+	MethodChannelInstancesList               = "channels.instances.list"
+	MethodChannelInstancesGet                = "channels.instances.get"
+	MethodChannelInstancesCreate             = "channels.instances.create"
+	MethodChannelInstancesUpdate             = "channels.instances.update"
+	MethodChannelInstancesDelete             = "channels.instances.delete"
+	MethodChannelInstancesZaloOAConsentURL   = "channels.instances.zalo_oa.consent_url"
+	MethodChannelInstancesZaloOAExchangeCode = "channels.instances.zalo_oa.exchange_code"
+	MethodChannelInstancesZaloOACallbackURL  = "channels.instances.zalo_oa.callback_url"
 )
 
 // Agent links (inter-agent delegation)

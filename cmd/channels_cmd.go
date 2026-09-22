@@ -23,12 +23,15 @@ func channelsCmd() *cobra.Command {
 
 // httpChannelInstance is the CLI-side representation of a channel instance from the HTTP API.
 type httpChannelInstance struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	ChannelType string `json:"channel_type"`
-	AgentID     string `json:"agent_id"`
-	Enabled     bool   `json:"enabled"`
-	Status      string `json:"status"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	ChannelType   string `json:"channel_type"`
+	AgentID       string `json:"agent_id"`
+	Enabled       bool   `json:"enabled"`
+	Status        string `json:"status"`
+	AuthConnected *bool  `json:"auth_connected,omitempty"`
+	WebhookURL    string `json:"webhook_url,omitempty"`
+	CallbackURL   string `json:"callback_url,omitempty"`
 }
 
 func channelsListCmd() *cobra.Command {
@@ -96,6 +99,7 @@ func runChannelsAdd() {
 		{"Telegram", "telegram"},
 		{"Discord", "discord"},
 		{"Slack", "slack"},
+		{"Zalo Bot", "zalo_bot"},
 	}
 	channelType, err := promptSelect("Channel type", typeOptions, 0)
 	if err != nil {
@@ -122,6 +126,13 @@ func runChannelsAdd() {
 		creds["token"] = token
 	case "discord":
 		token, err := promptPassword("Bot token", "from Discord Developer Portal")
+		if err != nil || token == "" {
+			fmt.Println("Cancelled.")
+			return
+		}
+		creds["token"] = token
+	case "zalo_bot":
+		token, err := promptPassword("Bot token", "from Zalo Bot Manager")
 		if err != nil || token == "" {
 			fmt.Println("Cancelled.")
 			return
@@ -182,7 +193,7 @@ func runChannelsAdd() {
 	}
 
 	fmt.Printf("\nChannel %q (%s) created and bound to agent.\n", name, channelType)
-	fmt.Println("Note: For Zalo, Feishu, WhatsApp — use the Web Dashboard.")
+	fmt.Println("Note: For Zalo OA OAuth, Zalo Personal, Feishu, WhatsApp — use the Web Dashboard.")
 }
 
 func channelsDeleteCmd() *cobra.Command {

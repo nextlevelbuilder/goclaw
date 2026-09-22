@@ -381,4 +381,31 @@ const (
 	MsgGitCredHostScopeInvalid         = "error.git_cred_host_scope_invalid"         // "host_scope %q is not a valid hostname"
 	MsgGitCredBlobMissingField         = "error.git_cred_blob_missing_field"         // "blob missing required field %q"
 	MsgGitCredUnsupportedCredType      = "error.git_cred_unsupported_cred_type"      // "credential_type %q is not supported"
+
+	// --- Zalo OA ---
+	MsgZaloOAUnsupportedAttachment = "zalo_oa.unsupported_attachment"   // "Attachment %s (%s) is not supported by Zalo OA; only images, GIFs, and PDF/DOC/DOCX files can be sent."
+	MsgZaloOAErrAuth               = "zalo_oa.error.auth"               // "Zalo access token rejected (%d: %s). The channel refreshes and retries once automatically."
+	MsgZaloOAErrRefreshExpired     = "zalo_oa.error.refresh_expired"    // "Zalo refresh token has expired (%d: %s); re-authorize the OA to resume sending."
+	MsgZaloOAErrSize               = "zalo_oa.error.size"               // "Attachment exceeds the Zalo cap (image 1MB, file 5MB, gif 5MB)."
+	MsgZaloOAErrPermission         = "zalo_oa.error.permission"         // "The OA app is missing an extended permission required for this call."
+	MsgZaloOAErrUserNotVisible     = "zalo_oa.error.user_not_visible"   // "The target user is not visible to this OA (not opted-in or profile hidden)."
+	MsgZaloOAErrAppDisabled        = "zalo_oa.error.app_disabled"       // "The Zalo app is disabled or banned; contact Zalo support."
+	MsgZaloOAErrInteractionWindow  = "zalo_oa.error.interaction_window" // "Zalo only allows messaging users who interacted with the OA recently."
+	MsgZaloOAErrRate               = "zalo_oa.error.rate"               // "Zalo quota for this OA or user has been exhausted; wait for the quota window to reset."
+	MsgZaloOAErrServer             = "zalo_oa.error.server"             // "Zalo returned a temporary server error; retrying after a short backoff is safe."
+	MsgZaloOAErrPayload            = "zalo_oa.error.payload"            // "Zalo rejected the request payload; verify message shape and recipient ID format."
+	MsgZaloOAErrRedirectURI        = "zalo_oa.error.redirect_uri"       // "Zalo rejected the OAuth redirect_uri; update the Zalo console to match the channel config."
+	MsgZaloOAReauthDueSoon         = "zalo_oa.reauth_due_soon"          // "Re-consent due soon: the refresh token expires in about %d day(s)."
+
+	// --- Zalo OA consent flow ---
+	MsgZaloOACodeExchangeFailed  = "zalo_oa.error.code_exchange_failed"  // "zalo oauth code exchange failed: %s"
+	MsgZaloOAInvalidChannelType  = "zalo_oa.error.invalid_channel_type"  // "instance is not a zalo_oa channel"
+	MsgZaloOAConnected           = "zalo_oa.info.connected"              // "zalo official account connected: %s"
+	MsgZaloOAInvalidState        = "zalo_oa.error.invalid_state"         // "oauth state token is invalid or expired; start Connect again"
+	MsgZaloOARedirectURIRequired = "zalo_oa.error.redirect_uri_required" // "credentials.redirect_uri is required and must match the dev-console callback"
+	MsgZaloOAMissingAppID        = "zalo_oa.error.missing_app_id"        // "credentials.app_id is required (set it on the channel before requesting consent URL)"
+	MsgZaloOAStateGenFailed      = "zalo_oa.error.state_gen_failed"      // "failed to generate state token"
+	MsgZaloOAOAIDMismatch        = "zalo_oa.error.oaid_mismatch"         // "callback OA differs from instance OA — paste the URL from THIS instance's consent page"
+	MsgZaloOACallbackUnavailable = "zalo_oa.error.callback_unavailable"  // "cannot determine the gateway public URL yet — open the dashboard once via its public domain"
+	MsgZaloOAAuthUnavailable     = "zalo_oa.error.auth_unavailable"
 )

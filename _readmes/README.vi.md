@@ -200,7 +200,7 @@ Tài liệu đầy đủ tại **[docs.goclaw.sh](https://docs.goclaw.sh)** — 
 | [Khái niệm cốt lõi](https://docs.goclaw.sh/#how-goclaw-works) | Agent Loop, Session, Công cụ, Bộ nhớ, Multi-Tenancy |
 | [Agent](https://docs.goclaw.sh/#creating-agents) | Tạo agent, Tệp ngữ cảnh, Tính cách, Chia sẻ và quyền truy cập |
 | [Nhà cung cấp](https://docs.goclaw.sh/#providers-overview) | Anthropic, OpenAI, OpenRouter, Gemini, DeepSeek, và hơn 15 nhà cung cấp khác |
-| [Kênh](https://docs.goclaw.sh/#channels-overview) | Telegram, Discord, Slack, Feishu, Zalo, WhatsApp, WebSocket |
+| [Kênh](https://docs.goclaw.sh/#channels-overview) | Telegram, Discord, Slack, Feishu, [Zalo OA](../docs/zalo-oa-integration.md), WhatsApp, WebSocket |
 | [Nhóm Agent](https://docs.goclaw.sh/#teams-what-are-teams) | Nhóm, Bảng nhiệm vụ, Nhắn tin, Ủy quyền và chuyển giao |
 | [Nâng cao](https://docs.goclaw.sh/#custom-tools) | Công cụ tùy chỉnh, MCP, Skill, Cron, Sandbox, Hooks, RBAC |
 | [Triển khai](https://docs.goclaw.sh/#deploy-docker-compose) | Docker Compose, Cơ sở dữ liệu, Bảo mật, Observability, Tailscale |

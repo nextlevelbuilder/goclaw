@@ -247,8 +247,9 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_DATA_DIR", &c.DataDir)
 	envStr("GOCLAW_WORKSPACE", &c.Agents.Defaults.Workspace)
 
-	// Gateway host/port
+	// Gateway host/port/public URL
 	envStr("GOCLAW_HOST", &c.Gateway.Host)
+	envStr("GOCLAW_PUBLIC_URL", &c.Gateway.PublicURL)
 	if v := os.Getenv("GOCLAW_PORT"); v != "" {
 		if port, err := strconv.Atoi(v); err == nil && port > 0 {
 			c.Gateway.Port = port

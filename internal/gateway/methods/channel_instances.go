@@ -317,13 +317,18 @@ func maskInstance(inst store.ChannelInstanceData) map[string]any {
 		"updated_at":      inst.UpdatedAt,
 	}
 
-	// Mask credentials: show keys with "***" values
+	// Mask credentials: non-secret keys (e.g. zalo_oa.oa_id, redirect_uri)
+	// stay plain; everything else shows "***".
 	if len(inst.Credentials) > 0 {
 		var raw map[string]any
 		if json.Unmarshal(inst.Credentials, &raw) == nil {
 			masked := make(map[string]any, len(raw))
-			for k := range raw {
-				masked[k] = "***"
+			for k, v := range raw {
+				if channels.IsNonSecretCredentialKey(inst.ChannelType, k) {
+					masked[k] = v
+				} else {
+					masked[k] = "***"
+				}
 			}
 			result["credentials"] = masked
 		} else {
@@ -345,7 +350,7 @@ func maskInstance(inst store.ChannelInstanceData) map[string]any {
 // channels neither API accepts.
 func isValidChannelType(ct string) bool {
 	switch ct {
-	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu", "facebook", "pancake", "bitrix24":
+	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_bot", "zalo_personal", "feishu", "facebook", "pancake", "bitrix24":
 		return true
 	}
 	return false

@@ -1,4 +1,4 @@
-// Package zalo implements the Zalo OA Bot channel.
+// Package zalo implements the Zalo Bot API channel (legacy bot-api.zaloplatforms.com).
 // Ported from OpenClaw TS extensions/zalo/.
 //
 // Zalo Bot API: https://bot-api.zaloplatforms.com
@@ -58,6 +58,7 @@ func New(cfg config.ZaloConfig, msgBus *bus.MessageBus, pairingSvc store.Pairing
 	}
 
 	base := channels.NewBaseChannel("zalo", msgBus, cfg.AllowFrom)
+	base.SetType(channels.TypeZaloBot)
 	base.ValidatePolicy(cfg.DMPolicy, "")
 
 	dmPolicy := cfg.DMPolicy

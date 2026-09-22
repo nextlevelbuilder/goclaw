@@ -87,12 +87,12 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 
 	if cfg.Channels.Zalo.Enabled {
 		if cfg.Channels.Zalo.Token == "" {
-			recordMissingConfig(channels.TypeZaloOA, "Set channels.zalo.token in config.")
+			recordMissingConfig(channels.TypeZaloBot, "Set channels.zalo.token in config.")
 		} else if z, err := zalo.New(cfg.Channels.Zalo, msgBus, pgStores.Pairing); err != nil {
-			channelMgr.RecordFailure(channels.TypeZaloOA, "", err)
+			channelMgr.RecordFailure(channels.TypeZaloBot, "", err)
 			slog.Error("failed to initialize zalo channel", "error", err)
 		} else {
-			channelMgr.RegisterChannel(channels.TypeZaloOA, z)
+			channelMgr.RegisterChannel(channels.TypeZaloBot, z)
 			slog.Info("zalo channel enabled (config)")
 		}
 	}

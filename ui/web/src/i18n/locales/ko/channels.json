@@ -481,6 +481,10 @@
     }
   },
   "wizard": {
+    "zaloOa": {
+      "createLabel": "생성 및 설정 완료",
+      "formBanner": "콜백과 Webhook URL을 등록하고 Webhook Secret Key를 붙여넣은 다음 채널을 생성하고 OA를 승인하세요."
+    },
     "zaloPersonal": {
       "createLabel": "생성 & 인증",
       "formBanner": "생성 후 QR 코드를 통해 인증하고 허용된 사용자를 설정합니다."
@@ -552,5 +556,77 @@
     "relinkDevice": "기기 재연결",
     "connectedSuccess": "✅ WhatsApp이 성공적으로 연결되었습니다!",
     "tabQrCode": "QR 코드"
+  },
+  "zaloOa": {
+    "dialogTitle": "Zalo OA 연결 — {{name}}",
+    "dialogDescription": "Official Account를 승인한 다음 브라우저의 리디렉트 URL을 붙여넣으세요.",
+    "step1Heading": "1단계 — 승인",
+    "step2Heading": "2단계 — 콜백 URL 붙여넣기",
+    "authorizeHelp": "아래 URL을 열고 Zalo에 로그인한 뒤 Official Account 접근을 승인하세요. 승인 후 브라우저가 콜백 URL로 이동합니다 — 주소 표시줄의 전체 URL을 복사해 2단계에 붙여넣으세요.",
+    "consentLoading": "승인 URL 생성 중…",
+    "pasteHelp": "승인 후 브라우저 주소 표시줄에서 전체 URL을 복사해 여기에 붙여넣으세요.",
+    "pastePlaceholder": "전체 콜백 URL",
+    "errCodeMissing": "붙여넣은 URL에 \"code\" 매개변수가 없습니다 — 승인 후 주소 표시줄에서 전체 콜백 URL을 복사하세요.",
+    "errStateMismatch": "이 콜백 URL은 다른 승인 시도에 속합니다. 현재 Zalo 승인 URL을 연 뒤 다시 시도하세요.",
+    "connectedClosing": "연결됨 — 닫는 중…",
+    "copyUrl": "URL 복사",
+    "openInTab": "새 탭에서 열기",
+    "cancel": "취소",
+    "connect": "연결",
+    "connecting": "연결 중…",
+    "connectBanner": {
+      "title": "이 Official Account 승인",
+      "hint": "OAuth 동의 흐름을 실행해 이 채널을 OA에 바인딩하고 액세스/리프레시 토큰을 받으세요.",
+      "connected": "연결됨 — OA {{oaId}}",
+      "connectedHint": "액세스 토큰은 자동 갱신됩니다. 권한 변경 후 다시 승인하려면 다시 연결을 사용하세요."
+    },
+    "openPopup": "승인",
+    "popupAutoHint": "보안 창이 열리며 승인 후 자동으로 완료됩니다.",
+    "reconnect": "다시 연결",
+    "callback": {
+      "title": "승인 완료",
+      "errorTitle": "콜백 수신됨",
+      "successHint": "아래 전체 URL을 복사해 GoClaw 동의 대화상자(2단계)에 붙여넣으세요.",
+      "oaId": "OA ID",
+      "copy": "복사",
+      "manualHint": "대화상자가 자동 완료되지 않으면 위 URL을 동의 대화상자 2단계에 붙여넣으세요.",
+      "missingCode": "이 콜백 URL에 승인 코드가 없습니다. GoClaw 대화상자에서 승인 URL을 다시 여세요."
+    },
+    "callbackUrlLabel": "콜백 URL (Zalo 콘솔용)",
+    "callbackUrlHelp": "Zalo Developers 콘솔에 이 URL을 OA Callback URL로 그대로 등록하세요. 시스템 생성 — 수정할 수 없습니다.",
+    "callbackUrlCopy": "복사",
+    "callbackUrlUnavailable": "게이트웨이가 공개 요청을 확인할 때까지 사용할 수 없습니다",
+    "openCallbackSettings": "Zalo에서 콜백 설정 열기",
+    "setup": {
+      "title": "Zalo OA 설정 완료",
+      "description": "앱 자격 증명을 입력하고 생성된 URL 두 개를 등록한 다음 채널을 만들기 전에 Webhook Secret Key를 붙여넣으세요.",
+      "descriptionPolling": "앱 자격 증명을 입력하고 채널을 만들기 전에 생성된 Callback URL을 등록하세요. 폴링 모드는 웹훅을 사용하지 않습니다.",
+      "loading": "설정 URL 생성 중…",
+      "loadError": "설정 URL을 생성할 수 없습니다. 게이트웨이 공개 URL로 이 양식을 연 뒤 다시 시도하세요.",
+      "webhookStep": "2. 웹훅 등록 및 보호",
+      "consentStepWebhook": "3. Official Account 승인",
+      "consentStepPolling": "2. Official Account 승인",
+      "secretRequired": "OA를 승인하기 전에 Webhook Secret Key를 저장하세요.",
+      "closeResumeLater": "닫기 (나중에 계속)"
+    },
+    "webhookSetup": {
+      "title": "웹훅 설정",
+      "help": "엔드포인트를 등록한 다음 OA Webhook Secret Key를 붙여넣어 서명된 이벤트를 요구하세요.",
+      "urlLabel": "웹훅 URL",
+      "urlHelp": "Zalo Developers → OA → Webhook에 이 URL을 그대로 등록하세요. 시스템 생성이며 읽기 전용입니다.",
+      "urlUnavailable": "게이트웨이가 공개 요청을 확인할 때까지 사용할 수 없습니다",
+      "openConsole": "Zalo에서 웹훅 설정 열기",
+      "copy": "복사",
+      "copied": "복사됨",
+      "awaitingSecret": "웹훅 시크릿 대기 중",
+      "secured": "웹훅이 보호됨",
+      "secretLabel": "Webhook Secret Key",
+      "secretHelp": "Zalo가 URL을 수락한 후 콘솔에 표시된 OA Webhook Secret Key를 붙여넣으세요.",
+      "secretRotateHelp": "서명된 이벤트가 필요합니다. 키를 교체할 때만 새 시크릿을 입력하세요.",
+      "secretPlaceholder": "OA Webhook Secret Key 붙여넣기",
+      "saveEnable": "저장 및 사용",
+      "saving": "저장 중…",
+      "saveError": "웹훅 시크릿을 저장할 수 없습니다. 채널은 아직 확인되지 않았습니다."
+    }
   }
 }

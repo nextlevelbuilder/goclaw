@@ -251,6 +251,29 @@ func (s *PGChannelInstanceStore) loadExistingCreds(ctx context.Context, id uuid.
 	return m, nil
 }
 
+// MergeConfig atomically replaces patched top-level keys without losing siblings.
+func (s *PGChannelInstanceStore) MergeConfig(ctx context.Context, id uuid.UUID, patch map[string]any) error {
+	if len(patch) == 0 {
+		return nil
+	}
+	raw, err := json.Marshal(patch)
+	if err != nil {
+		return fmt.Errorf("marshal channel config patch: %w", err)
+	}
+	query := `UPDATE channel_instances SET config = (CASE WHEN jsonb_typeof(config) = 'object' THEN config ELSE '{}'::jsonb END) || $1::jsonb, updated_at = $2 WHERE id = $3`
+	args := []any{string(raw), time.Now(), id}
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			return fmt.Errorf("tenant_id required")
+		}
+		query += ` AND tenant_id = $4`
+		args = append(args, tid)
+	}
+	_, err = s.db.ExecContext(ctx, query, args...)
+	return err
+}
+
 func (s *PGChannelInstanceStore) Delete(ctx context.Context, id uuid.UUID) error {
 	if store.IsCrossTenant(ctx) {
 		_, err := s.db.ExecContext(ctx, "DELETE FROM channel_instances WHERE id = $1", id)

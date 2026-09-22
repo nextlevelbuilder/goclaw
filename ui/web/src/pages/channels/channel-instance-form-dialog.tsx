@@ -32,6 +32,16 @@ interface ChannelInstanceFormDialogProps {
   onUpdate?: (id: string, data: Partial<ChannelInstanceInput>) => Promise<unknown>;
 }
 
+function isFieldVisible(field: FieldDef, values: Record<string, unknown>, fields: FieldDef[]) {
+  if (!field.showWhen) return true;
+  const dependency = values[field.showWhen.key]
+    ?? fields.find((candidate) => candidate.key === field.showWhen?.key)?.defaultValue;
+  const dependencyValue = dependency === undefined || dependency === null ? "" : String(dependency);
+  return Array.isArray(field.showWhen.value)
+    ? field.showWhen.value.includes(dependencyValue)
+    : field.showWhen.value === dependencyValue;
+}
+
 export function ChannelInstanceFormDialog({
   open,
   onOpenChange,
@@ -154,7 +164,22 @@ export function ChannelInstanceFormDialog({
   const handleSubmit = form.handleSubmit(async (values) => {
     if (!instance) {
       const schema = credentialsSchema[values.channelType] ?? [];
-      const missing = schema.filter((f: FieldDef) => f.required && !credsValues[f.key]);
+      const cfgSchema = configSchema[values.channelType] ?? [];
+      const effectiveValues = {
+        ...Object.fromEntries(
+          cfgSchema
+            .filter((field) => field.defaultValue !== undefined)
+            .map((field) => [field.key, field.defaultValue]),
+        ),
+        ...configValues,
+        ...credsValues,
+      };
+      const missing = schema.filter(
+        (field: FieldDef) =>
+          field.required
+          && isFieldVisible(field, effectiveValues, [...schema, ...cfgSchema])
+          && (credsValues[field.key] === undefined || credsValues[field.key] === null || credsValues[field.key] === ""),
+      );
       if (missing.length > 0) {
         setError(t("form.errors.requiredFields", { fields: missing.map((f: FieldDef) => f.label).join(", ") }));
         return;
@@ -178,7 +203,10 @@ export function ChannelInstanceFormDialog({
     if (!instance) {
       const cfgSchema = configSchema[values.channelType] ?? [];
       const missingCfg = cfgSchema.filter(
-        (f: FieldDef) => f.required && (cleanConfig[f.key] === undefined || cleanConfig[f.key] === "" || cleanConfig[f.key] === null),
+        (field: FieldDef) =>
+          field.required
+          && isFieldVisible(field, cleanConfig, cfgSchema)
+          && (cleanConfig[field.key] === undefined || cleanConfig[field.key] === null || cleanConfig[field.key] === ""),
       );
       if (missingCfg.length > 0) {
         setError(t("form.errors.requiredFields", { fields: missingCfg.map((f: FieldDef) => f.label).join(", ") }));

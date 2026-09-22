@@ -661,6 +661,10 @@
     }
   },
   "wizard": {
+    "zaloOa": {
+      "createLabel": "Создать и завершить настройку",
+      "formBanner": "Зарегистрируйте callback и webhook URL, вставьте Webhook Secret Key, затем создайте канал и авторизуйте OA на следующем шаге."
+    },
     "zaloPersonal": {
       "createLabel": "Создать и аутентифицировать",
       "formBanner": "После создания вы пройдёте аутентификацию по QR-коду и настроите разрешённых пользователей."
@@ -781,6 +785,78 @@
         "closeResumeLater": "Закрыть (продолжить позже)",
         "urlUnknown": "URL установки недоступен. Откройте UI goclaw через ваш публичный URL и повторите из выпадающего списка."
       }
+    }
+  },
+  "zaloOa": {
+    "dialogTitle": "Подключить Zalo OA — {{name}}",
+    "dialogDescription": "Авторизуйте Official Account, затем вставьте URL перенаправления из браузера.",
+    "step1Heading": "Шаг 1 — Авторизация",
+    "step2Heading": "Шаг 2 — Вставьте callback URL",
+    "authorizeHelp": "Откройте URL ниже, войдите в Zalo и разрешите доступ Official Account. После подтверждения браузер перейдёт на callback URL — скопируйте полный URL из адресной строки и вставьте его в шаг 2.",
+    "consentLoading": "Создание URL согласия…",
+    "pasteHelp": "После подтверждения скопируйте полный URL из адресной строки браузера и вставьте его сюда.",
+    "pastePlaceholder": "Полный callback URL",
+    "errCodeMissing": "Во вставленном URL нет параметра \"code\" — скопируйте полный callback URL из адресной строки после подтверждения.",
+    "errStateMismatch": "Этот callback URL относится к другой попытке авторизации. Откройте текущий URL авторизации Zalo и повторите попытку.",
+    "connectedClosing": "Подключено — закрытие…",
+    "copyUrl": "Копировать URL",
+    "openInTab": "Открыть в новой вкладке",
+    "cancel": "Отмена",
+    "connect": "Подключить",
+    "connecting": "Подключение…",
+    "connectBanner": {
+      "title": "Авторизовать этот Official Account",
+      "hint": "Запустите OAuth-согласие, чтобы привязать канал к OA и получить токены доступа/обновления.",
+      "connected": "Подключено — OA {{oaId}}",
+      "connectedHint": "Токен доступа обновляется автоматически. Используйте «Переподключить» для повторной авторизации (например, после смены прав)."
+    },
+    "openPopup": "Авторизовать",
+    "popupAutoHint": "Открывает безопасное окно; завершается автоматически после подтверждения.",
+    "reconnect": "Переподключить",
+    "callback": {
+      "title": "Авторизация завершена",
+      "errorTitle": "Callback получен",
+      "successHint": "Скопируйте полный URL ниже и вставьте его в диалог согласия GoClaw (шаг 2).",
+      "oaId": "OA ID",
+      "copy": "Копировать",
+      "manualHint": "Если диалог не завершился автоматически, вставьте URL выше в шаг 2 диалога согласия.",
+      "missingCode": "В этом callback URL нет кода авторизации. Снова откройте URL согласия из диалога GoClaw."
+    },
+    "callbackUrlLabel": "Callback URL (для консоли Zalo)",
+    "callbackUrlHelp": "Зарегистрируйте этот точный URL как OA Callback URL в консоли Zalo Developers. Генерируется системой — изменить нельзя.",
+    "callbackUrlCopy": "Копировать",
+    "callbackUrlUnavailable": "Недоступно, пока шлюз не получит публичный запрос",
+    "openCallbackSettings": "Открыть настройки Callback в Zalo",
+    "setup": {
+      "title": "Завершить настройку Zalo OA",
+      "description": "Введите учётные данные приложения, зарегистрируйте оба сгенерированных URL, затем вставьте Webhook Secret Key перед созданием канала.",
+      "descriptionPolling": "Введите учётные данные приложения и зарегистрируйте сгенерированный Callback URL перед созданием канала. Режим опроса не использует webhook.",
+      "loading": "Создание URL настройки…",
+      "loadError": "Не удалось создать URL настройки. Откройте эту форму через публичный URL шлюза и повторите попытку.",
+      "webhookStep": "2. Зарегистрировать и защитить webhook",
+      "consentStepWebhook": "3. Авторизовать Official Account",
+      "consentStepPolling": "2. Авторизовать Official Account",
+      "secretRequired": "Сохраните Webhook Secret Key перед авторизацией OA.",
+      "closeResumeLater": "Закрыть (продолжить позже)"
+    },
+    "webhookSetup": {
+      "title": "Настройка Webhook",
+      "help": "Зарегистрируйте endpoint, затем вставьте OA Webhook Secret Key, чтобы требовать подписанные события.",
+      "urlLabel": "Webhook URL",
+      "urlHelp": "Зарегистрируйте этот точный URL в Zalo Developers → OA → Webhook. Генерируется системой и доступен только для чтения.",
+      "urlUnavailable": "Недоступно, пока шлюз не получит публичный запрос",
+      "openConsole": "Открыть настройки Webhook в Zalo",
+      "copy": "Копировать",
+      "copied": "Скопировано",
+      "awaitingSecret": "Ожидание секрета webhook",
+      "secured": "Webhook защищён",
+      "secretLabel": "Webhook Secret Key",
+      "secretHelp": "После того как Zalo примет URL, вставьте OA Webhook Secret Key из консоли Zalo.",
+      "secretRotateHelp": "Подписанные события обязательны. Вводите новый секрет только для ротации ключа.",
+      "secretPlaceholder": "Вставьте OA Webhook Secret Key",
+      "saveEnable": "Сохранить и включить",
+      "saving": "Сохранение…",
+      "saveError": "Не удалось сохранить секрет webhook. Канал остаётся непроверенным."
     }
   }
 }

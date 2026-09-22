@@ -71,6 +71,7 @@ export function ChannelDetailPage({
     setContextCredentials,
     deleteContextCredentials,
     refreshDiscordMetadata,
+    refresh,
   } = useChannelDetail(instanceId);
   const { agents } = useAgents();
   const { channels } = useChannels();
@@ -226,6 +227,7 @@ export function ChannelDetailPage({
               <ChannelCredentialsTab
                 instance={instance}
                 onUpdate={updateInstance}
+                onRefresh={refresh}
               />
             </TabsContent>
 

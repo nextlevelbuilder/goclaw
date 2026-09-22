@@ -16,6 +16,13 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Added
 
+- **Zalo Official Account OAuth v4 channel** — `zalo_oa` is now the OA OpenAPI
+  integration (consent, webhook or polling, strict signatures). Operator setup:
+  [docs/zalo-oa-integration.md](docs/zalo-oa-integration.md). Adapted from
+  [nextlevelbuilder/dewee](https://github.com/nextlevelbuilder/dewee)
+  (CC BY-NC 4.0).
+
+
 - **Task detail dialog shows the full task UUID with one-click copy** — the
   short identifier (`T-015-cc8e`) carries only the last four hex characters of
   the UUID, while the agent-facing `team_tasks` tool and RPCs take the full
@@ -141,6 +148,12 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Breaking Changes
 
+- **Zalo channel type retype (`zalo_oa` → `zalo_bot`).** Existing
+  `channel_instances` rows whose `channel_type` was the Bot API (`zalo_oa`)
+  are retyped to `zalo_bot`. New `zalo_oa` is Official Account OAuth v4.
+  Static `channels.zalo` remains Bot. Filters on `channel_type='zalo_oa'`
+  must be updated or they will miss retyped Bot instances.
+
 - **Context pruning now opt-in.** Previously tool-result trimming ran by default
   for all providers; now requires explicit `contextPruning.mode: "cache-ttl"` in
   `config.agents.defaults` to enable. Matches upstream TS design and prevents
@@ -156,6 +169,7 @@ All notable changes to GoClaw are documented here. For full documentation, see [
   ```
 
 ### New Features
+
 
 - **Pancake private-reply (comment → DM).** Enables a one-time DM to commenters
   after the public reply. Stateless on GoClaw side — no DB dedup table, no

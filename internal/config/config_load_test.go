@@ -147,6 +147,23 @@ func TestLoad_EnvVarOverrides(t *testing.T) {
 	}
 }
 
+func TestLoad_PublicURLFromEnv(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json5")
+	if err := os.WriteFile(cfgPath, []byte(`{"gateway":{"public_url":"https://from-file.example"}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GOCLAW_PUBLIC_URL", "https://from-env.example")
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if cfg.Gateway.PublicURL != "https://from-env.example" {
+		t.Fatalf("public URL = %q, want env overlay", cfg.Gateway.PublicURL)
+	}
+}
+
 func TestLoad_WebhookTimeoutsFromFileAndEnv(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.json5")

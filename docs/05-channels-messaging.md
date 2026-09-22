@@ -166,11 +166,11 @@ Every channel must implement the base interface:
 | Interface | Purpose | Implemented By |
 |-----------|---------|----------------|
 | `StreamingChannel` | Real-time streaming updates | Telegram, Slack |
-| `WebhookChannel` | Webhook HTTP handler mounting | Facebook, Feishu/Lark, Pancake |
-| `ReactionChannel` | Status reactions on messages | Telegram, Slack, Feishu |
+| `WebhookChannel` | Webhook HTTP handler mounting | Facebook, Feishu/Lark, Pancake, Zalo OA |
+| `ReactionChannel` | Status reactions on messages | Telegram, Slack, Feishu, Zalo OA |
 | `ActivityIndicatorChannel` | Ephemeral "agent is working" indicator | Bitrix24 |
-| `BlockReplyChannel` | Override gateway block_reply setting | Discord, Feishu/Lark, Pancake, Slack, Zalo OA, Zalo Personal |
-| `ChatBehaviorChannel` | Override gateway chat_behavior setting | Bitrix24, Discord, Feishu/Lark, Pancake, Slack, Telegram, WhatsApp, Zalo OA, Zalo Personal |
+| `BlockReplyChannel` | Override gateway block_reply setting | Discord, Feishu/Lark, Pancake, Slack, Zalo Bot, Zalo Personal |
+| `ChatBehaviorChannel` | Override gateway chat_behavior setting | Bitrix24, Discord, Feishu/Lark, Pancake, Slack, Telegram, WhatsApp, Zalo Bot, Zalo Personal |
 | `ReasoningDeliveryChannel` | Override channel-visible reasoning delivery | Telegram |
 
 `BaseChannel` provides a shared implementation that all channels embed: allowlist matching, `HandleMessage()`, `CheckPolicy()`, and user ID extraction.
@@ -259,20 +259,20 @@ flowchart TD
 
 | Feature | Telegram | Feishu/Lark | Discord | Slack | WhatsApp | Zalo OA | Zalo Personal | Bitrix24 |
 |---------|----------|-------------|---------|-------|----------|---------|---------------|----------|
-| Connection | Long polling | WS (default) / Webhook | Gateway events | Socket Mode | Direct protocol (in-process) | Long polling | Internal protocol | Long polling (REST) |
+| Connection | Long polling | WS (default) / Webhook | Gateway events | Socket Mode | Direct protocol (in-process) | Webhook (default) / polling | Internal protocol | Long polling (REST) |
 | DM support | Yes | Yes | Yes | Yes | Yes | Yes (DM only) | Yes | Yes |
 | Group support | Yes (mention gating) | Yes | Yes | Yes (mention gating + thread cache) | Yes | No | Yes | Yes |
 | Forum/Topics | Yes (per-topic config) | Yes (topic session mode) | -- | -- | -- | -- | -- | -- |
 | Message limit | 4,096 chars | Configurable (default 4,000) | 2,000 chars | 4,000 chars | WhatsApp native limit | 2,000 chars | 2,000 chars | 4,096 chars |
 | Streaming | Typing indicator | Streaming message cards | Edit "Thinking..." | Edit "Thinking..." (throttled 1s) | No | No | No | No |
-| Media | Photos, voice, files | Images, files (30 MB) | Files, embeds | Files (download w/ SSRF protection) | Images, audio, video, documents | Images (5 MB) | -- | Files (20 MB default) |
+| Media | Photos, voice, files | Images, files (30 MB) | Files, embeds | Files (download w/ SSRF protection) | Images, audio, video, documents | Image 1 MB / GIF 5 MB / file 5 MB (sequential) | -- | Files (20 MB default) |
 | Speech-to-text | Yes (STT proxy) | -- | -- | -- | -- | -- | -- | -- |
 | Voice routing | Yes (VoiceAgentID) | -- | -- | -- | -- | -- | -- | -- |
 | Rich formatting | Markdown → HTML | Card messages | Markdown | Markdown → mrkdwn | Plain text | Plain text | Plain text | Plain text |
 | Bot commands | 10+ commands | -- | -- | -- | -- | -- | -- | -- |
 | Tool allow list | Per-topic | -- | -- | -- | -- | -- | -- | -- |
-| Pairing support | Yes | Yes | Yes | Yes | Yes | Yes | Yes | Yes |
-| Status reactions | Yes | Yes | -- | Yes | -- | -- | -- | -- |
+| Pairing support | Yes | Yes | Yes | Yes | Yes | Pairing (default) | Yes | Yes |
+| Status reactions | Yes | Yes | -- | Yes | -- | Optional | -- | -- |
 
 ---
 
@@ -664,16 +664,29 @@ The WhatsApp channel connects directly to the WhatsApp network via the multi-dev
 
 ## 10. Zalo OA
 
-The Zalo OA (Official Account) channel connects to the Zalo OA Bot API.
+The Zalo OA channel is the Official Account OAuth v4 integration
+(`channel_type=zalo_oa`). It is not the Bot API.
+
+Operator setup, public HTTPS/callback versus webhook URLs, two-phase webhook
+registration, secrets, consent, polling, media caps, and the `zalo_oa` →
+`zalo_bot` retype: **[zalo-oa-integration.md](./zalo-oa-integration.md)**.
 
 ### Key Behaviors
 
-- **DM only**: No group support. Only direct messages are processed
-- **Text limit**: 2,000-character maximum per message
-- **Long polling**: Default 30-second timeout, 5-second backoff on errors
-- **Media**: Image support with 5 MB default limit
-- **Default DM policy**: `"pairing"` (requires pairing code)
-- **Pairing debounce**: 60-second debounce on pairing instructions
+- **DM only**: no group support; `chatID == senderID`
+- **Webhook default**: shared mount `/channels/zalo/webhook/<slug>`; `transport=polling` is the alternative
+- **OAuth v4**: paste-code consent; refresh tokens are single-use
+- **Text limit**: 2,000 characters per message
+- **Access**: `dm_policy` defaults to `pairing` (pairing reply, then drop); `allowlist` uses `allow_from`
+- **Health**: pre-consent / pre-secret webhook is Degraded; dead refresh token is Failed/Auth
+
+### Legacy Bot API (`zalo_bot`)
+
+The official Zalo Bot API (`bot-api.zaloplatforms.com`) remains a separate
+channel. Static `channels.zalo` still enables that Bot adapter. Existing
+`channel_type='zalo_oa'` Bot rows are retyped to `zalo_bot`. Setup uses Zalo
+Bot Manager/Creator and does not require an Official Account. Default DM
+policy is `pairing`.
 
 ---
 
@@ -685,13 +698,16 @@ The Zalo Personal channel provides access to personal Zalo accounts using a reve
 
 | Aspect | Zalo OA | Zalo Personal |
 |--------|---------|---------------|
-| Protocol | Official Bot API | Reverse-engineered (zcago, MIT) |
+| Protocol | Official OA OpenAPI (OAuth v4) | Reverse-engineered (zcago, MIT) |
 | DM support | Yes | Yes |
 | Group support | No | Yes |
-| Default DM policy | `pairing` | `allowlist` (restrictive) |
+| Default DM access | `pairing` (default) | `allowlist` (restrictive) |
 | Default group policy | N/A | `allowlist` (restrictive) |
-| Authentication | API credentials | Pre-loaded credentials or QR scan |
-| Risk | None | Account may be locked/banned |
+| Authentication | App + OA OAuth consent | Pre-loaded credentials or QR scan |
+| Risk | None beyond OA app policy | Account may be locked/banned |
+
+The Bot API (`zalo_bot` / `channels.zalo`) is a third surface: official bot
+token, pairing default, no OA OAuth. See [zalo-oa-integration.md](./zalo-oa-integration.md).
 
 ### Security Warning
 
@@ -888,4 +904,5 @@ Use `grep` or your editor's symbol search for specific files.
 | [08-scheduling-cron.md](./08-scheduling-cron.md) | /stop and /stopall commands, scheduler lanes, cron |
 | [09-security.md](./09-security.md) | Group file writer restrictions, security logging |
 | [11-agent-teams.md](./11-agent-teams.md) | Team message routing, delegation result delivery |
+| [zalo-oa-integration.md](./zalo-oa-integration.md) | Zalo OA OAuth setup, webhook/callback URLs, Bot retype |
 | [project-changelog.md](./project-changelog.md) | Phase 5 audio manager & unified STT implementation |

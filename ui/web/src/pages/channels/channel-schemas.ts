@@ -103,7 +103,12 @@ export const credentialsSchema: Record<string, FieldDef[]> = {
     { key: "verification_token", label: "Verification Token", type: "password", help: "For webhook event verification", showWhen: { key: "connection_mode", value: "webhook" } },
   ],
   zalo_oa: [
-    { key: "token", label: "OA Access Token", type: "password", required: true },
+    { key: "app_id", label: "App ID", type: "text", required: true, help: "From Zalo Developers console → OA app" },
+    { key: "secret_key", label: "Secret Key", type: "password", required: true, help: "OAuth v4 secret (NOT the webhook secret)" },
+    { key: "webhook_secret_key", label: "Webhook Secret Key", type: "password", required: true, help: "After registering the Webhook URL, paste the signing secret generated in Zalo Developers → OA → Webhook", showWhen: { key: "transport", value: "webhook" } },
+  ],
+  zalo_bot: [
+    { key: "token", label: "Bot Token", type: "password", required: true },
     { key: "webhook_secret", label: "Webhook Secret", type: "password" },
   ],
   zalo_personal: [],
@@ -210,6 +215,15 @@ export const configSchema: Record<string, FieldDef[]> = {
     ...chatBehaviorOverrideFields,
   ],
   zalo_oa: [
+    { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
+    { key: "transport", label: "Transport", type: "select", options: [{ value: "webhook", label: "Webhook" }, { value: "polling", label: "Polling" }], defaultValue: "webhook" },
+    { key: "poll_interval_seconds", label: "Poll Interval (s)", type: "number", defaultValue: 15, advanced: true },
+    { key: "reaction_level", label: "Reaction Level", type: "select", options: [{ value: "off", label: "Off" }, { value: "minimal", label: "Minimal" }, { value: "full", label: "Full" }], defaultValue: "off" },
+    { key: "quote_user_message", label: "Quote user message", type: "boolean", defaultValue: false, advanced: true },
+    { key: "allow_from", label: "Allowed Users", type: "tags", help: "Zalo user IDs" },
+    ...chatBehaviorOverrideFields,
+  ],
+  zalo_bot: [
     { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
     { key: "webhook_url", label: "Webhook URL", type: "text", placeholder: "https://..." },
     { key: "media_max_mb", label: "Max Media Size (MB)", type: "number", defaultValue: 5 },
@@ -371,6 +385,11 @@ export interface WizardConfig {
 }
 
 export const wizardConfig: Partial<Record<string, WizardConfig>> = {
+  zalo_oa: {
+    steps: ["auth"],
+    createLabel: "wizard.zaloOa.createLabel",
+    formBanner: "wizard.zaloOa.formBanner",
+  },
   zalo_personal: {
     steps: ["auth", "config"],
     createLabel: "wizard.zaloPersonal.createLabel",

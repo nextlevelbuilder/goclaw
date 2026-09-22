@@ -12,6 +12,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/cache"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/bitrix24"
+	zalocommon "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/common"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/heartbeat"
@@ -366,6 +367,12 @@ func (d *gatewayDeps) runLifecycle(
 	for _, route := range d.channelMgr.WebhookHandlers() {
 		mux.Handle(route.Path, route.Handler)
 		slog.Info("webhook route mounted on gateway", "path", route.Path)
+	}
+
+	// Bootstrap verification must work before the first OA instance exists.
+	if path, handler := zalocommon.SharedRouter().MountRoute(); path != "" && handler != nil {
+		mux.Handle(path, handler)
+		slog.Info("webhook route mounted on gateway", "path", path)
 	}
 
 	// Bitrix24: also claim+mount the shared webhook router directly, even if

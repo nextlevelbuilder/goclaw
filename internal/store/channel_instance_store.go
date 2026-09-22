@@ -30,7 +30,7 @@ func IsDefaultChannelInstance(name string) bool {
 	}
 	// Legacy config-based defaults that were seeded with bare channel-type names.
 	switch name {
-	case "telegram", "discord", "feishu", "zalo_oa", "whatsapp":
+	case "telegram", "discord", "feishu", "zalo_oa", "zalo_bot", "whatsapp":
 		return true
 	}
 	return false
@@ -49,6 +49,8 @@ type ChannelInstanceStore interface {
 	Get(ctx context.Context, id uuid.UUID) (*ChannelInstanceData, error)
 	GetByName(ctx context.Context, name string) (*ChannelInstanceData, error)
 	Update(ctx context.Context, id uuid.UUID, updates map[string]any) error
+	// MergeConfig atomically replaces patched top-level keys, preserving siblings.
+	MergeConfig(ctx context.Context, id uuid.UUID, patch map[string]any) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	ListEnabled(ctx context.Context) ([]ChannelInstanceData, error)
 	ListAll(ctx context.Context) ([]ChannelInstanceData, error)

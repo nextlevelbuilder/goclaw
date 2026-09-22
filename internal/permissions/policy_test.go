@@ -121,6 +121,30 @@ func TestCanAccess_AdminMethods(t *testing.T) {
 	}
 }
 
+func TestCanAccess_ZaloOACallbackURL_AdminOnly(t *testing.T) {
+	pe := NewPolicyEngine(nil)
+	for _, method := range []string{
+		protocol.MethodChannelInstancesZaloOAConsentURL,
+		protocol.MethodChannelInstancesZaloOAExchangeCode,
+		protocol.MethodChannelInstancesZaloOACallbackURL,
+	} {
+		t.Run(method, func(t *testing.T) {
+			if !pe.CanAccess(RoleAdmin, method) {
+				t.Fatalf("admin should access %s", method)
+			}
+			if !pe.CanAccess(RoleOwner, method) {
+				t.Fatalf("owner should access %s", method)
+			}
+			if pe.CanAccess(RoleOperator, method) {
+				t.Fatalf("operator should NOT access %s", method)
+			}
+			if pe.CanAccess(RoleViewer, method) {
+				t.Fatalf("viewer should NOT access %s", method)
+			}
+		})
+	}
+}
+
 func TestCanAccess_WriteMethods(t *testing.T) {
 	pe := NewPolicyEngine(nil)
 	writeMethods := []string{

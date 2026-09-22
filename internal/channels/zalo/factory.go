@@ -26,7 +26,7 @@ type zaloInstanceConfig struct {
 	ChatBehavior *config.ChatBehaviorConfig `json:"chat_behavior,omitempty"`
 }
 
-// Factory creates a Zalo OA channel from DB instance data.
+// Factory creates a Zalo Bot channel from DB instance data.
 func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 	msgBus *bus.MessageBus, pairingSvc store.PairingStore) (channels.Channel, error) {
 

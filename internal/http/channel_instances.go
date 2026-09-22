@@ -13,6 +13,8 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channelmemory"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	zalocommon "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/common"
+	zalooa "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/oa"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
@@ -31,6 +33,16 @@ import (
 // error in those situations; real failures (store read, decode) propagate.
 type OrphanChannelCleaner func(ctx context.Context, tenantID uuid.UUID, configJSON []byte) error
 
+// ZaloOAFlowError is the transport-neutral error returned by the injected
+// Zalo OA authorization coordinator.
+type ZaloOAFlowError struct {
+	Code    string
+	Message string
+}
+
+type ZaloOAConsentFunc func(context.Context, uuid.UUID, string) (map[string]any, *ZaloOAFlowError)
+type ZaloOAExchangeFunc func(context.Context, uuid.UUID, string, string, string, string) (map[string]any, *ZaloOAFlowError)
+
 // ChannelInstancesHandler handles channel instance CRUD endpoints.
 type ChannelInstancesHandler struct {
 	store           store.ChannelInstanceStore
@@ -46,6 +58,10 @@ type ChannelInstancesHandler struct {
 	secureCLIStore  store.SecureCLIStore
 	mcpContextStore store.MCPContextAdminStore
 	cliContextStore store.SecureCLIContextAdminStore
+	publicURLSource func() string
+	publicURLUpdate func(*http.Request) string
+	zaloOAConsent   ZaloOAConsentFunc
+	zaloOAExchange  ZaloOAExchangeFunc
 	// orphanCleaners is keyed by channel_type; called when channelMgr.GetChannel
 	// returns false. Keeps handler agnostic of per-channel packages.
 	orphanCleaners map[string]OrphanChannelCleaner
@@ -54,6 +70,21 @@ type ChannelInstancesHandler struct {
 // NewChannelInstancesHandler creates a handler for channel instance management endpoints.
 func NewChannelInstancesHandler(s store.ChannelInstanceStore, agentStore store.AgentStore, configPermStore store.ConfigPermissionStore, contactStore store.ContactStore, tenantStore store.TenantStore, msgBus *bus.MessageBus) *ChannelInstancesHandler {
 	return &ChannelInstancesHandler{store: s, agentStore: agentStore, configPermStore: configPermStore, contactStore: contactStore, tenantStore: tenantStore, msgBus: msgBus}
+}
+
+// SetPublicURLSource supplies the externally reachable gateway base URL used
+// to render channel callback endpoints in API responses. update is invoked
+// only inside authenticated handlers and must reject private/internal hosts.
+func (h *ChannelInstancesHandler) SetPublicURLSource(source func() string, update func(*http.Request) string) {
+	h.publicURLSource = source
+	h.publicURLUpdate = update
+}
+
+// SetZaloOAAuthFlow shares the consent-state coordinator with authenticated
+// HTTP clients without importing the WebSocket methods package.
+func (h *ChannelInstancesHandler) SetZaloOAAuthFlow(consent ZaloOAConsentFunc, exchange ZaloOAExchangeFunc) {
+	h.zaloOAConsent = consent
+	h.zaloOAExchange = exchange
 }
 
 // SetMemberResolver wires a channel member resolver so addwriter can auto-fill
@@ -124,10 +155,13 @@ func (h *ChannelInstancesHandler) RegisterRoutes(mux *http.ServeMux) {
 	// Channel instance CRUD (reads: viewer+, writes: admin+)
 	mux.HandleFunc("GET /v1/channels/instances", h.auth(h.handleList))
 	mux.HandleFunc("POST /v1/channels/instances", h.adminAuth(h.handleCreate))
+	mux.HandleFunc("GET /v1/channels/setup/zalo-oa", h.adminAuth(h.handleZaloOASetupPreview))
 	mux.HandleFunc("GET /v1/channels/instances/{id}", h.auth(h.handleGet))
 	mux.HandleFunc("PUT /v1/channels/instances/{id}", h.adminAuth(h.handleUpdate))
 	mux.HandleFunc("DELETE /v1/channels/instances/{id}", h.adminAuth(h.handleDelete))
 	mux.HandleFunc("POST /v1/channels/instances/{id}/metadata/refresh", h.adminAuth(h.handleRefreshChannelMetadata))
+	mux.HandleFunc("GET /v1/channels/instances/{id}/zalo-oa/consent", h.adminAuth(h.handleZaloOAConsent))
+	mux.HandleFunc("POST /v1/channels/instances/{id}/zalo-oa/exchange-code", h.adminAuth(h.handleZaloOAExchangeCode))
 
 	// Channel contacts (global, not per-agent)
 	if h.contactStore != nil {
@@ -198,6 +232,12 @@ func (h *ChannelInstancesHandler) adminAuth(next http.HandlerFunc) http.HandlerF
 	return requireAuth(permissions.RoleAdmin, next)
 }
 
+func (h *ChannelInstancesHandler) observePublicURL(r *http.Request) {
+	if h.publicURLUpdate != nil {
+		h.publicURLUpdate(r)
+	}
+}
+
 func (h *ChannelInstancesHandler) emitCacheInvalidate(key string) {
 	if h.msgBus == nil {
 		return
@@ -209,6 +249,7 @@ func (h *ChannelInstancesHandler) emitCacheInvalidate(key string) {
 }
 
 func (h *ChannelInstancesHandler) handleList(w http.ResponseWriter, r *http.Request) {
+	h.observePublicURL(r)
 	opts := store.ChannelInstanceListOpts{
 		Limit:  50,
 		Offset: 0,
@@ -240,7 +281,7 @@ func (h *ChannelInstancesHandler) handleList(w http.ResponseWriter, r *http.Requ
 
 	result := make([]map[string]any, 0, len(instances))
 	for _, inst := range instances {
-		result = append(result, maskInstanceHTTP(inst))
+		result = append(result, h.maskInstanceHTTP(inst))
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -252,6 +293,7 @@ func (h *ChannelInstancesHandler) handleList(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *ChannelInstancesHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
+	h.observePublicURL(r)
 	locale := store.LocaleFromContext(r.Context())
 	var body struct {
 		Name        string          `json:"name"`
@@ -309,10 +351,110 @@ func (h *ChannelInstancesHandler) handleCreate(w http.ResponseWriter, r *http.Re
 
 	h.emitCacheInvalidate(inst.ID.String())
 	emitAudit(h.msgBus, r, "channel_instance.created", "channel_instance", inst.ID.String())
-	writeJSON(w, http.StatusCreated, maskInstanceHTTP(*inst))
+	writeJSON(w, http.StatusCreated, h.maskInstanceHTTP(*inst))
+}
+
+// handleZaloOASetupPreview returns the exact callback and webhook URLs for a
+// not-yet-created OA instance so the create form can be completed in one pass.
+func (h *ChannelInstancesHandler) handleZaloOASetupPreview(w http.ResponseWriter, r *http.Request) {
+	h.observePublicURL(r)
+	locale := store.LocaleFromContext(r.Context())
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	if name == "" {
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "name"))
+		return
+	}
+
+	publicBase := ""
+	if h.publicURLSource != nil {
+		publicBase = h.publicURLSource()
+	}
+	callbackURL, err := zalooa.CallbackURL(publicBase)
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, protocol.ErrUnavailable, i18n.T(locale, i18n.MsgZaloOACallbackUnavailable))
+		return
+	}
+	webhookURL, err := zalooa.WebhookURL(publicBase, "", name)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, err.Error()))
+		return
+	}
+	slug := zalocommon.DeriveSlugFromName(name)
+	if err := zalocommon.SharedRouter().RegisterSetupSlug(slug); err != nil {
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, err.Error()))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"callback_url": callbackURL,
+		"webhook_url":  webhookURL,
+	})
+}
+
+func (h *ChannelInstancesHandler) handleZaloOAConsent(w http.ResponseWriter, r *http.Request) {
+	h.observePublicURL(r)
+	if h.zaloOAConsent == nil {
+		writeError(w, http.StatusServiceUnavailable, protocol.ErrUnavailable, i18n.T(store.LocaleFromContext(r.Context()), i18n.MsgZaloOAAuthUnavailable))
+		return
+	}
+	result, flowErr := h.zaloOAConsent(
+		r.Context(),
+		store.TenantIDFromContext(r.Context()),
+		r.PathValue("id"),
+	)
+	if flowErr != nil {
+		writeZaloOAFlowError(w, flowErr)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *ChannelInstancesHandler) handleZaloOAExchangeCode(w http.ResponseWriter, r *http.Request) {
+	h.observePublicURL(r)
+	if h.zaloOAExchange == nil {
+		writeError(w, http.StatusServiceUnavailable, protocol.ErrUnavailable, i18n.T(store.LocaleFromContext(r.Context()), i18n.MsgZaloOAAuthUnavailable))
+		return
+	}
+	locale := store.LocaleFromContext(r.Context())
+	var body struct {
+		Code  string `json:"code"`
+		State string `json:"state"`
+		OAID  string `json:"oa_id"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidJSON))
+		return
+	}
+	result, flowErr := h.zaloOAExchange(
+		r.Context(),
+		store.TenantIDFromContext(r.Context()),
+		r.PathValue("id"),
+		body.Code,
+		body.State,
+		body.OAID,
+	)
+	if flowErr != nil {
+		writeZaloOAFlowError(w, flowErr)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func writeZaloOAFlowError(w http.ResponseWriter, flowErr *ZaloOAFlowError) {
+	status := http.StatusInternalServerError
+	switch flowErr.Code {
+	case protocol.ErrInvalidRequest:
+		status = http.StatusBadRequest
+	case protocol.ErrNotFound:
+		status = http.StatusNotFound
+	case protocol.ErrUnavailable:
+		status = http.StatusServiceUnavailable
+	}
+	writeError(w, status, flowErr.Code, flowErr.Message)
 }
 
 func (h *ChannelInstancesHandler) handleGet(w http.ResponseWriter, r *http.Request) {
+	h.observePublicURL(r)
 	locale := store.LocaleFromContext(r.Context())
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -326,7 +468,7 @@ func (h *ChannelInstancesHandler) handleGet(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	writeJSON(w, http.StatusOK, maskInstanceHTTP(*inst))
+	writeJSON(w, http.StatusOK, h.maskInstanceHTTP(*inst))
 }
 
 func (h *ChannelInstancesHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
@@ -437,8 +579,9 @@ func (h *ChannelInstancesHandler) handleDelete(w http.ResponseWriter, r *http.Re
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-// maskInstanceHTTP returns a map with credentials masked for HTTP responses.
-func maskInstanceHTTP(inst store.ChannelInstanceData) map[string]any {
+// maskInstanceHTTP returns a map with credentials masked for HTTP responses
+// and derived, non-secret setup values for supported channel types.
+func (h *ChannelInstancesHandler) maskInstanceHTTP(inst store.ChannelInstanceData) map[string]any {
 	result := map[string]any{
 		"id":              inst.ID,
 		"name":            inst.Name,
@@ -454,12 +597,43 @@ func maskInstanceHTTP(inst store.ChannelInstanceData) map[string]any {
 		"updated_at":      inst.UpdatedAt,
 	}
 
+	if inst.ChannelType == channels.TypeZaloOA {
+		var creds *zalooa.ChannelCreds
+		if loaded, err := zalooa.LoadCreds(inst.Credentials); err == nil {
+			creds = loaded
+			result["auth_connected"] = loaded.AccessToken != "" && loaded.RefreshToken != ""
+		}
+		if h.publicURLSource != nil {
+			publicBase := h.publicURLSource()
+			var cfg config.ZaloOAConfig
+			if len(inst.Config) == 0 || json.Unmarshal(inst.Config, &cfg) == nil {
+				if webhookURL, err := zalooa.WebhookURL(publicBase, cfg.WebhookPath, inst.Name); err == nil {
+					result["webhook_url"] = webhookURL
+				}
+			}
+			callbackURL := ""
+			if creds != nil {
+				callbackURL = strings.TrimSpace(creds.RedirectURI)
+			}
+			if callbackURL == "" {
+				callbackURL, _ = zalooa.CallbackURL(publicBase)
+			}
+			if callbackURL != "" {
+				result["callback_url"] = callbackURL
+			}
+		}
+	}
+
 	if len(inst.Credentials) > 0 {
 		var raw map[string]any
 		if json.Unmarshal(inst.Credentials, &raw) == nil {
 			masked := make(map[string]any, len(raw))
-			for k := range raw {
-				masked[k] = "***"
+			for k, v := range raw {
+				if channels.IsNonSecretCredentialKey(inst.ChannelType, k) {
+					masked[k] = v
+				} else {
+					masked[k] = "***"
+				}
 			}
 			result["credentials"] = masked
 		} else {
@@ -799,7 +973,7 @@ func (h *ChannelInstancesHandler) handleResolveContacts(w http.ResponseWriter, r
 // ui/web/src/constants/channels.ts.
 func isValidChannelType(ct string) bool {
 	switch ct {
-	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu", "facebook", "pancake", "bitrix24":
+	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_bot", "zalo_personal", "feishu", "facebook", "pancake", "bitrix24":
 		return true
 	}
 	return false
