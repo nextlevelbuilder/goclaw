@@ -99,6 +99,7 @@ Supported price units: input, output, cache read, cache write, reasoning, reques
 | atlascloud | `https://api.atlascloud.ai/v1` | `qwen/qwen3.5-flash` | Atlas Cloud OpenAI-compatible LLM endpoint |
 | api_route | `https://global.api-route.com/v1` | `gpt-5.4-mini` | API Route branded OpenAI-compatible endpoint |
 | openrouter | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4-5-20250929` | Model must contain `/` |
+| requesty | `https://router.requesty.ai/v1` | `openai/gpt-4o-mini` | Requesty router; regional bases such as `https://router.eu.requesty.ai/v1` |
 | groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` | |
 | deepseek | `https://api.deepseek.com/v1` | `deepseek-chat` | |
 | gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.0-flash` | Skips empty content fields |
@@ -130,6 +131,27 @@ Set `GOCLAW_API_ROUTE_API_KEY` in the environment, or add the key through the se
     defaults: {
       provider: "api_route",
       model: "gpt-5.4-mini"
+    }
+  }
+}
+```
+
+### Requesty setup
+
+Set `GOCLAW_REQUESTY_API_KEY` in the environment (keys are created at https://app.requesty.ai/api-keys), or add the key through the setup wizard. Set `GOCLAW_REQUESTY_BASE_URL` or `api_base` to use a regional endpoint, for example `https://router.eu.requesty.ai/v1` for EU routing. Models use `vendor/model` ids such as `anthropic/claude-sonnet-4-5`, or managed policy ids such as `claude-sonnet-4-5`; the provider models list shows both.
+
+```json5
+{
+  providers: {
+    requesty: {
+      api_key: "rqsty-...",
+      api_base: "https://router.requesty.ai/v1"
+    }
+  },
+  agents: {
+    defaults: {
+      provider: "requesty",
+      model: "openai/gpt-4o-mini"
     }
   }
 }

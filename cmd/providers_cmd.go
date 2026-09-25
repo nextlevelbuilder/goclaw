@@ -126,6 +126,7 @@ func runProvidersAdd() {
 		{"OpenAI", "openai"},
 		{"Atlas Cloud", "atlascloud"},
 		{"API Route", "api_route"},
+		{"Requesty", "requesty"},
 		{"OpenRouter", "openrouter"},
 		{"DashScope (Alibaba)", "dashscope"},
 		{"OpenAI-compatible", "openai_compat"},
@@ -153,7 +154,7 @@ func runProvidersAdd() {
 	// Step 4: Base URL (pre-fill per type, editable)
 	defaultURL := defaultBaseURL(providerType)
 	baseURL := ""
-	if providerType == "openai_compat" || providerType == "atlascloud" || providerType == "api_route" {
+	if providerType == "openai_compat" || providerType == "atlascloud" || providerType == "api_route" || providerType == "requesty" {
 		baseURL, err = promptString("Base URL", "e.g. https://api.example.com/v1", defaultURL)
 		if err != nil {
 			fmt.Println("Cancelled.")
@@ -317,6 +318,8 @@ func defaultBaseURL(providerType string) string {
 		return "https://api.atlascloud.ai/v1"
 	case "api_route":
 		return store.APIRouteDefaultAPIBase
+	case "requesty":
+		return store.RequestyDefaultAPIBase
 	case "openrouter":
 		return "https://openrouter.ai/api/v1"
 	case "dashscope":

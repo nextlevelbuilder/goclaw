@@ -129,6 +129,64 @@ func fetchOpenAIModels(ctx context.Context, apiBase, apiKey string, extraHeaders
 	return models, nil
 }
 
+// fetchRequestyModels lists Requesty managed policies (GET /models/managed,
+// curated ids such as "claude-sonnet-4-5") followed by the key's model catalog
+// from GET /models ("vendor/model" ids). The managed list is best effort; the
+// catalog call validates the key, so its error is returned.
+func fetchRequestyModels(ctx context.Context, apiBase, apiKey string) ([]ModelInfo, error) {
+	catalog, err := fetchOpenAIModels(ctx, apiBase, apiKey, nil)
+	if err != nil {
+		return nil, err
+	}
+	managed, err := fetchRequestyManagedModels(ctx, apiBase, apiKey)
+	if err != nil {
+		return catalog, nil
+	}
+	seen := make(map[string]bool, len(managed)+len(catalog))
+	models := make([]ModelInfo, 0, len(managed)+len(catalog))
+	for _, m := range append(managed, catalog...) {
+		if seen[m.ID] {
+			continue
+		}
+		seen[m.ID] = true
+		models = append(models, m)
+	}
+	return models, nil
+}
+
+func fetchRequestyManagedModels(ctx context.Context, apiBase, apiKey string) ([]ModelInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", apiBase+"/models/managed", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("requesty managed models returned %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode requesty managed models: %w", err)
+	}
+
+	models := make([]ModelInfo, 0, len(result.Data))
+	for _, m := range result.Data {
+		models = append(models, ModelInfo{ID: m.ID, Name: m.ID})
+	}
+	return models, nil
+}
+
 // fetchOllamaModels calls Ollama's native /api/tags endpoint to get model metadata
 // including parameter size, quantization level, and model family.
 // The api_base may include a /v1 suffix (from issue #654 normalization) — strip it

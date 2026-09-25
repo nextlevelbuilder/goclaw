@@ -111,6 +111,8 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		models = zaiModels()
 	case store.ProviderAIMLAPI:
 		models = aimlapiModels()
+	case store.ProviderRequesty:
+		models, err = fetchRequestyModels(ctx, openAIModelsAPIBase(p.ProviderType, h.resolveAPIBase(p)), p.APIKey)
 	default:
 		// All other types use OpenAI-compatible /models endpoint
 		apiBase := openAIModelsAPIBase(p.ProviderType, h.resolveAPIBase(p))
@@ -146,6 +148,8 @@ func openAIModelsAPIBase(providerType, apiBase string) string {
 		return store.AtlasCloudDefaultAPIBase
 	case store.ProviderAPIRoute:
 		return store.APIRouteDefaultAPIBase
+	case store.ProviderRequesty:
+		return store.RequestyDefaultAPIBase
 	case store.ProviderKimiCoding:
 		return store.KimiCodingDefaultAPIBase
 	default:

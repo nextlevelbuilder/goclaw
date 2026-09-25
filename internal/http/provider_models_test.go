@@ -397,6 +397,67 @@ func TestOpenAIModelsAPIBaseDefaultsKimiCoding(t *testing.T) {
 	}
 }
 
+func TestProvidersHandlerListProviderModelsRequestyMergesManagedAndCatalog(t *testing.T) {
+	token := setupProvidersAdminToken(t)
+	var capturedAuth string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedAuth = r.Header.Get("Authorization")
+		var ids []string
+		switch r.URL.Path {
+		case "/models/managed":
+			ids = []string{"claude-sonnet-4-5", "gpt-5-mini@eu"}
+		case "/models":
+			ids = []string{"openai/gpt-4o-mini", "claude-sonnet-4-5"}
+		default:
+			http.NotFound(w, r)
+			return
+		}
+		data := make([]map[string]string, 0, len(ids))
+		for _, id := range ids {
+			data = append(data, map[string]string{"id": id})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": data})
+	}))
+	t.Cleanup(upstream.Close)
+
+	providerStore := newMockProviderStore()
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		Name:         "requesty",
+		ProviderType: store.ProviderRequesty,
+		APIBase:      upstream.URL,
+		APIKey:       "requesty-key",
+		Enabled:      true,
+	}
+	if err := providerStore.CreateProvider(t.Context(), provider); err != nil {
+		t.Fatalf("CreateProvider() error = %v", err)
+	}
+
+	handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	result := providerModelsRequest(t, mux, provider.ID, token)
+	if capturedAuth != "Bearer requesty-key" {
+		t.Fatalf("Authorization = %q, want Bearer requesty-key", capturedAuth)
+	}
+	want := []string{"claude-sonnet-4-5", "gpt-5-mini@eu", "openai/gpt-4o-mini"}
+	if len(result.Models) != len(want) {
+		t.Fatalf("models = %#v, want %v", result.Models, want)
+	}
+	for index, model := range result.Models {
+		if model.ID != want[index] {
+			t.Errorf("models[%d].ID = %q, want %q", index, model.ID, want[index])
+		}
+	}
+}
+
+func TestOpenAIModelsAPIBaseDefaultsRequesty(t *testing.T) {
+	if got := openAIModelsAPIBase(store.ProviderRequesty, ""); got != store.RequestyDefaultAPIBase {
+		t.Fatalf("Requesty default api base = %q, want %q", got, store.RequestyDefaultAPIBase)
+	}
+}
+
 func TestProvidersHandlerListProviderModelsAIMLAPIUsesCuratedCatalog(t *testing.T) {
 	token := setupProvidersAdminToken(t)
 	providerStore := newMockProviderStore()

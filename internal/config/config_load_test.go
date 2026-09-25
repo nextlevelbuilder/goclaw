@@ -418,6 +418,33 @@ func TestLoad_APIRouteProviderFromFileAndEnv(t *testing.T) {
 	}
 }
 
+func TestLoad_RequestyProviderFromFileAndEnv(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json5")
+	if err := os.WriteFile(cfgPath, []byte(`{
+		"providers": {
+			"requesty": {
+				"api_key": "file-key"
+			}
+		}
+	}`), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	t.Setenv("GOCLAW_REQUESTY_API_KEY", "env-key")
+	t.Setenv("GOCLAW_REQUESTY_BASE_URL", "https://router.eu.requesty.ai/v1")
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if cfg.Providers.Requesty.APIKey != "env-key" {
+		t.Fatalf("API key = %q, want GOCLAW_REQUESTY_API_KEY override", cfg.Providers.Requesty.APIKey)
+	}
+	if cfg.Providers.Requesty.APIBase != "https://router.eu.requesty.ai/v1" {
+		t.Fatalf("API base = %q, want GOCLAW_REQUESTY_BASE_URL override", cfg.Providers.Requesty.APIBase)
+	}
+}
+
 // --- Allowed origins from JSON5 ---
 
 func TestLoad_AllowedOrigins_JSON5(t *testing.T) {
