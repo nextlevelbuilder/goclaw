@@ -797,6 +797,7 @@ CREATE INDEX IF NOT EXISTS idx_mcp_user_credentials_server ON mcp_user_credentia
 
 -- ============================================================
 -- Table: channel_instances
+-- Zalo Bot API instances use zalo_bot; zalo_oa is the OAuth v4 Official Account.
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS channel_instances (

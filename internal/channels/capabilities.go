@@ -29,17 +29,20 @@ const (
 //   - feishu:   internal/channels/feishu/feishu.go:250
 //   - slack:    internal/channels/slack/send.go:80
 //   - zalo_personal: internal/channels/zalo/personal/send.go:42
+//   - zalo_oa:  internal/channels/zalo/oa/channel.go — Send dispatches
+//     image/gif/file sequentially via /v2.0/oa/upload/*
 //   - pancake:  internal/channels/pancake/media_handler.go:18
 //   - facebook: internal/channels/facebook/facebook.go:205
 //
 // NOT in this list:
-//   - zalo_oa: internal/channels/zalo/zalo.go:115 — Send() does NOT consume msg.Media
+//   - zalo_bot: internal/channels/zalo/zalo.go:115 — URL-based sendPhoto only
 var mediaCapableTypes = map[string]bool{
 	TypeTelegram:     true,
 	TypeDiscord:      true,
 	TypeWhatsApp:     true,
 	TypeFeishu:       true,
 	TypeSlack:        true,
+	TypeZaloOA:       true,
 	TypeZaloPersonal: true,
 	TypePancake:      true,
 	TypeFacebook:     true,

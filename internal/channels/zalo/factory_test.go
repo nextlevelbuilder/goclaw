@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
@@ -25,6 +26,9 @@ func TestFactory_ValidCredsProducesChannel(t *testing.T) {
 	}
 	if ch.Name() != "my-zalo" {
 		t.Errorf("Name() = %q, want my-zalo", ch.Name())
+	}
+	if ch.Type() != channels.TypeZaloBot {
+		t.Errorf("Type() = %q, want %s", ch.Type(), channels.TypeZaloBot)
 	}
 	zc, ok := ch.(*Channel)
 	if !ok {

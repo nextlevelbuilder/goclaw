@@ -246,6 +246,39 @@ func (s *SQLiteChannelInstanceStore) loadExistingCreds(ctx context.Context, id u
 	return m, nil
 }
 
+// MergeConfig matches PostgreSQL's shallow JSONB merge: replacing a cursor
+// removes its evicted entries while leaving operator settings untouched.
+func (s *SQLiteChannelInstanceStore) MergeConfig(ctx context.Context, id uuid.UUID, patch map[string]any) error {
+	if len(patch) == 0 {
+		return nil
+	}
+	parts := make([]string, 0, len(patch))
+	args := make([]any, 0, len(patch)*2+3)
+	for key, value := range patch {
+		if !validMetadataKey(key) {
+			return fmt.Errorf("invalid config key %q for MergeConfig", key)
+		}
+		raw, err := json.Marshal(value)
+		if err != nil {
+			return fmt.Errorf("marshal config value for %q: %w", key, err)
+		}
+		parts = append(parts, "?, json(?)")
+		args = append(args, "$."+key, string(raw))
+	}
+	query := `UPDATE channel_instances SET config = json_set(CASE WHEN json_type(config) = 'object' THEN config ELSE '{}' END, ` + strings.Join(parts, ", ") + `), updated_at = ? WHERE id = ?`
+	args = append(args, time.Now(), id)
+	if !store.IsCrossTenant(ctx) {
+		tid := store.TenantIDFromContext(ctx)
+		if tid == uuid.Nil {
+			return fmt.Errorf("tenant_id required")
+		}
+		query += ` AND tenant_id = ?`
+		args = append(args, tid)
+	}
+	_, err := s.db.ExecContext(ctx, query, args...)
+	return err
+}
+
 func (s *SQLiteChannelInstanceStore) Delete(ctx context.Context, id uuid.UUID) error {
 	if store.IsCrossTenant(ctx) {
 		_, err := s.db.ExecContext(ctx, "DELETE FROM channel_instances WHERE id = ?", id)

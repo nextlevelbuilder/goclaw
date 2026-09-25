@@ -188,6 +188,16 @@ func (m *Manager) ClearGroupApproval(channelName, chatID string) {
 	}
 }
 
+// QuoteInboundOnDM reports whether the channel opts into DM reply-to stamping.
+func (m *Manager) QuoteInboundOnDM(name string) bool {
+	ch, exists := m.GetChannel(name)
+	if !exists {
+		return false
+	}
+	q, ok := ch.(DMQuoteChannel)
+	return ok && q.QuoteInboundOnDM()
+}
+
 // GetStatus returns the running status of all channels.
 func (m *Manager) GetStatus() map[string]any {
 	m.mu.RLock()

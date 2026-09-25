@@ -75,6 +75,12 @@ describe("agent instance display utils", () => {
     expect(display.label).toBe("Zalo - chat4878");
   });
 
+  it("labels zalo_bot group prefixes before generic zalo", () => {
+    const display = buildAgentInstanceDisplay({ user_id: "group:zalo_bot:chat99" }, resolver({}));
+
+    expect(display.label).toBe("Zalo Bot - chat99");
+  });
+
   it("uses raw group ids for contact resolver inputs", () => {
     expect(
       getAgentInstanceResolveIds([

@@ -8,6 +8,12 @@ export interface ChannelInstanceData {
   enabled: boolean;
   is_default: boolean;
   has_credentials: boolean;
+  auth_connected?: boolean;
+  // Masked credentials map: secret keys come back as "***"; non-secret
+  // identifiers (e.g. zalo_oa.oa_id, redirect_uri) are plain.
+  credentials?: Record<string, unknown>;
+  webhook_url?: string;
+  callback_url?: string;
   created_by: string;
   created_at: string;
   updated_at: string;

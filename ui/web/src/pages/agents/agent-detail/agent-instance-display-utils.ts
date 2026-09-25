@@ -20,6 +20,8 @@ const CHANNEL_PREFIX_LABELS: Array<[string, string]> = [
   ["zalo-personal", "Zalo Personal"],
   ["zalo_oa", "Zalo OA"],
   ["zalo-oa", "Zalo OA"],
+  ["zalo_bot", "Zalo Bot"],
+  ["zalo-bot", "Zalo Bot"],
   ["bitrix24", "Bitrix24"],
   ["bitrix", "Bitrix24"],
   ["telegram", "Telegram"],

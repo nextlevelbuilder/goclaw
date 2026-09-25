@@ -720,6 +720,10 @@
     }
   },
   "wizard": {
+    "zaloOa": {
+      "createLabel": "Create & Complete Setup",
+      "formBanner": "Register the callback and webhook URLs, paste the Webhook Secret Key, then create the channel and authorize the OA in the next step."
+    },
     "zaloPersonal": {
       "createLabel": "Create & Authenticate",
       "formBanner": "After creating, you'll authenticate via QR code and configure allowed users."
@@ -848,6 +852,78 @@
         "closeResumeLater": "Close (resume later)",
         "urlUnknown": "Install URL is unavailable. Open the goclaw UI via your public URL and retry from the dropdown."
       }
+    }
+  },
+  "zaloOa": {
+    "dialogTitle": "Connect Zalo OA — {{name}}",
+    "dialogDescription": "Authorize the Official Account, then paste the redirect URL from your browser.",
+    "step1Heading": "Step 1 — Authorize",
+    "step2Heading": "Step 2 — Paste callback URL",
+    "authorizeHelp": "Open the URL below, sign in to Zalo, and approve access for the Official Account. After you approve, your browser redirects to a callback URL — copy the full URL from the address bar and paste it into Step 2 below.",
+    "consentLoading": "Generating consent URL…",
+    "pasteHelp": "After approving, copy the full URL from your browser's address bar and paste it here.",
+    "pastePlaceholder": "Full callback URL",
+    "errCodeMissing": "Pasted URL has no \"code\" parameter — copy the full callback URL from your browser's address bar after approval.",
+    "errStateMismatch": "This callback URL belongs to a different authorization attempt. Open the current Zalo authorization URL and try again.",
+    "connectedClosing": "Connected — closing…",
+    "copyUrl": "Copy URL",
+    "openInTab": "Open in new tab",
+    "cancel": "Cancel",
+    "connect": "Connect",
+    "connecting": "Connecting…",
+    "connectBanner": {
+      "title": "Authorize this Official Account",
+      "hint": "Run the OAuth consent flow to bind this channel to your OA and obtain access/refresh tokens.",
+      "connected": "Connected — OA {{oaId}}",
+      "connectedHint": "Access token auto-refreshes. Use Reconnect to re-authorize (e.g. after changing permissions)."
+    },
+    "openPopup": "Authorize",
+    "popupAutoHint": "Opens a secure window; completes automatically after approval.",
+    "reconnect": "Reconnect",
+    "callback": {
+      "title": "Authorization complete",
+      "errorTitle": "Callback received",
+      "successHint": "Copy the full URL below and paste it into the GoClaw consent dialog (Step 2).",
+      "oaId": "OA ID",
+      "copy": "Copy",
+      "manualHint": "If the dialog didn't auto-complete, paste the URL above into Step 2 of the consent dialog.",
+      "missingCode": "This callback URL has no authorization code. Open the consent URL again from the GoClaw dialog."
+    },
+    "callbackUrlLabel": "Callback URL (for the Zalo console)",
+    "callbackUrlHelp": "Register this exact URL as the OA Callback URL in the Zalo Developers console. System-generated — cannot be edited.",
+    "callbackUrlCopy": "Copy",
+    "callbackUrlUnavailable": "Unavailable until the gateway observes a public request",
+    "openCallbackSettings": "Open Callback settings in Zalo",
+    "setup": {
+      "title": "Complete Zalo OA setup",
+      "description": "Enter the app credentials, register both generated URLs, then paste the Webhook Secret Key before creating the channel.",
+      "descriptionPolling": "Enter the app credentials and register the generated Callback URL before creating the channel. Polling mode does not use a webhook.",
+      "loading": "Generating setup URLs…",
+      "loadError": "Could not generate the setup URLs. Open this form through the gateway's public URL and try again.",
+      "webhookStep": "2. Register and secure the webhook",
+      "consentStepWebhook": "3. Authorize the Official Account",
+      "consentStepPolling": "2. Authorize the Official Account",
+      "secretRequired": "Save the Webhook Secret Key before authorizing the OA.",
+      "closeResumeLater": "Close (resume later)"
+    },
+    "webhookSetup": {
+      "title": "Webhook Setup",
+      "help": "Register the endpoint, then paste the OA Webhook Secret Key to require signed events.",
+      "urlLabel": "Webhook URL",
+      "urlHelp": "Register this exact URL in Zalo Developers → OA → Webhook. System-generated and read-only.",
+      "urlUnavailable": "Unavailable until the gateway observes a public request",
+      "openConsole": "Open Webhook settings in Zalo",
+      "copy": "Copy",
+      "copied": "Copied",
+      "awaitingSecret": "Waiting for webhook secret",
+      "secured": "Webhook secured",
+      "secretLabel": "Webhook Secret Key",
+      "secretHelp": "After Zalo accepts the URL, paste the OA Webhook Secret Key shown in the Zalo console.",
+      "secretRotateHelp": "Signed events are required. Enter a new secret only to rotate the current key.",
+      "secretPlaceholder": "Paste the OA Webhook Secret Key",
+      "saveEnable": "Save & Enable",
+      "saving": "Saving…",
+      "saveError": "Could not save the webhook secret. The channel remains unverified."
     }
   }
 }

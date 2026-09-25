@@ -25,6 +25,7 @@ func TestIsExternalChannel(t *testing.T) {
 		{"feishu", channels.TypeFeishu, true},
 		{"whatsapp", channels.TypeWhatsApp, true},
 		{"zalo_oa", channels.TypeZaloOA, true},
+		{"zalo_bot", channels.TypeZaloBot, true},
 		{"zalo_personal", channels.TypeZaloPersonal, true},
 		{"pancake", channels.TypePancake, true},
 		{"slack", channels.TypeSlack, true},

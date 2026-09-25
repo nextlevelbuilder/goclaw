@@ -719,6 +719,10 @@
     }
   },
   "wizard": {
+    "zaloOa": {
+      "createLabel": "Tạo & hoàn tất thiết lập",
+      "formBanner": "Đăng ký Callback URL và Webhook URL, dán Webhook Secret Key, sau đó tạo channel và cấp quyền OA ở bước tiếp theo."
+    },
     "zaloPersonal": {
       "createLabel": "Tạo & Xác thực",
       "formBanner": "Sau khi tạo, bạn sẽ xác thực bằng mã QR và cấu hình người dùng được phép."
@@ -847,6 +851,78 @@
         "closeResumeLater": "Đóng (resume sau)",
         "urlUnknown": "Không có install URL. Mở UI qua public URL rồi retry từ dropdown."
       }
+    }
+  },
+  "zaloOa": {
+    "dialogTitle": "Kết nối Zalo OA — {{name}}",
+    "dialogDescription": "Cấp quyền cho Official Account, sau đó dán URL redirect từ trình duyệt của bạn.",
+    "step1Heading": "Bước 1 — Cấp quyền",
+    "step2Heading": "Bước 2 — Dán URL callback",
+    "authorizeHelp": "Mở URL bên dưới, đăng nhập Zalo và phê duyệt quyền truy cập cho Official Account. Sau khi phê duyệt, trình duyệt chuyển đến URL callback — hãy copy toàn bộ URL trên thanh địa chỉ và dán vào Bước 2.",
+    "consentLoading": "Đang tạo URL consent…",
+    "pasteHelp": "Sau khi phê duyệt, copy toàn bộ URL từ thanh địa chỉ trình duyệt và dán vào đây.",
+    "pastePlaceholder": "URL callback đầy đủ",
+    "errCodeMissing": "URL đã dán không có tham số \"code\" — hãy copy toàn bộ URL callback từ thanh địa chỉ sau khi phê duyệt.",
+    "errStateMismatch": "URL callback này thuộc một lần cấp quyền khác. Hãy mở URL cấp quyền Zalo hiện tại và thử lại.",
+    "connectedClosing": "Đã kết nối — đang đóng…",
+    "copyUrl": "Sao chép URL",
+    "openInTab": "Mở trong tab mới",
+    "cancel": "Hủy",
+    "connect": "Kết nối",
+    "connecting": "Đang kết nối…",
+    "connectBanner": {
+      "title": "Cấp quyền cho Official Account này",
+      "hint": "Chạy luồng consent OAuth để gắn kênh với OA và nhận access/refresh token.",
+      "connected": "Đã kết nối — OA {{oaId}}",
+      "connectedHint": "Access token tự làm mới. Dùng Kết nối lại để cấp quyền lại (ví dụ sau khi đổi quyền)."
+    },
+    "openPopup": "Cấp quyền",
+    "popupAutoHint": "Mở cửa sổ bảo mật; tự hoàn tất sau khi phê duyệt.",
+    "reconnect": "Kết nối lại",
+    "callback": {
+      "title": "Đã hoàn tất cấp quyền",
+      "errorTitle": "Đã nhận callback",
+      "successHint": "Sao chép toàn bộ URL bên dưới và dán vào hộp thoại consent của GoClaw (Bước 2).",
+      "oaId": "OA ID",
+      "copy": "Sao chép",
+      "manualHint": "Nếu hộp thoại không tự hoàn tất, hãy dán URL trên vào Bước 2 của hộp thoại consent.",
+      "missingCode": "URL callback này không có mã cấp quyền. Hãy mở lại URL consent từ hộp thoại GoClaw."
+    },
+    "callbackUrlLabel": "Callback URL (đăng ký trên Zalo console)",
+    "callbackUrlHelp": "Đăng ký đúng URL này làm OA Callback URL trên Zalo Developers console. Hệ thống tự sinh — không thể sửa.",
+    "callbackUrlCopy": "Sao chép",
+    "callbackUrlUnavailable": "Chưa có cho đến khi gateway nhận được request qua domain công khai",
+    "openCallbackSettings": "Mở cấu hình Callback trên Zalo",
+    "setup": {
+      "title": "Hoàn tất thiết lập Zalo OA",
+      "description": "Nhập thông tin ứng dụng, đăng ký cả hai URL được tạo sẵn, sau đó dán Webhook Secret Key trước khi tạo channel.",
+      "descriptionPolling": "Nhập thông tin ứng dụng và đăng ký Callback URL được tạo sẵn trước khi tạo channel. Chế độ polling không dùng webhook.",
+      "loading": "Đang tạo các URL thiết lập…",
+      "loadError": "Không thể tạo URL thiết lập. Hãy mở form này qua domain công khai của gateway rồi thử lại.",
+      "webhookStep": "2. Đăng ký và bảo vệ webhook",
+      "consentStepWebhook": "3. Cấp quyền cho Official Account",
+      "consentStepPolling": "2. Cấp quyền cho Official Account",
+      "secretRequired": "Lưu Webhook Secret Key trước khi cấp quyền cho OA.",
+      "closeResumeLater": "Đóng (tiếp tục sau)"
+    },
+    "webhookSetup": {
+      "title": "Thiết lập Webhook",
+      "help": "Đăng ký endpoint, sau đó nhập Webhook Secret Key của OA để bắt buộc xác minh chữ ký sự kiện.",
+      "urlLabel": "Webhook URL",
+      "urlHelp": "Đăng ký chính xác URL này tại Zalo Developers → OA → Webhook. Hệ thống tự sinh và chỉ đọc.",
+      "urlUnavailable": "Chưa có cho đến khi gateway nhận được request qua domain công khai",
+      "openConsole": "Mở cấu hình Webhook trên Zalo",
+      "copy": "Sao chép",
+      "copied": "Đã sao chép",
+      "awaitingSecret": "Đang chờ Webhook Secret Key",
+      "secured": "Webhook đã được bảo vệ",
+      "secretLabel": "Webhook Secret Key",
+      "secretHelp": "Sau khi Zalo chấp nhận URL, dán OA Webhook Secret Key hiển thị trong Zalo console.",
+      "secretRotateHelp": "Kênh đang bắt buộc xác minh chữ ký. Chỉ nhập secret mới khi cần xoay khóa.",
+      "secretPlaceholder": "Dán OA Webhook Secret Key",
+      "saveEnable": "Lưu & kích hoạt",
+      "saving": "Đang lưu…",
+      "saveError": "Không thể lưu Webhook Secret Key. Kênh vẫn chưa được xác minh."
     }
   }
 }

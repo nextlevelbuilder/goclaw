@@ -243,10 +243,12 @@ func processNormalMessage(
 	// Build outbound metadata for reply-to + thread routing BEFORE RegisterRun
 	// so block.reply handler can use it for routing intermediate messages.
 	outMeta := channels.CopyFinalRoutingMeta(msg.Metadata)
-	if isGroup {
-		if mid := msg.Metadata["message_id"]; mid != "" {
+	if mid := msg.Metadata["message_id"]; mid != "" {
+		if isGroup || (deps.ChannelMgr != nil && deps.ChannelMgr.QuoteInboundOnDM(msg.Channel)) {
 			outMeta["reply_to_message_id"] = mid
 		}
+	}
+	if isGroup {
 		// Address the asker so multi-user group chats render a clear "this
 		// reply is for X" signal. Today this is Bitrix24-specific (channel
 		// renders [USER=<id>][/USER] BBCode); other channels ignore the key.

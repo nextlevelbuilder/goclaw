@@ -300,9 +300,13 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 		return nil
 	}
 
+	instCtx := store.WithTenantID(ctx, inst.TenantID)
+	if setter, ok := ch.(interface{ SetInstanceID(uuid.UUID) }); ok {
+		setter.SetInstanceID(inst.ID)
+	}
+
 	// Resolve agent_key from UUID — the routing system (Router, session keys) uses agent_key, not UUID.
 	// Use the instance's tenant_id to scope the agent lookup.
-	instCtx := store.WithTenantID(ctx, inst.TenantID)
 	var ag *store.AgentData
 	if base, ok := ch.(interface{ SetAgentID(string) }); ok {
 		var err error

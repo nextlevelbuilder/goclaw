@@ -14,7 +14,7 @@ func TestIsMediaCapable_KnownCapableTypes(t *testing.T) {
 	t.Parallel()
 	capable := []string{
 		TypeTelegram, TypeDiscord, TypeWhatsApp, TypeFeishu,
-		TypeSlack, TypeZaloPersonal, TypePancake, TypeFacebook,
+		TypeSlack, TypeZaloOA, TypeZaloPersonal, TypePancake, TypeFacebook,
 	}
 	for _, ct := range capable {
 		if !IsMediaCapable(ct) {
@@ -26,7 +26,7 @@ func TestIsMediaCapable_KnownCapableTypes(t *testing.T) {
 func TestIsMediaCapable_UnsupportedTypes(t *testing.T) {
 	t.Parallel()
 	unsupported := []string{
-		TypeZaloOA, "unknown", "", "cli", "system",
+		TypeZaloBot, "unknown", "", "cli", "system",
 	}
 	for _, ct := range unsupported {
 		if IsMediaCapable(ct) {
@@ -51,11 +51,11 @@ func newMockChannel(name, channelType string) *mockChannel {
 	return mc
 }
 
-func (m *mockChannel) Type() string                                     { return m.channelType }
-func (m *mockChannel) Start(_ context.Context) error                    { return nil }
-func (m *mockChannel) Stop(_ context.Context) error                     { return nil }
-func (m *mockChannel) IsRunning() bool                                  { return true }
-func (m *mockChannel) IsAllowed(_ string) bool                          { return true }
+func (m *mockChannel) Type() string                  { return m.channelType }
+func (m *mockChannel) Start(_ context.Context) error { return nil }
+func (m *mockChannel) Stop(_ context.Context) error  { return nil }
+func (m *mockChannel) IsRunning() bool               { return true }
+func (m *mockChannel) IsAllowed(_ string) bool       { return true }
 func (m *mockChannel) Send(_ context.Context, msg bus.OutboundMessage) error {
 	m.lastMsg = msg
 	return m.sendErr
@@ -92,17 +92,17 @@ func TestSendMediaToChannel_PassesMediaToAdapter(t *testing.T) {
 	}
 }
 
-func TestSendMediaToChannel_ReturnsErrMediaUnsupported_ForZaloOA(t *testing.T) {
+func TestSendMediaToChannel_ReturnsErrMediaUnsupported_ForZaloBot(t *testing.T) {
 	t.Parallel()
 
 	mb := bus.New()
 	mgr := NewManager(mb)
 
-	ch := newMockChannel("zalo-oa-test", TypeZaloOA)
-	mgr.channels["zalo-oa-test"] = ch
+	ch := newMockChannel("zalo-bot-test", TypeZaloBot)
+	mgr.channels["zalo-bot-test"] = ch
 
 	media := []bus.MediaAttachment{{URL: "/tmp/img.png", ContentType: "image/png"}}
-	err := mgr.SendMediaToChannel(context.Background(), "zalo-oa-test", "chat1", "", media)
+	err := mgr.SendMediaToChannel(context.Background(), "zalo-bot-test", "chat1", "", media)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

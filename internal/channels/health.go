@@ -50,6 +50,15 @@ const (
 	ChannelRemediationTargetDetails     ChannelRemediationTarget = "details"
 )
 
+// ChannelBootstrapState classifies a degraded state that is part of normal
+// first-time setup rather than a fault. Locale-independent so UIs can gate
+// bootstrap banners without substring-matching localized summaries.
+type ChannelBootstrapState string
+
+const (
+	ChannelBootstrapAwaitingSecret ChannelBootstrapState = "awaiting_secret"
+)
+
 // ChannelRemediation contains a coarse, additive operator hint for the current incident.
 type ChannelRemediation struct {
 	Code     ChannelRemediationCode   `json:"code"`
@@ -60,21 +69,22 @@ type ChannelRemediation struct {
 
 // ChannelHealth is the shared runtime health snapshot exposed via channels.status.
 type ChannelHealth struct {
-	ChannelType         string              `json:"-"`
-	Enabled             bool                `json:"enabled"`
-	Running             bool                `json:"running"`
-	State               ChannelHealthState  `json:"state"`
-	Summary             string              `json:"summary,omitempty"`
-	Detail              string              `json:"detail,omitempty"`
-	FailureKind         ChannelFailureKind  `json:"failure_kind,omitempty"`
-	Retryable           bool                `json:"retryable"`
-	CheckedAt           time.Time           `json:"checked_at"`
-	FailureCount        int                 `json:"failure_count,omitempty"`
-	ConsecutiveFailures int                 `json:"consecutive_failures,omitempty"`
-	FirstFailedAt       time.Time           `json:"first_failed_at"`
-	LastFailedAt        time.Time           `json:"last_failed_at"`
-	LastHealthyAt       time.Time           `json:"last_healthy_at"`
-	Remediation         *ChannelRemediation `json:"remediation,omitempty"`
+	ChannelType         string                `json:"-"`
+	Enabled             bool                  `json:"enabled"`
+	Running             bool                  `json:"running"`
+	State               ChannelHealthState    `json:"state"`
+	Summary             string                `json:"summary,omitempty"`
+	Detail              string                `json:"detail,omitempty"`
+	FailureKind         ChannelFailureKind    `json:"failure_kind,omitempty"`
+	Retryable           bool                  `json:"retryable"`
+	CheckedAt           time.Time             `json:"checked_at"`
+	FailureCount        int                   `json:"failure_count,omitempty"`
+	ConsecutiveFailures int                   `json:"consecutive_failures,omitempty"`
+	FirstFailedAt       time.Time             `json:"first_failed_at"`
+	LastFailedAt        time.Time             `json:"last_failed_at"`
+	LastHealthyAt       time.Time             `json:"last_healthy_at"`
+	Remediation         *ChannelRemediation   `json:"remediation,omitempty"`
+	BootstrapState      ChannelBootstrapState `json:"bootstrap_state,omitempty"`
 }
 
 // ChannelErrorInfo contains shared error classification output for operators.

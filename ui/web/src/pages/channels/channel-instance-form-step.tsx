@@ -24,6 +24,7 @@ import { wizardEditConfigs } from "./channel-wizard-registry";
 import { TelegramGroupOverrides, type GroupConfigWithTopics } from "./telegram-group-overrides";
 import { CHANNEL_TYPES } from "@/constants/channels";
 import type { ChannelInstanceFormData } from "@/schemas/channel.schema";
+import { ZaloOACreateSetup } from "./zalo/zalo-oa-create-setup";
 
 interface ChannelInstanceFormStepProps {
   form: UseFormReturn<ChannelInstanceFormData>;
@@ -58,12 +59,28 @@ export function ChannelInstanceFormStep({
   const wizard = wizardConfig[channelType];
   const EditConfig = wizardEditConfigs[channelType];
   const credsFields = credentialsSchema[channelType] ?? [];
+  const isZaloOACreate = !instance && channelType === "zalo_oa";
+  const preSetupCredsFields = isZaloOACreate
+    ? credsFields.filter((field) => field.key !== "webhook_secret_key")
+    : credsFields;
+  const postSetupCredsFields = isZaloOACreate
+    ? credsFields.filter((field) => field.key === "webhook_secret_key")
+    : [];
   const excludeSet = new Set(wizard?.excludeConfigFields ?? []);
   const cfgFields = configSchema[channelType] ?? [];
   const formCfgFields = excludeSet.size > 0 ? cfgFields.filter((f: FieldDef) => !excludeSet.has(f.key)) : cfgFields;
   const hasWizard = !instance && !!wizard;
+  const authReady = channelType === "zalo_oa" ? Boolean(instance?.auth_connected) : Boolean(instance?.has_credentials);
   const normalCfgFields = formCfgFields.filter((f: FieldDef) => !f.advanced);
   const advancedCfgFields = formCfgFields.filter((f: FieldDef) => f.advanced);
+  const effectiveConfigValues = {
+    ...Object.fromEntries(
+      cfgFields
+        .filter((field) => field.defaultValue !== undefined)
+        .map((field) => [field.key, field.defaultValue]),
+    ),
+    ...configValues,
+  };
   const [showAdvanced, setShowAdvanced] = useState(
     () => advancedCfgFields.some((f) => configValues[f.key] !== undefined && configValues[f.key] !== ""),
   );
@@ -140,7 +157,17 @@ export function ChannelInstanceFormStep({
               {t("form.credentials")}
               {instance && <span className="text-xs font-normal text-muted-foreground ml-1">{t("form.credentialsHint")}</span>}
             </legend>
-            <ChannelFields fields={credsFields} values={credsValues} onChange={onCredsChange} idPrefix="ci-cred" isEdit={!!instance} contextValues={configValues} />
+            <ChannelFields fields={preSetupCredsFields} values={credsValues} onChange={onCredsChange} idPrefix="ci-cred" isEdit={!!instance} contextValues={effectiveConfigValues} />
+            {isZaloOACreate && (
+              <ZaloOACreateSetup
+                name={form.watch("name")}
+                appID={credsValues.app_id}
+                usesWebhook={String(effectiveConfigValues.transport) !== "polling"}
+              />
+            )}
+            {postSetupCredsFields.length > 0 && (
+              <ChannelFields fields={postSetupCredsFields} values={credsValues} onChange={onCredsChange} idPrefix="ci-cred" contextValues={effectiveConfigValues} />
+            )}
             <p className="text-xs text-muted-foreground">{t("form.credentialsEncrypted")}</p>
           </fieldset>
         )}
@@ -150,11 +177,11 @@ export function ChannelInstanceFormStep({
         {instance && wizard?.steps.includes("auth") && (
           <div className="rounded-md border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950 p-3">
             <div className="flex items-center gap-2">
-              <span className={`h-2 w-2 rounded-full ${instance.has_credentials ? "bg-green-500" : "bg-amber-500"}`} />
+              <span className={`h-2 w-2 rounded-full ${authReady ? "bg-green-500" : "bg-amber-500"}`} />
               <span className="text-sm">
-                {instance.has_credentials ? t("form.authStatus.authenticated") : t("form.authStatus.notAuthenticated")}
+                {authReady ? t("form.authStatus.authenticated") : t("form.authStatus.notAuthenticated")}
               </span>
-              {!instance.has_credentials && (
+              {!authReady && (
                 <span className="text-xs text-muted-foreground ml-1">{t("form.authStatus.useQrHint")}</span>
               )}
             </div>

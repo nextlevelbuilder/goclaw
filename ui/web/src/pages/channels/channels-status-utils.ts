@@ -13,6 +13,7 @@ export const channelTypeLabels: Record<string, string> = {
   slack: "Slack",
   feishu: "Feishu / Lark",
   zalo_oa: "Zalo OA",
+  zalo_bot: "Zalo Bot",
   zalo_personal: "Zalo Personal",
   whatsapp: "WhatsApp",
 };

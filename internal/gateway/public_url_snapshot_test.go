@@ -33,12 +33,12 @@ func TestPublicURLSnapshot_SetIgnoresEmpty(t *testing.T) {
 
 func TestPublicURLSnapshot_Update_FromRequest(t *testing.T) {
 	cases := []struct {
-		name      string
-		host      string
-		fwdHost   string
-		fwdProto  string
-		hasTLS    bool
-		wantURL   string
+		name     string
+		host     string
+		fwdHost  string
+		fwdProto string
+		hasTLS   bool
+		wantURL  string
 	}{
 		{
 			name:     "behind_cloudflare_tunnel",
@@ -116,6 +116,33 @@ func TestPublicURLSnapshot_Update_EmptyHost_NoChange(t *testing.T) {
 	if stored := s.Get(); stored != "https://existing.com" {
 		t.Errorf("empty Update must not clobber existing, got %q", stored)
 	}
+}
+
+func TestPublicURLSnapshot_UpdateIfPublic(t *testing.T) {
+	t.Run("accepts authenticated public proxy host", func(t *testing.T) {
+		s := NewPublicURLSnapshot()
+		req := httptest.NewRequest(http.MethodGet, "http://internal/v1/channels/instances", nil)
+		req.Header.Set("X-Forwarded-Proto", "https")
+		req.Header.Set("X-Forwarded-Host", "gateway.example.com")
+		if got := s.UpdateIfPublic(req); got != "https://gateway.example.com" {
+			t.Fatalf("UpdateIfPublic = %q", got)
+		}
+		if got := s.Get(); got != "https://gateway.example.com" {
+			t.Fatalf("snapshot = %q", got)
+		}
+	})
+
+	t.Run("does not replace public URL with internal BFF host", func(t *testing.T) {
+		s := NewPublicURLSnapshot()
+		s.Set("https://gateway.example.com")
+		req := httptest.NewRequest(http.MethodGet, "http://10.0.0.5:18790/v1/channels/instances", nil)
+		if got := s.UpdateIfPublic(req); got != "" {
+			t.Fatalf("UpdateIfPublic = %q, want empty", got)
+		}
+		if got := s.Get(); got != "https://gateway.example.com" {
+			t.Fatalf("private request replaced snapshot with %q", got)
+		}
+	})
 }
 
 // TestPublicURLSnapshot_SetIfPublic_AcceptsPublic verifies that legitimate

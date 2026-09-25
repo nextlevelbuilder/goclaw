@@ -624,6 +624,18 @@ Admin-only. Invalidate tenant cache, forcing fresh fetch on next list.
 
 ---
 
+## 19. Zalo OA
+
+| Method | Description |
+|--------|-------------|
+| `channels.instances.zalo_oa.callback_url` | Public OAuth callback URL to register in the Zalo console |
+| `channels.instances.zalo_oa.consent_url` | Mint a short-lived state and return the Zalo permission URL |
+| `channels.instances.zalo_oa.exchange_code` | Consume state, exchange pasted code, persist tokens |
+
+Payloads and HTTP twins: [zalo-oa-integration.md](./zalo-oa-integration.md).
+
+---
+
 ## 19. Zalo Personal
 
 | Method | Description |

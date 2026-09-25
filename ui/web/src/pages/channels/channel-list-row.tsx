@@ -36,6 +36,10 @@ export function ChannelListRow({
   const { t } = useTranslation("channels");
   const displayName = instance.display_name || instance.name;
   const supportsReauth = channelsWithAuth.has(instance.channel_type);
+  const isZaloOA = instance.channel_type === "zalo_oa";
+  const authActionLabel = isZaloOA
+    ? t(instance.auth_connected ? "zaloOa.reconnect" : "zaloOa.connect")
+    : t("actions.reauthenticate");
   const statusMeta = getChannelStatusMeta(status, instance.enabled, t);
   const failureKind = getChannelFailureKindLabel(status?.failure_kind, t);
   const checkedLabel = getChannelCheckedLabel(status, t);
@@ -126,14 +130,19 @@ export function ChannelListRow({
           {onAuth && supportsReauth && (
             <Button
               variant="ghost"
-              size="xs"
-              className="text-muted-foreground hover:text-primary"
+              size={isZaloOA ? "sm" : "xs"}
+              className={cn(
+                "text-muted-foreground hover:text-primary",
+                isZaloOA && "gap-1.5",
+              )}
+              aria-label={authActionLabel}
               onClick={(e) => {
                 e.stopPropagation();
                 onAuth();
               }}
             >
               <QrCode className="h-3.5 w-3.5" />
+              {isZaloOA && <span>{authActionLabel}</span>}
             </Button>
           )}
           {onDelete && !instance.is_default && (

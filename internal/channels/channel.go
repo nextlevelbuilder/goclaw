@@ -82,6 +82,7 @@ const (
 	TypeTelegram     = "telegram"
 	TypeWhatsApp     = "whatsapp"
 	TypeZaloOA       = "zalo_oa"
+	TypeZaloBot      = "zalo_bot"
 	TypeZaloPersonal = "zalo_personal"
 )
 
@@ -164,6 +165,13 @@ type ChannelDestroyer interface {
 // the gateway-level block_reply setting. Returns nil to inherit the gateway default.
 type BlockReplyChannel interface {
 	BlockReplyEnabled() *bool
+}
+
+// DMQuoteChannel is optionally implemented by channels that want the gateway
+// to auto-stamp metadata["reply_to_message_id"] on inbound DMs so replies
+// quote the user's last message. Returns true to enable.
+type DMQuoteChannel interface {
+	QuoteInboundOnDM() bool
 }
 
 // ChatBehaviorChannel is optionally implemented by channels that override
@@ -535,6 +543,18 @@ func (c *BaseChannel) MarkDegraded(summary, detail string, kind ChannelFailureKi
 		summary = "Running with warnings"
 	}
 	c.setHealth(NewChannelHealth(ChannelHealthStateDegraded, summary, detail, kind, retryable))
+}
+
+// MarkBootstrap records a degraded state that's part of normal setup
+// (e.g. awaiting a webhook secret), not a fault. UIs gate bootstrap
+// banners on BootstrapState, never on localized summaries.
+func (c *BaseChannel) MarkBootstrap(state ChannelBootstrapState, summary, detail string, kind ChannelFailureKind, retryable bool) {
+	if summary == "" {
+		summary = "Awaiting setup"
+	}
+	snap := NewChannelHealth(ChannelHealthStateDegraded, summary, detail, kind, retryable)
+	snap.BootstrapState = state
+	c.setHealth(snap)
 }
 
 // MarkFailed records a startup or runtime failure.

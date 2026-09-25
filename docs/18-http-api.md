@@ -1182,9 +1182,24 @@ Writer test request:
 
 Response includes `allowed`, `reason`, `instance_id`, `agent_id`, `group_id`, `user_id`, and `writer_count`. Stable reasons: `writer`, `not_writer`, `no_writers_configured`, `invalid_group`.
 
-**Supported channels:** `telegram`, `discord`, `slack`, `whatsapp`, `zalo_oa`, `zalo_personal`, `feishu`
+**Supported channels:** `telegram`, `discord`, `slack`, `whatsapp`, `zalo_oa` (Official Account, OAuth v4), `zalo_bot` (legacy Bot API), `zalo_personal`, `feishu`
 
-Credentials are masked in HTTP responses.
+Existing `channel_type='zalo_oa'` Bot API rows are retyped to `zalo_bot`.
+Credentials are masked. For `zalo_oa`, instance responses also include
+read-only `callback_url`, `webhook_url`, and `auth_connected` (true only when
+both access and refresh tokens are present).
+
+Zalo OA setup and consent require tenant-admin access:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/channels/setup/zalo-oa?name={channelName}` | Preview callback and webhook URLs before create |
+| `GET` | `/v1/channels/instances/{id}/zalo-oa/consent` | Mint OAuth state and return the Zalo consent URL |
+| `POST` | `/v1/channels/instances/{id}/zalo-oa/exchange-code` | Exchange pasted `code`/`state` (optional `oa_id`) |
+
+Operator curl, two-phase webhook, and single-process consent limits:
+[zalo-oa-integration.md](./zalo-oa-integration.md).
+
 
 ### Passive Memory Extraction
 

@@ -119,6 +119,18 @@ func (s *PublicURLSnapshot) Update(r *http.Request) string {
 	return url
 }
 
+// UpdateIfPublic derives the request's external base URL and stores it only
+// when the host is publicly routable. Use this after HTTP authentication so
+// reverse-proxy headers can seed the snapshot without allowing internal BFF
+// requests to replace a public value with a service-network hostname.
+func (s *PublicURLSnapshot) UpdateIfPublic(r *http.Request) string {
+	url := derivePublicURLFromRequest(r)
+	if !s.SetIfPublic(url) {
+		return ""
+	}
+	return url
+}
+
 // Middleware returns an http.Handler that snapshots the public URL from each
 // inbound request before delegating to next. Mount AFTER any auth middleware
 // so unauthenticated probes can't pin a value.

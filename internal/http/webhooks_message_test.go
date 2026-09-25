@@ -185,6 +185,9 @@ func (s *stubChannelInstanceStore) GetByName(_ context.Context, _ string) (*stor
 func (s *stubChannelInstanceStore) Update(_ context.Context, _ uuid.UUID, _ map[string]any) error {
 	return nil
 }
+func (s *stubChannelInstanceStore) MergeConfig(_ context.Context, _ uuid.UUID, _ map[string]any) error {
+	return nil
+}
 func (s *stubChannelInstanceStore) Delete(_ context.Context, _ uuid.UUID) error { return nil }
 func (s *stubChannelInstanceStore) ListEnabled(_ context.Context) ([]store.ChannelInstanceData, error) {
 	return nil, nil
@@ -364,7 +367,7 @@ func TestWebhookMessage_SSRFBlock_RFC1918(t *testing.T) {
 // and text-only delivery is performed (no media sent).
 func TestWebhookMessage_MediaUnsupported_FallbackOn(t *testing.T) {
 	disp := newStubDispatcher()
-	disp.addChannel("zalo-main", channels.TypeZaloOA, tenantA) // zalo_oa: not media capable
+	disp.addChannel("zalo-main", channels.TypeZaloBot, tenantA) // zalo_bot: not media capable
 
 	calls := &msgCallStore{}
 	h := buildHandler(t, disp, calls)
@@ -412,7 +415,7 @@ func TestWebhookMessage_MediaUnsupported_FallbackOn(t *testing.T) {
 // doesn't support media and fallback_to_text is false (default), a 501 is returned.
 func TestWebhookMessage_MediaUnsupported_FallbackOff(t *testing.T) {
 	disp := newStubDispatcher()
-	disp.addChannel("zalo-main", channels.TypeZaloOA, tenantA)
+	disp.addChannel("zalo-main", channels.TypeZaloBot, tenantA)
 
 	calls := &msgCallStore{}
 	h := buildHandler(t, disp, calls)

@@ -719,6 +719,10 @@
     }
   },
   "wizard": {
+    "zaloOa": {
+      "createLabel": "创建并完成设置",
+      "formBanner": "注册回调和 Webhook URL，粘贴 Webhook Secret Key，然后创建渠道并在下一步授权 OA。"
+    },
     "zaloPersonal": {
       "createLabel": "创建并认证",
       "formBanner": "创建后，您将通过二维码进行认证并配置允许的用户。"
@@ -847,6 +851,78 @@
         "closeResumeLater": "关闭（稍后继续）",
         "urlUnknown": "无法获取安装 URL。请通过公网 URL 打开 goclaw UI 后从下拉框重试。"
       }
+    }
+  },
+  "zaloOa": {
+    "dialogTitle": "连接 Zalo OA — {{name}}",
+    "dialogDescription": "授权公众号后，粘贴浏览器中的重定向 URL。",
+    "step1Heading": "第 1 步 — 授权",
+    "step2Heading": "第 2 步 — 粘贴回调 URL",
+    "authorizeHelp": "打开下方 URL，登录 Zalo 并批准公众号访问权限。批准后浏览器会跳转到回调 URL — 从地址栏复制完整 URL 并粘贴到第 2 步。",
+    "consentLoading": "正在生成授权 URL…",
+    "pasteHelp": "批准后，从浏览器地址栏复制完整 URL 并粘贴到这里。",
+    "pastePlaceholder": "完整回调 URL",
+    "errCodeMissing": "粘贴的 URL 中没有 \"code\" 参数 — 请在批准后从浏览器地址栏复制完整回调 URL。",
+    "errStateMismatch": "此回调 URL 属于另一次授权。请打开当前的 Zalo 授权 URL 后重试。",
+    "connectedClosing": "已连接 — 正在关闭…",
+    "copyUrl": "复制 URL",
+    "openInTab": "在新标签页打开",
+    "cancel": "取消",
+    "connect": "连接",
+    "connecting": "连接中…",
+    "connectBanner": {
+      "title": "授权此公众号",
+      "hint": "运行 OAuth 授权流程，将渠道绑定到您的公众号并获取访问/刷新令牌。",
+      "connected": "已连接 — OA {{oaId}}",
+      "connectedHint": "访问令牌会自动刷新。需要重新授权时（如更改权限后）请使用“重新连接”。"
+    },
+    "openPopup": "授权",
+    "popupAutoHint": "打开安全窗口；批准后自动完成。",
+    "reconnect": "重新连接",
+    "callback": {
+      "title": "授权完成",
+      "errorTitle": "已收到回调",
+      "successHint": "复制下方完整 URL 并粘贴到 GoClaw 授权对话框（第 2 步）。",
+      "oaId": "OA ID",
+      "copy": "复制",
+      "manualHint": "如果对话框未自动完成，请将上方 URL 粘贴到授权对话框的第 2 步。",
+      "missingCode": "此回调 URL 中没有授权码。请从 GoClaw 对话框重新打开授权 URL。"
+    },
+    "callbackUrlLabel": "回调 URL（Zalo 控制台）",
+    "callbackUrlHelp": "请在 Zalo 开发者控制台中将此 URL 原样注册为 OA 回调 URL。系统自动生成 — 不可修改。",
+    "callbackUrlCopy": "复制",
+    "callbackUrlUnavailable": "在网关通过公开域名收到请求前不可用",
+    "openCallbackSettings": "在 Zalo 中打开回调设置",
+    "setup": {
+      "title": "完成 Zalo OA 设置",
+      "description": "输入应用凭据，注册两个生成的 URL，然后在创建渠道前粘贴 Webhook Secret Key。",
+      "descriptionPolling": "输入应用凭据并在创建渠道前注册生成的回调 URL。轮询模式不使用 Webhook。",
+      "loading": "正在生成设置 URL…",
+      "loadError": "无法生成设置 URL。请通过网关公网域名打开此表单后重试。",
+      "webhookStep": "2. 注册并保护 Webhook",
+      "consentStepWebhook": "3. 授权公众号",
+      "consentStepPolling": "2. 授权公众号",
+      "secretRequired": "授权 OA 前请先保存 Webhook Secret Key。",
+      "closeResumeLater": "关闭（稍后继续）"
+    },
+    "webhookSetup": {
+      "title": "Webhook 设置",
+      "help": "注册端点，然后粘贴 OA Webhook Secret Key，以强制验证事件签名。",
+      "urlLabel": "Webhook URL",
+      "urlHelp": "在 Zalo Developers → OA → Webhook 中原样注册此 URL。系统自动生成且只读。",
+      "urlUnavailable": "在网关通过公开域名收到请求前不可用",
+      "openConsole": "在 Zalo 中打开 Webhook 设置",
+      "copy": "复制",
+      "copied": "已复制",
+      "awaitingSecret": "等待 Webhook Secret Key",
+      "secured": "Webhook 已受保护",
+      "secretLabel": "Webhook Secret Key",
+      "secretHelp": "Zalo 接受该 URL 后，请粘贴 Zalo 控制台中显示的 OA Webhook Secret Key。",
+      "secretRotateHelp": "当前已强制验证签名。仅在轮换密钥时输入新的 secret。",
+      "secretPlaceholder": "粘贴 OA Webhook Secret Key",
+      "saveEnable": "保存并启用",
+      "saving": "保存中…",
+      "saveError": "无法保存 Webhook Secret Key。该渠道仍未验证。"
     }
   }
 }

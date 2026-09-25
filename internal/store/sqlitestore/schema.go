@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 60
+const SchemaVersion = 61
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -95,6 +95,8 @@ BEGIN
 END;`
 
 var migrations = map[int]string{
+	// Version 60 → 61: reserve zalo_oa for OAuth v4; preserve legacy Bot credentials.
+	60: `UPDATE channel_instances SET channel_type = 'zalo_bot' WHERE channel_type = 'zalo_oa';`,
 	// Version 59 → 60: keep an append-only copy of group capture. Pending rows are
 	// deleted when the buffer is handed to the agent and when compaction replaces
 	// them with a summary; before this table those deletes destroyed the only copy.

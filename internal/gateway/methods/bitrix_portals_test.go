@@ -131,6 +131,9 @@ func (s *stubChannelInstanceStore) GetByName(_ context.Context, _ string) (*stor
 func (s *stubChannelInstanceStore) Update(_ context.Context, _ uuid.UUID, _ map[string]any) error {
 	return nil
 }
+func (s *stubChannelInstanceStore) MergeConfig(_ context.Context, _ uuid.UUID, _ map[string]any) error {
+	return nil
+}
 func (s *stubChannelInstanceStore) Delete(_ context.Context, _ uuid.UUID) error { return nil }
 func (s *stubChannelInstanceStore) ListEnabled(_ context.Context) ([]store.ChannelInstanceData, error) {
 	return nil, nil
