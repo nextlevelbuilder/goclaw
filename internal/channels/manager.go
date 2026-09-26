@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"sync"
 	"time"
 
@@ -13,6 +14,19 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/systemmessages"
 )
+
+// reBotToken matches Telegram bot tokens in URLs (bot<id>:<secret>/).
+var reBotToken = regexp.MustCompile(`bot\d+:[A-Za-z0-9_-]+/`)
+
+// MaskBotToken replaces bot tokens in error messages with "bot***/" so
+// secrets do not leak into journalctl when channel start / sync / watchdog
+// errors are logged. Safe to call with nil.
+func MaskBotToken(err error) string {
+	if err == nil {
+		return ""
+	}
+	return reBotToken.ReplaceAllString(err.Error(), "bot***/")
+}
 
 // ChannelStream is the per-run streaming handle stored on RunContext.
 // Each channel implementation returns a ChannelStream from CreateStream().
@@ -124,7 +138,7 @@ func (m *Manager) StartAll(ctx context.Context) error {
 		m.syncChannelHealthLocked(name, channel)
 		if err := channel.Start(ctx); err != nil {
 			m.recordChannelStartFailureLocked(name, channel, "", err)
-			slog.Error("failed to start channel", "channel", name, "error", err)
+			slog.Error("failed to start channel", "channel", name, "error", MaskBotToken(err))
 			continue
 		}
 		m.syncChannelHealthLocked(name, channel)
