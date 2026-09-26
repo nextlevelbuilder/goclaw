@@ -100,6 +100,7 @@ func gatewayHTTPDoRawWithLimit(method, path string, body any, limit int64) ([]by
 	req.Header.Set("X-GoClaw-User-Id", "system")
 	if token := resolveGatewayToken(); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-GoClaw-User-Id", "system")
 	}
 
 	resp, err := httpClient.Do(req)
