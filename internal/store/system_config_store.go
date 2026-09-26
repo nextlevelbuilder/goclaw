@@ -1,6 +1,11 @@
 package store
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+var ErrSystemConfigNotFound = errors.New("system config not found")
 
 // SystemConfigStore manages per-tenant configuration settings.
 // Non-secret, plain-text key-value pairs. Use ConfigSecretsStore for secrets.
