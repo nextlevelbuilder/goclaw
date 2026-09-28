@@ -71,7 +71,7 @@ Go port projektu [OpenClaw](https://github.com/openclaw/openclaw) s vylepšeným
 - **Multi-tenant PostgreSQL** — Pracovní prostory pro každého uživatele, kontextové soubory pro každého uživatele, šifrované API klíče (AES-256-GCM), izolované relace
 - **Jediný binární soubor** — ~25 MB statický Go binární soubor, bez Node.js runtime, <1 s spuštění, běží na VPS za $5
 - **Produkční bezpečnost** — 5vrstvý systém oprávnění (autentizace gateway → globální politika nástrojů → na agenta → na kanál → pouze vlastník) plus omezení rychlosti, detekce injekce promptů, ochrana SSRF, vzory zamítnutí shellu a šifrování AES-256-GCM
-- **20+ poskytovatelů LLM** — Anthropic (nativní HTTP+SSE s cachováním promptů), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP a libovolný OpenAI-kompatibilní endpoint
+- **20+ poskytovatelů LLM** — Anthropic (nativní HTTP+SSE s cachováním promptů), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP a libovolný OpenAI-kompatibilní endpoint
 - **7 komunikačních kanálů** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — Režim myšlení pro každého poskytovatele (Anthropic tokeny rozpočtu, OpenAI effort uvažování, DashScope rozpočet myšlení) s podporou streamování
 - **Heartbeat** — Pravidelné kontroly agentů prostřednictvím kontrolních seznamů HEARTBEAT.md s potlačením při OK, aktivními hodinami, logikou opakování a doručením do kanálu

@@ -49,7 +49,7 @@ Phiên bản Go của [OpenClaw](https://github.com/openclaw/openclaw) với b�
 - **Multi-tenant PostgreSQL** — Không gian làm việc riêng theo người dùng, tệp ngữ cảnh riêng, khóa API được mã hóa (AES-256-GCM), session cô lập
 - **Một tệp nhị phân duy nhất** — Tệp nhị phân Go tĩnh khoảng 25 MB, không cần runtime Node.js, khởi động dưới 1 giây, chạy được trên VPS $5 (khuyến nghị tối thiểu 2 GB RAM khi chạy Docker)
 - **Bảo mật cấp production** — Hệ thống phân quyền 5 lớp (gateway auth → global tool policy → per-agent → per-channel → owner-only) cùng rate limiting, phát hiện prompt injection, chống SSRF, shell deny patterns, và mã hóa AES-256-GCM
-- **Hơn 20 nhà cung cấp LLM** — Anthropic (HTTP+SSE gốc với prompt caching), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP, và mọi OpenAI-compatible endpoint
+- **Hơn 20 nhà cung cấp LLM** — Anthropic (HTTP+SSE gốc với prompt caching), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP, và mọi OpenAI-compatible endpoint
 - **7 kênh nhắn tin** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — Chế độ suy luận theo từng nhà cung cấp (budget token của Anthropic, reasoning effort của OpenAI, thinking budget của DashScope) với hỗ trợ streaming
 - **Heartbeat** — Agent tự kiểm tra định kỳ qua danh sách HEARTBEAT.md với tắt thông báo khi bình thường, khung giờ hoạt động, cơ chế thử lại, và gửi kết quả qua kênh

@@ -71,7 +71,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 - **মাল্টি-টেন্যান্ট PostgreSQL** — প্রতি-ব্যবহারকারী ওয়ার্কস্পেস, প্রতি-ব্যবহারকারী কনটেক্সট ফাইল, এনক্রিপ্টেড API কী (AES-256-GCM), বিচ্ছিন্ন সেশন
 - **একক বাইনারি** — ~২৫ MB স্ট্যাটিক Go বাইনারি, কোনো Node.js রানটাইম নেই, <১ সেকেন্ড স্টার্টআপ, $৫-এর VPS-এও চলে
 - **প্রোডাকশন নিরাপত্তা** — ৫-স্তরের অনুমতি ব্যবস্থা (gateway auth → গ্লোবাল টুল পলিসি → প্রতি-এজেন্ট → প্রতি-চ্যানেল → মালিক-কেবল) এবং রেট লিমিটিং, প্রম্পট ইনজেকশন ডিটেকশন, SSRF সুরক্ষা, শেল ডিনাই প্যাটার্ন, এবং AES-256-GCM এনক্রিপশন
-- **২০+ LLM প্রদানকারী** — Anthropic (নেটিভ HTTP+SSE প্রম্পট ক্যাশিং সহ), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP, এবং যেকোনো OpenAI-কম্প্যাটিবল এন্ডপয়েন্ট
+- **২০+ LLM প্রদানকারী** — Anthropic (নেটিভ HTTP+SSE প্রম্পট ক্যাশিং সহ), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP, এবং যেকোনো OpenAI-কম্প্যাটিবল এন্ডপয়েন্ট
 - **৭টি মেসেজিং চ্যানেল** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — প্রতি-প্রদানকারী থিংকিং মোড (Anthropic বাজেট টোকেন, OpenAI রিজনিং এফোর্ট, DashScope থিংকিং বাজেট) স্ট্রিমিং সাপোর্ট সহ
 - **Heartbeat** — HEARTBEAT.md চেকলিস্টের মাধ্যমে পর্যায়ক্রমিক এজেন্ট চেক-ইন, suppress-on-OK, সক্রিয় ঘণ্টা, রিট্রি লজিক এবং চ্যানেল ডেলিভারি সহ

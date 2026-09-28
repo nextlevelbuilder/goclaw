@@ -71,7 +71,7 @@ Go-portti [OpenClaw](https://github.com/openclaw/openclaw)-projektista, jossa on
 - **Monivuokraaja-PostgreSQL** — Käyttäjäkohtaiset työtilat, käyttäjäkohtaiset kontekstitiedostot, salatut API-avaimet (AES-256-GCM), eristetyt sessiot
 - **Yksittäinen binääri** — ~25 MB staattinen Go-binääri, ei Node.js-ajonaikaa, alle 1 s käynnistys, toimii 5 dollarin VPS:llä
 - **Tuotantoturvallisuus** — 5-kerroksinen käyttöoikeusjärjestelmä (yhdyskäytävätodennus → globaali työkalukäytäntö → agenttikohtainen → kanavakohtainen → vain omistajalle) sekä nopeusrajoitus, kehotteen injektioiden havaitseminen, SSRF-suojaus, komennon estokuviot ja AES-256-GCM-salaus
-- **20+ LLM-tarjoajaa** — Anthropic (natiivi HTTP+SSE kehotteen välimuistilla), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP ja mikä tahansa OpenAI-yhteensopiva päätepiste
+- **20+ LLM-tarjoajaa** — Anthropic (natiivi HTTP+SSE kehotteen välimuistilla), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP ja mikä tahansa OpenAI-yhteensopiva päätepiste
 - **7 viestintäkanavaa** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — Tarjoajakohtainen ajattelutila (Anthropic budjettitokenit, OpenAI päättelyponnistus, DashScope ajattelubudjetti) suoratoistotuella
 - **Heartbeat** — Säännölliset agenttien tarkistukset HEARTBEAT.md-tarkistuslistojen kautta, joissa on OK:n yhteydessä estäminen, aktiiviset tunnit, uudelleenyrityslogiikka ja kanavajakelu

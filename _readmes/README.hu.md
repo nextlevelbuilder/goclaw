@@ -71,7 +71,7 @@ Az [OpenClaw](https://github.com/openclaw/openclaw) Go portja, fokozott biztons�
 - **Többbérlős PostgreSQL** — Felhasználónkénti munkaterületek, felhasználónkénti kontextfájlok, titkosított API-kulcsok (AES-256-GCM), izolált munkamenetek
 - **Egyetlen bináris** — ~25 MB statikus Go bináris, nincs Node.js futtatókörnyezet, <1 mp indulási idő, fut egy $5-os VPS-en
 - **Éles szintű biztonság** — 5 rétegű jogosultságrendszer (átjáró hitelesítés → globális eszközszabályzat → ügynökönkénti → csatornánkénti → csak tulajdonos) plusz sebességkorlátozás, prompt injection felismerés, SSRF védelem, shell tiltási minták és AES-256-GCM titkosítás
-- **20+ LLM-szolgáltató** — Anthropic (natív HTTP+SSE prompt gyorsítótárazással), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP és bármilyen OpenAI-kompatibilis végpont
+- **20+ LLM-szolgáltató** — Anthropic (natív HTTP+SSE prompt gyorsítótárazással), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP és bármilyen OpenAI-kompatibilis végpont
 - **7 üzenetküldő csatorna** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — Szolgáltatónkénti gondolkodási mód (Anthropic budget tokenek, OpenAI reasoning effort, DashScope thinking budget) streamelési támogatással
 - **Heartbeat** — Rendszeres ügynök-bejelentkezések HEARTBEAT.md ellenőrzőlistákon keresztül, OK esetén elnémítással, aktív órákkal, újrapróbálkozási logikával és csatornán keresztüli kézbesítéssel

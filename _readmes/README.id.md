@@ -71,7 +71,7 @@ Merupakan port Go dari [OpenClaw](https://github.com/openclaw/openclaw) dengan k
 - **PostgreSQL Multi-Tenant** — Ruang kerja per-pengguna, file konteks per-pengguna, kunci API terenkripsi (AES-256-GCM), sesi terisolasi
 - **Satu Binary** — Binary Go statis ~25 MB, tanpa runtime Node.js, startup <1 detik, berjalan di VPS $5
 - **Keamanan Produksi** — Sistem izin 5 lapisan (autentikasi gateway → kebijakan alat global → per-agen → per-saluran → hanya-pemilik) ditambah pembatasan laju, deteksi injeksi prompt, perlindungan SSRF, pola penolakan shell, dan enkripsi AES-256-GCM
-- **20+ Penyedia LLM** — Anthropic (HTTP+SSE native dengan prompt caching), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP, dan endpoint kompatibel OpenAI lainnya
+- **20+ Penyedia LLM** — Anthropic (HTTP+SSE native dengan prompt caching), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP, dan endpoint kompatibel OpenAI lainnya
 - **7 Saluran Pesan** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — Mode berpikir per-penyedia (token anggaran Anthropic, upaya penalaran OpenAI, anggaran berpikir DashScope) dengan dukungan streaming
 - **Heartbeat** — Pemeriksaan berkala agen melalui daftar periksa HEARTBEAT.md dengan suppress-on-OK, jam aktif, logika percobaan ulang, dan pengiriman saluran

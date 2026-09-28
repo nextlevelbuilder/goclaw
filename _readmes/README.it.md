@@ -71,7 +71,7 @@ Un port Go di [OpenClaw](https://github.com/openclaw/openclaw) con sicurezza mig
 - **PostgreSQL Multi-Tenant** — Workspace per utente, file di contesto per utente, chiavi API cifrate (AES-256-GCM), sessioni isolate
 - **Binario Singolo** — ~25 MB binario Go statico, nessun runtime Node.js, avvio in <1s, funziona su un VPS da $5
 - **Sicurezza di Produzione** — Sistema di permessi a 5 livelli (autenticazione gateway → policy globale degli strumenti → per-agente → per-canale → solo proprietario) più limitazione della frequenza, rilevamento di prompt injection, protezione SSRF, pattern di blocco shell e cifratura AES-256-GCM
-- **20+ Provider LLM** — Anthropic (HTTP+SSE nativo con caching dei prompt), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP e qualsiasi endpoint compatibile con OpenAI
+- **20+ Provider LLM** — Anthropic (HTTP+SSE nativo con caching dei prompt), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP e qualsiasi endpoint compatibile con OpenAI
 - **7 Canali di Messaggistica** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — Modalità di pensiero per provider (token di budget Anthropic, sforzo di ragionamento OpenAI, budget di pensiero DashScope) con supporto allo streaming
 - **Heartbeat** — Check-in periodici degli agenti tramite checklist HEARTBEAT.md con soppressione in caso di OK, ore attive, logica di retry e consegna sul canale

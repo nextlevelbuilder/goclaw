@@ -71,7 +71,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 - **PostgreSQL מרובה-דיירים** — סביבות עבודה פר-משתמש, קבצי הקשר פר-משתמש, מפתחות API מוצפנים (AES-256-GCM), סשנים מבודדים
 - **קובץ בינארי יחיד** — קובץ בינארי סטטי של Go בגודל ~25 MB, ללא Node.js runtime, הפעלה תוך פחות מ-1 שנייה, רץ על VPS בעלות $5
 - **אבטחת ייצור** — מערכת הרשאות 5 שכבות (אימות שער ← מדיניות כלים גלובלית ← פר-סוכן ← פר-ערוץ ← בעלים בלבד) בתוספת הגבלת קצב, זיהוי הזרקת פרומפטים, הגנת SSRF, דפוסי דחיית מעטפת והצפנת AES-256-GCM
-- **מעל 20 ספקי LLM** — Anthropic (HTTP+SSE מקורי עם שמירת פרומפטים), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP וכל נקודת קצה תואמת OpenAI
+- **מעל 20 ספקי LLM** — Anthropic (HTTP+SSE מקורי עם שמירת פרומפטים), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP וכל נקודת קצה תואמת OpenAI
 - **7 ערוצי הודעות** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — מצב חשיבה פר-ספק (תקציב טוקנים של Anthropic, מאמץ חשיבה של OpenAI, תקציב חשיבה של DashScope) עם תמיכה בסטרימינג
 - **Heartbeat** — בדיקות מצב תקופתיות של סוכנים דרך רשימות HEARTBEAT.md עם הדחקה-בהצלחה, שעות פעילות, לוגיקת ניסיון חוזר ומשלוח לערוצים

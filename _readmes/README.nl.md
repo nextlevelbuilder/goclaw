@@ -71,7 +71,7 @@ Een Go-port van [OpenClaw](https://github.com/openclaw/openclaw) met verbeterde 
 - **Multi-Tenant PostgreSQL** — Werkruimtes per gebruiker, contextbestanden per gebruiker, versleutelde API-sleutels (AES-256-GCM), geïsoleerde sessies
 - **Enkel Binary** — ~25 MB statisch Go-binary, geen Node.js-runtime, <1 s opstartijd, draait op een VPS van $5
 - **Productiebeveiliging** — 5-laags rechtensysteem (gateway-authenticatie → globaal toolbeleid → per agent → per kanaal → alleen eigenaar) plus snelheidsbeperking, detectie van prompt-injectie, SSRF-bescherming, shell-weigerings­patronen en AES-256-GCM-versleuteling
-- **20+ LLM-providers** — Anthropic (native HTTP+SSE met prompt-caching), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP en elk OpenAI-compatibel eindpunt
+- **20+ LLM-providers** — Anthropic (native HTTP+SSE met prompt-caching), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP en elk OpenAI-compatibel eindpunt
 - **7 Berichtenkanalen** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — Denkmodus per provider (Anthropic-budgettokens, OpenAI-redeneerinspanning, DashScope-denkbudget) met streamingondersteuning
 - **Heartbeat** — Periodieke agent-check-ins via HEARTBEAT.md-checklists met onderdrukken-bij-OK, actieve uren, herproberinglogica en kanaallevering

@@ -71,7 +71,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 - **PostgreSQL Πολλαπλών Μισθωτών** — Χώροι εργασίας ανά χρήστη, αρχεία περιβάλλοντος ανά χρήστη, κρυπτογραφημένα κλειδιά API (AES-256-GCM), απομονωμένες συνεδρίες
 - **Μονό Δυαδικό Αρχείο** — ~25 MB στατικό δυαδικό αρχείο Go, χωρίς χρόνο εκτέλεσης Node.js, εκκίνηση <1s, τρέχει σε VPS $5
 - **Ασφάλεια Παραγωγικού Επιπέδου** — Σύστημα αδειών 5 επιπέδων (πιστοποίηση πύλης → παγκόσμια πολιτική εργαλείων → ανά πράκτορα → ανά κανάλι → μόνο ιδιοκτήτης) συν περιορισμό ρυθμού, ανίχνευση έγχυσης εντολών, προστασία SSRF, μοτίβα απόρριψης κελύφους, και κρυπτογράφηση AES-256-GCM
-- **20+ Πάροχοι LLM** — Anthropic (εγγενές HTTP+SSE με προσωρινή αποθήκευση εντολών), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP, και οποιοδήποτε συμβατό σημείο τελικό OpenAI
+- **20+ Πάροχοι LLM** — Anthropic (εγγενές HTTP+SSE με προσωρινή αποθήκευση εντολών), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP, και οποιοδήποτε συμβατό σημείο τελικό OpenAI
 - **7 Κανάλια Ανταλλαγής Μηνυμάτων** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — Λειτουργία σκέψης ανά πάροχο (Anthropic budget tokens, OpenAI reasoning effort, DashScope thinking budget) με υποστήριξη ροής
 - **Heartbeat** — Περιοδικές ενημερώσεις πρακτόρων μέσω λιστών ελέγχου HEARTBEAT.md με αναστολή-σε-OK, ενεργές ώρες, λογική επανάληψης, και παράδοση στο κανάλι

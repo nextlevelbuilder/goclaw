@@ -71,7 +71,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 - **PostgreSQL متعدد المستأجرين** — مساحات عمل لكل مستخدم، وملفات سياق لكل مستخدم، ومفاتيح API مشفّرة (AES-256-GCM)، وجلسات معزولة
 - **ملف ثنائي واحد** — ملف Go ثابت بحجم ~25 ميغابايت، بدون Node.js، بدء تشغيل أقل من ثانية، يعمل على خادم VPS بـ5 دولارات
 - **أمان للإنتاج** — نظام أذونات من 5 طبقات (مصادقة البوابة ← سياسة الأداة العالمية ← لكل وكيل ← لكل قناة ← للمالك فقط) بالإضافة إلى تحديد المعدل، وكشف حقن البرومبت، وحماية SSRF، وأنماط رفض Shell، وتشفير AES-256-GCM
-- **أكثر من 20 مزوّد نماذج لغوية** — Anthropic (HTTP+SSE أصلي مع تخزين مؤقت للبرومبت)، OpenAI، OpenRouter، Groq، DeepSeek، Gemini، Mistral، xAI، MiniMax، Cohere، Perplexity، DashScope، Bailian، Zai، Ollama، Ollama Cloud، Claude CLI، Codex، ACP، وأي نقطة نهاية متوافقة مع OpenAI
+- **أكثر من 20 مزوّد نماذج لغوية** — Anthropic (HTTP+SSE أصلي مع تخزين مؤقت للبرومبت)، OpenAI، OpenRouter، Requesty، Groq، DeepSeek، Gemini، Mistral، xAI، MiniMax، Cohere، Perplexity، DashScope، Bailian، Zai، Ollama، Ollama Cloud، Claude CLI، Codex، ACP، وأي نقطة نهاية متوافقة مع OpenAI
 - **7 قنوات مراسلة** — Telegram، Discord، Slack، Zalo OA، Zalo Personal، Feishu/Lark، WhatsApp
 - **Extended Thinking** — وضع تفكير لكل مزوّد (رموز ميزانية Anthropic، جهد استدلال OpenAI، ميزانية تفكير DashScope) مع دعم البث
 - **Heartbeat** — فحوصات دورية للوكيل عبر قوائم مراجعة HEARTBEAT.md مع كبت عند النجاح، وساعات نشطة، ومنطق إعادة المحاولة، وتسليم القناة

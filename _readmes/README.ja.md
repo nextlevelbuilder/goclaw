@@ -49,7 +49,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 - **マルチテナント PostgreSQL** — ユーザーごとのワークスペース、ユーザーごとのコンテキストファイル、暗号化された API キー（AES-256-GCM）、分離されたセッション
 - **単一バイナリ** — 約 25 MB の静的 Go バイナリ、Node.js ランタイム不要、1秒未満で起動、$5 の VPS で動作
 - **本番グレードのセキュリティ** — 5層のパーミッションシステム（ゲートウェイ認証 → グローバルツールポリシー → エージェントごと → チャンネルごと → オーナー限定）に加え、レート制限、プロンプトインジェクション検出、SSRF 保護、シェル拒否パターン、AES-256-GCM 暗号化
-- **20以上の LLM プロバイダ** — Anthropic（プロンプトキャッシュ付きネイティブ HTTP+SSE）、OpenAI、OpenRouter、Groq、DeepSeek、Gemini、Mistral、xAI、MiniMax、Cohere、Perplexity、DashScope、Bailian、Zai、Ollama、Ollama Cloud、Claude CLI、Codex、ACP、および OpenAI 互換エンドポイント
+- **20以上の LLM プロバイダ** — Anthropic（プロンプトキャッシュ付きネイティブ HTTP+SSE）、OpenAI、OpenRouter、Requesty、Groq、DeepSeek、Gemini、Mistral、xAI、MiniMax、Cohere、Perplexity、DashScope、Bailian、Zai、Ollama、Ollama Cloud、Claude CLI、Codex、ACP、および OpenAI 互換エンドポイント
 - **7つのメッセージングチャンネル** — Telegram、Discord、Slack、Zalo OA、Zalo Personal、Feishu/Lark、WhatsApp
 - **Extended Thinking** — プロバイダごとの思考モード（Anthropic バジェットトークン、OpenAI 推論努力度、DashScope 思考バジェット）とストリーミングサポート
 - **Heartbeat** — HEARTBEAT.md チェックリストによる定期的なエージェントチェックイン、正常時の抑制、アクティブ時間、リトライロジック、チャンネル配信

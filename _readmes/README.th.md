@@ -51,7 +51,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 - **PostgreSQL แบบ Multi-Tenant** — workspace แยกต่อผู้ใช้, ไฟล์ context แยกต่อผู้ใช้, API key เข้ารหัสด้วย AES-256-GCM และ session ที่แยกจากกัน
 - **Single Binary** — Go binary แบบ static ขนาดประมาณ 25 MB ไม่ต้องใช้ Node.js runtime เริ่มทำงานภายใน <1 วินาที รันบน VPS ราคา $5 ได้
 - **ความปลอดภัยระดับ Production** — ระบบสิทธิ์ 5 ชั้น (gateway auth → global tool policy → per-agent → per-channel → owner-only) พร้อม rate limiting, การตรวจจับ prompt injection, การป้องกัน SSRF, shell deny patterns และการเข้ารหัส AES-256-GCM
-- **ผู้ให้บริการ LLM มากกว่า 20 ราย** — Anthropic (native HTTP+SSE พร้อม prompt caching), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP และ endpoint ที่เข้ากันได้กับ OpenAI ทุกรูปแบบ
+- **ผู้ให้บริการ LLM มากกว่า 20 ราย** — Anthropic (native HTTP+SSE พร้อม prompt caching), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP และ endpoint ที่เข้ากันได้กับ OpenAI ทุกรูปแบบ
 - **7 ช่องทางสื่อสาร** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — โหมดการคิดแบบขยายต่อผู้ให้บริการ (Anthropic budget tokens, OpenAI reasoning effort, DashScope thinking budget) พร้อมรองรับ streaming
 - **Heartbeat** — การตรวจสอบ agent เป็นระยะด้วย HEARTBEAT.md checklists พร้อม suppress-on-OK, กำหนดชั่วโมงทำงาน, logic การลองใหม่ และการส่งผ่านช่องทาง

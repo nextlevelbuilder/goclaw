@@ -71,7 +71,7 @@ En Go-port av [OpenClaw](https://github.com/openclaw/openclaw) med förbättrad 
 - **Flertenants PostgreSQL** — Per-användararbetsytor, per-användarkontextfiler, krypterade API-nycklar (AES-256-GCM), isolerade sessioner
 - **Enstaka binärfil** — ~25 MB statisk Go-binärfil, ingen Node.js-körningstid, <1s uppstartstid, körs på en $5 VPS
 - **Produktionssäkerhet** — 5-lagers behörighetssystem (gateway-autentisering → global verktygspolicy → per-agent → per-kanal → ägarexklusivt) plus hastighetsbegränsning, detektering av prompt injection, SSRF-skydd, nekade skalkommandon och AES-256-GCM-kryptering
-- **20+ LLM-leverantörer** — Anthropic (native HTTP+SSE med prompt caching), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP och valfri OpenAI-kompatibel slutpunkt
+- **20+ LLM-leverantörer** — Anthropic (native HTTP+SSE med prompt caching), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP och valfri OpenAI-kompatibel slutpunkt
 - **7 meddelandekanaler** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — Per-leverantörs tänkande-läge (Anthropic budgettokens, OpenAI resonemangsnivå, DashScope thinking budget) med stöd för strömning
 - **Heartbeat** — Periodiska agentincheckning via HEARTBEAT.md-checklistor med undertryckning vid OK-status, aktiva timmar, återförsökslogik och kanalleverans

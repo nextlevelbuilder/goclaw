@@ -71,7 +71,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 - **मल्टी-टेनेंट PostgreSQL** — प्रति-उपयोगकर्ता वर्कस्पेस, प्रति-उपयोगकर्ता कॉन्टेक्स्ट फ़ाइलें, एन्क्रिप्टेड API कुंजियाँ (AES-256-GCM), आइसोलेटेड सेशन
 - **सिंगल बाइनरी** — ~25 MB स्टेटिक Go बाइनरी, कोई Node.js रनटाइम नहीं, <1s स्टार्टअप, $5 VPS पर चलती है
 - **प्रोडक्शन सुरक्षा** — 5-लेयर परमिशन सिस्टम (gateway auth → global tool policy → per-agent → per-channel → owner-only) के साथ रेट लिमिटिंग, प्रॉम्प्ट इंजेक्शन डिटेक्शन, SSRF प्रोटेक्शन, शेल डेनाय पैटर्न, और AES-256-GCM एन्क्रिप्शन
-- **20+ LLM प्रदाता** — Anthropic (नेटिव HTTP+SSE विथ प्रॉम्प्ट कैशिंग), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP, और कोई भी OpenAI-compatible एंडपॉइंट
+- **20+ LLM प्रदाता** — Anthropic (नेटिव HTTP+SSE विथ प्रॉम्प्ट कैशिंग), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP, और कोई भी OpenAI-compatible एंडपॉइंट
 - **7 मैसेजिंग चैनल** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — प्रति-प्रदाता थिंकिंग मोड (Anthropic बजट टोकन, OpenAI रीज़निंग एफर्ट, DashScope थिंकिंग बजट) स्ट्रीमिंग सपोर्ट के साथ
 - **Heartbeat** — HEARTBEAT.md चेकलिस्ट के माध्यम से आवधिक एजेंट चेक-इन, suppress-on-OK, सक्रिय घंटे, रिट्री लॉजिक और चैनल डिलीवरी के साथ

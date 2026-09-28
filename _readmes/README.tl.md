@@ -71,7 +71,7 @@ Isang Go port ng [OpenClaw](https://github.com/openclaw/openclaw) na may pinahus
 - **Multi-Tenant PostgreSQL** — Bawat user ay may sariling workspace, context file, naka-encrypt na API key (AES-256-GCM), at nakahiwalay na session
 - **Iisang Binary** — ~25 MB static Go binary, walang Node.js runtime, <1s na pagsisimula, tumatakbo sa $5 VPS
 - **Seguridad sa Produksyon** — 5-layer na sistema ng pahintulot (gateway auth → global tool policy → per-agent → per-channel → owner-only) kasama ang rate limiting, pagtuklas ng prompt injection, proteksyon sa SSRF, shell deny patterns, at AES-256-GCM encryption
-- **20+ LLM Provider** — Anthropic (native HTTP+SSE na may prompt caching), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP, at anumang OpenAI-compatible na endpoint
+- **20+ LLM Provider** — Anthropic (native HTTP+SSE na may prompt caching), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP, at anumang OpenAI-compatible na endpoint
 - **7 Messaging Channel** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — Bawat provider ay may thinking mode (Anthropic budget tokens, OpenAI reasoning effort, DashScope thinking budget) na may suporta sa streaming
 - **Heartbeat** — Pana-panahong pag-check-in ng agent sa pamamagitan ng HEARTBEAT.md checklist na may suppress-on-OK, aktibong oras, retry logic, at paghahatid sa channel

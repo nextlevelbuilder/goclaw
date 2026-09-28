@@ -71,7 +71,7 @@ En Go-port av [OpenClaw](https://github.com/openclaw/openclaw) med forbedret sik
 - **Flerleietaker PostgreSQL** — Arbeidsområde per bruker, kontekstfiler per bruker, krypterte API-nøkler (AES-256-GCM), isolerte sesjoner
 - **Én enkelt binærfil** — ~25 MB statisk Go-binær, ingen Node.js-kjøretid, <1s oppstartstid, kjører på en $5 VPS
 - **Produksjonssikkerhet** — 5-lags tillatelsessystem (gateway-autentisering → global verktøypolicy → per agent → per kanal → kun eier) pluss hastighetsbegrensning, deteksjon av prompt-injeksjon, SSRF-beskyttelse, avvisningsmønstre for skall og AES-256-GCM-kryptering
-- **20+ LLM-leverandører** — Anthropic (innebygd HTTP+SSE med prompt-mellomlagring), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP og ethvert OpenAI-kompatibelt endepunkt
+- **20+ LLM-leverandører** — Anthropic (innebygd HTTP+SSE med prompt-mellomlagring), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP og ethvert OpenAI-kompatibelt endepunkt
 - **7 meldingskanaler** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — Tenkningsmodus per leverandør (Anthropic budsjett-tokens, OpenAI resonneringsintensitet, DashScope tenkningsbudsjett) med strømmestøtte
 - **Heartbeat** — Periodiske agentsjekker via HEARTBEAT.md-sjekklister med undertrykking ved OK, aktive timer, logikk for nye forsøk og kanalleveranse

@@ -49,7 +49,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 - **멀티 테넌트 PostgreSQL** — 사용자별 워크스페이스, 사용자별 컨텍스트 파일, 암호화된 API 키(AES-256-GCM), 격리된 세션
 - **단일 바이너리** — 약 25MB 정적 Go 바이너리, Node.js 런타임 불필요, 1초 미만 시작, $5 VPS에서 실행 가능
 - **프로덕션 보안** — 5계층 권한 시스템(게이트웨이 인증 → 전역 도구 정책 → 에이전트별 → 채널별 → 소유자 전용)과 속도 제한, 프롬프트 인젝션 감지, SSRF 보호, 셸 차단 패턴, AES-256-GCM 암호화
-- **20개 이상의 LLM 공급자** — Anthropic(네이티브 HTTP+SSE, 프롬프트 캐싱), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP, 그리고 모든 OpenAI 호환 엔드포인트
+- **20개 이상의 LLM 공급자** — Anthropic(네이티브 HTTP+SSE, 프롬프트 캐싱), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP, 그리고 모든 OpenAI 호환 엔드포인트
 - **7개 메시징 채널** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — 공급자별 사고 모드(Anthropic 예산 토큰, OpenAI 추론 노력, DashScope 사고 예산)와 스트리밍 지원
 - **Heartbeat** — HEARTBEAT.md 체크리스트를 통한 주기적 에이전트 체크인(정상 시 억제, 활성 시간, 재시도 로직, 채널 전달)

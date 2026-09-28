@@ -49,7 +49,7 @@ Un portage Go de [OpenClaw](https://github.com/openclaw/openclaw) avec une sécu
 - **PostgreSQL multi-tenant** — Espaces de travail par utilisateur, fichiers de contexte par utilisateur, clés API chiffrées (AES-256-GCM), sessions isolées
 - **Binaire unique** — Binaire Go statique de ~25 Mo, sans runtime Node.js, démarrage en <1 s, fonctionne sur un VPS à 5 $
 - **Sécurité de niveau production** — Système de permissions à 5 couches (auth passerelle → politique d'outils globale → par agent → par canal → propriétaire uniquement) plus limitation de débit, détection d'injection de prompt, protection SSRF, motifs de refus shell, et chiffrement AES-256-GCM
-- **Plus de 20 fournisseurs LLM** — Anthropic (HTTP+SSE natif avec mise en cache des prompts), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP, et tout endpoint compatible OpenAI
+- **Plus de 20 fournisseurs LLM** — Anthropic (HTTP+SSE natif avec mise en cache des prompts), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP, et tout endpoint compatible OpenAI
 - **7 canaux de messagerie** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — Mode de réflexion par fournisseur (jetons budget Anthropic, effort de raisonnement OpenAI, budget de réflexion DashScope) avec support du streaming
 - **Heartbeat** — Vérifications périodiques des agents via des listes de contrôle HEARTBEAT.md avec suppression en cas de succès, heures actives, logique de réessai, et livraison par canal

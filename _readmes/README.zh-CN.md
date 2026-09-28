@@ -49,7 +49,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 - **多租户 PostgreSQL** — 每用户工作空间、每用户上下文文件、加密 API 密钥（AES-256-GCM）、隔离的会话
 - **单一二进制文件** — 约 25 MB 静态 Go 二进制文件，无 Node.js 运行时，启动时间 <1 秒，可在 5 美元 VPS 上运行
 - **生产级安全** — 5 层权限体系（网关认证 → 全局工具策略 → 每智能体 → 每渠道 → 仅限所有者），外加速率限制、提示词注入检测、SSRF 防护、Shell 拒绝模式和 AES-256-GCM 加密
-- **20 多个大语言模型提供商** — Anthropic（原生 HTTP+SSE，支持提示词缓存）、OpenAI、OpenRouter、Groq、DeepSeek、Gemini、Mistral、xAI、MiniMax、Cohere、Perplexity、DashScope、百炼、Zai、Ollama、Ollama Cloud、Claude CLI、Codex、ACP，以及任何 OpenAI 兼容端点
+- **20 多个大语言模型提供商** — Anthropic（原生 HTTP+SSE，支持提示词缓存）、OpenAI、OpenRouter、Requesty、Groq、DeepSeek、Gemini、Mistral、xAI、MiniMax、Cohere、Perplexity、DashScope、百炼、Zai、Ollama、Ollama Cloud、Claude CLI、Codex、ACP，以及任何 OpenAI 兼容端点
 - **7 个消息渠道** — Telegram、Discord、Slack、Zalo OA、Zalo Personal、飞书/Lark、WhatsApp
 - **Extended Thinking** — 每提供商思考模式（Anthropic 预算 token、OpenAI 推理效果、DashScope 思考预算），支持流式传输
 - **Heartbeat** — 通过 HEARTBEAT.md 检查清单进行定期智能体签到，支持正常时静默、活跃时段、重试逻辑和渠道投递

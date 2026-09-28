@@ -71,7 +71,7 @@ Un port Go al [OpenClaw](https://github.com/openclaw/openclaw) cu securitate îm
 - **PostgreSQL Multi-Tenant** — Spații de lucru per utilizator, fișiere de context per utilizator, chei API criptate (AES-256-GCM), sesiuni izolate
 - **Binar Unic** — Binar Go static de ~25 MB, fără Node.js runtime, pornire în <1s, rulează pe un VPS de $5
 - **Securitate la Nivel de Producție** — Sistem de permisiuni în 5 straturi (autentificare gateway → politică globală instrumente → per-agent → per-canal → doar proprietar), plus limitare rată, detectare injecție prompturi, protecție SSRF, tipare de refuzare comenzi shell și criptare AES-256-GCM
-- **20+ Furnizori LLM** — Anthropic (HTTP+SSE nativ cu cache prompturi), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP și orice endpoint compatibil OpenAI
+- **20+ Furnizori LLM** — Anthropic (HTTP+SSE nativ cu cache prompturi), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP și orice endpoint compatibil OpenAI
 - **7 Canale de Mesagerie** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — Mod de gândire per furnizor (tokeni buget Anthropic, efort de raționament OpenAI, buget de gândire DashScope) cu suport streaming
 - **Heartbeat** — Verificări periodice ale agenților prin liste de verificare HEARTBEAT.md cu suprimare la OK, ore active, logică de reîncercare și livrare pe canal

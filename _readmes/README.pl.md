@@ -71,7 +71,7 @@ Port GoClaw w języku Go projektu [OpenClaw](https://github.com/openclaw/opencla
 - **Wielodostępny PostgreSQL** — Oddzielne obszary robocze dla każdego użytkownika, pliki kontekstu per użytkownik, szyfrowane klucze API (AES-256-GCM), izolowane sesje
 - **Pojedynczy Plik Binarny** — ~25 MB statyczny plik binarny Go, bez środowiska uruchomieniowego Node.js, uruchomienie <1s, działa na serwerze za $5
 - **Bezpieczeństwo Produkcyjne** — 5-warstwowy system uprawnień (uwierzytelnianie bramki → globalna polityka narzędzi → per-agent → per-kanał → tylko właściciel) oraz ograniczanie szybkości, wykrywanie wstrzyknięć do promptów, ochrona SSRF, wzorce blokowania powłoki i szyfrowanie AES-256-GCM
-- **20+ Dostawców LLM** — Anthropic (natywny HTTP+SSE z buforowaniem promptów), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP i dowolny punkt końcowy kompatybilny z OpenAI
+- **20+ Dostawców LLM** — Anthropic (natywny HTTP+SSE z buforowaniem promptów), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP i dowolny punkt końcowy kompatybilny z OpenAI
 - **7 Kanałów Komunikacji** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — Tryb myślenia per dostawca (tokeny budżetowe Anthropic, wysiłek wnioskowania OpenAI, budżet myślenia DashScope) ze wsparciem strumieniowania
 - **Heartbeat** — Okresowe meldowanie agentów przez listy kontrolne HEARTBEAT.md z wyciszaniem przy OK, aktywnymi godzinami, logiką ponawiania prób i dostarczaniem przez kanały

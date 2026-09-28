@@ -71,7 +71,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 - **ملٹی-ٹیننٹ PostgreSQL** — فی-صارف ورک اسپیسز، فی-صارف کانٹیکسٹ فائلیں، انکرپٹڈ API کیز (AES-256-GCM)، آئسولیٹڈ سیشنز
 - **واحد بائنری** — ~25 MB اسٹیٹک Go بائنری، کوئی Node.js رن ٹائم نہیں، <1s اسٹارٹ اپ، $5 VPS پر چلتی ہے
 - **پروڈکشن سیکیورٹی** — 5-پرت پرمیشن سسٹم (gateway auth → گلوبل ٹول پالیسی → فی-ایجنٹ → فی-چینل → صرف مالک) نیز ریٹ لمٹنگ، پرامپٹ انجیکشن ڈیٹیکشن، SSRF پروٹیکشن، شیل ڈینائی پیٹرنز، اور AES-256-GCM انکرپشن
-- **20+ LLM فراہم کنندگان** — Anthropic (native HTTP+SSE پرامپٹ کیشنگ کے ساتھ)، OpenAI، OpenRouter، Groq، DeepSeek، Gemini، Mistral، xAI، MiniMax، Cohere، Perplexity، DashScope، Bailian، Zai، Ollama، Ollama Cloud، Claude CLI، Codex، ACP، اور کوئی بھی OpenAI-compatible اینڈپوائنٹ
+- **20+ LLM فراہم کنندگان** — Anthropic (native HTTP+SSE پرامپٹ کیشنگ کے ساتھ)، OpenAI، OpenRouter، Requesty، Groq، DeepSeek، Gemini، Mistral، xAI، MiniMax، Cohere، Perplexity، DashScope، Bailian، Zai، Ollama، Ollama Cloud، Claude CLI، Codex، ACP، اور کوئی بھی OpenAI-compatible اینڈپوائنٹ
 - **7 میسجنگ چینلز** — Telegram، Discord، Slack، Zalo OA، Zalo Personal، Feishu/Lark، WhatsApp
 - **Extended Thinking** — فی-فراہم کنندہ تھنکنگ موڈ (Anthropic بجٹ ٹوکنز، OpenAI reasoning effort، DashScope تھنکنگ بجٹ) اسٹریمنگ سپورٹ کے ساتھ
 - **Heartbeat** — HEARTBEAT.md چیک لسٹس کے ذریعے وقتاً فوقتاً ایجنٹ چیک-انز، suppress-on-OK، فعال اوقات، ری-ٹرائی لاجک، اور چینل ڈیلیوری کے ساتھ

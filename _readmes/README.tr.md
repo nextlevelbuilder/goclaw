@@ -71,7 +71,7 @@ Single binary. Production-tested. Agents that orchestrate for you.
 - **Çok Kiracılı PostgreSQL** — Kullanıcı başına çalışma alanları, kullanıcı başına bağlam dosyaları, şifreli API anahtarları (AES-256-GCM), izole oturumlar
 - **Tek İkili Dosya** — ~25 MB statik Go ikili dosyası, Node.js çalışma zamanı yok, <1 saniye başlatma, 5 dolarlık bir VPS üzerinde çalışır
 - **Üretim Güvenliği** — 5 katmanlı izin sistemi (ağ geçidi kimlik doğrulaması → genel araç politikası → ajan başına → kanal başına → yalnızca sahip) ile hız sınırlama, komut enjeksiyonu tespiti, SSRF koruması, kabuk reddetme desenleri ve AES-256-GCM şifreleme
-- **20'den Fazla LLM Sağlayıcısı** — Anthropic (istem önbellekleme ile yerel HTTP+SSE), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP ve OpenAI uyumlu herhangi bir uç nokta
+- **20'den Fazla LLM Sağlayıcısı** — Anthropic (istem önbellekleme ile yerel HTTP+SSE), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP ve OpenAI uyumlu herhangi bir uç nokta
 - **7 Mesajlaşma Kanalı** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — Akış desteğiyle sağlayıcı başına düşünme modu (Anthropic bütçe tokeni, OpenAI muhakeme çabası, DashScope düşünme bütçesi)
 - **Heartbeat** — Sessizlik-başarı modunda, aktif saatler, yeniden deneme mantığı ve kanal teslimiyle HEARTBEAT.md kontrol listeleri üzerinden periyodik ajan bildirimleri

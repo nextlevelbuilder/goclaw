@@ -49,7 +49,7 @@ Go-порт проекта [OpenClaw](https://github.com/openclaw/openclaw) с �
 - **Мультиарендный PostgreSQL** — Отдельные рабочие пространства для каждого пользователя, контекстные файлы на пользователя, зашифрованные API-ключи (AES-256-GCM), изолированные сессии
 - **Единый бинарник** — ~25 МБ статический Go-бинарник, без Node.js, запуск менее чем за 1 с, работает на VPS за $5
 - **Безопасность производственного уровня** — 5-уровневая система прав (аутентификация шлюза → глобальная политика инструментов → на агента → на канал → только для владельца) плюс ограничение запросов, обнаружение prompt-инъекций, защита от SSRF, запрещённые shell-паттерны и шифрование AES-256-GCM
-- **20+ провайдеров LLM** — Anthropic (нативный HTTP+SSE с кэшированием промптов), OpenAI, OpenRouter, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP и любой OpenAI-совместимый эндпоинт
+- **20+ провайдеров LLM** — Anthropic (нативный HTTP+SSE с кэшированием промптов), OpenAI, OpenRouter, Requesty, Groq, DeepSeek, Gemini, Mistral, xAI, MiniMax, Cohere, Perplexity, DashScope, Bailian, Zai, Ollama, Ollama Cloud, Claude CLI, Codex, ACP и любой OpenAI-совместимый эндпоинт
 - **7 каналов обмена сообщениями** — Telegram, Discord, Slack, Zalo OA, Zalo Personal, Feishu/Lark, WhatsApp
 - **Extended Thinking** — Режим thinking на каждого провайдера (бюджет токенов Anthropic, усилия рассуждения OpenAI, бюджет мышления DashScope) с поддержкой стриминга
 - **Heartbeat** — Периодические проверки агентов через чек-листы HEARTBEAT.md с подавлением при успехе, активными часами, логикой повторных попыток и доставкой в канал
