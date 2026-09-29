@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -67,6 +69,9 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 	// 3. Construct the final ChatRequest and enforce the request-level
 	// context budget before any provider call is attempted.
 	req, estimate, err := s.prepareFinalRequest(ctx, state, toolDefs)
+	if errors.Is(err, ErrContextBudgetExceeded) {
+		return s.stopForContextBudget(ctx, state, err)
+	}
 	if err != nil {
 		return err
 	}
@@ -85,7 +90,7 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 		// the guard already guaranteed zero transport calls were made.
 		if isRequestBudgetExceededErr(err) {
 			if state.Think.OverflowRetries >= maxBudgetReductionRetries {
-				return fmt.Errorf("request context budget exceeded after reduction: %w", err)
+				return s.stopForContextBudget(ctx, state, fmt.Errorf("request %w after reduction: %w", ErrContextBudgetExceeded, err))
 			}
 			if s.reduceForBudgetExceeded(ctx, state) {
 				// This LLM call produced no response, so LastResponse still holds
@@ -96,7 +101,7 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 				state.Think.LastResponse = nil
 				return nil // Retry this iteration (Continue result) with reduced context.
 			}
-			return fmt.Errorf("request context budget exceeded, reduction exhausted: %w", err)
+			return s.stopForContextBudget(ctx, state, fmt.Errorf("request %w, reduction exhausted: %w", ErrContextBudgetExceeded, err))
 		}
 		// Issue 958: Check for context overflow — attempt emergency compaction + retry
 		if isContextOverflowErr(err) {
@@ -215,6 +220,16 @@ func (s *ThinkStage) Execute(ctx context.Context, state *RunState) error {
 
 	s.emitToolIterationBlockReply(ctx, resp)
 
+	return nil
+}
+
+// stopForContextBudget ends the run with a localized notice instead of an error so
+// FinalizeStage still persists this run's tool results and delivers the reply.
+func (s *ThinkStage) stopForContextBudget(ctx context.Context, state *RunState, cause error) error {
+	slog.Warn("context_budget.run_stopped", "run_id", state.RunID, "iteration", state.Iteration, "error", cause)
+	state.Observe.FinalContent = i18n.T(store.LocaleFromContext(ctx), i18n.MsgContextBudgetExceeded)
+	state.StopReason = cause.Error()
+	s.result = AbortRun
 	return nil
 }
 

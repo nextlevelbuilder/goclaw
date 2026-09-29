@@ -702,6 +702,7 @@ type RunResult struct {
 	LastBlockReply string                `json:"lastBlockReply,omitempty"` // last block reply content (for dedup)
 	LoopKilled     bool                  `json:"loopKilled,omitempty"`     // true when run was terminated by loop detector
 	Calls          []providers.CallUsage `json:"calls,omitempty"`          // per-call usage breakdown
+	StopReason     string                `json:"stopReason,omitempty"`     // why the pipeline (not the model) ended the run
 }
 
 // MediaResult represents a media file produced by a tool during the agent run.

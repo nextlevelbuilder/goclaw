@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -72,6 +73,18 @@ type PendingRequest struct {
 type RunOutcome struct {
 	Result *agent.RunResult
 	Err    error
+}
+
+// Failure returns Err, or the reason the pipeline stopped the run itself (the
+// run still carries a user-facing notice). Automated consumers treat both as failed.
+func (o RunOutcome) Failure() error {
+	if o.Err != nil {
+		return o.Err
+	}
+	if o.Result != nil && o.Result.StopReason != "" {
+		return errors.New(o.Result.StopReason)
+	}
+	return nil
 }
 
 // activeRunEntry tracks a running agent execution with its generation.

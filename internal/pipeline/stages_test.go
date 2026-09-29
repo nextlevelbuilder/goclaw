@@ -17,6 +17,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
+	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
@@ -724,9 +725,6 @@ func TestPruneStage_UnderBudget_NoOp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error: %v", err)
 	}
-	if stage.Result() != Continue {
-		t.Errorf("Result() = %v, want Continue", stage.Result())
-	}
 	if pruneCallCount != 0 {
 		t.Errorf("PruneMessages called %d times, want 0", pruneCallCount)
 	}
@@ -811,7 +809,8 @@ func TestPruneStage_Over100Percent_CallsCompact(t *testing.T) {
 	}
 }
 
-func TestPruneStage_StillOverAfterCompaction_ReturnsAbortRun(t *testing.T) {
+// PruneStage's estimate is not authoritative; ThinkStage's request guard decides.
+func TestPruneStage_StillOverAfterCompaction_DefersToRequestGuard(t *testing.T) {
 	t.Parallel()
 	deps := &PipelineDeps{
 		Config: PipelineConfig{
@@ -840,8 +839,8 @@ func TestPruneStage_StillOverAfterCompaction_ReturnsAbortRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error: %v", err)
 	}
-	if stage.Result() != AbortRun {
-		t.Errorf("Result() = %v, want AbortRun after compaction still over budget", stage.Result())
+	if _, ok := any(stage).(StageWithResult); ok {
+		t.Fatal("PruneStage must not control loop flow")
 	}
 }
 
@@ -860,9 +859,6 @@ func TestPruneStage_ZeroBudget_NoOp(t *testing.T) {
 	err := stage.Execute(context.Background(), state)
 	if err != nil {
 		t.Fatalf("Execute() error: %v", err)
-	}
-	if stage.Result() != Continue {
-		t.Errorf("Result() = %v, want Continue for zero budget", stage.Result())
 	}
 }
 
@@ -3535,7 +3531,7 @@ func TestThinkStage_FinalRequestGuard_AllowsRequestUnderLimit(t *testing.T) {
 	}
 }
 
-func TestThinkStage_FinalRequestGuard_AbortsWhenStillOverLimit(t *testing.T) {
+func TestThinkStage_FinalRequestGuard_StopsRunWhenStillOverLimit(t *testing.T) {
 	t.Parallel()
 	called := false
 	compactCalls := 0
@@ -3556,12 +3552,18 @@ func TestThinkStage_FinalRequestGuard_AbortsWhenStillOverLimit(t *testing.T) {
 	state := defaultState()
 	state.Messages.SetHistory([]providers.Message{{Role: "user", Content: strings.Repeat("long-history", 10)}})
 
-	err := stage.Execute(context.Background(), state)
-	if err == nil {
-		t.Fatal("expected final request context budget error")
+	ctx := context.Background()
+	if err := stage.Execute(ctx, state); err != nil {
+		t.Fatalf("Execute() error: %v, want graceful stop", err)
 	}
-	if !strings.Contains(err.Error(), "final request context budget exceeded") {
-		t.Fatalf("unexpected error: %v", err)
+	if stage.Result() != AbortRun {
+		t.Errorf("Result() = %v, want AbortRun", stage.Result())
+	}
+	if want := i18n.T(store.LocaleFromContext(ctx), i18n.MsgContextBudgetExceeded); state.Observe.FinalContent != want {
+		t.Errorf("FinalContent = %q, want %q", state.Observe.FinalContent, want)
+	}
+	if !strings.Contains(state.StopReason, "final request context budget exceeded") {
+		t.Errorf("StopReason = %q, want the guard error", state.StopReason)
 	}
 	if compactCalls != 1 {
 		t.Fatalf("CompactMessages calls = %d, want 1", compactCalls)

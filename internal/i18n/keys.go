@@ -275,6 +275,9 @@ const (
 	// output and no deliverable media, replacing the old meaningless "...".
 	MsgEmptyReplyFallback = "chat.empty_reply_fallback"
 
+	// Shown when the request guard stops a run because the context budget is exhausted.
+	MsgContextBudgetExceeded = "chat.context_budget_exceeded"
+
 	// Tool progress announcements (user-facing)
 	MsgToolAnnouncementSingle = "progress.tool_announcement.single" // "I'll use %s to handle the next step."
 	MsgToolAnnouncementMulti  = "progress.tool_announcement.multi"  // "I'll use %s to handle the next step."

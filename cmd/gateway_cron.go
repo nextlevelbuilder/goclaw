@@ -191,8 +191,8 @@ func makeCronJobHandler(sched *scheduler.Scheduler, msgBus *bus.MessageBus, cfg 
 		case <-cronCtx.Done():
 			return nil, fmt.Errorf("cron job %s timed out after %s", job.Name, jobTimeout)
 		}
-		if outcome.Err != nil {
-			return nil, outcome.Err
+		if err := outcome.Failure(); err != nil {
+			return nil, err
 		}
 
 		result := outcome.Result

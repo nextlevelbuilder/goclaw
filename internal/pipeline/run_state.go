@@ -40,6 +40,8 @@ type RunState struct {
 	Iteration int
 	RunID     string
 	ExitCode  StageResult
+	// StopReason explains a run stopped by the pipeline instead of the model (empty otherwise).
+	StopReason string
 
 	// CurrentLLMSpanID is the most recent LLM-call span in this run; tool spans parent to it.
 	CurrentLLMSpanID *uuid.UUID
@@ -88,6 +90,7 @@ func (rs *RunState) BuildResult() *RunResult {
 		BlockReplies:   rs.Observe.BlockReplies,
 		LastBlockReply: rs.Observe.LastBlockReply,
 		Calls:          rs.Calls,
+		StopReason:     rs.StopReason,
 	}
 }
 

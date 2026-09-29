@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -232,6 +233,45 @@ func TestCronJobHandlerSuppressesNoReplyDelivery(t *testing.T) {
 				t.Fatalf("outbound message = %#v, want channel telegram chat chat-1 content %q", got, tt.content)
 			}
 		})
+	}
+}
+
+// A run stopped by the context budget guard is a failed cron run: record the
+// error and do not deliver the "start a new session" notice to the channel.
+func TestCronJobHandler_PipelineStopIsFailure(t *testing.T) {
+	mb := bus.New()
+	defer mb.Close()
+
+	sched := scheduler.NewScheduler(
+		scheduler.DefaultLanes(),
+		scheduler.QueueConfig{Mode: scheduler.QueueModeQueue, Cap: 1, Drop: scheduler.DropOld, MaxConcurrent: 1},
+		func(context.Context, agent.RunRequest) (*agent.RunResult, error) {
+			return &agent.RunResult{Content: "context budget notice", StopReason: "final request context budget exceeded"}, nil
+		},
+	)
+	defer sched.Stop()
+
+	handler := makeCronJobHandler(sched, mb, &config.Config{}, nil, nil, nil, nil, nil, nil)
+	_, err := handler(&store.CronJob{
+		ID:             uuid.NewString(),
+		TenantID:       uuid.New(),
+		Name:           "daily-report",
+		AgentID:        "reporter",
+		UserID:         "user-1",
+		Stateless:      true,
+		Deliver:        true,
+		DeliverChannel: "telegram",
+		DeliverTo:      "chat-1",
+		Payload:        store.CronPayload{Kind: "agent_turn", Message: "daily report"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "context budget exceeded") {
+		t.Fatalf("handler error = %v, want the pipeline stop reason", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if got, ok := mb.SubscribeOutbound(ctx); ok {
+		t.Fatalf("unexpected outbound message: %#v", got)
 	}
 }
 

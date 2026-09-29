@@ -81,12 +81,12 @@ func init() {
 		MsgNotImplemented: "%s은(는) 아직 구현되지 않았습니다",
 
 		// Agent links
-		MsgLinksNotConfigured:   "에이전트 링크가 설정되지 않았습니다",
-		MsgInvalidDirection:     "방향은 outbound, inbound, 또는 bidirectional이어야 합니다",
-		MsgSourceTargetSame:     "소스와 대상은 서로 다른 에이전트여야 합니다",
-		MsgCannotDelegateOpen:   "오픈 에이전트에게는 위임할 수 없습니다 — 사전 정의된 에이전트만 위임 대상이 될 수 있습니다",
-		MsgNoUpdatesProvided:    "업데이트가 제공되지 않았습니다",
-		MsgInvalidLinkStatus:    "상태는 active 또는 disabled여야 합니다",
+		MsgLinksNotConfigured: "에이전트 링크가 설정되지 않았습니다",
+		MsgInvalidDirection:   "방향은 outbound, inbound, 또는 bidirectional이어야 합니다",
+		MsgSourceTargetSame:   "소스와 대상은 서로 다른 에이전트여야 합니다",
+		MsgCannotDelegateOpen: "오픈 에이전트에게는 위임할 수 없습니다 — 사전 정의된 에이전트만 위임 대상이 될 수 있습니다",
+		MsgNoUpdatesProvided:  "업데이트가 제공되지 않았습니다",
+		MsgInvalidLinkStatus:  "상태는 active 또는 disabled여야 합니다",
 
 		// Teams
 		MsgTeamsNotConfigured:   "팀이 설정되지 않았습니다",
@@ -172,9 +172,10 @@ func init() {
 		MsgToolPublishSkill:    "스킬 디렉토리를 시스템 데이터베이스에 등록하여 검색 가능하게 만듭니다",
 		MsgToolTeamTasks:       "팀 작업 보드에서 작업을 보고, 생성하고, 업데이트하고, 완료합니다",
 
-		MsgSkillNudgePostscript: "이 작업은 여러 단계를 포함했습니다. 이 과정을 재사용 가능한 스킬로 저장할까요? **\"스킬로 저장\"** 또는 **\"건너뛰기\"**로 답장하세요.",
-		MsgSkillNudge70Pct:      "[System] 반복 예산의 70%에 도달했습니다. 이 세션의 패턴 중 좋은 스킬이 될 수 있는 것이 있는지 고려해보세요.",
-		MsgSkillNudge90Pct:      "[System] 반복 예산의 90%에 도달했습니다. 이 세션에 재사용 가능한 패턴이 포함되어 있다면 완료하기 전에 스킬로 저장하는 것을 고려해보세요.",
+		MsgSkillNudgePostscript:  "이 작업은 여러 단계를 포함했습니다. 이 과정을 재사용 가능한 스킬로 저장할까요? **\"스킬로 저장\"** 또는 **\"건너뛰기\"**로 답장하세요.",
+		MsgSkillNudge70Pct:       "[System] 반복 예산의 70%에 도달했습니다. 이 세션의 패턴 중 좋은 스킬이 될 수 있는 것이 있는지 고려해보세요.",
+		MsgSkillNudge90Pct:       "[System] 반복 예산의 90%에 도달했습니다. 이 세션에 재사용 가능한 패턴이 포함되어 있다면 완료하기 전에 스킬로 저장하는 것을 고려해보세요.",
+		MsgContextBudgetExceeded: "⚠️ 대화가 모델의 컨텍스트 창에 비해 너무 길어져 답변하기 전에 중단했습니다. 이번 차례의 일부 도구 작업은 이미 실행되었을 수 있습니다. 계속하려면 새 세션을 시작해 주세요.",
 
 		MsgInvalidRole: "잘못된 역할: 허용되는 값은 owner, admin, operator, member, viewer입니다",
 

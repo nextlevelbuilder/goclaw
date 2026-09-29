@@ -64,12 +64,13 @@ Finalize (runs once, uses background context if cancelled)
 - Call LLM, record span with token counts
 - Emit `chunk` events (streaming) or single response
 
-**PruneStage** (opt-in via `contextPruning.mode: "cache-ttl"`)
-- Estimate token ratio vs context window
-- If >= 25%, run soft trim pass (keep first/last 3000 chars, replace middle with "...")
+**PruneStage** (pruning enabled by default; disable with `contextPruning.mode: "off"`)
+- Count history with the same `BudgetCounter` as ThinkStage's request guard
+- If >= 30%, run soft trim pass (keep first/last 3000 chars, replace middle with "...")
 - If >= 50%, run hard clear pass (replace with placeholder)
 - Run sanitizeHistory to fix broken tool_use/tool_result pairs after prune
 - Trigger memory flush (synchronous) if compaction threshold exceeded
+- Never stops the run: if compaction cannot bring history under budget, ThinkStage's request guard decides
 
 **ToolStage**
 - Execute single tool sequentially (no goroutine overhead)
@@ -430,13 +431,13 @@ Repairs tool message pairing that may have been broken by truncation or compacti
 
 ## 6. Context Pruning
 
-Context pruning reduces oversized tool results using a 2-pass algorithm. **It is opt-in** — configure `contextPruning.mode: "cache-ttl"` to enable. When disabled (default), zero overhead. Owned by PruneStage in the agent pipeline.
+Context pruning reduces oversized tool results using a 2-pass algorithm. **It is enabled by default** (an unset `contextPruning.mode` prunes like `"cache-ttl"`, without the prompt-cache TTL gate); set `contextPruning.mode: "off"` to disable it with zero overhead. Owned by PruneStage in the agent pipeline.
 
 ```mermaid
 flowchart TD
     START[Check mode == cache-ttl?] --> GATE{Mode enabled?}
     GATE -->|No| SKIP[No pruning - zero overhead]
-    GATE -->|Yes| CHECK{Ratio >= softTrimRatio 0.25?}
+    GATE -->|Yes| CHECK{Ratio >= softTrimRatio 0.3?}
     CHECK -->|No| DONE[No pruning needed]
     CHECK -->|Yes| PASS1
 
@@ -451,12 +452,12 @@ flowchart TD
 
 ### Configuration
 
-Enable pruning by setting `contextPruning.mode` in agent defaults:
+Disable pruning by setting `contextPruning.mode` in agent defaults (per-agent `context_pruning` overrides it):
 
 ```json5
 agents: {
   defaults: {
-    contextPruning: { mode: "cache-ttl" }
+    contextPruning: { mode: "off" }
   }
 }
 ```
@@ -465,9 +466,9 @@ agents: {
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `mode` | `""` (disabled) | `""` or `"off"` = disabled; `"cache-ttl"` = enabled |
+| `mode` | `""` (enabled) | `""` or `"cache-ttl"` = enabled; `"off"` = disabled |
 | `keepLastAssistants` | 3 | Number of recent assistant messages protected from pruning |
-| `softTrimRatio` | 0.25 | Token ratio threshold to trigger Pass 1 |
+| `softTrimRatio` | 0.3 | Token ratio threshold to trigger Pass 1 |
 | `hardClearRatio` | 0.5 | Token ratio threshold to trigger Pass 2 |
 | `minPrunableToolChars` | 50,000 | Minimum tool result length eligible for hard clear |
 
@@ -494,6 +495,8 @@ Threshold: prompt_tokens >= contextWindow * 0.75 (configurable via MaxHistorySha
 Trigger: Once per run, inside the iteration loop (between LLM calls)
 Output: In-memory messages replaced with [summary] + [recent 4 messages]
 ```
+
+If there is no clean split point (for example the history is only tool call/result pairs), compaction returns `ErrNotCompacted` and nothing is recorded as compacted. When the final request still exceeds the budget after every reduction step (prune, compact, shrink memory), ThinkStage stops the run with the localized `chat.context_budget_exceeded` notice instead of an error: the run's tool results are still persisted, and the trace is marked `error` with the stop reason. Memory flush and compaction attempts appear in the trace as `memory_flush` and `mid_loop_compaction` event spans.
 
 ### Post-Run Compaction (After Completion)
 

@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -26,6 +27,9 @@ type FinalRequestEstimate struct {
 }
 
 const defaultMaxRequestShare = 0.85
+
+// ErrContextBudgetExceeded marks a request that still exceeds the context budget after every reduction step.
+var ErrContextBudgetExceeded = errors.New("context budget exceeded")
 
 func effectiveMaxRequestShare(cfg *config.CompactionConfig) float64 {
 	if cfg != nil && cfg.MaxRequestShare > 0 && cfg.MaxRequestShare <= 1 {
@@ -181,8 +185,8 @@ func (s *ThinkStage) prepareFinalRequest(ctx context.Context, state *RunState, t
 	}
 
 	s.logFinalRequestGuard(state, estimate, "abort", "exhausted")
-	return req, estimate, fmt.Errorf("final request context budget exceeded: estimated_input=%d compact_target=%d hard_input_cap=%d context_window=%d max_request_share=%.2f",
-		estimate.InputTokens, estimate.CompactTargetTokens, estimate.HardInputCapTokens, estimate.ContextWindow, estimate.MaxRequestShare)
+	return req, estimate, fmt.Errorf("final request %w: estimated_input=%d compact_target=%d hard_input_cap=%d context_window=%d max_request_share=%.2f",
+		ErrContextBudgetExceeded, estimate.InputTokens, estimate.CompactTargetTokens, estimate.HardInputCapTokens, estimate.ContextWindow, estimate.MaxRequestShare)
 }
 
 func (s *ThinkStage) reduceFinalRequestContext(ctx context.Context, state *RunState, estimate FinalRequestEstimate, step string) (bool, error) {
@@ -208,7 +212,10 @@ func (s *ThinkStage) pruneForFinalRequestBudget(state *RunState, estimate FinalR
 	}
 	fixedMessages := []providers.Message{state.Messages.System()}
 	fixedMessages = append(fixedMessages, state.Messages.Pending()...)
-	fixedMessageTokens := countRequestMessages(s.deps, state.Model, fixedMessages)
+	fixedMessageTokens, _, err := countBudgetInput(s.deps, state.Model, providers.ChatRequest{Messages: fixedMessages})
+	if err != nil {
+		fixedMessageTokens = countRequestMessages(s.deps, state.Model, fixedMessages)
+	}
 	budget := estimate.CompactTargetTokens - estimate.ToolTokens - fixedMessageTokens
 	if budget <= 0 {
 		budget = 1
@@ -226,7 +233,7 @@ func (s *ThinkStage) pruneForFinalRequestBudget(state *RunState, estimate FinalR
 }
 
 func (s *ThinkStage) compactForFinalRequestBudget(ctx context.Context, state *RunState) (bool, error) {
-	if s.deps.CompactMessages == nil {
+	if s.deps.CompactMessages == nil || state.Compact.Unavailable {
 		return false, nil
 	}
 	history := state.Messages.History()
@@ -235,6 +242,10 @@ func (s *ThinkStage) compactForFinalRequestBudget(ctx context.Context, state *Ru
 	}
 	savedPending := state.Messages.Pending()
 	compacted, err := s.deps.CompactMessages(ctx, history, state.Model)
+	if errors.Is(err, ErrNotCompacted) {
+		state.Compact.Unavailable = true
+		return false, nil
+	}
 	if err != nil {
 		return false, fmt.Errorf("compact final request context: %w", err)
 	}

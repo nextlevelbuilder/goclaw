@@ -2,10 +2,12 @@ package pipeline
 
 import (
 	"context"
-	"errors"
+	"strings"
 	"testing"
 
+	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // fakeBudgetErr satisfies the contextBudgetExceededError interface that
@@ -51,10 +53,11 @@ func TestThinkStage_BudgetExceeded_ReducesThenRetries(t *testing.T) {
 	}
 }
 
-// TestThinkStage_BudgetExceeded_AbortsWhenReductionExhausted verifies that when
-// no reduction step can change the request, the stage surfaces the budget error
-// instead of looping forever. The guard already guaranteed zero transport calls.
-func TestThinkStage_BudgetExceeded_AbortsWhenReductionExhausted(t *testing.T) {
+// TestThinkStage_BudgetExceeded_StopsRunWhenReductionExhausted verifies that when
+// no reduction step can change the request, the stage stops the run with a
+// localized notice instead of looping forever. The guard already guaranteed zero
+// transport calls.
+func TestThinkStage_BudgetExceeded_StopsRunWhenReductionExhausted(t *testing.T) {
 	deps := &PipelineDeps{
 		Config: PipelineConfig{MaxIterations: 10, MaxTokens: 1000, ContextWindow: 200_000},
 		CallLLM: func(_ context.Context, _ *RunState, _ providers.ChatRequest) (*providers.ChatResponse, error) {
@@ -66,12 +69,18 @@ func TestThinkStage_BudgetExceeded_AbortsWhenReductionExhausted(t *testing.T) {
 	stage := NewThinkStage(deps)
 	state := defaultState()
 
-	err := stage.Execute(context.Background(), state)
-	if err == nil {
-		t.Fatal("expected abort when reduction is exhausted, got nil")
+	ctx := context.Background()
+	if err := stage.Execute(ctx, state); err != nil {
+		t.Fatalf("Execute() error: %v, want graceful stop", err)
 	}
-	if !errors.As(err, new(interface{ ContextBudgetExceeded() bool })) {
-		t.Fatalf("expected wrapped budget error, got %v", err)
+	if stage.Result() != AbortRun {
+		t.Errorf("Result() = %v, want AbortRun", stage.Result())
+	}
+	if want := i18n.T(store.LocaleFromContext(ctx), i18n.MsgContextBudgetExceeded); state.Observe.FinalContent != want {
+		t.Errorf("FinalContent = %q, want %q", state.Observe.FinalContent, want)
+	}
+	if !strings.Contains(state.StopReason, "context budget exceeded") {
+		t.Errorf("StopReason = %q, want the budget error", state.StopReason)
 	}
 }
 

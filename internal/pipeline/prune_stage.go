@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -14,20 +15,18 @@ import (
 //   - Phase 1 (70% budget): soft trim via PruneMessages callback
 //   - Phase 2 (100% budget): memory flush + LLM compaction
 //
-// Implements StageWithResult — returns AbortRun if still over budget after compaction.
+// Never controls loop flow: ThinkStage's final request guard is the budget authority.
 type PruneStage struct {
 	deps        *PipelineDeps
 	memoryFlush *MemoryFlushStage
-	result      StageResult
 }
 
 // NewPruneStage creates a PruneStage with inline memory flush.
 func NewPruneStage(deps *PipelineDeps, memFlush *MemoryFlushStage) *PruneStage {
-	return &PruneStage{deps: deps, memoryFlush: memFlush, result: Continue}
+	return &PruneStage{deps: deps, memoryFlush: memFlush}
 }
 
-func (s *PruneStage) Name() string        { return "prune" }
-func (s *PruneStage) Result() StageResult { return s.result }
+func (s *PruneStage) Name() string { return "prune" }
 
 // defaultCachePruneTTL is used when cfg.TTL is empty or invalid.
 const defaultCachePruneTTL = 5 * time.Minute
@@ -48,8 +47,6 @@ func parseTTL(s string) time.Duration {
 
 // Execute checks history tokens against budget, prunes/compacts as needed.
 func (s *PruneStage) Execute(ctx context.Context, state *RunState) error {
-	s.result = Continue
-
 	// Compute budget using the effective context window for this run's model.
 	// ContextStage resolves EffectiveContextWindow once per run via ModelRegistry;
 	// if zero (unknown model, registry not wired) fall back to the pipeline-wide
@@ -187,7 +184,7 @@ func (s *PruneStage) Execute(ctx context.Context, state *RunState) error {
 		state.Compact.MemoryFlushedThisCycle = true
 	}
 
-	if s.deps.CompactMessages == nil {
+	if s.deps.CompactMessages == nil || state.Compact.Unavailable {
 		return nil // no compaction available
 	}
 
@@ -197,41 +194,45 @@ func (s *PruneStage) Execute(ctx context.Context, state *RunState) error {
 	savedPending := state.Messages.Pending()
 
 	compacted, err := s.deps.CompactMessages(ctx, state.Messages.History(), state.Model)
-	if err != nil {
+	switch {
+	case errors.Is(err, ErrNotCompacted):
+		state.Compact.Unavailable = true
+		slog.Warn("prune: compaction made no change", "session_key", sessionKey, "tokens", historyTokens, "budget", budget)
+		return nil
+	case err != nil:
 		return fmt.Errorf("compact messages: %w", err)
-	}
-	state.Messages.ReplaceHistory(compacted)
+	default:
+		state.Messages.ReplaceHistory(compacted)
 
-	// Restore pending messages that were cleared by ReplaceHistory.
-	for _, msg := range savedPending {
-		state.Messages.AppendPending(msg)
-	}
-	state.Prune.MidLoopCompacted = true
-	state.Compact.CompactionCount++
-	state.Compact.MemoryFlushedThisCycle = false // reset for next cycle
+		// Restore pending messages that were cleared by ReplaceHistory.
+		for _, msg := range savedPending {
+			state.Messages.AppendPending(msg)
+		}
+		state.Prune.MidLoopCompacted = true
+		state.Compact.CompactionCount++
+		state.Compact.MemoryFlushedThisCycle = false // reset for next cycle
 
-	// Recount after compaction
-	historyTokens = s.countHistory(state)
-	state.Prune.HistoryTokens = historyTokens
+		historyTokens = s.countHistory(state)
+		state.Prune.HistoryTokens = historyTokens
+	}
 
 	if historyTokens > budget {
 		slog.Warn("still over budget after compaction", "tokens", historyTokens, "budget", budget)
-		s.result = AbortRun
 	}
 
 	return nil
 }
 
-// countHistory counts history + pending tokens via TokenCounter.
+// countHistory counts history + pending tokens.
 func (s *PruneStage) countHistory(state *RunState) int {
 	h := state.Messages.History()
 	p := state.Messages.Pending()
-	if s.deps.TokenCounter == nil || (len(h) == 0 && len(p) == 0) {
+	if len(h) == 0 && len(p) == 0 {
 		return 0
 	}
 	// Explicit copy to avoid aliasing the history slice.
 	msgs := make([]providers.Message, 0, len(h)+len(p))
 	msgs = append(msgs, h...)
 	msgs = append(msgs, p...)
-	return s.deps.TokenCounter.CountMessages(state.Model, msgs)
+	return budgetMessageTokens(s.deps, state.Model, msgs)
 }

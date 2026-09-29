@@ -431,9 +431,21 @@ func (l *Loop) emitAgentSpanEnd(ctx context.Context, agentSpanID uuid.UUID, star
 		updates["output_preview"] = tracing.TruncateMid(result.Content, limit)
 		// Note: token counts are NOT set on agent spans to avoid double-counting
 		// with child spans that directly report model usage.
+		if result.StopReason != "" {
+			updates["status"] = store.SpanStatusError
+			updates["error"] = result.StopReason
+		}
 	}
 
 	collector.EmitSpanUpdate(agentSpanID, traceID, tracing.RedactSpanUpdates(ctx, updates))
+}
+
+// runTraceStatus maps a finished run to its trace status and error text.
+func runTraceStatus(result *RunResult) (status, errMsg string) {
+	if result != nil && result.StopReason != "" {
+		return store.TraceStatusError, result.StopReason
+	}
+	return store.TraceStatusCompleted, ""
 }
 
 // previewLimitForVerbose returns the preview character limit based on verbose mode.

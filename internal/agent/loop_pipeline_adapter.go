@@ -310,6 +310,7 @@ func convertRunResult(pr *pipeline.RunResult) *RunResult {
 		LastBlockReply: pr.LastBlockReply,
 		LoopKilled:     pr.LoopKilled,
 		Calls:          pr.Calls,
+		StopReason:     pr.StopReason,
 	}
 }
 

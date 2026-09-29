@@ -38,7 +38,7 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 	}
 
 	// 1b. Skill evolution postscript (matching v2 loop_finalize.go:52-57).
-	if s.deps.SkillPostscript != nil && state.Observe.FinalContent != "" {
+	if s.deps.SkillPostscript != nil && state.Observe.FinalContent != "" && state.StopReason == "" {
 		state.Observe.FinalContent = s.deps.SkillPostscript(ctx, state.Observe.FinalContent, state.Tool.TotalToolCalls)
 	}
 
@@ -161,7 +161,8 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 	// and advances the cumulative compaction count so episodic can progress (Việc 1-B).
 	// Both mid-loop paths (prune_stage + compactForFinalRequestBudget) set this flag.
 	if s.deps.MaybeSummarize != nil {
-		s.deps.MaybeSummarize(ctx, state.Input.SessionKey, state.Prune.MidLoopCompacted)
+		pressure := state.Prune.MidLoopCompacted || state.Compact.Unavailable || state.StopReason != ""
+		s.deps.MaybeSummarize(ctx, state.Input.SessionKey, pressure)
 	}
 
 	// 8. Emit session.completed for consolidation pipeline (episodic → semantic → dreaming).

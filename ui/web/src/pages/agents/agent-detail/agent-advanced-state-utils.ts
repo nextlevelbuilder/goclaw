@@ -123,7 +123,7 @@ export function deriveState(
     },
     inboundDebounceMode: inboundDebounceMs === undefined ? "inherit" : "custom",
     inboundDebounceMs: inboundDebounceMs ?? 0,
-    pruneEnabled: agent.context_pruning?.mode === "cache-ttl",
+    pruneEnabled: agent.context_pruning?.mode !== "off",
     prune: agent.context_pruning ?? {},
     sbEnabled: agent.sandbox_config != null,
     sb: agent.sandbox_config ?? {},
@@ -177,9 +177,7 @@ export function buildAdvancedUpdatePayload(
 
   const updates: Record<string, unknown> = {
     compaction_config: comp,
-    context_pruning: pruneEnabled
-      ? { mode: "cache-ttl", ...prune }
-      : { mode: "off" },
+    context_pruning: buildContextPruningPayload(agent.context_pruning, pruneEnabled, prune),
     sandbox_config: sbEnabled ? sb : null,
     model_fallback: normalizeModelFallbackForPayload(modelFallback),
     ...routingPayload,
@@ -228,6 +226,16 @@ export function buildAdvancedUpdatePayload(
   }
 
   return updates;
+}
+
+// An unset context_pruning inherits the global default; keep it unset unless the user changed it.
+function buildContextPruningPayload(
+  current: ContextPruningConfig | null | undefined,
+  enabled: boolean,
+  prune: ContextPruningConfig,
+): ContextPruningConfig | undefined {
+  if (current == null && enabled && Object.keys(prune).length === 0) return undefined;
+  return enabled ? { ...prune, mode: "cache-ttl" } : { mode: "off" };
 }
 
 function buildOtherConfigWithDeliveryBehavior(

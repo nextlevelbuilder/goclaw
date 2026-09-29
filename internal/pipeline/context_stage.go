@@ -141,13 +141,9 @@ func (s *ContextStage) Execute(ctx context.Context, state *RunState) error {
 		}
 	}
 
-	// 5. Compute overhead tokens via TokenCounter (replaces heuristic estimateOverhead).
-	// Includes both system-prompt tokens and tool-schema tokens so PruneStage
+	// 5. Compute overhead tokens (system prompt + tool schemas) so PruneStage
 	// budget shrinks correctly when tools are large.
-	if s.deps.TokenCounter != nil {
-		system := state.Messages.System()
-		overhead := s.deps.TokenCounter.CountMessages(state.Model, []providers.Message{system})
-		overhead += s.deps.TokenCounter.CountToolSchemas(state.Model, state.Think.Tools)
+	if overhead, ok := budgetOverheadTokens(s.deps, state.Model, state.Messages.System(), state.Think.Tools); ok {
 		state.Context.OverheadTokens = overhead
 	}
 

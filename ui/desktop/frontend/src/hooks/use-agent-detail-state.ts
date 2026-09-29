@@ -3,6 +3,7 @@ import type {
   AgentData, ContextPruningConfig, SubagentsConfig, ToolPolicyConfig,
   SandboxConfig, AgentReasoningConfig, ReasoningOverrideMode,
 } from '../types/agent'
+import { buildContextPruningPayload, isContextPruningEnabled } from '../lib/context-pruning'
 
 export function useAgentDetailState(
   agent: AgentData,
@@ -40,7 +41,7 @@ export function useAgentDetailState(
   )
 
   // --- Context pruning ---
-  const [pruningEnabled, setPruningEnabled] = useState(agent.context_pruning != null)
+  const [pruningEnabled, setPruningEnabled] = useState(isContextPruningEnabled(agent.context_pruning))
   const [pruningConfig, setPruningConfig] = useState<ContextPruningConfig>(agent.context_pruning ?? {})
 
   // --- Compaction ---
@@ -115,7 +116,7 @@ export function useAgentDetailState(
         is_default: isDefault,
         status,
         other_config: Object.keys(otherConfig).length > 0 ? otherConfig : {},
-        context_pruning: pruningEnabled ? pruningConfig : null,
+        context_pruning: buildContextPruningPayload(agent.context_pruning, pruningEnabled, pruningConfig),
         compaction_config: compactionConfig,
         subagents_config: subEnabled ? subConfig : null,
         tools_config: toolsEnabled ? toolsConfig : {},

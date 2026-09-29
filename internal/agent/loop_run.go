@@ -215,13 +215,17 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		if result.LastUsage != nil {
 			logAttrs = append(logAttrs, "last_usage_prompt_tokens", result.LastUsage.PromptTokens)
 		}
+		if result.StopReason != "" {
+			logAttrs = append(logAttrs, "stop_reason", result.StopReason)
+		}
 		slog.Info("v3.run.completed", logAttrs...)
 
 		if agentSpanID != uuid.Nil {
 			l.emitAgentSpanEnd(ctx, agentSpanID, runStart, result, nil)
 		}
+		traceStatus, traceErr := runTraceStatus(result)
 		if isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
-			l.traceCollector.SetTraceStatus(ctx, traceID, store.TraceStatusCompleted)
+			l.traceCollector.SetTraceStatus(ctx, traceID, traceStatus)
 		}
 		completedPayload := map[string]any{"content": result.Content}
 		if result.Thinking != "" {
@@ -244,7 +248,7 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 		if !isChildTrace && l.traceCollector != nil && traceID != uuid.Nil {
 			traceFinalized = true
 			if result != nil {
-				l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "",
+				l.traceCollector.FinishTrace(ctx, traceID, traceStatus, tracing.RedactText(ctx, traceErr),
 					tracing.RedactText(ctx, truncateStr(result.Content, l.traceCollector.PreviewMaxLen())))
 			} else {
 				l.traceCollector.FinishTrace(ctx, traceID, store.TraceStatusCompleted, "", "")

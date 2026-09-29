@@ -67,7 +67,7 @@ func (p *Pipeline) Run(ctx context.Context, state *RunState) (*RunResult, error)
 	// 2. Iteration loop
 	// BreakLoop: complete all remaining stages in this iteration (ObserveStage must
 	// capture FinalContent), then exit the outer loop.
-	// AbortRun: exit inner loop immediately (unrecoverable, e.g. over budget after compaction).
+	// AbortRun: exit inner loop immediately (unrecoverable, e.g. truncation retries exhausted).
 	for state.Iteration = 0; state.Iteration < p.Deps.Config.MaxIterations; state.Iteration++ {
 		for _, stage := range p.iteration {
 			if err := stage.Execute(ctx, state); err != nil {

@@ -129,10 +129,11 @@ func resolveTeamTaskOutcome(
 
 	// Smart post-turn decision based on action flags.
 	// Only error, completed/escalated, and reviewed block auto-complete.
+	runFailure := outcome.Failure()
 	switch {
-	case outcome.Err != nil:
-		// Agent errored → auto-fail.
-		if err := deps.TeamStore.FailTask(ctx, meta.TaskID, meta.TeamID, outcome.Err.Error()); err != nil {
+	case runFailure != nil:
+		// Agent errored or the pipeline stopped the run → auto-fail.
+		if err := deps.TeamStore.FailTask(ctx, meta.TaskID, meta.TeamID, runFailure.Error()); err != nil {
 			slog.Warn("auto-complete: FailTask error", "task_id", meta.TaskID, "error", err)
 		} else {
 			bus.BroadcastForTenant(deps.MsgBus, protocol.EventTeamTaskFailed, store.TenantIDFromContext(ctx), tools.BuildTaskEventPayload(
@@ -140,7 +141,7 @@ func resolveTeamTaskOutcome(
 				store.TeamTaskStatusFailed,
 				"agent", toAgent,
 				tools.WithTaskInfo(taskNumber, taskSubject),
-				tools.WithReason(outcome.Err.Error()),
+				tools.WithReason(runFailure.Error()),
 				tools.WithChannel(taskChannel),
 				tools.WithChatID(taskChatID),
 				tools.WithPeerKind(taskPeerKind),

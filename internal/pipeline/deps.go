@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
@@ -12,6 +13,9 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tokencount"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
 )
+
+// ErrNotCompacted: CompactMessages left history unchanged; callers must not count it as a compaction.
+var ErrNotCompacted = errors.New("history not compacted")
 
 // PruneStats holds counts from a single pruneContextMessages invocation.
 // Populated by the pruning function; read by PruneStage for event emission.
@@ -128,9 +132,10 @@ type PipelineDeps struct {
 	// msgCount is the message count captured alongside lastUsage.
 	UpdateMetadata   func(ctx context.Context, sessionKey string, usage, lastUsage providers.Usage, msgCount int) error
 	BootstrapCleanup func(ctx context.Context, state *RunState) error
-	// MaybeSummarize takes midLoopCompacted: when the final-request guard already
-	// compacted mid-loop this run, post-turn summarization lowers its trigger
-	// threshold so the compaction is PERSISTED (episodic Bug B / anti-loop).
+	// MaybeSummarize takes midLoopCompacted: when this run hit mid-loop context
+	// pressure (compacted, compaction unavailable, or stopped for budget),
+	// post-turn summarization lowers its trigger threshold so the compaction is
+	// PERSISTED (episodic Bug B / anti-loop).
 	MaybeSummarize func(ctx context.Context, sessionKey string, midLoopCompacted bool)
 }
 

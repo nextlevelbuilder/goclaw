@@ -20,6 +20,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 	usagecaps "github.com/nextlevelbuilder/goclaw/internal/usage/caps"
 	"github.com/nextlevelbuilder/goclaw/internal/workspace"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
@@ -689,9 +690,19 @@ func (l *Loop) makePruneMessages() func(msgs []providers.Message, budget int) ([
 
 func (l *Loop) makeCompactMessages(req *RunRequest) func(ctx context.Context, msgs []providers.Message, model string) ([]providers.Message, error) {
 	return func(ctx context.Context, msgs []providers.Message, model string) ([]providers.Message, error) {
+		start := time.Now().UTC()
 		compacted := l.compactMessagesInPlace(ctx, msgs)
+		outcome := "compacted"
 		if compacted == nil {
-			return msgs, nil // compaction failed, return original
+			outcome = "not_compacted"
+		}
+		tracing.EmitEventSpan(ctx, "mid_loop_compaction", start, nil, map[string]any{
+			"outcome":         outcome,
+			"input_messages":  len(msgs),
+			"output_messages": len(compacted),
+		})
+		if compacted == nil {
+			return nil, pipeline.ErrNotCompacted
 		}
 		// Stamp session metadata with the compaction timestamp so operators
 		// can diagnose compaction cadence without a dedicated column. Stored

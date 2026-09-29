@@ -298,7 +298,7 @@ func (t *Ticker) runOne(ctx context.Context, hb store.AgentHeartbeat) {
 		outcome := <-outCh
 		if outcome.Err == nil {
 			result = outcome.Result
-			lastErr = nil
+			lastErr = outcome.Failure() // a pipeline stop will not succeed on retry
 			break
 		}
 		lastErr = outcome.Err
