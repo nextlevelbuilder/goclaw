@@ -43,7 +43,10 @@ func (r *DispatcherTestRunner) RunTest(ctx context.Context, cfg hooks.HookConfig
 	if cfg.TimeoutMS > 0 {
 		timeout = time.Duration(cfg.TimeoutMS) * time.Millisecond
 	}
-	hctx, cancel := context.WithTimeout(ctx, timeout)
+
+	scriptRes := &hooks.ScriptResult{}
+	hctx := hooks.WithScriptResult(ctx, scriptRes)
+	hctx, cancel := context.WithTimeout(hctx, timeout)
 	defer cancel()
 
 	start := time.Now()
@@ -51,8 +54,11 @@ func (r *DispatcherTestRunner) RunTest(ctx context.Context, cfg hooks.HookConfig
 	durationMS := int(time.Since(start) / time.Millisecond)
 
 	res := HookTestResult{
-		Decision:   dec,
-		DurationMS: durationMS,
+		Decision:     dec,
+		Reason:       scriptRes.Reason,
+		DurationMS:   durationMS,
+		Stdout:       scriptRes.Stdout,
+		UpdatedInput: scriptRes.UpdatedInput,
 	}
 	if err != nil {
 		res.Error = err.Error()

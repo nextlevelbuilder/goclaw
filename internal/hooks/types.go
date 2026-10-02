@@ -221,6 +221,8 @@ type Event struct {
 	SessionID string
 	TenantID  uuid.UUID
 	AgentID   uuid.UUID
+	SenderID  string `json:"sender_id"`
+	UserID    string `json:"user_id"`
 	// ToolName is populated for PreToolUse/PostToolUse events.
 	ToolName string
 	// ToolInput is the raw tool arguments map for CEL evaluation.

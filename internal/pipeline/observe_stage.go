@@ -70,6 +70,8 @@ func (s *ObserveStage) observeFinalResponse(state *RunState, resp *providers.Cha
 			SessionID:     state.Input.SessionKey,
 			TenantID:      store.TenantIDFromContext(state.Ctx),
 			AgentID:       store.AgentIDFromContext(state.Ctx),
+			SenderID:      state.Input.SenderID,
+			UserID:        state.Input.UserID,
 			HookEvent:     hooks.EventPostModelResponse,
 			ModelResponse: content,
 			Thinking:      thinking,

@@ -194,6 +194,8 @@ func (s *FinalizeStage) Execute(ctx context.Context, state *RunState) error {
 			SessionID: state.Input.SessionKey,
 			TenantID:  store.TenantIDFromContext(ctx),
 			AgentID:   store.AgentIDFromContext(ctx),
+			SenderID:  state.Input.SenderID,
+			UserID:    state.Input.UserID,
 			HookEvent: hooks.EventStop,
 		})
 	}

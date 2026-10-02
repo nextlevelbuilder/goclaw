@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/dop251/goja"
+	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 )
@@ -15,15 +16,20 @@ import (
 // version change. strict=true gives stronger semantics (assigning to an
 // undeclared variable throws instead of silently creating a global).
 func (h *ScriptHandler) compile(cfg hooks.HookConfig, source string) (*goja.Program, error) {
-	key := progCacheKey{ID: cfg.ID, Version: cfg.Version}
-	if prog, ok := h.progCache.Get(key); ok {
-		return prog, nil
+	if cfg.ID != uuid.Nil {
+		key := progCacheKey{ID: cfg.ID, Version: cfg.Version}
+		if prog, ok := h.progCache.Get(key); ok {
+			return prog, nil
+		}
 	}
 	prog, err := goja.Compile(cfg.ID.String(), source, true)
 	if err != nil {
 		return nil, fmt.Errorf("compile: %w", err)
 	}
-	h.progCache.Add(key, prog)
+	if cfg.ID != uuid.Nil {
+		key := progCacheKey{ID: cfg.ID, Version: cfg.Version}
+		h.progCache.Add(key, prog)
+	}
 	return prog, nil
 }
 
@@ -42,6 +48,10 @@ func bindEvent(rt *goja.Runtime, ev hooks.Event) error {
 		"sessionId": ev.SessionID,
 		"tenantId":  ev.TenantID.String(),
 		"agentId":   ev.AgentID.String(),
+		"senderId":  ev.SenderID,
+		"sender_id": ev.SenderID,
+		"userId":    ev.UserID,
+		"user_id":   ev.UserID,
 		"toolName":  ev.ToolName,
 		"toolInput": ev.ToolInput,
 		"rawInput":  ev.RawInput,
