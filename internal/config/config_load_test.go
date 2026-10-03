@@ -445,6 +445,33 @@ func TestLoad_RequestyProviderFromFileAndEnv(t *testing.T) {
 	}
 }
 
+func TestLoad_CheaperInferenceProviderFromFileAndEnv(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json5")
+	if err := os.WriteFile(cfgPath, []byte(`{
+		"providers": {
+			"cheaperinference": {
+				"api_key": "file-key"
+			}
+		}
+	}`), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	t.Setenv("GOCLAW_CHEAPERINFERENCE_API_KEY", "env-key")
+	t.Setenv("GOCLAW_CHEAPERINFERENCE_BASE_URL", "https://gateway.example.com/v1")
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if cfg.Providers.CheaperInference.APIKey != "env-key" {
+		t.Fatalf("API key = %q, want GOCLAW_CHEAPERINFERENCE_API_KEY override", cfg.Providers.CheaperInference.APIKey)
+	}
+	if cfg.Providers.CheaperInference.APIBase != "https://gateway.example.com/v1" {
+		t.Fatalf("API base = %q, want GOCLAW_CHEAPERINFERENCE_BASE_URL override", cfg.Providers.CheaperInference.APIBase)
+	}
+}
+
 // --- Allowed origins from JSON5 ---
 
 func TestLoad_AllowedOrigins_JSON5(t *testing.T) {

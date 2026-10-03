@@ -415,6 +415,11 @@ func openAIProviderDefaults(providerType, apiBase string) (string, string) {
 			apiBase = store.RequestyDefaultAPIBase
 		}
 		return apiBase, store.RequestyDefaultModel
+	case store.ProviderCheaperInference:
+		if apiBase == "" {
+			apiBase = store.CheaperInferenceDefaultAPIBase
+		}
+		return apiBase, store.CheaperInferenceDefaultModel
 	default:
 		return apiBase, ""
 	}
