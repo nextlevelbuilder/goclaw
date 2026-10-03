@@ -1,0 +1,70 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+#
+# GoClaw on Render — Blueprint for https://github.com/ojusave/goclaw
+# Upstream: https://github.com/nextlevelbuilder/goclaw
+# Template docs: https://github.com/ojusave/goclaw/blob/dev/render.yaml
+#
+# Pattern: image-wrapper (official ghcr.io image with embedded web UI + Python).
+#
+# Port contract: GoClaw binds GOCLAW_HOST + GOCLAW_PORT (not Render's PORT).
+# Render web services default to port 10000 — set GOCLAW_PORT=10000 explicitly.
+# Do NOT use dockerCommand shell wrappers here; Render image services pass the
+# full string as a single argv and startup fails with exit 127.
+#
+# Database: migrations run on boot (docker-entrypoint.sh → goclaw upgrade) and
+# create pgvector/pgcrypto extensions. Do NOT use initialDeployHook with psql —
+# the upstream image does not ship a PostgreSQL client.
+#
+# LLM provider keys are NOT listed in this Blueprint (avoids empty required fields
+# at Apply time). Add GOCLAW_*_API_KEY vars in the Dashboard after deploy.
+
+previews:
+  generation: off
+
+projects:
+  - name: goclaw
+    environments:
+      - name: production
+        services:
+          - type: web
+            name: goclaw
+            runtime: image
+            plan: standard
+            region: oregon
+            image:
+              url: ghcr.io/nextlevelbuilder/goclaw:v3.12.0
+            healthCheckPath: /health
+            maxShutdownDelaySeconds: 120
+            disk:
+              name: goclaw-data
+              mountPath: /app/data
+              sizeGB: 10
+            envVars:
+              - key: GOCLAW_HOST
+                value: "0.0.0.0"
+              - key: GOCLAW_PORT
+                value: "10000"
+              - key: GOCLAW_CONFIG
+                value: /app/data/config.json
+              - key: GOCLAW_DATA_DIR
+                value: /app/data
+              - key: GOCLAW_WORKSPACE
+                value: /app/data/workspace
+              - key: GOCLAW_SKILLS_DIR
+                value: /app/data/skills
+              - key: GOCLAW_GATEWAY_TOKEN
+                generateValue: true
+              - key: GOCLAW_ENCRYPTION_KEY
+                generateValue: true
+              - key: GOCLAW_POSTGRES_DSN
+                fromDatabase:
+                  name: goclaw-db
+                  property: connectionString
+
+        databases:
+          - name: goclaw-db
+            plan: basic-256mb
+            region: oregon
+            databaseName: goclaw
+            postgresMajorVersion: "18"
+            ipAllowList: []
