@@ -19,6 +19,8 @@ func init() {
 		MsgFailedToDelete:   "删除 %s 失败：%s",
 		MsgFailedToSave:     "保存 %s 失败：%s",
 		MsgInvalidUpdates:   "更新内容无效",
+		// TODO(i18n): translate to zh
+		MsgAgentDeleteVaultConflict: "failed to delete agent: a vault document of this agent is at a path another deleted owner already orphaned; delete or re-path this agent's vault documents first, or upgrade to schema version 99 or later",
 
 		// Agent
 		MsgAgentNotFound:                       "未找到Agent：%s",

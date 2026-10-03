@@ -19,6 +19,8 @@ func init() {
 		MsgFailedToDelete:   "не удалось удалить %s: %s",
 		MsgFailedToSave:     "не удалось сохранить %s: %s",
 		MsgInvalidUpdates:   "неверные обновления",
+		// TODO(i18n): translate to ru
+		MsgAgentDeleteVaultConflict: "failed to delete agent: a vault document of this agent is at a path another deleted owner already orphaned; delete or re-path this agent's vault documents first, or upgrade to schema version 99 or later",
 
 		// Agent
 		MsgAgentNotFound:                       "агент не найден: %s",

@@ -19,6 +19,8 @@ func init() {
 		MsgFailedToDelete:   "failed to delete %s: %s",
 		MsgFailedToSave:     "failed to save %s: %s",
 		MsgInvalidUpdates:   "invalid updates",
+		// Vault orphan collision on agent delete (#1550)
+		MsgAgentDeleteVaultConflict: "failed to delete agent: a vault document of this agent is at a path another deleted owner already orphaned; delete or re-path this agent's vault documents first, or upgrade to schema version 99 or later",
 
 		// Agent
 		MsgAgentNotFound:                       "agent not found: %s",

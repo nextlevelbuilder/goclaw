@@ -21,6 +21,10 @@ const (
 	MsgFailedToSave     = "error.failed_to_save"    // "failed to save %s: %s"
 	MsgInvalidUpdates   = "error.invalid_updates"   // "invalid updates"
 
+	// Agent deletion blocked by the vault orphan collision of #1550. Fixed by migration
+	// 000099; kept for installations still on an earlier schema version.
+	MsgAgentDeleteVaultConflict = "error.agent_delete_vault_conflict"
+
 	// --- Agent ---
 	MsgAgentNotFound                       = "error.agent_not_found"       // "agent not found: %s"
 	MsgCannotDeleteDefault                 = "error.cannot_delete_default" // "cannot delete the default agent"

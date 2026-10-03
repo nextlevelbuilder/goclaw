@@ -19,6 +19,8 @@ func init() {
 		MsgFailedToDelete:   "%s 삭제에 실패했습니다: %s",
 		MsgFailedToSave:     "%s 저장에 실패했습니다: %s",
 		MsgInvalidUpdates:   "잘못된 업데이트",
+		// TODO(i18n): translate to ko
+		MsgAgentDeleteVaultConflict: "failed to delete agent: a vault document of this agent is at a path another deleted owner already orphaned; delete or re-path this agent's vault documents first, or upgrade to schema version 99 or later",
 
 		// Agent
 		MsgAgentNotFound:       "에이전트를 찾을 수 없습니다: %s",

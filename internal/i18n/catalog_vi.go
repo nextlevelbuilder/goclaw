@@ -19,6 +19,8 @@ func init() {
 		MsgFailedToDelete:   "không thể xóa %s: %s",
 		MsgFailedToSave:     "không thể lưu %s: %s",
 		MsgInvalidUpdates:   "cập nhật không hợp lệ",
+		// TODO(i18n): translate to vi
+		MsgAgentDeleteVaultConflict: "failed to delete agent: a vault document of this agent is at a path another deleted owner already orphaned; delete or re-path this agent's vault documents first, or upgrade to schema version 99 or later",
 
 		// Agent
 		MsgAgentNotFound:                       "không tìm thấy agent: %s",
