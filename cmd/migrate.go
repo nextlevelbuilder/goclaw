@@ -106,6 +106,18 @@ func migrateUpCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			// Ensure required extensions exist before attempting migration.
+			db, err := sql.Open("pgx", dsn)
+			if err != nil {
+				return fmt.Errorf("connect for extension check: %w", err)
+			}
+			if err := upgrade.EnsureExtensions(db); err != nil {
+				db.Close()
+				return fmt.Errorf("ensure extensions: %w", err)
+			}
+			db.Close()
+
 			m, err := newMigrator(dsn)
 			if err != nil {
 				return err
