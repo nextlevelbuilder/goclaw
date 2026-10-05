@@ -98,7 +98,7 @@ export function PersonalitySection({
               onChange={(e) => onFrontmatterChange(e.target.value)}
               placeholder={t("identity.expertiseSummaryPlaceholder")}
               rows={3}
-              className="text-base resize-none md:text-sm"
+              className="max-h-64 resize-none overflow-y-auto text-base md:text-sm"
             />
             {frontmatter && (
               <p className="text-xs text-muted-foreground italic truncate">
