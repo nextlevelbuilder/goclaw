@@ -104,6 +104,9 @@ type TeamTaskEventPayload struct {
 	LocalKey         string `json:"local_key,omitempty"`
 	Timestamp        string `json:"timestamp"`
 
+	// Result summary (for team.task.completed events — the member's completion report).
+	Result string `json:"result,omitempty"`
+
 	// Comment text preview (for team.task.commented events, truncated).
 	CommentText string `json:"comment_text,omitempty"`
 
