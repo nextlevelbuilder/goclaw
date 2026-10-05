@@ -445,10 +445,10 @@ func firstExecutableFile(paths []string) (string, bool) {
 }
 
 // apkViaHelper is the legacy 2-return-value wrapper used by InstallSingleDep,
-// InstallDeps, and UninstallPackage. Delegates to apkHelperCall; callers
+// InstallDeps, and UninstallPackage. Delegates to apkHelperCallFunc; callers
 // receive (ok, errMsg) and do not need the code/data fields.
 func apkViaHelper(ctx context.Context, action, pkg string) (bool, string) {
-	ok, _, _, errMsg := apkHelperCall(ctx, action, pkg)
+	ok, _, _, errMsg := apkHelperCallFunc(ctx, action, pkg)
 	return ok, errMsg
 }
 

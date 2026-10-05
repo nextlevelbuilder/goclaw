@@ -13,7 +13,8 @@ var (
 	debPackageNameRE               = regexp.MustCompile(`^[a-z0-9][a-z0-9+.-]*$`)
 	systemLookPath                 = exec.LookPath
 	systemCommandCombinedOutput    = runSystemCommandCombinedOutput
-	aptSystemPackageAliases        = map[string]string{"pip3": "python3-pip", "github-cli": "gh", "go": "golang-go", "golang": "golang-go"}
+	aptSystemPackageAliases        = map[string]string{"pip3": "python3-pip", "github-cli": "gh", "go": "golang-go", "golang": "golang-go", "node": "nodejs"}
+	apkSystemPackageAliases        = map[string]string{"node": "nodejs"}
 	errSystemPackageMgrUnavailable = "system package manager unavailable on this runtime"
 )
 
@@ -23,7 +24,7 @@ func runSystemCommandCombinedOutput(ctx context.Context, name string, args ...st
 
 func installSystemPackage(ctx context.Context, requested string) (bool, string) {
 	if IsAlpineRuntime() {
-		return apkViaHelper(ctx, "install", requested)
+		return apkViaHelper(ctx, "install", resolveAlpinePackageName(requested))
 	}
 	pkg, err := resolveDebianPackageName(requested)
 	if err != nil {
@@ -44,7 +45,7 @@ func installSystemPackage(ctx context.Context, requested string) (bool, string) 
 
 func uninstallSystemPackage(ctx context.Context, requested string) (bool, string) {
 	if IsAlpineRuntime() {
-		return apkViaHelper(ctx, "uninstall", requested)
+		return apkViaHelper(ctx, "uninstall", resolveAlpinePackageName(requested))
 	}
 	pkg, err := resolveDebianPackageName(requested)
 	if err != nil {
@@ -72,6 +73,16 @@ func resolveDebianPackageName(requested string) (string, error) {
 		return "", fmt.Errorf("invalid Debian package name: %s", requested)
 	}
 	return pkg, nil
+}
+
+// resolveAlpinePackageName maps a dependency name to the apk package that
+// provides it, e.g. the "node" binary ships in the "nodejs" package. Names
+// without an alias pass through unchanged; pkg-helper validates them.
+func resolveAlpinePackageName(requested string) string {
+	if alias, ok := apkSystemPackageAliases[strings.ToLower(strings.TrimSpace(requested))]; ok {
+		return alias
+	}
+	return requested
 }
 
 func runAptCommand(ctx context.Context, action, pkg string) (bool, string) {

@@ -35,6 +35,7 @@ func TestResolveDebianPackageNameAliases(t *testing.T) {
 		"github-cli": "gh",
 		"go":         "golang-go",
 		"golang":     "golang-go",
+		"node":       "nodejs",
 		"ripgrep":    "ripgrep",
 		"libstdc++":  "libstdc++",
 	}
@@ -54,6 +55,62 @@ func TestResolveDebianPackageNameRejectsUnsafeNames(t *testing.T) {
 		if got, err := resolveDebianPackageName(input); err == nil {
 			t.Fatalf("resolveDebianPackageName(%q) = %q, want error", input, got)
 		}
+	}
+}
+
+func TestResolveAlpinePackageNameAliases(t *testing.T) {
+	tests := map[string]string{
+		"node":    "nodejs",
+		"nodejs":  "nodejs",
+		"npm":     "npm",
+		"ripgrep": "ripgrep",
+	}
+	for input, want := range tests {
+		if got := resolveAlpinePackageName(input); got != want {
+			t.Fatalf("resolveAlpinePackageName(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestInstallSystemPackageMapsNodeToNodejsOnAlpine(t *testing.T) {
+	withSystemPackageTestHooks(t, true, nil, func(context.Context, string, ...string) ([]byte, error) {
+		t.Fatal("apt command should not run on Alpine")
+		return nil, nil
+	})
+	var gotAction, gotPkg string
+	setApkHelperStub(t, func(_ context.Context, action, pkg string) (bool, string, string, string) {
+		gotAction, gotPkg = action, pkg
+		return true, "", "", ""
+	})
+
+	ok, msg := installSystemPackage(context.Background(), "node")
+
+	if !ok || msg != "" {
+		t.Fatalf("installSystemPackage failed: ok=%v msg=%q", ok, msg)
+	}
+	if gotAction != "install" || gotPkg != "nodejs" {
+		t.Fatalf("pkg-helper call = (%q, %q), want (\"install\", \"nodejs\")", gotAction, gotPkg)
+	}
+}
+
+func TestUninstallSystemPackageMapsNodeToNodejsOnAlpine(t *testing.T) {
+	withSystemPackageTestHooks(t, true, nil, func(context.Context, string, ...string) ([]byte, error) {
+		t.Fatal("apt command should not run on Alpine")
+		return nil, nil
+	})
+	var gotAction, gotPkg string
+	setApkHelperStub(t, func(_ context.Context, action, pkg string) (bool, string, string, string) {
+		gotAction, gotPkg = action, pkg
+		return true, "", "", ""
+	})
+
+	ok, msg := uninstallSystemPackage(context.Background(), "node")
+
+	if !ok || msg != "" {
+		t.Fatalf("uninstallSystemPackage failed: ok=%v msg=%q", ok, msg)
+	}
+	if gotAction != "uninstall" || gotPkg != "nodejs" {
+		t.Fatalf("pkg-helper call = (%q, %q), want (\"uninstall\", \"nodejs\")", gotAction, gotPkg)
 	}
 }
 
