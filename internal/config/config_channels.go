@@ -68,7 +68,22 @@ type ChannelsConfig struct {
 	Zalo              ZaloConfig               `json:"zalo"`
 	ZaloPersonal      ZaloPersonalConfig       `json:"zalo_personal"`
 	Feishu            FeishuConfig             `json:"feishu"`
+	Mattermost        MattermostConfig         `json:"mattermost"`
 	PendingCompaction *PendingCompactionConfig `json:"pending_compaction,omitempty"` // global pending message compaction settings
+}
+
+// MattermostConfig configures a Mattermost channel connection.
+type MattermostConfig struct {
+	Enabled     bool                `json:"enabled"`
+	ServerURL   string              `json:"server_url"`             // e.g. "http://localhost:8065"
+	BotToken    string              `json:"bot_token"`              // personal access token or bot token
+	BotUserID   string              `json:"bot_user_id,omitempty"`  // bot's Mattermost user ID (auto-detected if empty)
+	TeamID      string              `json:"team_id,omitempty"`      // team ID (auto-detected from team_name if empty)
+	TeamName    string              `json:"team_name,omitempty"`    // team name for channel discovery (default "goclaw-bots")
+	AllowFrom   FlexibleStringSlice `json:"allow_from"`
+	DMPolicy    string              `json:"dm_policy,omitempty"`    // "open" (default), "allowlist", "disabled"
+	GroupPolicy string              `json:"group_policy,omitempty"` // "open" (default), "allowlist", "disabled"
+	BlockReply  *bool               `json:"block_reply,omitempty"`  // override gateway block_reply (nil = inherit)
 }
 
 type TelegramConfig struct {
