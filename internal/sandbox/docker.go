@@ -3,6 +3,8 @@ package sandbox
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -472,8 +474,11 @@ func sanitizeKey(key string) string {
 		"@", "-",
 	).Replace(key)
 
+	// Keys longer than 50 chars keep a 41-char prefix plus a hash of the full key, so keys that
+	// only differ after the cut (team tasks, topics in one group) get distinct container names.
 	if len(safe) > 50 {
-		safe = safe[:50]
+		h := sha256.Sum256([]byte(key))
+		safe = safe[:41] + "-" + hex.EncodeToString(h[:4])
 	}
 	return safe
 }
