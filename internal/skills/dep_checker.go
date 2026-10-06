@@ -2,14 +2,30 @@ package skills
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
 )
 
-const depCheckTimeout = 5 * time.Second
+// defaultDepCheckTimeout bounds a single python3/node import probe. Importing
+// heavy packages (e.g. anthropic) can take several seconds on a cold start.
+const defaultDepCheckTimeout = 30 * time.Second
+
+// depCheckTimeout returns the probe timeout, overridable via
+// GOCLAW_DEP_CHECK_TIMEOUT (Go duration, e.g. "60s"). Empty, invalid or
+// non-positive values fall back to the default. Read at call time.
+func depCheckTimeout() time.Duration {
+	if v := os.Getenv("GOCLAW_DEP_CHECK_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return defaultDepCheckTimeout
+}
 
 // CheckSkillDeps verifies all dependencies in a manifest are available.
 // Returns (ok, missing) where missing lists unavailable dependencies.
@@ -64,7 +80,8 @@ func checkPythonPackages(importNames []string, scriptsDir string) []string {
 		sb.WriteString(fmt.Sprintf("try:\n import %s\nexcept ImportError:\n print(%q)\n", name, name))
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), depCheckTimeout)
+	timeout := depCheckTimeout()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "python3", "-c", sb.String())
@@ -88,6 +105,12 @@ func checkPythonPackages(importNames []string, scriptsDir string) []string {
 
 	out, err := cmd.Output()
 	if err != nil {
+		// A timeout says nothing about whether the packages are installed:
+		// report them as unknown (not missing) instead of archiving the skill.
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			slog.Warn("skills.dep_check.timeout", "runtime", "python3", "timeout", timeout, "packages", importNames)
+			return nil
+		}
 		// Python itself failed — all packages are missing
 		var missing []string
 		for _, name := range importNames {
@@ -118,7 +141,8 @@ func checkNodePackages(packages []string, scriptsDir string) []string {
 		sb.WriteString(fmt.Sprintf("try{require.resolve('%s')}catch(e){console.log(%q)}\n", pkg, pkg))
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), depCheckTimeout)
+	timeout := depCheckTimeout()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "node", "-e", sb.String())
@@ -129,6 +153,10 @@ func checkNodePackages(packages []string, scriptsDir string) []string {
 
 	out, err := cmd.Output()
 	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			slog.Warn("skills.dep_check.timeout", "runtime", "node", "timeout", timeout, "packages", packages)
+			return nil
+		}
 		var missing []string
 		for _, pkg := range packages {
 			missing = append(missing, "npm:"+pkg)
