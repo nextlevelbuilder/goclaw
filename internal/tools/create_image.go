@@ -6,12 +6,17 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/jpeg" // decoders for imageDimensions
+	_ "image/png"
 	"io"
 	"log/slog"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -46,6 +51,99 @@ var imageGenModelDefaults = map[string]string{
 	"minimax":    "image-01",
 	"dashscope":  "wan2.6-image",
 	"byteplus":   "seedream-5-0-260128",
+}
+
+// supportedImageAspectRatios: Gemini takes all natively; other providers pick their closest size (see Dimensions in the result).
+var supportedImageAspectRatios = []string{"1:1", "1:2", "2:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"}
+
+func isSupportedAspectRatio(aspectRatio string) bool {
+	return slices.Contains(supportedImageAspectRatios, aspectRatio)
+}
+
+// parseAspectRatio returns width/height for a "W:H" string.
+func parseAspectRatio(aspectRatio string) (float64, bool) {
+	w, h, ok := strings.Cut(aspectRatio, ":")
+	if !ok {
+		return 0, false
+	}
+	width, errW := strconv.ParseFloat(strings.TrimSpace(w), 64)
+	height, errH := strconv.ParseFloat(strings.TrimSpace(h), 64)
+	if errW != nil || errH != nil || width <= 0 || height <= 0 {
+		return 0, false
+	}
+	return width / height, true
+}
+
+// nearestAspectRatio compares on a log scale so portrait and landscape deviations weigh the same (4:5 → 3:4, 5:4 → 4:3).
+func nearestAspectRatio(requested string, supported []string) string {
+	if slices.Contains(supported, requested) {
+		return requested
+	}
+	want, ok := parseAspectRatio(requested)
+	if !ok {
+		return "1:1"
+	}
+	best, bestDistance := "1:1", math.Inf(1)
+	for _, candidate := range supported {
+		have, ok := parseAspectRatio(candidate)
+		if !ok {
+			continue
+		}
+		if distance := math.Abs(math.Log(have / want)); distance < bestDistance {
+			best, bestDistance = candidate, distance
+		}
+	}
+	return best
+}
+
+// gptImageSize: short edge 1024, edges multiples of 16, so the three documented sizes come out unchanged.
+func gptImageSize(aspectRatio string) string {
+	ratio, ok := parseAspectRatio(aspectRatio)
+	if !ok {
+		return "1024x1024"
+	}
+	const short, step = 1024, 16
+	long := int(math.Round(float64(short)*math.Max(ratio, 1/ratio)/step)) * step
+	if ratio >= 1 {
+		return fmt.Sprintf("%dx%d", long, short)
+	}
+	return fmt.Sprintf("%dx%d", short, long)
+}
+
+// openAIImageSize: gpt-image takes the exact ratio as a custom size, dall-e-3 the closest documented one, "" keeps the provider default.
+func openAIImageSize(model, aspectRatio string) string {
+	switch {
+	case strings.HasPrefix(model, "gpt-image"), model == "chatgpt-image-latest":
+		return gptImageSize(aspectRatio)
+	case model == "dall-e-3":
+		switch nearestAspectRatio(aspectRatio, []string{"1:1", "16:9", "9:16"}) {
+		case "16:9":
+			return "1792x1024"
+		case "9:16":
+			return "1024x1792"
+		default:
+			return "1024x1024"
+		}
+	}
+	return ""
+}
+
+// geminiImageSizes is the imageConfig.imageSize tier enum of Gemini image models.
+var geminiImageSizes = []string{"1K", "2K", "4K"}
+
+// geminiImageConfig returns nil at the defaults so older image models that reject imageConfig keep working.
+func geminiImageConfig(params map[string]any, aspectKey, sizeKey string) map[string]any {
+	imageConfig := map[string]any{}
+	if aspectRatio := GetParamString(params, "aspect_ratio", "1:1"); aspectRatio != "" && aspectRatio != "1:1" {
+		imageConfig[aspectKey] = aspectRatio
+	}
+	if imageSize := GetParamString(params, "image_size", ""); imageSize != "" {
+		imageConfig[sizeKey] = imageSize
+	}
+	if len(imageConfig) == 0 {
+		return nil
+	}
+	return imageConfig
 }
 
 // CreateImageTool generates images using an image generation API.
@@ -218,7 +316,11 @@ func (t *CreateImageTool) Parameters() map[string]any {
 			},
 			"aspect_ratio": map[string]any{
 				"type":        "string",
-				"description": "Aspect ratio: '1:1' (default), '3:4', '4:3', '9:16', '16:9'.",
+				"description": "Aspect ratio: '1:1' (default), '1:2', '2:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'. Gemini and gpt-image get the exact ratio; MiniMax and dall-e-3 use the closest one they offer. The result's Dimensions line shows what was generated.",
+			},
+			"image_size": map[string]any{
+				"type":        "string",
+				"description": "Output size tier for Gemini image models: '1K' (default), '2K', '4K'. Other providers ignore it.",
 			},
 			"filename_hint": map[string]any{
 				"type":        "string",
@@ -249,8 +351,19 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 		return ErrorResult("prompt is required")
 	}
 	aspectRatio, _ := args["aspect_ratio"].(string)
+	aspectRatio = strings.TrimSpace(aspectRatio)
 	if aspectRatio == "" {
 		aspectRatio = "1:1"
+	}
+	if !isSupportedAspectRatio(aspectRatio) {
+		return ErrorResult(fmt.Sprintf("unsupported aspect_ratio %q; supported values: %s",
+			aspectRatio, strings.Join(supportedImageAspectRatios, ", ")))
+	}
+	imageSize, _ := args["image_size"].(string)
+	imageSize = strings.ToUpper(strings.TrimSpace(imageSize))
+	if imageSize != "" && !slices.Contains(geminiImageSizes, imageSize) {
+		return ErrorResult(fmt.Sprintf("unsupported image_size %q; supported values: %s",
+			imageSize, strings.Join(geminiImageSizes, ", ")))
 	}
 	filenameHint, _ := args["filename_hint"].(string)
 
@@ -269,6 +382,9 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 		}
 		chain[i].Params["prompt"] = prompt
 		chain[i].Params["aspect_ratio"] = aspectRatio
+		if imageSize != "" {
+			chain[i].Params["image_size"] = imageSize
+		}
 		if len(refImgs) > 0 {
 			chain[i].Params["ref_images"] = refImgs
 		}
@@ -305,7 +421,11 @@ func (t *CreateImageTool) Execute(ctx context.Context, args map[string]any) *Res
 		slog.Info("create_image: file saved", "path", imagePath, "size", fi.Size(), "data_len", len(imageData))
 	}
 
-	result := &Result{ForLLM: fmt.Sprintf("MEDIA:%s\nUse the EXACT filename when referencing: %s", imagePath, filepath.Base(imagePath))}
+	forLLM := fmt.Sprintf("MEDIA:%s\nUse the EXACT filename when referencing: %s", imagePath, filepath.Base(imagePath))
+	if width, height, ok := imageDimensions(imageData); ok {
+		forLLM += fmt.Sprintf("\nDimensions: %dx%d (requested aspect_ratio %s)", width, height, aspectRatio)
+	}
+	result := &Result{ForLLM: forLLM}
 	result.Media = []bus.MediaFile{{Path: imagePath, MimeType: "image/png", Filename: filepath.Base(imagePath)}}
 	result.MediaPrompts = map[int]string{0: prompt}
 	result.Deliverable = fmt.Sprintf("[Generated image: %s]\nPrompt: %s", filepath.Base(imagePath), prompt)
@@ -333,6 +453,15 @@ func embedPromptIntoPNG(data []byte, prompt string) []byte {
 		return data
 	}
 	return out
+}
+
+// imageDimensions reads the header only; the result shows it so callers can see whether the provider honoured aspect_ratio.
+func imageDimensions(data []byte) (width, height int, ok bool) {
+	config, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return 0, 0, false
+	}
+	return config.Width, config.Height, true
 }
 
 // callProvider dispatches to the correct image generation implementation based on provider type.
@@ -405,13 +534,14 @@ func (t *CreateImageTool) callProvider(ctx context.Context, cp credentialProvide
 			model == "dall-e-2" ||
 			ptype == "openai_compat"
 		if isEditModel {
+			size := openAIImageSize(model, aspectRatio)
 			if model == "dall-e-2" {
 				if len(refImgs) > 1 {
 					slog.Warn("openai dall-e-2 only supports 1 reference image, using the first one", "count", len(refImgs))
 				}
-				return t.callOpenAIImageEditMultipart(ctx, cp.APIKey(), cp.APIBase(), model, prompt, refImgs[:1])
+				return t.callOpenAIImageEditMultipart(ctx, cp.APIKey(), cp.APIBase(), model, prompt, refImgs[:1], size)
 			}
-			return t.callOpenAIImageEditJSON(ctx, cp.APIKey(), cp.APIBase(), model, prompt, refImgs)
+			return t.callOpenAIImageEditJSON(ctx, cp.APIKey(), cp.APIBase(), model, prompt, refImgs, size)
 		}
 		slog.Warn("create_image: model does not support reference images, ignoring reference", "model", model, "provider", providerName)
 	}
@@ -485,10 +615,8 @@ func (t *CreateImageTool) callImageGenAPI(ctx context.Context, apiKey, apiBase, 
 		"messages":   messages,
 		"modalities": []string{"image", "text"},
 	}
-	if aspectRatio != "" && aspectRatio != "1:1" {
-		body["image_config"] = map[string]any{
-			"aspect_ratio": aspectRatio,
-		}
+	if imageConfig := geminiImageConfig(params, "aspect_ratio", "image_size"); imageConfig != nil {
+		body["image_config"] = imageConfig
 	}
 
 	jsonBody, err := json.Marshal(body)
@@ -529,6 +657,9 @@ func (t *CreateImageTool) callStandardImageGenAPI(ctx context.Context, apiKey, a
 		"prompt":          prompt,
 		"n":               1,
 		"response_format": "b64_json",
+	}
+	if size := openAIImageSize(model, GetParamString(params, "aspect_ratio", "1:1")); size != "" {
+		body["size"] = size
 	}
 
 	jsonBody, err := json.Marshal(body)
@@ -629,7 +760,8 @@ func (t *CreateImageTool) downloadImageBytes(ctx context.Context, rawURL string)
 }
 
 // callOpenAIImageEditMultipart calls the OpenAI /v1/images/edits API using multipart/form-data.
-func (t *CreateImageTool) callOpenAIImageEditMultipart(ctx context.Context, apiKey, apiBase, model, prompt string, refImgs []*referenceImage) ([]byte, *providers.Usage, error) {
+// size is the OpenAI "size" value from openAIImageSize; "" leaves the provider default.
+func (t *CreateImageTool) callOpenAIImageEditMultipart(ctx context.Context, apiKey, apiBase, model, prompt string, refImgs []*referenceImage, size string) ([]byte, *providers.Usage, error) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 	hasImages := false
@@ -703,6 +835,11 @@ func (t *CreateImageTool) callOpenAIImageEditMultipart(ctx context.Context, apiK
 	if err := writer.WriteField("model", model); err != nil {
 		return nil, nil, fmt.Errorf("write field model: %w", err)
 	}
+	if size != "" {
+		if err := writer.WriteField("size", size); err != nil {
+			return nil, nil, fmt.Errorf("write field size: %w", err)
+		}
+	}
 	if err := writer.WriteField("response_format", "b64_json"); err != nil {
 		return nil, nil, fmt.Errorf("write field response_format: %w", err)
 	}
@@ -755,7 +892,8 @@ func (t *CreateImageTool) callOpenAIImageEditMultipart(ctx context.Context, apiK
 }
 
 // callOpenAIImageEditJSON calls the OpenAI /v1/images/edits API using a JSON payload.
-func (t *CreateImageTool) callOpenAIImageEditJSON(ctx context.Context, apiKey, apiBase, model, prompt string, refImgs []*referenceImage) ([]byte, *providers.Usage, error) {
+// size is the OpenAI "size" value from openAIImageSize; "" leaves the provider default.
+func (t *CreateImageTool) callOpenAIImageEditJSON(ctx context.Context, apiKey, apiBase, model, prompt string, refImgs []*referenceImage, size string) ([]byte, *providers.Usage, error) {
 	type ImageRef struct {
 		ImageURL string `json:"image_url,omitempty"`
 		FileID   string `json:"file_id,omitempty"`
@@ -809,6 +947,9 @@ func (t *CreateImageTool) callOpenAIImageEditJSON(ctx context.Context, apiKey, a
 		"prompt":          finalPrompt,
 		"images":          images,
 		"response_format": "b64_json",
+	}
+	if size != "" {
+		body["size"] = size
 	}
 
 	jsonBody, err := json.Marshal(body)
@@ -903,13 +1044,18 @@ func (t *CreateImageTool) callGeminiNativeImageGen(ctx context.Context, apiKey, 
 		}
 	}
 
+	generationConfig := map[string]any{
+		"responseModalities": []string{"TEXT", "IMAGE"},
+	}
+	if imageConfig := geminiImageConfig(params, "aspectRatio", "imageSize"); imageConfig != nil {
+		generationConfig["imageConfig"] = imageConfig
+	}
+
 	body := map[string]any{
 		"contents": []map[string]any{
 			{"parts": parts},
 		},
-		"generationConfig": map[string]any{
-			"responseModalities": []string{"TEXT", "IMAGE"},
-		},
+		"generationConfig": generationConfig,
 	}
 
 	jsonBody, err := json.Marshal(body)
