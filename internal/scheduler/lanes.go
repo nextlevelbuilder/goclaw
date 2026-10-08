@@ -76,31 +76,41 @@ func (l *Lane) Submit(ctx context.Context, fn func()) error {
 	l.pending.Add(1)
 	defer l.pending.Add(-1)
 
-	// Wait for a semaphore token or cancellation
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-l.ctx.Done():
+	if l.ctx.Err() != nil {
 		return context.Canceled
-	case token, ok := <-l.sem:
-		if !ok {
-			return context.Canceled
-		}
-
-		l.active.Add(1)
-		l.wg.Add(1)
-
-		go func() {
-			defer func() {
-				l.active.Add(-1)
-				l.wg.Done()
-				l.sem <- token // return token
-			}()
-			fn()
-		}()
-
-		return nil
 	}
+
+	// Take a free slot first: select picks randomly among ready cases, so an already-expired ctx used to lose a free slot half the time.
+	var token struct{}
+	var ok bool
+	select {
+	case token, ok = <-l.sem:
+	default:
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-l.ctx.Done():
+			return context.Canceled
+		case token, ok = <-l.sem:
+		}
+	}
+	if !ok {
+		return context.Canceled
+	}
+
+	l.active.Add(1)
+	l.wg.Add(1)
+
+	go func() {
+		defer func() {
+			l.active.Add(-1)
+			l.wg.Done()
+			l.sem <- token // return token
+		}()
+		fn()
+	}()
+
+	return nil
 }
 
 // Stop drains the lane and waits for active work to complete.
