@@ -75,7 +75,7 @@ func (p *parallelSearchProvider) Search(ctx context.Context, params searchParams
 	}
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", webSearchUserAgent)
+	req.Header.Set("User-Agent", "goclaw")
 
 	resp, err := p.client.Do(req)
 	if err != nil {
