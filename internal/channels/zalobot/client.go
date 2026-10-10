@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -15,42 +16,77 @@ const (
 )
 
 type BotUser struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Username string `json:"username"`
+	ID          string `json:"id"`
+	AccountName string `json:"account_name"`
+	AccountType string `json:"account_type,omitempty"`
+	Name        string `json:"name,omitempty"`
+	DisplayName string `json:"display_name,omitempty"`
+	Username    string `json:"username,omitempty"`
+}
+
+func (u *BotUser) GetName() string {
+	if u == nil {
+		return ""
+	}
+	if u.DisplayName != "" {
+		return u.DisplayName
+	}
+	if u.AccountName != "" {
+		return u.AccountName
+	}
+	if u.Name != "" {
+		return u.Name
+	}
+	return u.Username
 }
 
 type User struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+	Name        string `json:"name,omitempty"`
+	Username    string `json:"username,omitempty"`
+	IsBot       bool   `json:"is_bot,omitempty"`
+}
+
+func (u *User) GetName() string {
+	if u.DisplayName != "" {
+		return u.DisplayName
+	}
+	if u.Name != "" {
+		return u.Name
+	}
+	return u.Username
 }
 
 type Chat struct {
 	ID       string `json:"id"`
-	ChatType string `json:"chat_type"` // "DIRECT" or "GROUP"
-}
-
-type PhotoSize struct {
-	FileID   string `json:"file_id"`
-	URL      string `json:"url"`
-	Width    int    `json:"width,omitempty"`
-	Height   int    `json:"height,omitempty"`
-	FileSize int64  `json:"file_size,omitempty"`
+	ChatType string `json:"chat_type"` // "PRIVATE" or "GROUP"
 }
 
 type Message struct {
-	MessageID string      `json:"message_id"`
-	From      User        `json:"from"`
-	Chat      Chat        `json:"chat"`
-	Date      int64       `json:"date"`
-	Text      string      `json:"text"`
-	Photo     []PhotoSize `json:"photo,omitempty"`
-	Caption   string      `json:"caption,omitempty"`
+	MessageID string `json:"message_id"`
+	From      User   `json:"from"`
+	Chat      Chat   `json:"chat"`
+	Date      int64  `json:"date"`
+	Text      string `json:"text"`
+	Photo     string `json:"photo,omitempty"`
+	PhotoURL  string `json:"photo_url,omitempty"`
+	Caption   string `json:"caption,omitempty"`
+	Sticker   string `json:"sticker,omitempty"`
+	VoiceURL  string `json:"voice_url,omitempty"`
 }
 
 type Update struct {
-	UpdateID int64    `json:"update_id"`
-	Message  *Message `json:"message,omitempty"`
+	UpdateID  int64    `json:"update_id,omitempty"`
+	EventName string   `json:"event_name,omitempty"`
+	Message   *Message `json:"message,omitempty"`
+}
+
+func (u *Update) MessageID() string {
+	if u.Message != nil {
+		return u.Message.MessageID
+	}
+	return ""
 }
 
 type APIResponse[T any] struct {
@@ -60,14 +96,19 @@ type APIResponse[T any] struct {
 	ErrorCode   int    `json:"error_code,omitempty"`
 }
 
+type rawAPIResponse struct {
+	Ok          bool            `json:"ok"`
+	Result      json.RawMessage `json:"result,omitempty"`
+	Description string          `json:"description,omitempty"`
+	ErrorCode   int             `json:"error_code,omitempty"`
+}
+
 type SentMessageResult struct {
 	MessageID string `json:"message_id"`
 }
 
 type getUpdatesRequest struct {
-	Offset  int64 `json:"offset"`
-	Limit   int   `json:"limit"`
-	Timeout int   `json:"timeout"`
+	Timeout int `json:"timeout"`
 }
 
 type sendMessageRequest struct {
@@ -119,6 +160,12 @@ func NewClient(token string, opts ...ClientOption) *Client {
 	return c
 }
 
+func (c *Client) methodURL(method string) string {
+	base := strings.TrimRight(c.baseURL, "/")
+	method = strings.TrimLeft(method, "/")
+	return fmt.Sprintf("%s/bot%s/%s", base, c.token, method)
+}
+
 func (c *Client) doRequest(ctx context.Context, method, endpoint string, body any, respOut any) error {
 	var bodyReader io.Reader
 	if body != nil {
@@ -129,12 +176,12 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body an
 		bodyReader = bytes.NewReader(data)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+endpoint, bodyReader)
+	url := c.methodURL(endpoint)
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
 
-	req.Header.Set("bot-token", c.token)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -150,6 +197,9 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body an
 		return fmt.Errorf("read response body: %w", err)
 	}
 
+	if resp.StatusCode == 408 {
+		return fmt.Errorf("api error (status 408): timeout")
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("api error (status %d): %s", resp.StatusCode, string(respBytes))
 	}
@@ -165,7 +215,7 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body an
 
 func (c *Client) GetMe(ctx context.Context) (*BotUser, error) {
 	var resp APIResponse[BotUser]
-	if err := c.doRequest(ctx, http.MethodGet, "/bot/getMe", nil, &resp); err != nil {
+	if err := c.doRequest(ctx, http.MethodPost, "getMe", nil, &resp); err != nil {
 		return nil, err
 	}
 	if !resp.Ok {
@@ -174,20 +224,42 @@ func (c *Client) GetMe(ctx context.Context) (*BotUser, error) {
 	return &resp.Result, nil
 }
 
-func (c *Client) GetUpdates(ctx context.Context, offset int64, limit int, timeoutSec int) ([]Update, error) {
+func (c *Client) GetUpdates(ctx context.Context, timeoutSec int) ([]Update, error) {
 	req := getUpdatesRequest{
-		Offset:  offset,
-		Limit:   limit,
 		Timeout: timeoutSec,
 	}
-	var resp APIResponse[[]Update]
-	if err := c.doRequest(ctx, http.MethodPost, "/bot/getUpdates", req, &resp); err != nil {
+	var raw rawAPIResponse
+	if err := c.doRequest(ctx, http.MethodPost, "getUpdates", req, &raw); err != nil {
+		if strings.Contains(err.Error(), "408") {
+			return nil, nil
+		}
 		return nil, err
 	}
-	if !resp.Ok {
-		return nil, fmt.Errorf("getUpdates returned ok=false: %s", resp.Description)
+	if !raw.Ok {
+		return nil, fmt.Errorf("getUpdates returned ok=false: %s", raw.Description)
 	}
-	return resp.Result, nil
+
+	trimmed := bytes.TrimSpace(raw.Result)
+	if len(trimmed) == 0 || string(trimmed) == "null" || string(trimmed) == "{}" || string(trimmed) == "[]" {
+		return nil, nil
+	}
+
+	if trimmed[0] == '[' {
+		var updates []Update
+		if err := json.Unmarshal(raw.Result, &updates); err != nil {
+			return nil, fmt.Errorf("unmarshal updates: %w", err)
+		}
+		return updates, nil
+	}
+
+	var single Update
+	if err := json.Unmarshal(raw.Result, &single); err != nil {
+		return nil, fmt.Errorf("unmarshal single update: %w", err)
+	}
+	if single.Message == nil && single.EventName == "" {
+		return nil, nil
+	}
+	return []Update{single}, nil
 }
 
 func (c *Client) SendMessage(ctx context.Context, chatID, text string) error {
@@ -196,7 +268,7 @@ func (c *Client) SendMessage(ctx context.Context, chatID, text string) error {
 		Text:   text,
 	}
 	var resp APIResponse[SentMessageResult]
-	if err := c.doRequest(ctx, http.MethodPost, "/bot/sendMessage", req, &resp); err != nil {
+	if err := c.doRequest(ctx, http.MethodPost, "sendMessage", req, &resp); err != nil {
 		return err
 	}
 	if !resp.Ok {
@@ -212,7 +284,7 @@ func (c *Client) SendPhoto(ctx context.Context, chatID, photoURL, caption string
 		Caption: caption,
 	}
 	var resp APIResponse[SentMessageResult]
-	if err := c.doRequest(ctx, http.MethodPost, "/bot/sendPhoto", req, &resp); err != nil {
+	if err := c.doRequest(ctx, http.MethodPost, "sendPhoto", req, &resp); err != nil {
 		return err
 	}
 	if !resp.Ok {

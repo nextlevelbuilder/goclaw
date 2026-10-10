@@ -64,7 +64,7 @@ func (c *Channel) Start(ctx context.Context) error {
 	})
 	c.mu.Unlock()
 
-	slog.Info("zalo_bot channel authorized", "bot_id", botUser.ID, "bot_name", botUser.Name, "username", botUser.Username)
+	slog.Info("zalo_bot channel authorized", "bot_id", botUser.ID, "bot_name", botUser.GetName(), "username", botUser.Username)
 
 	pollCtx, cancel := context.WithCancel(context.Background())
 	c.cancel = cancel
@@ -98,7 +98,7 @@ func (c *Channel) pollLoop(ctx context.Context) {
 		default:
 		}
 
-		updates, err := c.client.GetUpdates(ctx, c.lastOff, 50, timeoutSec)
+		updates, err := c.client.GetUpdates(ctx, timeoutSec)
 		if err != nil {
 			if ctx.Err() != nil {
 				return
@@ -123,7 +123,7 @@ func (c *Channel) pollLoop(ctx context.Context) {
 
 			if handler != nil {
 				if err := handler.ProcessUpdate(ctx, u); err != nil {
-					slog.Warn("failed to process zalobot update", "update_id", u.UpdateID, "error", err)
+					slog.Warn("failed to process zalobot update", "message_id", u.MessageID(), "error", err)
 				}
 			}
 		}

@@ -19,7 +19,7 @@ func TestChannel_Send_TextChunking(t *testing.T) {
 
 	var sentMessages int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/bot/sendMessage" {
+		if r.URL.Path == "/bottest-token/sendMessage" {
 			atomic.AddInt32(&sentMessages, 1)
 			var req sendMessageRequest
 			_ = json.NewDecoder(r.Body).Decode(&req)
@@ -71,7 +71,7 @@ func TestChannel_Send_MediaPhoto(t *testing.T) {
 
 	var photoSent bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/bot/sendPhoto" {
+		if r.URL.Path == "/bottest-token/sendPhoto" {
 			photoSent = true
 			var req sendPhotoRequest
 			_ = json.NewDecoder(r.Body).Decode(&req)
@@ -128,7 +128,7 @@ func TestChannel_StartStopLifecycle(t *testing.T) {
 
 	var pollCount int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/bot/getMe" {
+		if r.URL.Path == "/bottest-token/getMe" {
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(APIResponse[BotUser]{
 				Ok: true,
@@ -140,7 +140,7 @@ func TestChannel_StartStopLifecycle(t *testing.T) {
 			})
 			return
 		}
-		if r.URL.Path == "/bot/getUpdates" {
+		if r.URL.Path == "/bottest-token/getUpdates" {
 			atomic.AddInt32(&pollCount, 1)
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(APIResponse[[]Update]{

@@ -107,7 +107,7 @@ func (h *InboundHandler) ProcessUpdate(ctx context.Context, u Update) error {
 
 	senderID := msg.From.ID
 	chatID := msg.Chat.ID
-	senderName := msg.From.Name
+	senderName := msg.From.GetName()
 	if senderName == "" {
 		senderName = senderID
 	}
@@ -120,11 +120,12 @@ func (h *InboundHandler) ProcessUpdate(ctx context.Context, u Update) error {
 	}
 
 	var media []string
-	if len(msg.Photo) > 0 {
-		bestPhoto := msg.Photo[len(msg.Photo)-1]
-		if bestPhoto.URL != "" {
-			media = append(media, bestPhoto.URL)
-		}
+	photoURL := msg.PhotoURL
+	if photoURL == "" {
+		photoURL = msg.Photo
+	}
+	if photoURL != "" {
+		media = append(media, photoURL)
 	}
 
 	if isGroup {
@@ -148,7 +149,7 @@ func (h *InboundHandler) ProcessUpdate(ctx context.Context, u Update) error {
 		botName := ""
 		botUsername := ""
 		if h.bot != nil {
-			botName = h.bot.Name
+			botName = h.bot.GetName()
 			botUsername = h.bot.Username
 		}
 
