@@ -37,6 +37,7 @@ func New(cfg config.ZaloBotConfig, msgBus *bus.MessageBus, pairingSvc store.Pair
 
 	base := channels.NewBaseChannel(channels.TypeZaloBot, msgBus, cfg.AllowFrom)
 	base.SetName("zalo_bot")
+	base.SetType(channels.TypeZaloBot)
 	base.SetPairingService(pairingSvc)
 
 	client := NewClient(cfg.Token)
