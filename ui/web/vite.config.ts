@@ -5,7 +5,7 @@ import path from "path";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const backendPort = env.VITE_BACKEND_PORT || "9600";
+  const backendPort = env.VITE_BACKEND_PORT || "18790";
   const backendHost = env.VITE_BACKEND_HOST || "localhost";
 
   return {
