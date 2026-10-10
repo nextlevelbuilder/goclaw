@@ -52,7 +52,7 @@ describe("zalo_bot status utils mapping", () => {
 
     expect(fallback).not.toBeNull();
     expect(fallback?.failure_kind).toBe("config");
-    expect(fallback?.remediation.code).toBe("open_credentials");
-    expect(fallback?.remediation.target).toBe("credentials");
+    expect(fallback?.remediation?.code).toBe("open_credentials");
+    expect(fallback?.remediation?.target).toBe("credentials");
   });
 });

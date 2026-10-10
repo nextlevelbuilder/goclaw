@@ -188,7 +188,7 @@ describe("pancake configSchema", () => {
 
 describe("zalo_bot channel schema", () => {
   it("defines credentialsSchema for zalo_bot with required token", () => {
-    const creds = credentialsSchema["zalo_bot"];
+    const creds = credentialsSchema["zalo_bot"]!;
     expect(creds).toBeDefined();
     expect(creds).toHaveLength(1);
 
@@ -200,7 +200,7 @@ describe("zalo_bot channel schema", () => {
   });
 
   it("defines configSchema for zalo_bot with policies, require_mention, poll_timeout_sec, and media_max_mb", () => {
-    const config = configSchema["zalo_bot"];
+    const config = configSchema["zalo_bot"]!;
     expect(config).toBeDefined();
 
     const dmPolicy = config.find((f) => f.key === "dm_policy");
