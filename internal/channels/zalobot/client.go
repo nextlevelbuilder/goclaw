@@ -230,12 +230,15 @@ func (c *Client) GetUpdates(ctx context.Context, timeoutSec int) ([]Update, erro
 	}
 	var raw rawAPIResponse
 	if err := c.doRequest(ctx, http.MethodPost, "getUpdates", req, &raw); err != nil {
-		if strings.Contains(err.Error(), "408") {
+		if strings.Contains(err.Error(), "408") || strings.Contains(strings.ToLower(err.Error()), "timeout") {
 			return nil, nil
 		}
 		return nil, err
 	}
 	if !raw.Ok {
+		if raw.ErrorCode == 408 || strings.Contains(strings.ToLower(raw.Description), "timeout") {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("getUpdates returned ok=false: %s", raw.Description)
 	}
 

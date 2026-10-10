@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -102,6 +103,9 @@ func (c *Channel) pollLoop(ctx context.Context) {
 		if err != nil {
 			if ctx.Err() != nil {
 				return
+			}
+			if strings.Contains(err.Error(), "408") || strings.Contains(strings.ToLower(err.Error()), "timeout") {
+				continue
 			}
 			slog.Warn("zalobot getUpdates error, backing off", "error", err)
 			select {

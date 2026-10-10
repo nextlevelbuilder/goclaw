@@ -95,6 +95,32 @@ func TestClient_GetUpdates(t *testing.T) {
 		t.Errorf("unexpected updates: %+v", updates)
 	}
 }
+func TestClient_GetUpdates_Timeout(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/bottest-token/getUpdates" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":          false,
+			"description": "Request timeout",
+		})
+	}))
+	defer server.Close()
+
+	client := NewClient("test-token", WithBaseURL(server.URL))
+	updates, err := client.GetUpdates(context.Background(), 30)
+	if err != nil {
+		t.Fatalf("expected nil error on timeout, got: %v", err)
+	}
+	if len(updates) != 0 {
+		t.Errorf("expected 0 updates on timeout, got %d", len(updates))
+	}
+}
+
 
 func TestClient_SendMessage(t *testing.T) {
 	t.Parallel()
