@@ -398,6 +398,16 @@
       "label": "活动指示器",
       "help": "在智能体处理时显示原生的“智能体工作中”指示器（思考/搜索/生成…）。临时显示，不是聊天消息。"
     },
+    "poll_timeout_sec": {
+      "label": "轮询超时 (秒)",
+      "help": "长轮询超时时间 (秒)"
+    },
+    "zalo_bot": {
+      "token": {
+        "label": "Bot Token",
+        "help": "来自 Zalo Bot Creator / OA Zalo Bot Manager 的 Bot Token"
+      }
+    },
     "media_max_mb": {
       "label": "最大媒体大小 (MB)"
     },

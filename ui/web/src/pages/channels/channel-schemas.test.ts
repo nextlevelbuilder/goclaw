@@ -2,6 +2,16 @@ import { describe, it, expect } from "vitest";
 import { configSchema, credentialsSchema } from "./channel-schemas";
 import { deliveryModelKey, isDeliveryModelKey, isDeliveryProviderKey } from "./channel-delivery-provider-fields";
 import { normalizeReasoningDeliveryConfig, resolveReasoningDeliveryValue } from "./reasoning-delivery-config";
+import enChannels from "@/i18n/locales/en/channels.json";
+import viChannels from "@/i18n/locales/vi/channels.json";
+import zhChannels from "@/i18n/locales/zh/channels.json";
+
+interface ChannelLocaleStructure {
+  fieldConfig?: {
+    poll_timeout_sec?: { label?: string; help?: string };
+    zalo_bot?: { token?: { label?: string; help?: string } };
+  };
+}
 
 describe("telegram configSchema", () => {
   const telegramConfig = configSchema["telegram"]!;
@@ -240,5 +250,29 @@ describe("zalo_bot channel schema", () => {
 
     const behaviorFields = config.filter((f) => f.key.startsWith("chat_behavior."));
     expect(behaviorFields.length).toBeGreaterThan(0);
+  });
+});
+
+describe("zalo_bot i18n translations parity", () => {
+  const en = enChannels as ChannelLocaleStructure;
+  const vi = viChannels as ChannelLocaleStructure;
+  const zh = zhChannels as ChannelLocaleStructure;
+
+  it("provides poll_timeout_sec and zalo_bot token translations in en", () => {
+    expect(en.fieldConfig?.poll_timeout_sec?.label).toBe("Poll Timeout (s)");
+    expect(en.fieldConfig?.poll_timeout_sec?.help).toBe("Long polling timeout in seconds");
+    expect(en.fieldConfig?.zalo_bot?.token?.help).toContain("Zalo Bot Creator");
+  });
+
+  it("provides poll_timeout_sec and zalo_bot token translations in vi", () => {
+    expect(vi.fieldConfig?.poll_timeout_sec?.label).toBe("Thời gian chờ Polling (giây)");
+    expect(vi.fieldConfig?.poll_timeout_sec?.help).toContain("long polling");
+    expect(vi.fieldConfig?.zalo_bot?.token?.help).toContain("Zalo Bot Creator");
+  });
+
+  it("provides poll_timeout_sec and zalo_bot token translations in zh", () => {
+    expect(zh.fieldConfig?.poll_timeout_sec?.label).toBe("轮询超时 (秒)");
+    expect(zh.fieldConfig?.poll_timeout_sec?.help).toContain("长轮询");
+    expect(zh.fieldConfig?.zalo_bot?.token?.help).toContain("Zalo Bot Creator");
   });
 });
