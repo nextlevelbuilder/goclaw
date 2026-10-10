@@ -19,7 +19,7 @@ const (
 )
 
 type Channel struct {
-	channels.BaseChannel
+	*channels.BaseChannel
 	cfg     config.ZaloBotConfig
 	client  *Client
 	botUser *BotUser
@@ -43,7 +43,7 @@ func New(cfg config.ZaloBotConfig, msgBus *bus.MessageBus, pairingSvc store.Pair
 	client := NewClient(cfg.Token)
 
 	ch := &Channel{
-		BaseChannel: *base,
+		BaseChannel: base,
 		cfg:         cfg,
 		client:      client,
 	}
@@ -59,7 +59,7 @@ func (c *Channel) Start(ctx context.Context) error {
 
 	c.mu.Lock()
 	c.botUser = botUser
-	c.handler = NewInboundHandler(&c.BaseChannel, botUser, c.cfg, func(ctx context.Context, chatID, text string) error {
+	c.handler = NewInboundHandler(c.BaseChannel, botUser, c.cfg, func(ctx context.Context, chatID, text string) error {
 		return c.client.SendMessage(ctx, chatID, text)
 	})
 	c.mu.Unlock()
