@@ -67,6 +67,7 @@ type ChannelsConfig struct {
 	WhatsApp          WhatsAppConfig           `json:"whatsapp"`
 	Zalo              ZaloConfig               `json:"zalo"`
 	ZaloPersonal      ZaloPersonalConfig       `json:"zalo_personal"`
+	ZaloBot           ZaloBotConfig            `json:"zalo_bot"`
 	Feishu            FeishuConfig             `json:"feishu"`
 	PendingCompaction *PendingCompactionConfig `json:"pending_compaction,omitempty"` // global pending message compaction settings
 }
@@ -218,6 +219,19 @@ type ZaloPersonalConfig struct {
 	CredentialsPath string              `json:"credentials_path,omitempty"` // path to saved cookies JSON
 	BlockReply      *bool               `json:"block_reply,omitempty"`      // override gateway block_reply (nil = inherit)
 	ChatBehavior    *ChatBehaviorConfig `json:"chat_behavior,omitempty"`    // override gateway chat behavior (nil = inherit)
+}
+
+type ZaloBotConfig struct {
+	Enabled        bool                `json:"enabled"`
+	Token          string              `json:"token"`
+	AllowFrom      FlexibleStringSlice `json:"allow_from"`
+	DMPolicy       string              `json:"dm_policy,omitempty"`        // "pairing" (default), "allowlist", "open", "disabled"
+	GroupPolicy    string              `json:"group_policy,omitempty"`     // "open" (default), "allowlist", "disabled"
+	GroupAllowFrom FlexibleStringSlice `json:"group_allow_from,omitempty"`
+	RequireMention *bool               `json:"require_mention,omitempty"`  // require @bot mention in groups (default true)
+	PollTimeoutSec int                 `json:"poll_timeout_sec,omitempty"` // long polling timeout seconds (default 30)
+	BlockReply     *bool               `json:"block_reply,omitempty"`      // override gateway block_reply (nil = inherit)
+	ChatBehavior   *ChatBehaviorConfig `json:"chat_behavior,omitempty"`    // override gateway chat behavior (nil = inherit)
 }
 
 type FeishuConfig struct {
