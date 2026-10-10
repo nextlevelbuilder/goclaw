@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 )
 
@@ -200,7 +201,13 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 	// guaranteed to emit contiguous zero-based tc.Index values in delta.ToolCalls,
 	// so indexing by position can miss populated slots and hit a nil accumulator,
 	// causing a nil-pointer panic (observed with the point-p1/9router provider).
-	for _, acc := range accumulators {
+	indices := make([]int, 0, len(accumulators))
+	for idx := range accumulators {
+		indices = append(indices, idx)
+	}
+	slices.Sort(indices)
+	for _, idx := range indices {
+		acc := accumulators[idx]
 		if acc == nil {
 			continue
 		}
