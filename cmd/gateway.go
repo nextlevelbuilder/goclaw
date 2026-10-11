@@ -31,6 +31,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo"
 	zalopersonal "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/zalobot"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/consolidation"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
@@ -908,6 +909,7 @@ func runGateway() {
 		instanceLoader.RegisterFactory(channels.TypeFeishu, feishu.FactoryWithStoresAndAudio(pgStores.Agents, pgStores.ConfigPermissions, pgStores.PendingMessages, audioMgr))
 		instanceLoader.RegisterFactory(channels.TypeZaloOA, zalo.Factory)
 		instanceLoader.RegisterFactory(channels.TypeZaloPersonal, zalopersonal.FactoryWithPendingStore(pgStores.PendingMessages))
+		instanceLoader.RegisterFactory(channels.TypeZaloBot, zalobot.Factory)
 		instanceLoader.RegisterFactory(channels.TypeWhatsApp, whatsapp.FactoryWithDBAudio(pgStores.DB, pgStores.PendingMessages, "pgx", audioMgr, pgStores.BuiltinTools))
 		instanceLoader.RegisterFactory(channels.TypeSlack, slackchannel.FactoryWithPendingStore(pgStores.PendingMessages))
 		instanceLoader.RegisterFactory(channels.TypeFacebook, facebook.Factory)

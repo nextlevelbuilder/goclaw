@@ -19,6 +19,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo"
 	zalopersonal "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/zalobot"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal/zalomethods"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
@@ -105,6 +106,18 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 		} else {
 			channelMgr.RegisterChannel(channels.TypeZaloPersonal, zp)
 			slog.Info("zca (zalo personal) channel enabled (config)")
+		}
+	}
+
+	if cfg.Channels.ZaloBot.Enabled {
+		if cfg.Channels.ZaloBot.Token == "" {
+			recordMissingConfig(channels.TypeZaloBot, "Set channels.zalo_bot.token in config.")
+		} else if zb, err := zalobot.New(cfg.Channels.ZaloBot, msgBus, pgStores.Pairing); err != nil {
+			channelMgr.RecordFailure(channels.TypeZaloBot, "", err)
+			slog.Error("failed to initialize zalo_bot channel", "error", err)
+		} else {
+			channelMgr.RegisterChannel(channels.TypeZaloBot, zb)
+			slog.Info("zalo_bot channel enabled (config)")
 		}
 	}
 
