@@ -1,5 +1,53 @@
 package config
 
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
+
+func unmarshalFlexibleBool(data []byte) (*bool, error) {
+	if len(data) == 0 || string(data) == "null" {
+		return nil, nil
+	}
+	var b bool
+	if err := json.Unmarshal(data, &b); err == nil {
+		return &b, nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		s = strings.TrimSpace(strings.ToLower(s))
+		switch s {
+		case "true", "1", "on", "yes", "enabled":
+			val := true
+			return &val, nil
+		case "false", "0", "off", "no", "disabled":
+			val := false
+			return &val, nil
+		case "inherit", "default", "":
+			return nil, nil
+		default:
+			return nil, fmt.Errorf("invalid boolean value %q", s)
+		}
+	}
+	return nil, fmt.Errorf("invalid boolean type %s", string(data))
+}
+
+func unmarshalFlexibleMode(data []byte) (*string, error) {
+	if len(data) == 0 || string(data) == "null" {
+		return nil, nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return nil, err
+	}
+	s = strings.TrimSpace(s)
+	if s == "" || strings.EqualFold(s, "inherit") {
+		return nil, nil
+	}
+	return &s, nil
+}
+
 // ChatBehaviorConfig controls optional human-like channel delivery behavior.
 // Pointer fields allow per-channel overrides to inherit gateway defaults.
 type ChatBehaviorConfig struct {
@@ -7,6 +55,27 @@ type ChatBehaviorConfig struct {
 	IntermediateReplies *IntermediateRepliesConfig `json:"intermediate_replies,omitempty"`
 	QuickAck            *QuickAckConfig            `json:"quick_ack,omitempty"`
 	FinalSplit          *FinalSplitConfig          `json:"final_split,omitempty"`
+}
+
+func (c *ChatBehaviorConfig) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Enabled             json.RawMessage            `json:"enabled,omitempty"`
+		IntermediateReplies *IntermediateRepliesConfig `json:"intermediate_replies,omitempty"`
+		QuickAck            *QuickAckConfig            `json:"quick_ack,omitempty"`
+		FinalSplit          *FinalSplitConfig          `json:"final_split,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	b, err := unmarshalFlexibleBool(raw.Enabled)
+	if err != nil {
+		return err
+	}
+	c.Enabled = b
+	c.IntermediateReplies = raw.IntermediateReplies
+	c.QuickAck = raw.QuickAck
+	c.FinalSplit = raw.FinalSplit
+	return nil
 }
 
 // QuickAckConfig controls one short acknowledgement before longer non-streaming runs.
@@ -21,6 +90,40 @@ type QuickAckConfig struct {
 	MaxChars   *int     `json:"max_chars,omitempty"`
 	Templates  []string `json:"templates,omitempty"`
 }
+func (c *QuickAckConfig) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Enabled    json.RawMessage `json:"enabled,omitempty"`
+		Mode       json.RawMessage `json:"mode,omitempty"`
+		MinDelayMs *int            `json:"min_delay_ms,omitempty"`
+		Provider   string          `json:"provider,omitempty"`
+		Model      string          `json:"model,omitempty"`
+		TimeoutMs  *int            `json:"timeout_ms,omitempty"`
+		MaxTokens  *int            `json:"max_tokens,omitempty"`
+		MaxChars   *int            `json:"max_chars,omitempty"`
+		Templates  []string        `json:"templates,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	b, err := unmarshalFlexibleBool(raw.Enabled)
+	if err != nil {
+		return err
+	}
+	mode, err := unmarshalFlexibleMode(raw.Mode)
+	if err != nil {
+		return err
+	}
+	c.Enabled = b
+	c.Mode = mode
+	c.MinDelayMs = raw.MinDelayMs
+	c.Provider = raw.Provider
+	c.Model = raw.Model
+	c.TimeoutMs = raw.TimeoutMs
+	c.MaxTokens = raw.MaxTokens
+	c.MaxChars = raw.MaxChars
+	c.Templates = raw.Templates
+	return nil
+}
 
 // IntermediateRepliesConfig controls delivery-only progress messages during tool phases.
 type IntermediateRepliesConfig struct {
@@ -32,6 +135,36 @@ type IntermediateRepliesConfig struct {
 	MaxTokens *int    `json:"max_tokens,omitempty"`
 	MaxChars  *int    `json:"max_chars,omitempty"`
 }
+func (c *IntermediateRepliesConfig) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Enabled   json.RawMessage `json:"enabled,omitempty"`
+		Mode      json.RawMessage `json:"mode,omitempty"`
+		Provider  string          `json:"provider,omitempty"`
+		Model     string          `json:"model,omitempty"`
+		TimeoutMs *int            `json:"timeout_ms,omitempty"`
+		MaxTokens *int            `json:"max_tokens,omitempty"`
+		MaxChars  *int            `json:"max_chars,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	b, err := unmarshalFlexibleBool(raw.Enabled)
+	if err != nil {
+		return err
+	}
+	mode, err := unmarshalFlexibleMode(raw.Mode)
+	if err != nil {
+		return err
+	}
+	c.Enabled = b
+	c.Mode = mode
+	c.Provider = raw.Provider
+	c.Model = raw.Model
+	c.TimeoutMs = raw.TimeoutMs
+	c.MaxTokens = raw.MaxTokens
+	c.MaxChars = raw.MaxChars
+	return nil
+}
 
 // FinalSplitConfig controls semantic splitting of final channel replies.
 type FinalSplitConfig struct {
@@ -39,6 +172,26 @@ type FinalSplitConfig struct {
 	MinChars    *int  `json:"min_chars,omitempty"`
 	MaxMessages *int  `json:"max_messages,omitempty"`
 	DelayMs     *int  `json:"delay_ms,omitempty"`
+}
+func (c *FinalSplitConfig) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Enabled     json.RawMessage `json:"enabled,omitempty"`
+		MinChars    *int            `json:"min_chars,omitempty"`
+		MaxMessages *int            `json:"max_messages,omitempty"`
+		DelayMs     *int            `json:"delay_ms,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	b, err := unmarshalFlexibleBool(raw.Enabled)
+	if err != nil {
+		return err
+	}
+	c.Enabled = b
+	c.MinChars = raw.MinChars
+	c.MaxMessages = raw.MaxMessages
+	c.DelayMs = raw.DelayMs
+	return nil
 }
 
 // PendingCompactionConfig configures LLM-based compaction of pending group messages.

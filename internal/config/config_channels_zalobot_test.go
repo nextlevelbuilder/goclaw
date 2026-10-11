@@ -74,3 +74,85 @@ func TestChannelsConfig_ZaloBotField(t *testing.T) {
 		t.Errorf("expected ZaloBot.Token=bot-token-xyz, got %q", channelsCfg.ZaloBot.Token)
 	}
 }
+func TestZaloBotConfig_ChatBehavior_StringBooleans(t *testing.T) {
+	t.Parallel()
+
+	// Test string booleans and "inherit" which Web UI can send
+	raw := `{
+		"enabled": true,
+		"token": "test-bot-token-123",
+		"chat_behavior": {
+			"enabled": "true",
+			"intermediate_replies": {
+				"enabled": "false",
+				"mode": "inherit"
+			},
+			"quick_ack": {
+				"enabled": "true",
+				"mode": "sidecar_generated"
+			},
+			"final_split": {
+				"enabled": "off"
+			}
+		}
+	}`
+
+	var cfg config.ZaloBotConfig
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		t.Fatalf("failed to unmarshal ZaloBotConfig with string booleans: %v", err)
+	}
+
+	if cfg.ChatBehavior == nil {
+		t.Fatal("expected ChatBehavior to be non-nil")
+	}
+	if cfg.ChatBehavior.Enabled == nil || !*cfg.ChatBehavior.Enabled {
+		t.Errorf("expected ChatBehavior.Enabled=true, got %v", cfg.ChatBehavior.Enabled)
+	}
+	if cfg.ChatBehavior.IntermediateReplies == nil {
+		t.Fatal("expected IntermediateReplies to be non-nil")
+	}
+	if cfg.ChatBehavior.IntermediateReplies.Enabled == nil || *cfg.ChatBehavior.IntermediateReplies.Enabled {
+		t.Errorf("expected IntermediateReplies.Enabled=false, got %v", cfg.ChatBehavior.IntermediateReplies.Enabled)
+	}
+	if cfg.ChatBehavior.IntermediateReplies.Mode != nil {
+		t.Errorf("expected IntermediateReplies.Mode=nil for 'inherit', got %v", *cfg.ChatBehavior.IntermediateReplies.Mode)
+	}
+	if cfg.ChatBehavior.QuickAck == nil {
+		t.Fatal("expected QuickAck to be non-nil")
+	}
+	if cfg.ChatBehavior.QuickAck.Enabled == nil || !*cfg.ChatBehavior.QuickAck.Enabled {
+		t.Errorf("expected QuickAck.Enabled=true, got %v", cfg.ChatBehavior.QuickAck.Enabled)
+	}
+	if cfg.ChatBehavior.QuickAck.Mode == nil || *cfg.ChatBehavior.QuickAck.Mode != "sidecar_generated" {
+		t.Errorf("expected QuickAck.Mode='sidecar_generated', got %v", cfg.ChatBehavior.QuickAck.Mode)
+	}
+	if cfg.ChatBehavior.FinalSplit == nil {
+		t.Fatal("expected FinalSplit to be non-nil")
+	}
+	if cfg.ChatBehavior.FinalSplit.Enabled == nil || *cfg.ChatBehavior.FinalSplit.Enabled {
+		t.Errorf("expected FinalSplit.Enabled=false for 'off', got %v", cfg.ChatBehavior.FinalSplit.Enabled)
+	}
+}
+
+func TestZaloBotConfig_ChatBehavior_Inherit(t *testing.T) {
+	t.Parallel()
+
+	raw := `{
+		"enabled": true,
+		"token": "test-bot-token-123",
+		"chat_behavior": {
+			"enabled": "inherit"
+		}
+	}`
+
+	var cfg config.ZaloBotConfig
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if cfg.ChatBehavior == nil {
+		t.Fatal("expected ChatBehavior non-nil")
+	}
+	if cfg.ChatBehavior.Enabled != nil {
+		t.Errorf("expected Enabled=nil for 'inherit', got %v", *cfg.ChatBehavior.Enabled)
+	}
+}
