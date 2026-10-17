@@ -90,6 +90,19 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Fixed
 
+- **Channel reload no longer hangs after a failed channel start (#1627)** —
+  `PendingHistory.StopFlusher` waited on the flush goroutine's `stopped`
+  channel even when `StartFlusher` had never run. Telegram starts its flusher
+  only after `getMe` and long polling succeed, so a Telegram instance whose
+  `Start()` failed (network down at boot) blocked `InstanceLoader.Reload`
+  forever inside `Stop()` with the loader mutex held — every later channel
+  save from the dashboard queued silently behind it and only a process
+  restart recovered. The same wait sat in `LoadInstanceByID`, loader `Stop`
+  and the timed-out-start cleanup path. `StopFlusher` now returns immediately
+  when the flusher was never started and is idempotent (`sync.Once` around
+  `close(stopCh)`, so a second `Stop()` no longer panics with
+  `close of closed channel`); `StartFlusher` spawns at most one loop.
+
 - **Quick Acknowledgement generated mode** — Generated acknowledgements now use
   the sidecar delivery generator instead of always falling back to fixed
   templates. Sidecar failures stay non-blocking and fall back to templates.
