@@ -401,13 +401,26 @@ func resolvePathWithAllowed(path, workspace string, restrict bool, allowedPrefix
 	// If restricted and denied, check if path falls under an allowed prefix.
 	// Resolve symlinks in the candidate path for safe comparison.
 	cleaned := filepath.Clean(path)
+	if !filepath.IsAbs(cleaned) {
+		// Anchor relative paths at the workspace, same as resolvePath.
+		cleaned = filepath.Clean(filepath.Join(workspace, cleaned))
+	}
 	absPath, _ := filepath.Abs(cleaned)
+	// A target that does not exist at all (not even a dangling symlink) is
+	// reported as missing rather than as a boundary violation; existing paths
+	// keep the access-denied classification.
+	denied := err
+	if err.Error() == "access denied: path outside workspace" {
+		if _, lerr := os.Lstat(absPath); os.IsNotExist(lerr) {
+			denied = fmt.Errorf("file not found: %s", path)
+		}
+	}
 	real, evalErr := filepath.EvalSymlinks(absPath)
 	if evalErr != nil {
 		// Try resolving parent for non-existent files
 		parentReal, parentErr := filepath.EvalSymlinks(filepath.Dir(absPath))
 		if parentErr != nil {
-			return "", err
+			return "", denied
 		}
 		real = filepath.Join(parentReal, filepath.Base(absPath))
 	}
@@ -433,7 +446,7 @@ func resolvePathWithAllowed(path, workspace string, restrict bool, allowedPrefix
 		}
 	}
 	slog.Warn("read_file: access denied", "path", cleaned, "workspace", workspace, "allowedPrefixes", allowedPrefixes)
-	return "", err
+	return "", denied
 }
 
 // ValidateRegularFileForRead enforces the final leaf-file boundary used by
