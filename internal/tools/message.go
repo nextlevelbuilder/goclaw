@@ -17,9 +17,96 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// embeddedMediaPattern matches "MEDIA:" followed by a non-whitespace path.
+// embeddedMediaPattern matches "MEDIA:" followed by either a double-quoted path
+// (spaces allowed) or a non-whitespace path. Unquoted paths containing spaces
+// are recovered by scanMediaRefs.
 // Duplicated from agent.mediaPathPattern to avoid tools→agent import cycle.
-var embeddedMediaPattern = regexp.MustCompile(`MEDIA:\S+`)
+var embeddedMediaPattern = regexp.MustCompile(`MEDIA:(?:"[^"\r\n]+"|\S+)`)
+
+// mediaLookAheadTokens caps how many following tokens an unquoted MEDIA: path
+// may absorb when recovering a path that contains spaces.
+const mediaLookAheadTokens = 6
+
+// mediaRef is one MEDIA: reference located in a text by scanMediaRefs.
+type mediaRef struct {
+	start, end int    // byte span of the whole reference in the scanned text
+	path       string // resolved path, valid when ok
+	ok         bool   // reference resolved through resolveMediaPath
+	unresolved bool   // reference named a file that could not be resolved to an existing file
+}
+
+// scanMediaRefs is the single parser for MEDIA: references, shared by the
+// self-send guard and extractEmbeddedMedia.
+//   - MEDIA:"quoted path" takes the text inside the quotes verbatim.
+//   - MEDIA:unquoted uses the first token if it names an existing file;
+//     otherwise it joins up to mediaLookAheadTokens following tokens on the
+//     same line until the joined path resolves to an existing file.
+//
+// A reference that resolves under neither form is flagged unresolved when it
+// was quoted or when trailing tokens suggested a path with spaces; a lone
+// unquoted token keeps the legacy behaviour of resolving without an
+// existence check.
+func (t *MessageTool) scanMediaRefs(ctx context.Context, text string) []mediaRef {
+	locs := embeddedMediaPattern.FindAllStringIndex(text, -1)
+	refs := make([]mediaRef, 0, len(locs))
+	// Existence only: regular-file validation stays with the callers.
+	exists := func(p string) bool { _, err := os.Stat(p); return err == nil }
+	for _, loc := range locs {
+		start, end := loc[0], loc[1]
+		raw := text[start:end]
+		after := raw[len("MEDIA:"):]
+
+		// Quoted form takes precedence.
+		if strings.HasPrefix(after, `"`) {
+			ref := mediaRef{start: start, end: end}
+			if len(after) >= 2 && strings.HasSuffix(after, `"`) {
+				if p, ok := t.resolveMediaPath(ctx, "MEDIA:"+after[1:len(after)-1]); ok && exists(p) {
+					ref.path, ref.ok = p, true
+					refs = append(refs, ref)
+					continue
+				}
+			}
+			ref.unresolved = true
+			refs = append(refs, ref)
+			continue
+		}
+
+		first, firstOK := t.resolveMediaPath(ctx, raw)
+		if firstOK && exists(first) {
+			refs = append(refs, mediaRef{start: start, end: end, path: first, ok: true})
+			continue
+		}
+
+		// Greedy join of following same-line tokens.
+		found := false
+		sawMore := false
+		pos := end
+		for i := 0; i < mediaLookAheadTokens; i++ {
+			for pos < len(text) && (text[pos] == ' ' || text[pos] == '\t') {
+				pos++
+			}
+			tokEnd := pos
+			for tokEnd < len(text) && !strings.ContainsRune(" \t\r\n", rune(text[tokEnd])) {
+				tokEnd++
+			}
+			if tokEnd == pos {
+				break
+			}
+			sawMore = true
+			if p, ok := t.resolveMediaPath(ctx, text[start:tokEnd]); ok && exists(p) {
+				refs = append(refs, mediaRef{start: start, end: tokEnd, path: p, ok: true})
+				found = true
+				break
+			}
+			pos = tokEnd
+		}
+		if found {
+			continue
+		}
+		refs = append(refs, mediaRef{start: start, end: end, path: first, ok: firstOK, unresolved: sawMore && firstOK})
+	}
+	return refs
+}
 
 // MessageTool allows the agent to proactively send messages to channels.
 type MessageTool struct {
@@ -155,14 +242,11 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 		// delivery. Sending a mixed set would still duplicate the queued files;
 		// the model can retry with only the undelivered references.
 		if dm := DeliveredMediaFromCtx(ctx); dm != nil {
-			mediaRefs := embeddedMediaPattern.FindAllString(message, -1)
 			hasDelivered := false
-			for _, raw := range mediaRefs {
-				if filePath, ok := t.resolveMediaPath(ctx, raw); ok {
-					if dm.IsDelivered(filePath) {
-						hasDelivered = true
-						break
-					}
+			for _, ref := range t.scanMediaRefs(ctx, message) {
+				if ref.ok && dm.IsDelivered(ref.path) {
+					hasDelivered = true
+					break
 				}
 			}
 			if hasDelivered {
@@ -216,6 +300,17 @@ func (t *MessageTool) Execute(ctx context.Context, args map[string]any) *Result 
 	// Handle MEDIA: prefix — send file as attachment instead of text.
 	if filePath, ok := t.resolveMediaPath(ctx, message); ok {
 		return noticeOnSuccess(t.sendMedia(ctx, channel, target, filePath))
+	}
+
+	// Refuse to silently truncate a MEDIA: reference that cannot be resolved.
+	if strings.Contains(message, "MEDIA:") {
+		for _, ref := range t.scanMediaRefs(ctx, message) {
+			if ref.unresolved {
+				return ErrorResult(fmt.Sprintf(
+					"Could not resolve %s to an existing file. Check the path; if it contains spaces, wrap it in double quotes: MEDIA:\"path with spaces\".",
+					message[ref.start:ref.end]))
+			}
+		}
 	}
 
 	// Extract embedded MEDIA: paths from multi-line messages.
@@ -525,25 +620,28 @@ func (t *MessageTool) extractEmbeddedMedia(ctx context.Context, message string) 
 			continue
 		}
 		// Find all MEDIA: tokens on this line.
-		matches := embeddedMediaPattern.FindAllString(trimmed, -1)
-		if len(matches) == 0 {
+		refs := t.scanMediaRefs(ctx, line)
+		if len(refs) == 0 {
 			cleaned = append(cleaned, line)
 			continue
 		}
-		// Extract each MEDIA: path and resolve via security-checked path resolution.
-		for _, raw := range matches {
-			if resolved, ok := t.resolveMediaPath(ctx, raw); ok {
-				if err := ValidateRegularFileForRead(resolved); err != nil {
-					continue
-				}
-				media = append(media, bus.MediaAttachment{
-					URL:         resolved,
-					ContentType: mimeFromPath(resolved),
-				})
+		// Extract each MEDIA: path (already resolved via security-checked path resolution).
+		// Strip MEDIA: references from the line, keep surrounding text.
+		var rest strings.Builder
+		last := 0
+		for _, ref := range refs {
+			rest.WriteString(line[last:ref.start])
+			last = ref.end
+			if !ref.ok || ValidateRegularFileForRead(ref.path) != nil {
+				continue
 			}
+			media = append(media, bus.MediaAttachment{
+				URL:         ref.path,
+				ContentType: mimeFromPath(ref.path),
+			})
 		}
-		// Strip MEDIA: tokens from line, keep surrounding text.
-		remainder := strings.TrimSpace(embeddedMediaPattern.ReplaceAllString(line, ""))
+		rest.WriteString(line[last:])
+		remainder := strings.TrimSpace(rest.String())
 		if remainder != "" {
 			cleaned = append(cleaned, remainder)
 		}
@@ -640,6 +738,9 @@ func (t *MessageTool) resolveMediaPath(ctx context.Context, s string) (string, b
 		return "", false
 	}
 	raw := strings.TrimSpace(s[len("MEDIA:"):])
+	if len(raw) >= 2 && raw[0] == '"' && raw[len(raw)-1] == '"' && !strings.Contains(raw[1:len(raw)-1], `"`) {
+		raw = strings.TrimSpace(raw[1 : len(raw)-1])
+	}
 	if raw == "" || raw == "." {
 		return "", false
 	}

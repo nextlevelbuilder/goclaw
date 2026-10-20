@@ -319,6 +319,95 @@ func TestExtractEmbeddedMedia(t *testing.T) {
 	})
 }
 
+func TestExtractEmbeddedMediaSpacedPaths(t *testing.T) {
+	workspace := t.TempDir()
+	workspaceCanonical, _ := filepath.EvalSymlinks(workspace)
+	spaceDir := filepath.Join(workspaceCanonical, "My Reports")
+	if err := os.MkdirAll(spaceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	docFile := filepath.Join(spaceDir, "Bao cao.docx")
+	if err := os.WriteFile(docFile, []byte("test"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Expected value goes through Abs+EvalSymlinks, never an 8.3 short path.
+	docAbs, err := filepath.Abs(docFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	docCanonical, err := filepath.EvalSymlinks(docAbs)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tool := NewMessageTool(workspaceCanonical, true)
+	ctx := context.Background()
+
+	t.Run("quoted path with spaces", func(t *testing.T) {
+		cleaned, media := tool.extractEmbeddedMedia(ctx, `MEDIA:"`+docCanonical+`"`)
+		if len(media) != 1 {
+			t.Fatalf("expected 1 media, got %d", len(media))
+		}
+		if media[0].URL != docCanonical {
+			t.Errorf("media URL = %q, want %q", media[0].URL, docCanonical)
+		}
+		if cleaned != "" {
+			t.Errorf("expected empty cleaned text, got %q", cleaned)
+		}
+	})
+
+	t.Run("unquoted path with spaces and trailing words", func(t *testing.T) {
+		_, media := tool.extractEmbeddedMedia(ctx, "MEDIA:"+docCanonical+" please review it")
+		if len(media) != 1 {
+			t.Fatalf("expected 1 media, got %d", len(media))
+		}
+		if media[0].URL != docCanonical {
+			t.Errorf("media URL = %q, want %q", media[0].URL, docCanonical)
+		}
+	})
+
+	t.Run("quoted mid-sentence strips surrounding text", func(t *testing.T) {
+		cleaned, media := tool.extractEmbeddedMedia(ctx, `Here is MEDIA:"`+docCanonical+`" for you`)
+		if len(media) != 1 {
+			t.Fatalf("expected 1 media, got %d", len(media))
+		}
+		if cleaned != "Here is  for you" {
+			t.Errorf("cleaned = %q, want %q", cleaned, "Here is  for you")
+		}
+		if strings.Contains(cleaned, "MEDIA:") || strings.Contains(cleaned, "Bao cao") {
+			t.Errorf("path leaked into cleaned text: %q", cleaned)
+		}
+	})
+
+	t.Run("missing file with trailing words is unresolved", func(t *testing.T) {
+		// Relative form so the first token stays inside the workspace even when
+		// the temp dir itself contains a space.
+		refs := tool.scanMediaRefs(ctx, "MEDIA:My Reports/nope.docx trailing words")
+		if len(refs) != 1 {
+			t.Fatalf("expected 1 ref, got %d", len(refs))
+		}
+		if !refs[0].unresolved {
+			t.Errorf("expected ref to be flagged unresolved: %+v", refs[0])
+		}
+	})
+
+	t.Run("delegation policy strips spaced paths whole", func(t *testing.T) {
+		// The policy resolves against the run workspace carried in ctx.
+		wsCtx := WithToolWorkspace(ctx, workspaceCanonical)
+		quoted := stripArtifactMediaLines(wsCtx, `done MEDIA:"`+docCanonical+`" ok`)
+		if quoted != "done  ok" {
+			t.Errorf("quoted strip = %q", quoted)
+		}
+		unquoted := stripArtifactMediaLines(wsCtx, "MEDIA:"+docCanonical+" trailing\nkeep")
+		if strings.Contains(unquoted, "Bao") || strings.Contains(unquoted, "MEDIA:") {
+			t.Errorf("unquoted path was truncated, not stripped whole: %q", unquoted)
+		}
+		if !strings.HasSuffix(unquoted, "keep") {
+			t.Errorf("unrelated line lost: %q", unquoted)
+		}
+	})
+}
+
 func TestMimeFromPath(t *testing.T) {
 	tests := []struct {
 		path string
