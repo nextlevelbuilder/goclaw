@@ -208,13 +208,19 @@ func TestProvidersHandlerListProviderModelsMiniMaxPrefersFlash(t *testing.T) {
 	handler.RegisterRoutes(mux)
 
 	result := providerModelsRequest(t, mux, provider.ID, token)
-	if len(result.Models) != 2 {
-		t.Fatalf("models = %#v, want exactly Flash and M3", result.Models)
+	wantIDs := []string{
+		"MiniMax-M3.1-Flash", "MiniMax-M3",
+		"image-01", "MiniMax-Hailuo-2.3", "MiniMax-Hailuo-2", "T2V-01-Director",
+		"music-2.5+", "music-2.5", "speech-02-hd", "speech-02-turbo",
 	}
-	assertModelIDsInOrder(t, result.Models, []string{
-		"MiniMax-M3.1-Flash",
-		"MiniMax-M3",
-	})
+	if len(result.Models) != len(wantIDs) {
+		t.Fatalf("models = %#v, want current text models and unchanged media", result.Models)
+	}
+	for i, want := range wantIDs {
+		if result.Models[i].ID != want {
+			t.Fatalf("models[%d] = %q, want %q", i, result.Models[i].ID, want)
+		}
+	}
 	capability := result.Models[0].Reasoning
 	if capability == nil || capability.DefaultEffort != "high" || !capability.Supports("max") || capability.Supports("none") {
 		t.Fatalf("Flash reasoning capability = %#v", capability)
