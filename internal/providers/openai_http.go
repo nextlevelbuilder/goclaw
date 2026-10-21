@@ -15,6 +15,11 @@ import (
 )
 
 func (p *OpenAIProvider) doRequest(ctx context.Context, body any) (io.ReadCloser, error) {
+	// Apply after request middleware: fast mode can otherwise reintroduce a
+	// service tier that the direct Flash API does not accept.
+	if payload, ok := body.(map[string]any); ok && p.isMiniMaxEndpoint() && payload["model"] == "MiniMax-M3.1-Flash" {
+		delete(payload, "service_tier")
+	}
 	data, err := json.Marshal(body)
 	if err != nil {
 		return nil, fmt.Errorf("%s: marshal request: %w", p.name, err)

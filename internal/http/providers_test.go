@@ -95,7 +95,7 @@ func TestProvidersHandlerRegisterInMemoryUsesDBNameForAnthropic(t *testing.T) {
 	}
 }
 
-func TestProvidersHandlerRegisterInMemoryMiniMaxUsesM3Default(t *testing.T) {
+func TestProvidersHandlerRegisterInMemoryMiniMaxUsesFlashDefault(t *testing.T) {
 	providerReg := providers.NewRegistry(nil)
 	handler := NewProvidersHandler(newMockProviderStore(), newMockSecretsStore(), providerReg, "")
 
@@ -114,8 +114,8 @@ func TestProvidersHandlerRegisterInMemoryMiniMaxUsesM3Default(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetForTenant() error = %v", err)
 	}
-	if got := runtimeProvider.DefaultModel(); got != "MiniMax-M3" {
-		t.Fatalf("DefaultModel() = %q, want MiniMax-M3", got)
+	if got := runtimeProvider.DefaultModel(); got != "MiniMax-M3.1-Flash" {
+		t.Fatalf("DefaultModel() = %q, want MiniMax-M3.1-Flash", got)
 	}
 	openai, ok := runtimeProvider.(*providers.OpenAIProvider)
 	if !ok {

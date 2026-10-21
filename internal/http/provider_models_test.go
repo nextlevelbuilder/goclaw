@@ -189,7 +189,7 @@ func TestProvidersHandlerListProviderModelsBailianIncludesQwen37Plus(t *testing.
 	t.Fatalf("qwen3.7-plus not found in Bailian model list: %#v", result.Models)
 }
 
-func TestProvidersHandlerListProviderModelsMiniMaxIncludesM3AndLegacyModels(t *testing.T) {
+func TestProvidersHandlerListProviderModelsMiniMaxPrefersFlash(t *testing.T) {
 	token := setupProvidersAdminToken(t)
 	providerStore := newMockProviderStore()
 	provider := &store.LLMProviderData{
@@ -208,13 +208,17 @@ func TestProvidersHandlerListProviderModelsMiniMaxIncludesM3AndLegacyModels(t *t
 	handler.RegisterRoutes(mux)
 
 	result := providerModelsRequest(t, mux, provider.ID, token)
+	if len(result.Models) != 2 {
+		t.Fatalf("models = %#v, want exactly Flash and M3", result.Models)
+	}
 	assertModelIDsInOrder(t, result.Models, []string{
+		"MiniMax-M3.1-Flash",
 		"MiniMax-M3",
-		"MiniMax-M2.7",
-		"MiniMax-M2.5",
-		"MiniMax-M2.1",
-		"MiniMax-M2",
 	})
+	capability := result.Models[0].Reasoning
+	if capability == nil || capability.DefaultEffort != "high" || !capability.Supports("max") || capability.Supports("none") {
+		t.Fatalf("Flash reasoning capability = %#v", capability)
+	}
 }
 
 func TestProvidersHandlerListProviderModelsZaiUsesLocalCatalog(t *testing.T) {
