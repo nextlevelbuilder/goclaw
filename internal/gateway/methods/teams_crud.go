@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -290,6 +291,15 @@ func (m *TeamsMethods) handleUpdate(ctx context.Context, client *gateway.Client,
 		return
 	}
 
+	// Non-admin callers must have team access to update.
+	if !permissions.HasMinRole(client.Role(), permissions.RoleAdmin) {
+		callerID := store.UserIDFromContext(ctx)
+		if ok, err := m.teamStore.HasTeamAccess(ctx, teamID, callerID); err != nil || !ok {
+			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrNotFound, i18n.T(locale, i18n.MsgNotFound, "team", params.TeamID)))
+			return
+		}
+	}
+
 	// Validate team exists
 	team, err := m.teamStore.GetTeam(ctx, teamID)
 	if err != nil {
@@ -329,6 +339,18 @@ func (m *TeamsMethods) handleUpdate(ctx context.Context, client *gateway.Client,
 		BlockerEscalation *struct {
 			Enabled *bool `json:"enabled,omitempty"`
 		} `json:"blocker_escalation,omitempty"`
+		Routing *struct {
+			Enabled             *bool    `json:"enabled,omitempty"`
+			FallbackToSelf      *bool    `json:"fallback_to_self,omitempty"`
+			ConfidenceThreshold *float64 `json:"confidence_threshold,omitempty"`
+			Rules               []struct {
+				AgentKey     string   `json:"agent_key"`
+				Keywords     []string `json:"keywords"`
+				FilePatterns []string `json:"file_patterns"`
+				Criteria     string   `json:"criteria"`
+				Enabled      *bool    `json:"enabled,omitempty"`
+			} `json:"rules,omitempty"`
+		} `json:"routing,omitempty"`
 	}
 
 	updates := map[string]any{}
@@ -341,6 +363,12 @@ func (m *TeamsMethods) handleUpdate(ctx context.Context, client *gateway.Client,
 		if err := json.Unmarshal(raw, &access); err != nil {
 			client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, err.Error())))
 			return
+		}
+		if access.Routing != nil {
+			if msg := m.validateRouting(ctx, teamID, access.Routing); msg != "" {
+				client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgInvalidRequest, msg)))
+				return
+			}
 		}
 		cleaned, _ := json.Marshal(access)
 		updates["settings"] = json.RawMessage(cleaned)
@@ -383,6 +411,46 @@ func (m *TeamsMethods) handleUpdate(ctx context.Context, client *gateway.Client,
 			},
 		})
 	}
+}
+
+// validateRouting returns a rejection message, or "" when the routing block is
+// writable. Stale rules (agent_key not a current member) are rejected because
+// EffectiveRules would silently drop them at classify time.
+func (m *TeamsMethods) validateRouting(ctx context.Context, teamID uuid.UUID, r *struct {
+	Enabled             *bool    `json:"enabled,omitempty"`
+	FallbackToSelf      *bool    `json:"fallback_to_self,omitempty"`
+	ConfidenceThreshold *float64 `json:"confidence_threshold,omitempty"`
+	Rules               []struct {
+		AgentKey     string   `json:"agent_key"`
+		Keywords     []string `json:"keywords"`
+		FilePatterns []string `json:"file_patterns"`
+		Criteria     string   `json:"criteria"`
+		Enabled      *bool    `json:"enabled,omitempty"`
+	} `json:"rules,omitempty"`
+}) string {
+	if r.ConfidenceThreshold != nil && (*r.ConfidenceThreshold <= 0 || *r.ConfidenceThreshold > 1) {
+		return "routing.confidence_threshold must be in (0,1]"
+	}
+	if len(r.Rules) == 0 {
+		return ""
+	}
+	members, err := m.teamStore.ListMembers(ctx, teamID)
+	if err != nil {
+		return "routing: cannot verify team members: " + err.Error()
+	}
+	memberKeys := make(map[string]bool, len(members))
+	for _, mem := range members {
+		memberKeys[mem.AgentKey] = true
+	}
+	for _, rule := range r.Rules {
+		if strings.TrimSpace(rule.AgentKey) == "" {
+			return "routing.rules[].agent_key is required"
+		}
+		if !memberKeys[rule.AgentKey] {
+			return "routing.rules[].agent_key " + rule.AgentKey + " is not a team member"
+		}
+	}
+	return ""
 }
 
 // --- Known Users ---

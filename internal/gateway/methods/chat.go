@@ -294,11 +294,15 @@ func (m *ChatMethods) applyTeamWorkGate(ctx context.Context, params chatSendPara
 		Embedder: m.teamWorkEmbedder,
 	})
 	result := teamworkclassify.ClassifyWithLLM(ctx, input, loop.Provider(), loop.Model(), m.usageCaps)
-	slog.Info("team_work_classify: ws decision", "session", sessionKey, "agent", params.AgentID, "mode", mode, "decision", result.Decision, "self_score", result.SelfScore, "collaboration_score", result.CollaborationScore, "reason", result.Reason)
+	source := "evidence"
+	if result.Ambiguous {
+		source = "arbiter"
+	}
+	slog.Info("team_work_classify: ws decision", "session", sessionKey, "agent", params.AgentID, "mode", mode, "decision", result.Decision, "source", source, "self_score", result.SelfScore, "collaboration_score", result.CollaborationScore, "reason", result.Reason)
 	if result.Decision == teamworkclassify.DecisionTeam {
 		out.directive = &agent.TeamWorkDirective{
 			Mode:            string(result.Mode),
-			Source:          "llm",
+			Source:          source,
 			Reason:          result.Reason,
 			OriginalMessage: params.Message,
 			RequiredTool:    result.RequiredTool,

@@ -203,7 +203,12 @@ func (c *Collector) Stop() {
 }
 
 // CreateTrace synchronously creates a trace record.
+// A zero CreatedAt would persist as year 1 and be deleted by the retention
+// prune that runs on Start, orphaning every span later emitted for the trace.
 func (c *Collector) CreateTrace(ctx context.Context, trace *store.TraceData) error {
+	if trace.CreatedAt.IsZero() {
+		trace.CreatedAt = time.Now().UTC()
+	}
 	return c.store.CreateTrace(ctx, trace)
 }
 

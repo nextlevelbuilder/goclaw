@@ -307,7 +307,21 @@
       "downgradeNote": "降级是安全的 — V2数据会保留但隐藏。",
       "betaNote": "部分功能目前处于Beta阶段。",
       "gotIt": "知道了"
-    }
+    },
+    "routing": "路由规则",
+    "routingEnabled": "启用成员路由",
+    "routingEnabledDesc": "在嵌入分类前，将匹配的消息路由到特定成员",
+    "routingFallbackToSelf": "回退到自身",
+    "routingFallbackToSelfDesc": "无规则匹配时路由到自身（推荐）",
+    "routingConfidence": "置信度阈值",
+    "routingConfidenceDesc": "规则路由的最低置信度（0.01–1.00）",
+    "routingRuleOrderHint": "第一条匹配的规则生效——通过列表位置调整规则顺序",
+    "routingKeywords": "关键词",
+    "routingKeywordsHint": "按单词边界的子串匹配（例如 golang, deploy）",
+    "routingFilePatterns": "文件模式",
+    "routingFilePatternsHint": "扩展名，如 .go, dockerfile, *.ts",
+    "routingCriteria": "决策标准",
+    "routingCriteriaHint": "供决策模型使用的自然语言规则（可选）"
   },
   "create": {
     "title": "创建Team",
