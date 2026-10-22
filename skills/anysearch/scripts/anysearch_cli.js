@@ -104,12 +104,15 @@ function restRequest(method, endpointPath, apikey, payload = undefined, params =
   });
 }
 
+function requestIdDetail(requestId) {
+  return requestId ? ` (request_id: ${requestId})` : "";
+}
+
 async function callOrExit(method, endpointPath, apikey, payload = undefined, params = []) {
   try {
     return await restRequest(method, endpointPath, apikey, payload, params);
   } catch (e) {
-    const detail = e.requestId ? ` (request_id: ${e.requestId})` : "";
-    console.error(`API Error: ${e.message}${detail}`);
+    console.error(`API Error: ${e.message}${requestIdDetail(e.requestId)}`);
     if (e.data && typeof e.data === "object" && Object.keys(e.data).length) {
       console.error(`Response data: ${JSON.stringify(e.data)}`);
     }
@@ -117,11 +120,19 @@ async function callOrExit(method, endpointPath, apikey, payload = undefined, par
   }
 }
 
+function requestIdFooter(envelope) {
+  return envelope.request_id ? `\n\n_Request ID: ${envelope.request_id}_` : "";
+}
+
 function formatSearchResponse(envelope) {
-  const data = envelope.data || {};
-  const results = data.results || [];
-  const metadata = data.metadata || {};
-  if (!results.length) return "No relevant results found.";
+  const data = envelope.data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("invalid search response: data must be an object");
+  const results = data.results ?? [];
+  if (!Array.isArray(results)) throw new Error("invalid search response: data.results must be an array");
+  const metadata = data.metadata ?? {};
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) throw new Error("invalid search response: data.metadata must be an object");
+  if (!results.length) return "No relevant results found." + requestIdFooter(envelope);
+  if (results.some((result) => !result || typeof result !== "object" || Array.isArray(result))) throw new Error("invalid search response: each result must be an object");
   const lines = [`## Search Results (${metadata.total_results ?? results.length} results, ${metadata.search_time_ms ?? 0}ms)`, ""];
   results.forEach((result, index) => {
     lines.push(`### ${index + 1}. ${result.title || "(Untitled)"}`);
@@ -130,7 +141,7 @@ function formatSearchResponse(envelope) {
     if (description) lines.push(`- ${description}`);
     lines.push("");
   });
-  return lines.join("\n").trimEnd() + "\n";
+  return lines.join("\n").trimEnd() + requestIdFooter(envelope) + "\n";
 }
 
 function formatCapabilitiesResponse(envelope, requestedDomains) {
@@ -156,7 +167,7 @@ function formatCapabilitiesResponse(envelope, requestedDomains) {
       matched += 1;
     }
   }
-  return matched ? lines.join("\n").trimEnd() + "\n" : `No capabilities available for domain "${requestedDomains.join(", ")}".\n`;
+  return matched ? lines.join("\n").trimEnd() + requestIdFooter(envelope) + "\n" : `No capabilities available for domain "${requestedDomains.join(", ")}".` + requestIdFooter(envelope) + "\n";
 }
 
 function formatExtractResponse(envelope) {
@@ -167,7 +178,7 @@ function formatExtractResponse(envelope) {
   ];
   if (data.title) lines.push(`## ${data.title}`, "");
   lines.push(`**Source**: ${data.url || ""}`, "", "---", "", data.content || "");
-  return lines.join("\n");
+  return lines.join("\n") + requestIdFooter(envelope);
 }
 
 function normalizeSearchItem(item) {
@@ -259,7 +270,12 @@ async function cmdSearch(opts) {
   if (opts.maxResults !== undefined) args.max_results = Math.max(1, Math.min(opts.maxResults, 10));
 
   const result = await callOrExit("POST", "/v1/search", opts.apiKey, args);
-  process.stdout.write(formatSearchResponse(result));
+  try {
+    process.stdout.write(formatSearchResponse(result));
+  } catch (error) {
+    console.error(`Error: failed to format search response: ${error.message}${requestIdDetail(result.request_id)}`);
+    process.exit(1);
+  }
 }
 
 async function cmdListDomains(opts) {
@@ -417,14 +433,28 @@ async function cmdBatchSearch(opts) {
     }
   }));
   const output = [];
+  let apiFailures = 0;
+  let formatFailures = 0;
   results.forEach(({ response, error }, index) => {
     const query = queries[index] && typeof queries[index] === "object" ? queries[index].query || "" : "";
     output.push(`## Query ${index + 1}: ${query}`, "");
-    if (error) output.push(`Search failed: ${error.message}${error.requestId ? ` (request_id: ${error.requestId})` : ""}`);
-    else output.push(formatSearchResponse(response).trimEnd());
+    if (error) {
+      apiFailures += 1;
+      output.push(`Search failed: ${error.message}${requestIdDetail(error.requestId)}`);
+    } else {
+      try {
+        output.push(formatSearchResponse(response).trimEnd());
+      } catch (formatError) {
+        formatFailures += 1;
+        const detail = requestIdDetail(response.request_id);
+        console.error(`failed to format search response for query ${index + 1}: ${formatError.message}${detail}`);
+        output.push(`Search failed: invalid API response${detail}`);
+      }
+    }
     if (index < results.length - 1) output.push("", "---", "");
   });
   console.log(output.join("\n"));
+  if (formatFailures || apiFailures === queries.length) process.exit(1);
 }
 
 // BEGIN GENERATED:DOC_SPEC
@@ -450,9 +480,19 @@ function usage() {
 
 function parseArgs(argv) {
   const args = argv.slice(2);
+  const opts = { apiKey: process.env.ANYSEARCH_API_KEY || "" };
+  // Accept global authentication before the subcommand, matching the Python
+  // CLI and the documented invocation shape.
+  if (args[0] === "--api_key") {
+    if (args.length < 2) {
+      console.error("Error: missing value for --api_key");
+      process.exit(1);
+    }
+    opts.apiKey = args[1];
+    args.splice(0, 2);
+  }
   const command = args[0] || "";
   const rest = args.slice(1);
-  const opts = { apiKey: process.env.ANYSEARCH_API_KEY || "" };
 
   function shiftVal() {
     if (rest.length === 0) {

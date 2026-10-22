@@ -161,6 +161,15 @@ func (t *ExecTool) SetSandboxKey(key string) {}
 // These are NOT configurable via deny groups — they always apply regardless of group config.
 func (t *ExecTool) DenyPaths(paths ...string) {
 	for _, p := range paths {
+		if runtime.GOOS == "windows" {
+			// Windows paths are case-insensitive and accept either separator,
+			// so a literal case-sensitive pattern is trivially sidestepped.
+			if p != "" {
+				t.pathDenyPatterns = append(t.pathDenyPatterns, windowsPathDenyPattern(p))
+			}
+			t.pathDenyRoots = append(t.pathDenyRoots, p)
+			continue
+		}
 		seen := make(map[string]struct{}, 3)
 		for _, variant := range []string{p, filepath.ToSlash(p), filepath.FromSlash(p)} {
 			if variant == "" {
@@ -307,7 +316,12 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 	exemptions = append(exemptions, t.dynamicPathExemptions(ctx)...)
 
 	// Check for dangerous commands (applies to both host and sandbox).
-	wordFields := parseExecCommandWords(normalizedCommand)
+	wordFields, wordsOK := parseExecCommandWords(normalizedCommand)
+	if runtime.GOOS == "windows" && normalizedCommand != command {
+		// cmd.exe runs the raw command, so exemption analysis of the
+		// normalized form is only trustworthy when both are identical.
+		wordsOK = false
+	}
 	pathBaseDir := ToolWorkspaceFromCtx(ctx)
 	if pathBaseDir == "" {
 		pathBaseDir = t.workspace
@@ -338,8 +352,9 @@ func (t *ExecTool) Execute(ctx context.Context, args map[string]any) *Result {
 					exemptFields++
 				}
 			}
-			// Exempt only if at least one field matched AND all matched fields are exempt.
-			if matchingFields > 0 && exemptFields == matchingFields {
+			// Exempt only if the command parsed safely, at least one field
+			// matched, AND all matched fields are exempt.
+			if wordsOK && matchingFields > 0 && exemptFields == matchingFields {
 				exempt = true
 			}
 			if exempt {
