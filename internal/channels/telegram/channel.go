@@ -270,7 +270,7 @@ func (c *Channel) Start(ctx context.Context) error {
 		for attempt := 1; attempt <= 3; attempt++ {
 			if err := c.SyncMenuCommands(syncCtx, commands); err != nil {
 				lastErr = err
-				slog.Warn("failed to sync telegram menu commands", "error", err, "attempt", attempt)
+				slog.Warn("failed to sync telegram menu commands", "error", channels.MaskBotToken(err), "attempt", attempt)
 				if attempt < 3 {
 					select {
 					case <-syncCtx.Done():

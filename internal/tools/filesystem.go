@@ -432,6 +432,7 @@ func resolvePathWithAllowed(path, workspace string, restrict bool, allowedPrefix
 			return real, nil
 		}
 	}
+	slog.Warn("security.path_escape", "path", cleaned, "resolved", cleaned, "workspace", workspace)
 	slog.Warn("read_file: access denied", "path", cleaned, "workspace", workspace, "allowedPrefixes", allowedPrefixes)
 	return "", err
 }
@@ -567,7 +568,9 @@ func resolvePath(path, workspace string, restrict bool) (string, error) {
 
 	// Validate canonical path stays within canonical workspace.
 	if !isPathInside(real, wsReal) {
-		slog.Warn("security.path_escape", "path", path, "resolved", real, "workspace", wsReal)
+		// debug: routine deny path. resolvePathWithAllowed re-emits warn at
+		// the higher-level 'access denied' boundary, so don't double-warn here.
+		slog.Debug("security.path_escape", "path", path, "resolved", real, "workspace", wsReal)
 		return "", fmt.Errorf("access denied: path outside workspace")
 	}
 
