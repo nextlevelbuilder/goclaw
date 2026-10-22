@@ -97,7 +97,8 @@ func isExternalChannel(channelType string) bool {
 		channels.TypeZaloOA,
 		channels.TypeZaloPersonal,
 		channels.TypePancake,
-		channels.TypeSlack:
+		channels.TypeSlack,
+		channels.TypeMattermost:
 		return true
 	}
 	return false

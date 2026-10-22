@@ -354,6 +354,10 @@
       "label": "API Server URL",
       "help": "Custom Telegram Bot API server for large file uploads (up to 2GB). Leave empty for default."
     },
+    "server_url": {
+      "label": "Server URL",
+      "help": "Base URL of your Mattermost server. A server on a private network (10.x, 192.168.x, localhost) also needs GOCLAW_ALLOW_PRIVATE_MATTERMOST_URLS=true on the gateway."
+    },
     "proxy": {
       "label": "HTTP Proxy",
       "help": "Route bot traffic through an HTTP proxy"
@@ -462,6 +466,10 @@
     "thread_ttl": {
       "label": "Thread Participation TTL (hours)",
       "help": "Hours before bot stops auto-replying in threads it participated in. 0 = always require @mention."
+    },
+    "group_dm_as_direct": {
+      "label": "Group messages as DMs",
+      "help": "Treat group direct messages (3–8 people) like DMs: reply to every message without @mention or threads. The group policy still applies and the conversation stays one shared group session. Off = handle them like channels."
     },
     "skills": {
       "label": "Skills Filter",

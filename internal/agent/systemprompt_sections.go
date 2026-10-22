@@ -548,8 +548,19 @@ func buildRuntimeSection(cfg SystemPromptConfig) []string {
 
 // buildChannelFormattingHint returns platform-specific formatting guidance.
 // Zalo does not render any markup, so we instruct the model to use plain text.
+// Mattermost renders Markdown and can show message attachment cards.
 func buildChannelFormattingHint(channelType string) []string {
 	switch channelType {
+	case "mattermost":
+		return []string{
+			"## Output Formatting",
+			"",
+			"This channel (Mattermost) renders standard Markdown: headings, tables, code blocks, links.",
+			"For a status card (e.g. build or incident summary) you may add a fenced code block with the language `attachment` containing a JSON object or array of Mattermost message attachments.",
+			"Supported keys: color (hex or good/warning/danger), pretext, title, title_link, text, fields [{title, value, short}], image_url, thumb_url, author_name, author_link, author_icon, footer, footer_icon.",
+			"The block is removed from the text and rendered as a card under your message. Use it only when a card is clearly better than plain Markdown.",
+			"",
+		}
 	case "zalo", "zalo_personal":
 		return []string{
 			"## Output Formatting",

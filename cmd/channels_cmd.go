@@ -96,6 +96,7 @@ func runChannelsAdd() {
 		{"Telegram", "telegram"},
 		{"Discord", "discord"},
 		{"Slack", "slack"},
+		{"Mattermost", "mattermost"},
 	}
 	channelType, err := promptSelect("Channel type", typeOptions, 0)
 	if err != nil {
@@ -112,6 +113,7 @@ func runChannelsAdd() {
 
 	// Step 3: Credentials per type
 	creds := map[string]string{}
+	instanceCfg := map[string]any{}
 	switch channelType {
 	case "telegram":
 		token, err := promptPassword("Bot token", "from @BotFather")
@@ -140,6 +142,19 @@ func runChannelsAdd() {
 			return
 		}
 		creds["signing_secret"] = secret
+	case "mattermost":
+		serverURL, err := promptString("Server URL", "e.g. https://chat.example.com", "")
+		if err != nil || serverURL == "" {
+			fmt.Println("Cancelled.")
+			return
+		}
+		instanceCfg["server_url"] = serverURL
+		token, err := promptPassword("Bot token", "from Integrations → Bot Accounts")
+		if err != nil || token == "" {
+			fmt.Println("Cancelled.")
+			return
+		}
+		creds["bot_token"] = token
 	}
 
 	// Step 4: Bind to agent
@@ -173,6 +188,9 @@ func runChannelsAdd() {
 		"agent_id":     agentID,
 		"enabled":      true,
 		"credentials":  creds,
+	}
+	if len(instanceCfg) > 0 {
+		body["config"] = instanceCfg
 	}
 
 	_, err = gatewayHTTPPost("/v1/channels/instances", body)
