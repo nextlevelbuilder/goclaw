@@ -36,7 +36,7 @@
     "teamWorkClassify": "Phân Loại Team Work",
     "teamWorkClassifyHint": "Phân loại yêu cầu mới thành tự xử lý hoặc làm theo team/delegate workflow.",
     "teamWorkClassifyInfo": "Khi yêu cầu vượt chuyên môn hoặc nên chia việc, hệ thống dùng embedding làm bằng chứng rồi để model quyết định tự xử lý hay dùng team/delegate workflow. Hệ thống xét cả quyền lead/member; member chỉ được tạo request nhờ hỗ trợ khi team đã bật Yêu cầu thành viên và Tự động phân phối.",
-    "teamWorkClassifyEmbeddingRequired": "Cần cấu hình embedding trước khi bật Phân Loại Team Work."
+    "teamWorkClassifyEmbeddingRequired": "Cần cấu hình embedding hoặc ít nhất một quy tắc định tuyến team trước khi bật Phân Loại Team Work."
   },
   "kg": {
     "title": "Đồ thị tri thức",
@@ -103,5 +103,26 @@
       "model_not_found": "Không tìm thấy model (tên model không hợp lệ)",
       "unknown": "Lỗi nhà cung cấp không xác định"
     }
+  },
+  "decisionModel": {
+    "title": "Decision Model (System One)",
+    "description": "Mô hình quyết định định kiểu nhanh để phân tuyến nhóm khi thông tin không rõ ràng, thay thế LLM arbiter.",
+    "enabled": "Bật Decision Model",
+    "egressWarningTitle": "Truyền dữ liệu ra bên ngoài",
+    "egressWarningBody": "Khi bật, nội dung tin nhắn người dùng (giới hạn theo số ký tự bên dưới) và vai trò trong nhóm sẽ được gửi đến endpoint đã cấu hình để chọn thành viên xử lý. Lịch sử hội thoại, tệp đính kèm và system prompt không bao giờ được gửi.",
+    "endpoint": "URL Endpoint",
+    "endpointHint": "Bắt buộc dùng https://. Đã kiểm tra chặn SSRF (dải IP nội bộ/metadata).",
+    "model": "Mã Model",
+    "modelHint": "Nên ghim phiên bản cụ thể (ví dụ jev-1.13.0); alias của nhà cung cấp có thể thay đổi sau khi cập nhật.",
+    "apiKey": "API Key",
+    "apiKeyPlaceholder": "Nhập API key",
+    "apiKeyHint": "Được mã hóa bằng AES-256-GCM. Không bao giờ ghi log.",
+    "timeout": "Thời gian chờ (ms)",
+    "timeoutHint": "Thời gian chờ tối đa cho một lần gọi (100–5000 ms). Không thử lại khi lỗi.",
+    "maxStateChars": "Độ dài tin nhắn tối đa (ký tự)",
+    "maxStateCharsHint": "Giới hạn số ký tự gửi trong yêu cầu (200–20000).",
+    "verify": "Kiểm tra kết nối",
+    "verifySuccess": "Thành công: chọn {{choice}} (độ tin cậy {{confidence}}%, {{latency}}ms)",
+    "verifyFailed": "Kiểm tra thất bại"
   }
 }

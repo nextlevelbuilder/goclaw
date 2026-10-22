@@ -42,7 +42,7 @@
     "teamWorkClassify": "Team Work 분류",
     "teamWorkClassifyHint": "새 요청을 직접 처리 또는 team/delegate 워크플로로 분류합니다.",
     "teamWorkClassifyInfo": "요청이 현재 에이전트의 범위를 넘거나 분담이 필요하면 시스템이 embedding을 근거로 사용하고 모델이 직접 처리와 team/delegate 워크플로 중 하나를 결정하게 합니다. 시스템은 lead/member 권한도 확인합니다. member는 팀에서 member request와 auto-dispatch를 모두 켠 경우에만 도움 요청을 만들 수 있습니다.",
-    "teamWorkClassifyEmbeddingRequired": "Team Work 분류를 켜려면 먼저 embedding을 설정해야 합니다."
+    "teamWorkClassifyEmbeddingRequired": "Team Work 분류를 켜려면 embedding 설정 또는 하나 이상의 팀 라우팅 규칙이 필요합니다."
   },
   "kg": {
     "title": "지식 그래프",
@@ -84,5 +84,26 @@
     "maxTokensHint": "압축된 요약의 토큰 한도입니다.",
     "info": "그룹 채팅이 임계값을 초과하면 LLM이 오래된 메시지를 단일 압축 항목으로 자동 요약하여 컨텍스트를 위해 가장 최근 메시지를 유지합니다."
   },
-  "moreConfig": "추가 설정"
+  "moreConfig": "추가 설정",
+  "decisionModel": {
+    "title": "의사결정 모델 (System One)",
+    "description": "팀 분기가 모호할 때 LLM 중재자 대신 작업을 분배하는 빠른 타입 기반 결정 모델입니다.",
+    "enabled": "의사결정 모델 활성화",
+    "egressWarningTitle": "외부 데이터 전송 알림",
+    "egressWarningBody": "활성화 시 사용자 메시지 본문(아래 글자 수로 제한됨)과 팀 역할이 설정된 엔드포인트로 전송되어 담당 멤버를 결정합니다. 대화 기록, 첨부 미디어, 시스템 프롬프트는 절대 전송되지 않습니다.",
+    "endpoint": "엔드포인트 URL",
+    "endpointHint": "https:// URL이어야 합니다. SSRF 검증 적용(사설망 및 메타데이터 차단).",
+    "model": "모델 ID",
+    "modelHint": "버전이 고정된 ID(예: jev-1.13.0) 권장; 서비스 릴리스 시 별칭 대상이 변경될 수 있습니다.",
+    "apiKey": "API 키",
+    "apiKeyPlaceholder": "API 키 입력",
+    "apiKeyHint": "AES-256-GCM으로 암호화 저장되며 로그에 남지 않습니다.",
+    "timeout": "제한 시간 (ms)",
+    "timeoutHint": "단일 시도 하드 타임아웃(100–5000ms). 실패 시 재시도하지 않습니다.",
+    "maxStateChars": "최대 메시지 글자 수",
+    "maxStateCharsHint": "전송되는 메시지의 최대 글자 수(200–20000).",
+    "verify": "연결 테스트",
+    "verifySuccess": "성공: {{choice}} 선택(신뢰도 {{confidence}}%, {{latency}}ms)",
+    "verifyFailed": "검증 실패"
+  }
 }

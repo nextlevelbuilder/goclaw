@@ -624,6 +624,41 @@ find "$TMPDIR" -name 'goclaw-pgpass-*' -mmin +60 -delete
 - Credential-refresh primitive for `aws sts assume-role`-style short-lived
   STS credentials.
 
+
+---
+
+## 15. System One Decision-Model Egress
+
+When an operator opts into the typed-decision model for team routing, the gateway sends a bounded portion of inbound messages to a third-party endpoint (`POST https://api.typesafe.ai/v1/systemone` or an operator-configured alternative) to decide which team member should handle ambiguous work, in place of the LLM arbiter.
+
+### What leaves the deployment
+
+- **User message text:** truncated to `decision_model.max_state_chars` (default 4,000 runes; minimum 200, maximum 20,000). Truncation is rune-safe (multi-byte UTF-8 sequences are never split).
+- **Team context:** the sender's role on the team (e.g. `lead`, `member`), included under `state.sender_team_role`.
+- **Offered member options:** the candidate member `agent_key`s and their routing rubrics (`rule.criteria`, falling back to the member's rendered profile description). The sender's own key is excluded (represented by `"self"`).
+
+**Never sent:** conversation history, attached media, session keys, tenant IDs, agent system prompts, tools, or memory documents. Non-text inputs are ignored by the gate.
+
+### Two-key opt-in gate
+
+Egress is **disabled by default** and requires two separate keys to activate:
+
+1. `system_configs["decision_model.enabled"]` must be exactly `"true"`.
+2. `config_secrets["decision_model.api_key"]` must be non-empty (AES-256-GCM encrypted, per-tenant).
+
+Configuring an endpoint or storing a key without setting `enabled="true"` will never cause the gateway to send a request.
+
+### SSRF and credential protection
+
+- **Format validation:** the endpoint must use `https://` with no embedded userinfo (`https://user:pass@host/` is rejected).
+- **Address validation:** `internal/security.Validate` checks the endpoint host against blocked CIDRs (loopback `127.0.0.0/8`, link-local / cloud metadata `169.254.0.0/16`, RFC 1918 private ranges, multicast, `[::1]`) at configuration time **and** re-resolves the pinned IP on every outbound call, so DNS rebinding cannot redirect traffic to internal infrastructure after setup.
+- **Generic config isolation:** `PUT /v1/system-configs/{key}` rejects any key starting with `decision_model.`, preventing an operator from bypassing SSRF validation or storing an API key in plain text.
+
+### Failure and outage behavior
+
+- **Single attempt, hard timeout:** default 1s (configurable 100ms–5,000ms), no retry.
+- **Fail-safe fallback:** any network error, timeout, non-2xx response, rate limit (HTTP 429), or malformed body returns the embedding evidence verdict (defaulting to the current agent). It **never** falls through to the LLM arbiter on transport error, preventing sudden cost spikes during upstream vendor outages.
+- **Audit logging:** every egress call emits `slog.Info("security.decision_model.egress", "host", host, "model", model, "chars", chars, "options", count)`. Message text is never logged.
 ---
 
 ## File Reference
