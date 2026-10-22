@@ -110,8 +110,8 @@ Supported price units: input, output, cache read, cache write, reasoning, reques
 | perplexity | `https://api.perplexity.ai` | `sonar-pro` | |
 | ollama | `http://localhost:11434/v1` | `llama3.3` | Local/configurable |
 | bailian | `https://coding-intl.dashscope.aliyuncs.com/v1` | `qwen3.5-plus` | Alibaba Coding API |
-| zai | `https://api.z.ai/api/paas/v4` | `glm-5.2` | 1M context, 128K max output |
-| zai-coding | `https://api.z.ai/api/coding/paas/v4` | `glm-5.2` | 1M context, 128K max output |
+| zai | `https://api.z.ai/api/paas/v4` | `glm-5.3-flash` | 1M context, 128K max output; vision-capable (image input) |
+| zai-coding | `https://api.z.ai/api/coding/paas/v4` | `glm-5.3-flash` | 1M context, 128K max output; vision-capable (image input) |
 | byteplus | `https://ark.ap-southeast.bytepluses.com/api/v3` | `seed-2-0-lite-260228` | Seed 2.0 models |
 | byteplus_coding | `https://ark.ap-southeast.bytepluses.com/api/coding/v3` | `seed-2-0-lite-260228` | Seed 2.0 Coding Plan |
 
