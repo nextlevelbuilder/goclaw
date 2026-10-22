@@ -2,12 +2,12 @@ package teamworkclassify
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/teamconfig"
 )
 
 type ProfileStores struct {
@@ -41,6 +41,7 @@ func BuildInputFromStores(ctx context.Context, stores ProfileStores, opts BuildI
 			input.CurrentAgent = Profile{
 				Kind: "agent",
 				Name: firstNonEmpty(ag.DisplayName, ag.AgentKey),
+				Key:  ag.AgentKey,
 				Text: strings.TrimSpace(strings.Join([]string{
 					ag.Frontmatter,
 					ag.AgentDescription,
@@ -58,7 +59,7 @@ func BuildInputFromStores(ctx context.Context, stores ProfileStores, opts BuildI
 				input.TeamRole = "lead"
 				input.CanAssignTeamTasks = true
 			}
-			memberRequestCfg := parseMemberRequestRoutingConfig(team.Settings)
+			memberRequestCfg := teamconfig.ParseMemberRequest(team.Settings)
 			input.MemberRequestsEnabled = memberRequestCfg.Enabled
 			input.MemberRequestsAutoDispatch = memberRequestCfg.AutoDispatch
 			input.Team = Profile{
@@ -69,6 +70,7 @@ func BuildInputFromStores(ctx context.Context, stores ProfileStores, opts BuildI
 					fmt.Sprintf("lead_agent: %s %s", team.LeadAgentKey, team.LeadDisplayName),
 				}, "\n")),
 			}
+			var memberKeys []string
 			if members, err := stores.Teams.ListMembers(ctx, team.ID); err == nil {
 				for _, member := range members {
 					if member.AgentID == opts.AgentID && !input.CanAssignTeamTasks {
@@ -76,9 +78,11 @@ func BuildInputFromStores(ctx context.Context, stores ProfileStores, opts BuildI
 							input.TeamRole = member.Role
 						}
 					}
+					memberKeys = append(memberKeys, member.AgentKey)
 					input.Members = append(input.Members, Profile{
 						Kind: "team_member",
 						Name: firstNonEmpty(member.DisplayName, member.AgentKey),
+						Key:  member.AgentKey,
 						Text: strings.TrimSpace(strings.Join([]string{
 							"role: " + member.Role,
 							"agent_key: " + member.AgentKey,
@@ -86,6 +90,14 @@ func BuildInputFromStores(ctx context.Context, stores ProfileStores, opts BuildI
 						}, "\n")),
 					})
 				}
+			}
+			routing := teamconfig.ParseRouting(team.Settings)
+			input.RoutingRules = teamconfig.EffectiveRules(routing, memberKeys)
+			input.RoutingEnabled = routing.Enabled != nil && *routing.Enabled
+			input.DecisionFallbackToSelf = routing.FallbackToSelf == nil || *routing.FallbackToSelf
+			input.DecisionThreshold = 0.65
+			if routing.ConfidenceThreshold != nil {
+				input.DecisionThreshold = *routing.ConfidenceThreshold
 			}
 			input.CollaborationTools = append(input.CollaborationTools, teamPermissionProfiles(input)...)
 		}
@@ -97,6 +109,7 @@ func BuildInputFromStores(ctx context.Context, stores ProfileStores, opts BuildI
 				input.Delegates = append(input.Delegates, Profile{
 					Kind: "delegate",
 					Name: firstNonEmpty(link.TargetDisplayName, link.TargetAgentKey),
+					Key:  link.TargetAgentKey,
 					Text: strings.TrimSpace(strings.Join([]string{
 						"agent_key: " + link.TargetAgentKey,
 						"link_direction: " + link.Direction,
@@ -117,34 +130,6 @@ func BuildInputFromStores(ctx context.Context, stores ProfileStores, opts BuildI
 	}
 	input.CollaborationTools = append(input.CollaborationTools, opts.ExtraCollab...)
 	return input
-}
-
-type memberRequestRoutingConfig struct {
-	Enabled      bool
-	AutoDispatch bool
-}
-
-func parseMemberRequestRoutingConfig(settings json.RawMessage) memberRequestRoutingConfig {
-	var cfg memberRequestRoutingConfig
-	if len(settings) == 0 {
-		return cfg
-	}
-	var raw struct {
-		MemberRequests *struct {
-			Enabled      *bool `json:"enabled"`
-			AutoDispatch *bool `json:"auto_dispatch"`
-		} `json:"member_requests"`
-	}
-	if json.Unmarshal(settings, &raw) != nil || raw.MemberRequests == nil {
-		return cfg
-	}
-	if raw.MemberRequests.Enabled != nil {
-		cfg.Enabled = *raw.MemberRequests.Enabled
-	}
-	if raw.MemberRequests.AutoDispatch != nil {
-		cfg.AutoDispatch = *raw.MemberRequests.AutoDispatch
-	}
-	return cfg
 }
 
 func teamPermissionProfiles(input Input) []Profile {

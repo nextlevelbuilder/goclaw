@@ -372,6 +372,7 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 	// Per-tenant TTS config endpoint — allows tenant admins to configure TTS.
 	if d.pgStores.SystemConfigs != nil && d.pgStores.ConfigSecrets != nil {
 		d.server.SetTTSConfigHandler(httpapi.NewTTSConfigHandler(d.pgStores.SystemConfigs, d.pgStores.ConfigSecrets, d.pgStores.Tenants))
+		d.server.SetDecisionModelHandler(httpapi.NewDecisionModelHandler(d.pgStores.SystemConfigs, d.pgStores.ConfigSecrets, d.pgStores.Tenants))
 	}
 
 	// Workstations API — Standard edition only.
