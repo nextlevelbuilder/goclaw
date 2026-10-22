@@ -126,7 +126,7 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		return
 	}
 
-	respond(withReasoningCapabilities(models))
+	respond(withReasoningCapabilities(currentMiniMaxTextModels(models)))
 }
 
 func aimlapiModels() []ModelInfo {
@@ -185,7 +185,9 @@ func withReasoningCapabilities(models []ModelInfo) []ModelInfo {
 	result := make([]ModelInfo, 0, len(models))
 	for _, model := range models {
 		next := model
-		next.Reasoning = providers.LookupReasoningCapability(model.ID)
+		if next.Reasoning == nil {
+			next.Reasoning = providers.LookupReasoningCapability(model.ID)
+		}
 		result = append(result, next)
 	}
 	return result
