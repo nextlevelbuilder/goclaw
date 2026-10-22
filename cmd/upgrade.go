@@ -58,6 +58,15 @@ func runUpgradeStatus() error {
 	}
 	defer db.Close()
 
+	// Ensure required extensions exist before checking schema.
+	if err := upgrade.EnsureExtensions(db); err != nil {
+		fmt.Println("  Extensions:      ERROR")
+		fmt.Println()
+		fmt.Print(err)
+		fmt.Println()
+		return nil
+	}
+
 	s, err := upgrade.CheckSchema(db)
 	if err != nil {
 		return fmt.Errorf("check schema: %w", err)
@@ -118,6 +127,13 @@ func runUpgrade(dryRun bool) error {
 		return fmt.Errorf("connect: %w", err)
 	}
 	defer db.Close()
+
+	// Ensure required extensions exist before checking or running migrations.
+	if err := upgrade.EnsureExtensions(db); err != nil {
+		fmt.Print(err)
+		fmt.Println()
+		return ErrUpgradeFailed
+	}
 
 	s, err := upgrade.CheckSchema(db)
 	if err != nil {
