@@ -1,6 +1,9 @@
 package acp
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // --- Client -> Agent Requests ---
 
@@ -128,6 +131,27 @@ type SessionUpdate struct {
 		Kind       string `json:"kind,omitempty"`
 		Status     string `json:"status,omitempty"`
 	} `json:"update"`
+}
+
+// ContentText returns the text of Update.Content, which ACP sends either as a
+// single {"type":"text","text":...} object or as an array of such blocks.
+func (u *SessionUpdate) ContentText() string {
+	if len(u.Update.Content) == 0 {
+		return ""
+	}
+	var single ContentBlock
+	if err := json.Unmarshal(u.Update.Content, &single); err == nil && single.Type != "" {
+		return single.Text
+	}
+	var arr []ContentBlock
+	if err := json.Unmarshal(u.Update.Content, &arr); err != nil {
+		return ""
+	}
+	var sb strings.Builder
+	for _, b := range arr {
+		sb.WriteString(b.Text)
+	}
+	return sb.String()
 }
 
 type MessageUpdate struct {

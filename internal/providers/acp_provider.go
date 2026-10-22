@@ -282,6 +282,7 @@ func (p *ACPProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk f
 
 	var buf strings.Builder
 	var updateCount int
+	lastToolStatus := make(map[string]string) // toolCallId → last status surfaced
 	promptResp, err := proc.Prompt(ctx, acpSessionID, content, func(update acp.SessionUpdate) {
 		if update.Message != nil {
 			for _, block := range update.Message.Content {
@@ -292,8 +293,8 @@ func (p *ACPProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk f
 				}
 			}
 		}
-		if update.ToolCall != nil && update.ToolCall.Status == "running" {
-			slog.Debug("acp: tool call", "name", update.ToolCall.Name)
+		if text := acpProgressThinking(&update, lastToolStatus); text != "" {
+			onChunk(StreamChunk{Thinking: text})
 		}
 	})
 	if err != nil {
@@ -313,6 +314,45 @@ func (p *ACPProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk f
 		FinishReason: mapStopReason(promptResp),
 		Usage:        &Usage{},
 	}, nil
+}
+
+// acpProgressThinking turns non-text ACP session updates into a short progress
+// string for StreamChunk.Thinking, so the UI shows what the agent is doing
+// instead of a black box. Returns "" when there is nothing to surface.
+// lastStatus dedupes tool_call_update by toolCallId; session/update notifications
+// arrive sequentially from the conn read loop, so it needs no lock.
+func acpProgressThinking(u *acp.SessionUpdate, lastStatus map[string]string) string {
+	switch u.Update.SessionUpdate {
+	case "agent_thought_chunk":
+		return u.ContentText()
+	case "tool_call", "tool_call_update":
+		id, status := u.Update.ToolCallID, u.Update.Status
+		if status == "" {
+			status = "pending"
+		}
+		if lastStatus[id] == status {
+			return ""
+		}
+		lastStatus[id] = status
+		label := u.Update.Title
+		if label == "" {
+			label = u.Update.Kind
+		}
+		if label == "" {
+			label = id
+		}
+		return fmt.Sprintf("\n🔧 %s [%s]\n", label, status)
+	case "plan":
+		var sb strings.Builder
+		for _, e := range u.Update.Entries {
+			fmt.Fprintf(&sb, "\n- [%s] %s", e.Status, e.Content)
+		}
+		if sb.Len() == 0 {
+			return ""
+		}
+		return "\n📋 Plan:" + sb.String() + "\n"
+	}
+	return ""
 }
 
 // purgeSession removes a session entry from both tracking maps.
