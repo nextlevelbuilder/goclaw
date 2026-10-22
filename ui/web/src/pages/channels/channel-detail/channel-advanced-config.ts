@@ -25,9 +25,29 @@ export function buildAdvancedConfigUpdate(
 
   for (const [key, value] of Object.entries(values)) {
     if (!isAdvancedConfigKey(key)) continue;
-    if (value === undefined || value === "" || value === null) {
+    if (value === undefined || value === "" || value === null || value === "inherit") {
       delete flat[key];
       continue;
+    }
+    if (key.startsWith("chat_behavior.") && key.endsWith(".enabled")) {
+      if (value === "true") {
+        flat[key] = true;
+        continue;
+      }
+      if (value === "false") {
+        flat[key] = false;
+        continue;
+      }
+    }
+    if (key === "chat_behavior.enabled") {
+      if (value === "true") {
+        flat[key] = true;
+        continue;
+      }
+      if (value === "false") {
+        flat[key] = false;
+        continue;
+      }
     }
     flat[key] = value;
   }

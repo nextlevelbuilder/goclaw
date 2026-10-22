@@ -399,6 +399,16 @@
       "label": "Activity Indicator",
       "help": "Show a native \"agent is working\" indicator (thinking/searching/generating…) while the agent processes. Ephemeral, not a chat message."
     },
+    "poll_timeout_sec": {
+      "label": "Poll Timeout (s)",
+      "help": "Long polling timeout in seconds"
+    },
+    "zalo_bot": {
+      "token": {
+        "label": "Bot Token",
+        "help": "Bot Token from Zalo Bot Creator / OA Zalo Bot Manager"
+      }
+    },
     "media_max_mb": {
       "label": "Max Media Size (MB)"
     },
