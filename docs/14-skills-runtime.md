@@ -106,6 +106,10 @@ PATH=/app/data/.runtime/npm-global/bin:/app/data/.runtime/pip/bin:$PATH
 2. **Node.js**: `npm install -g <package>` installs to `/app/data/.runtime/npm-global/`. `NODE_PATH` includes both system globals (`/usr/local/lib/node_modules`) and runtime globals.
 3. **Persistence**: Packages installed at runtime persist across tool calls within the same container lifecycle (volume-backed).
 
+### Dependency Check Timeout
+
+The skill dependency check imports the Python packages in one `python3 -c` probe and resolves the npm packages in one `node -e` probe. Each probe is killed after 30s by default. Set `GOCLAW_DEP_CHECK_TIMEOUT` (a Go duration such as `60s`) to change it; empty, invalid or non-positive values keep the default. A probe that times out logs `skills.dep_check.timeout` and its packages are treated as unknown, not missing, so the skill is not archived.
+
 ### Bare-Metal Ubuntu/Debian
 
 When the gateway runs directly on Ubuntu/Debian instead of inside the Alpine Docker image:
