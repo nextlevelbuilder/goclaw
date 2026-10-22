@@ -168,12 +168,14 @@
         "brave": "Brave Search",
         "parallel": "Parallel",
         "serply": "Serply",
+        "keenable": "Keenable",
         "duckduckgo": "DuckDuckGo"
       },
       "apiKey": "API Key",
       "apiKeySet": "✓ Key set",
       "apiKeyChange": "Change",
       "apiKeyPlaceholder": "Enter API key",
+      "apiKeyOptionalPlaceholder": "Optional, lifts the keyless rate limit",
       "apiKeyReplacePlaceholder": "Enter new key to replace"
     },
     "ttsForm": {

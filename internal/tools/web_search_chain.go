@@ -201,6 +201,21 @@ func BuildChainFromStorage(ctx context.Context, secrets store.ConfigSecretsStore
 			chain = append(chain, buildProviderByName(name, "", maxResults))
 			continue
 		}
+		if name == searchProviderKeenable {
+			// Keenable is also absent from the default order, so reaching this
+			// branch means the tenant named it. The key is optional: without
+			// one the provider uses the keyless public endpoint.
+			key, err := secrets.Get(ctx, "tools.web."+name+".api_key")
+			if err != nil {
+				key = ""
+			}
+			maxResults := defaultSearchCount
+			if po, ok := override.Providers[name]; ok && po.MaxResults > 0 {
+				maxResults = po.MaxResults
+			}
+			chain = append(chain, buildProviderByName(name, key, maxResults))
+			continue
+		}
 
 		key, err := secrets.Get(ctx, "tools.web."+name+".api_key")
 		if err != nil || key == "" {
