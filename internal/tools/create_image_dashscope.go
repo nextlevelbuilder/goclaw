@@ -61,6 +61,7 @@ func dashScopeTaskEndpoint(apiBase, taskID string) string {
 // On completion, output.results[].url contains the image URL to download.
 // aspectRatioToDashScopeSize converts aspect_ratio to DashScope size format.
 // Falls back to explicit "size" param if set, otherwise uses aspect_ratio mapping.
+// Every size stays within the 512–1440 per-side window of the wan2.x text-to-image models.
 func aspectRatioToDashScopeSize(params map[string]any) string {
 	if s := GetParamString(params, "size", ""); s != "" {
 		return s
@@ -75,6 +76,20 @@ func aspectRatioToDashScopeSize(params map[string]any) string {
 		return "1024*768"
 	case "3:4":
 		return "768*1024"
+	case "3:2":
+		return "1152*768"
+	case "2:3":
+		return "768*1152"
+	case "4:5":
+		return "1152*1440"
+	case "5:4":
+		return "1440*1152"
+	case "21:9":
+		return "1344*576"
+	case "2:1":
+		return "1440*720"
+	case "1:2":
+		return "720*1440"
 	default:
 		return "1024*1024"
 	}

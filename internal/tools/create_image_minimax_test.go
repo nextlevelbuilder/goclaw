@@ -27,8 +27,28 @@ func TestMinimaxImageAspectRatio(t *testing.T) {
 			want:   "1:1",
 		},
 		{
-			name:   "unknown ratio falls back to 1:1",
+			name:   "21:9 is part of the MiniMax enum",
 			params: map[string]any{"aspect_ratio": "21:9"},
+			want:   "21:9",
+		},
+		{
+			name:   "4:5 maps to the closest supported portrait ratio",
+			params: map[string]any{"aspect_ratio": "4:5"},
+			want:   "3:4",
+		},
+		{
+			name:   "5:4 maps to the closest supported landscape ratio",
+			params: map[string]any{"aspect_ratio": "5:4"},
+			want:   "4:3",
+		},
+		{
+			name:   "2:1 maps to 16:9, the closest MiniMax ratio",
+			params: map[string]any{"aspect_ratio": "2:1"},
+			want:   "16:9",
+		},
+		{
+			name:   "unparsable ratio falls back to 1:1",
+			params: map[string]any{"aspect_ratio": "custom"},
 			want:   "1:1",
 		},
 		{

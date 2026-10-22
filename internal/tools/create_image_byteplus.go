@@ -128,6 +128,20 @@ func aspectRatioToBytePlusSize(params map[string]any) string {
 		return "1024x768"
 	case "3:4":
 		return "768x1024"
+	case "3:2":
+		return "1152x768"
+	case "2:3":
+		return "768x1152"
+	case "4:5":
+		return "1152x1440"
+	case "5:4":
+		return "1440x1152"
+	case "21:9":
+		return "1344x576"
+	case "2:1":
+		return "1440x720"
+	case "1:2":
+		return "720x1440"
 	default:
 		return "1024x1024"
 	}
