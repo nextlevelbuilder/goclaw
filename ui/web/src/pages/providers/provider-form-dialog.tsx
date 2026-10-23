@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import type { ProviderData, ProviderInput } from "./hooks/use-providers";
 import { slugify } from "@/lib/slug";
-import { DEFAULT_CODEX_OAUTH_ALIAS, PROVIDER_TYPES, suggestUniqueProviderAlias } from "@/constants/providers";
+import { DEFAULT_CODEX_OAUTH_ALIAS, PROVIDER_TYPES, providerTypeLabel, suggestUniqueProviderAlias } from "@/constants/providers";
 import { OAuthSection } from "./provider-oauth-section";
 import { CLISection } from "./provider-cli-section";
 import { ACPSection } from "./provider-acp-section";
@@ -298,7 +298,7 @@ function ProviderTypeSelect({ value, hasClaudeCLI, alreadyAddedLabel, providerTy
               value={pt.value}
               disabled={pt.value === "claude_cli" && hasClaudeCLI}
             >
-              {pt.label}
+              {providerTypeLabel(pt, (key) => t(key))}
               {pt.value === "claude_cli" && hasClaudeCLI && (
                 <span className="ml-1 text-xs opacity-60">{alreadyAddedLabel}</span>
               )}
