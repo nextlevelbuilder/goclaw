@@ -1,0 +1,93 @@
+{
+  "title": "Dashboard",
+  "description": "Panoramica del gateway e utilizzo delle quote",
+  "tabs": {
+    "overview": "Panoramica",
+    "usage": "Utilizzo"
+  },
+  "statCards": {
+    "requestsToday": "Richieste oggi",
+    "tokensToday": "Token oggi",
+    "costToday": "Costo oggi",
+    "agents": "Agenti",
+    "channels": "Canali",
+    "channelsAttention": "{{count}} richiedono attenzione",
+    "running": "in esecuzione",
+    "online": "online",
+    "users": "{{count}} utenti",
+    "inOut": "{{input}} in / {{output}} out"
+  },
+  "providers": {
+    "noProvidersTitle": "Nessun provider LLM configurato",
+    "noEnabledTitle": "Nessun provider LLM abilitato",
+    "noProvidersDesc": "È necessario aggiungere almeno un provider LLM prima che gli agenti possano funzionare.",
+    "noEnabledDesc": "Tutti i provider sono attualmente disabilitati. Abilitane almeno uno per iniziare a utilizzare gli agenti.",
+    "goToSettings": "Vai alle impostazioni dei provider"
+  },
+  "systemHealth": {
+    "title": "Stato del sistema",
+    "uptime": "Tempo di attività",
+    "version": "Versione",
+    "database": "Database",
+    "providers": "Provider",
+    "tools": "Strumenti",
+    "sessions": "Sessioni",
+    "clients": "Client",
+    "channels": "Canali",
+    "needsAttention": "Richiede attenzione",
+    "channelsNeedingAttention": "{{count}} canali",
+    "failedCount": "{{count}} non riusciti",
+    "warningCountOne": "{{count}} avviso",
+    "warningCountOther": "{{count}} avvisi",
+    "moreAttention": "+altri {{count}}",
+    "active": "{{count}} attivi",
+    "none": "nessuno",
+    "runtimes": "Runtime"
+  },
+  "connectedClients": {
+    "title": "Client connessi",
+    "noClients": "Nessun client connesso",
+    "columns": {
+      "ip": "IP",
+      "user": "Utente",
+      "role": "Ruolo",
+      "connected": "Connesso il"
+    },
+    "you": "tu"
+  },
+  "cronJobs": {
+    "title": "Processi pianificati (Cron)",
+    "manage": "Gestisci",
+    "noJobs": "Nessun processo cron configurato",
+    "disabled": "disabilitato"
+  },
+  "recentRequests": {
+    "title": "Richieste recenti",
+    "viewAll": "Visualizza tutte",
+    "noRequests": "Nessuna richiesta recente",
+    "columns": {
+      "time": "Ora",
+      "name": "Nome",
+      "user": "Utente",
+      "channel": "Canale",
+      "tokens": "Token",
+      "duration": "Durata",
+      "status": "Stato"
+    }
+  },
+  "quotaUsage": {
+    "title": "Utilizzo delle quote",
+    "columns": {
+      "userGroup": "Utente / Gruppo",
+      "hour": "Ora",
+      "day": "Giorno",
+      "week": "Settimana"
+    },
+    "noLimit": "nessun limite"
+  },
+  "embedding": {
+    "title": "Embedding",
+    "notConfigured": "Non configurato",
+    "configure": "Configura in Provider →"
+  }
+}
