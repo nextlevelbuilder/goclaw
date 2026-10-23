@@ -388,5 +388,8 @@
     "failedCreate": "Không thể tạo provider",
     "failedUpdate": "Không thể cập nhật provider",
     "failedDelete": "Không thể xóa provider"
+  },
+  "providerTypes": {
+    "custom": "Nhà cung cấp tùy chỉnh (tương thích OpenAI)"
   }
 }
