@@ -654,6 +654,7 @@ func (h *ProvidersHandler) handleCreateProvider(w http.ResponseWriter, r *http.R
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidSlug, "name")})
 		return
 	}
+	p.ProviderType = store.NormalizeProviderType(p.ProviderType)
 	if !store.ValidProviderTypes[p.ProviderType] {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "unsupported provider_type")})
 		return
@@ -840,6 +841,8 @@ func (h *ProvidersHandler) handleUpdateProvider(w http.ResponseWriter, r *http.R
 		candidate.DisplayName = displayName
 	}
 	if pt, ok := updates["provider_type"].(string); ok && pt != "" {
+		pt = store.NormalizeProviderType(pt)
+		updates["provider_type"] = pt
 		candidate.ProviderType = pt
 	}
 	if settings, ok := updates["settings"]; ok {
