@@ -17,6 +17,7 @@ export const PROVIDER_TYPES: ProviderTypeInfo[] = [
   { value: "chatgpt_oauth", label: "ChatGPT Subscription (OAuth)", apiBase: "", placeholder: "" },
   { value: "anthropic_native", label: "Anthropic (Native)", apiBase: "", placeholder: "https://api.anthropic.com" },
   { value: "openai_compat", label: "OpenAI Compatible", apiBase: "", placeholder: "https://api.openai.com/v1" },
+  { value: "custom", label: "Custom Provider (OpenAI-compatible)", apiBase: "", placeholder: "https://your-endpoint.example.com/v1" },
   { value: "gemini_native", label: "Google Gemini", apiBase: "https://generativelanguage.googleapis.com/v1beta/openai", placeholder: "" },
   { value: "vertex", label: "Google Vertex AI", apiBase: "", placeholder: "Auto-computed from project_id + region (settings)" },
   { value: "openrouter", label: "OpenRouter", apiBase: "https://openrouter.ai/api/v1", placeholder: "" },
