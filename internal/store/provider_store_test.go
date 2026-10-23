@@ -66,3 +66,25 @@ func TestParseThinkingEnabled(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizeProviderType(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"custom", ProviderOpenAICompat},
+		{"Custom", ProviderOpenAICompat},
+		{" custom ", ProviderOpenAICompat},
+		{ProviderOpenAICompat, ProviderOpenAICompat},
+		{ProviderOpenRouter, ProviderOpenRouter},
+		{"not-a-provider", "not-a-provider"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, NormalizeProviderType(tt.in), "input %q", tt.in)
+	}
+	// The alias must resolve to a type the create/update handlers accept.
+	assert.True(t, ValidProviderTypes[NormalizeProviderType(ProviderTypeCustomAlias)])
+	// The alias itself is not a stored provider type.
+	assert.False(t, ValidProviderTypes[ProviderTypeCustomAlias])
+}
