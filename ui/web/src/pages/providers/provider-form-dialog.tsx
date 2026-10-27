@@ -142,7 +142,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
             value={providerType}
             hasClaudeCLI={hasClaudeCLI}
             alreadyAddedLabel={t("form.alreadyAdded")}
-            providerTypeLabel={t("form.providerType")}
+            typeFieldLabel={t("form.providerType")}
             onChange={handleProviderTypeChange}
           />
 
@@ -277,16 +277,17 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
   );
 }
 
-function ProviderTypeSelect({ value, hasClaudeCLI, alreadyAddedLabel, providerTypeLabel, onChange }: {
+function ProviderTypeSelect({ value, hasClaudeCLI, alreadyAddedLabel, typeFieldLabel, onChange }: {
   value: string;
   hasClaudeCLI: boolean;
   alreadyAddedLabel: string;
-  providerTypeLabel: string;
+  typeFieldLabel: string;
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation("providers");
   return (
     <div className="space-y-2">
-      <Label>{providerTypeLabel}</Label>
+      <Label>{typeFieldLabel}</Label>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger>
           <SelectValue />
