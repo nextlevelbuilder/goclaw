@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -82,6 +83,21 @@ const (
 // Vertex AI constants live in internal/providers/vertex.go to avoid a store→providers import cycle
 // (store is imported by providers). DB-layer concerns (ProviderVertex type + settings parsing)
 // remain in this package.
+
+// ProviderTypeCustomAlias is accepted from API clients as a friendlier name for a
+// generic OpenAI-compatible endpoint (LiteLLM, vLLM, self-hosted gateways, ...).
+// It is not stored: NormalizeProviderType maps it to ProviderOpenAICompat, so the
+// existing OpenAI-compatible adapter and /v1/models discovery handle it unchanged.
+const ProviderTypeCustomAlias = "custom"
+
+// NormalizeProviderType resolves accepted aliases to their canonical provider type.
+// Unknown values are returned unchanged so callers can still reject them.
+func NormalizeProviderType(providerType string) string {
+	if strings.EqualFold(strings.TrimSpace(providerType), ProviderTypeCustomAlias) {
+		return ProviderOpenAICompat
+	}
+	return providerType
+}
 
 // ValidProviderTypes lists all accepted provider_type values.
 var ValidProviderTypes = map[string]bool{
