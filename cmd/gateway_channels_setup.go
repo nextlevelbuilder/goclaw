@@ -14,6 +14,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/discord"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/feishu"
+	"github.com/nextlevelbuilder/goclaw/internal/channels/mattermost"
 	slackchannel "github.com/nextlevelbuilder/goclaw/internal/channels/slack"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/telegram"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/whatsapp"
@@ -122,6 +123,24 @@ func registerConfigChannels(cfg *config.Config, channelMgr *channels.Manager, ms
 			} else {
 				channelMgr.RegisterChannel(channels.TypeSlack, sl)
 				slog.Info("slack channel enabled (config)")
+			}
+		}
+	}
+
+	if cfg.Channels.Mattermost.Enabled {
+		switch {
+		case cfg.Channels.Mattermost.ServerURL == "":
+			recordMissingConfig(channels.TypeMattermost, "Set channels.mattermost.server_url in config.")
+		case cfg.Channels.Mattermost.BotToken == "":
+			recordMissingConfig(channels.TypeMattermost, "Set channels.mattermost.bot_token in config.")
+		default:
+			mm, err := mattermost.New(cfg.Channels.Mattermost, msgBus, pgStores.Pairing, pgStores.PendingMessages)
+			if err != nil {
+				channelMgr.RecordFailure(channels.TypeMattermost, "", err)
+				slog.Error("failed to initialize mattermost channel", "error", err)
+			} else {
+				channelMgr.RegisterChannel(channels.TypeMattermost, mm)
+				slog.Info("mattermost channel enabled (config)")
 			}
 		}
 	}

@@ -296,6 +296,10 @@
       "label": "API 서버 URL",
       "help": "대용량 파일 업로드(최대 2GB)를 위한 커스텀 Telegram Bot API 서버. 기본값을 사용하려면 비워두세요."
     },
+    "server_url": {
+      "label": "서버 URL",
+      "help": "Mattermost 서버의 기본 URL. 사설 네트워크(10.x, 192.168.x, localhost)의 서버는 게이트웨이에 GOCLAW_ALLOW_PRIVATE_MATTERMOST_URLS=true 설정이 필요합니다."
+    },
     "proxy": {
       "label": "HTTP 프록시",
       "help": "HTTP 프록시를 통해 봇 트래픽 라우팅"
@@ -376,6 +380,10 @@
     "thread_ttl": {
       "label": "스레드 참여 TTL (시간)",
       "help": "참여한 스레드에서 봇이 자동 응답을 중지하기까지의 시간입니다. 0 = 항상 @멘션 필요."
+    },
+    "group_dm_as_direct": {
+      "label": "그룹 메시지를 DM으로 처리",
+      "help": "그룹 다이렉트 메시지(3–8명)를 DM처럼 처리합니다: @멘션이나 스레드 없이 모든 메시지에 응답합니다. 그룹 정책은 그대로 적용되며 대화는 하나의 공유 그룹 세션으로 유지됩니다. 끄면 채널처럼 처리합니다."
     },
     "skills": {
       "label": "스킬 필터",
