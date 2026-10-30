@@ -458,6 +458,12 @@ func TestOpenAIModelsAPIBaseDefaultsRequesty(t *testing.T) {
 	}
 }
 
+func TestOpenAIModelsAPIBaseDefaultsRuncrate(t *testing.T) {
+	if got := openAIModelsAPIBase(store.ProviderRuncrate, ""); got != store.RuncrateDefaultAPIBase {
+		t.Fatalf("Runcrate default api base = %q, want %q", got, store.RuncrateDefaultAPIBase)
+	}
+}
+
 func TestProvidersHandlerListProviderModelsAIMLAPIUsesCuratedCatalog(t *testing.T) {
 	token := setupProvidersAdminToken(t)
 	providerStore := newMockProviderStore()

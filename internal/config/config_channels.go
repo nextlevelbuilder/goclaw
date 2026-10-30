@@ -258,6 +258,7 @@ type ProvidersConfig struct {
 	AtlasCloud     ProviderConfig  `json:"atlascloud"` // Atlas Cloud (OpenAI-compatible endpoint)
 	APIRoute       ProviderConfig  `json:"api_route"`  // API Route (OpenAI-compatible endpoint)
 	Requesty       ProviderConfig  `json:"requesty"`   // Requesty (OpenAI-compatible router)
+	Runcrate       ProviderConfig  `json:"runcrate"`   // Runcrate (OpenAI-compatible endpoint)
 	OpenRouter     ProviderConfig  `json:"openrouter"`
 	Groq           ProviderConfig  `json:"groq"`
 	Gemini         ProviderConfig  `json:"gemini"`
@@ -340,6 +341,8 @@ func (p *ProvidersConfig) APIBaseForType(providerType string) string {
 		return p.APIRoute.APIBase
 	case "requesty":
 		return p.Requesty.APIBase
+	case "runcrate":
+		return p.Runcrate.APIBase
 	case "openrouter":
 		return p.OpenRouter.APIBase
 	case "groq":
@@ -390,6 +393,7 @@ func (c *Config) HasAnyProvider() bool {
 		p.AtlasCloud.APIKey != "" ||
 		p.APIRoute.APIKey != "" ||
 		p.Requesty.APIKey != "" ||
+		p.Runcrate.APIKey != "" ||
 		p.OpenRouter.APIKey != "" ||
 		p.Groq.APIKey != "" ||
 		p.Gemini.APIKey != "" ||

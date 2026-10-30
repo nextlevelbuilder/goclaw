@@ -77,6 +77,17 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 		slog.Info("registered provider", "name", "requesty")
 	}
 
+	if cfg.Providers.Runcrate.APIKey != "" {
+		base := cfg.Providers.Runcrate.APIBase
+		if base == "" {
+			base = store.RuncrateDefaultAPIBase
+		}
+		prov := providers.NewOpenAIProvider("runcrate", cfg.Providers.Runcrate.APIKey, base, store.RuncrateDefaultModel)
+		prov.WithProviderType(store.ProviderRuncrate)
+		registry.Register(prov)
+		slog.Info("registered provider", "name", "runcrate")
+	}
+
 	if cfg.Providers.OpenRouter.APIKey != "" {
 		orProv := providers.NewOpenAIProvider("openrouter", cfg.Providers.OpenRouter.APIKey, "https://openrouter.ai/api/v1", "anthropic/claude-sonnet-4-5-20250929")
 		orProv.WithSiteInfo("https://goclaw.sh", "GoClaw")
@@ -513,6 +524,11 @@ func openAIProviderDefaults(providerType, apiBase string) (string, string) {
 			apiBase = store.RequestyDefaultAPIBase
 		}
 		return apiBase, store.RequestyDefaultModel
+	case store.ProviderRuncrate:
+		if apiBase == "" {
+			apiBase = store.RuncrateDefaultAPIBase
+		}
+		return apiBase, store.RuncrateDefaultModel
 	default:
 		return apiBase, ""
 	}
