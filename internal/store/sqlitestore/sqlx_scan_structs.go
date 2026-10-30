@@ -46,7 +46,7 @@ type tenantRow struct {
 	Name      string          `json:"name" db:"name"`
 	Slug      string          `json:"slug" db:"slug"`
 	Status    string          `json:"status" db:"status"`
-	Settings  json.RawMessage `json:"settings" db:"settings"`
+	Settings  sqliteJSONValue `json:"settings" db:"settings"`
 	CreatedAt sqliteTime      `json:"created_at" db:"created_at"`
 	UpdatedAt sqliteTime      `json:"updated_at" db:"updated_at"`
 }
@@ -57,7 +57,7 @@ func (r *tenantRow) toTenantData() store.TenantData {
 		Name:      r.Name,
 		Slug:      r.Slug,
 		Status:    r.Status,
-		Settings:  r.Settings,
+		Settings:  json.RawMessage(r.Settings),
 		CreatedAt: r.CreatedAt.Time,
 		UpdatedAt: r.UpdatedAt.Time,
 	}
@@ -70,7 +70,7 @@ type tenantUserRow struct {
 	UserID      string          `json:"user_id" db:"user_id"`
 	DisplayName *string         `json:"display_name" db:"display_name"`
 	Role        string          `json:"role" db:"role"`
-	Metadata    json.RawMessage `json:"metadata" db:"metadata"`
+	Metadata    sqliteJSONValue `json:"metadata" db:"metadata"`
 	CreatedAt   sqliteTime      `json:"created_at" db:"created_at"`
 	UpdatedAt   sqliteTime      `json:"updated_at" db:"updated_at"`
 }
@@ -82,7 +82,7 @@ func (r *tenantUserRow) toTenantUserData() store.TenantUserData {
 		UserID:      r.UserID,
 		DisplayName: r.DisplayName,
 		Role:        r.Role,
-		Metadata:    r.Metadata,
+		Metadata:    json.RawMessage(r.Metadata),
 		CreatedAt:   r.CreatedAt.Time,
 		UpdatedAt:   r.UpdatedAt.Time,
 	}
@@ -90,44 +90,46 @@ func (r *tenantUserRow) toTenantUserData() store.TenantUserData {
 
 // mcpServerRow is a scan struct for mcp_servers rows.
 // Pointer fields handle nullable columns that sqlx maps to empty string otherwise.
+// JSON columns use sqliteJSONValue because they may be stored as TEXT (e.g.
+// CacheToolDescriptions, map-valued UpdateServer) or BLOB (json.RawMessage args).
 type mcpServerRow struct {
-	ID          uuid.UUID       `json:"id" db:"id"`
-	Name        string          `json:"name" db:"name"`
-	DisplayName *string         `json:"display_name" db:"display_name"`
-	Transport   string          `json:"transport" db:"transport"`
-	Command     *string         `json:"command" db:"command"`
-	Args        json.RawMessage `json:"args" db:"args"`
-	URL         *string         `json:"url" db:"url"`
-	Headers     json.RawMessage `json:"headers" db:"headers"`
-	Env         json.RawMessage `json:"env" db:"env"`
-	APIKey      *string         `json:"api_key" db:"api_key"`
-	ToolPrefix  *string         `json:"tool_prefix" db:"tool_prefix"`
-	TimeoutSec  int             `json:"timeout_sec" db:"timeout_sec"`
-	Settings    json.RawMessage `json:"settings" db:"settings"`
-	Enabled        bool       `json:"enabled" db:"enabled"`
-	RequireUserCredentials bool `json:"require_user_credentials" db:"require_user_credentials"`
-	CreatedBy      string     `json:"created_by" db:"created_by"`
-	CreatedAt      sqliteTime `json:"created_at" db:"created_at"`
-	UpdatedAt      sqliteTime `json:"updated_at" db:"updated_at"`
+	ID                     uuid.UUID       `json:"id" db:"id"`
+	Name                   string          `json:"name" db:"name"`
+	DisplayName            *string         `json:"display_name" db:"display_name"`
+	Transport              string          `json:"transport" db:"transport"`
+	Command                *string         `json:"command" db:"command"`
+	Args                   sqliteJSONValue `json:"args" db:"args"`
+	URL                    *string         `json:"url" db:"url"`
+	Headers                sqliteJSONValue `json:"headers" db:"headers"`
+	Env                    sqliteJSONValue `json:"env" db:"env"`
+	APIKey                 *string         `json:"api_key" db:"api_key"`
+	ToolPrefix             *string         `json:"tool_prefix" db:"tool_prefix"`
+	TimeoutSec             int             `json:"timeout_sec" db:"timeout_sec"`
+	Settings               sqliteJSONValue `json:"settings" db:"settings"`
+	Enabled                bool            `json:"enabled" db:"enabled"`
+	RequireUserCredentials bool            `json:"require_user_credentials" db:"require_user_credentials"`
+	CreatedBy              string          `json:"created_by" db:"created_by"`
+	CreatedAt              sqliteTime      `json:"created_at" db:"created_at"`
+	UpdatedAt              sqliteTime      `json:"updated_at" db:"updated_at"`
 }
 
 func (r *mcpServerRow) toMCPServerData() store.MCPServerData {
 	return store.MCPServerData{
-		BaseModel:      store.BaseModel{ID: r.ID, CreatedAt: r.CreatedAt.Time, UpdatedAt: r.UpdatedAt.Time},
-		Name:           r.Name,
-		DisplayName:    derefStr(r.DisplayName),
-		Transport:      r.Transport,
-		Command:        derefStr(r.Command),
-		Args:           r.Args,
-		URL:            derefStr(r.URL),
-		Headers:        r.Headers,
-		Env:            r.Env,
-		APIKey:         derefStr(r.APIKey),
-		ToolPrefix:     derefStr(r.ToolPrefix),
-		TimeoutSec:     r.TimeoutSec,
-		Settings:       r.Settings,
-		Enabled:        r.Enabled,
+		BaseModel:              store.BaseModel{ID: r.ID, CreatedAt: r.CreatedAt.Time, UpdatedAt: r.UpdatedAt.Time},
+		Name:                   r.Name,
+		DisplayName:            derefStr(r.DisplayName),
+		Transport:              r.Transport,
+		Command:                derefStr(r.Command),
+		Args:                   json.RawMessage(r.Args),
+		URL:                    derefStr(r.URL),
+		Headers:                json.RawMessage(r.Headers),
+		Env:                    json.RawMessage(r.Env),
+		APIKey:                 derefStr(r.APIKey),
+		ToolPrefix:             derefStr(r.ToolPrefix),
+		TimeoutSec:             r.TimeoutSec,
+		Settings:               json.RawMessage(r.Settings),
+		Enabled:                r.Enabled,
 		RequireUserCredentials: r.RequireUserCredentials,
-		CreatedBy:      r.CreatedBy,
+		CreatedBy:              r.CreatedBy,
 	}
 }

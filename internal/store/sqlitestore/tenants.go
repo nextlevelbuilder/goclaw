@@ -163,10 +163,12 @@ func (s *SQLiteTenantStore) CreateTenantUserReturning(ctx context.Context, tenan
 		store.GenNewID(), tenantID, userID, dn, role, now, now,
 	)
 	var d store.TenantUserData
+	var metadata sqliteJSONValue
 	createdAt, updatedAt := scanTimePair()
-	if err := row.Scan(&d.ID, &d.TenantID, &d.UserID, &d.DisplayName, &d.Role, &d.Metadata, createdAt, updatedAt); err != nil {
+	if err := row.Scan(&d.ID, &d.TenantID, &d.UserID, &d.DisplayName, &d.Role, &metadata, createdAt, updatedAt); err != nil {
 		return nil, err
 	}
+	d.Metadata = json.RawMessage(metadata)
 	d.CreatedAt = createdAt.Time
 	d.UpdatedAt = updatedAt.Time
 	return &d, nil

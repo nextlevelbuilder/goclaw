@@ -1,10 +1,13 @@
 ---
 name: anysearch
-description: Use this skill for live web and vertical-domain search, parallel batch search, and full-page URL extraction via AnySearch. Prefer vertical search for domain-specific or realtime queries (finance, academic, security, legal, code, travel, health, etc.); call get_sub_domains before vertical search; use batch_search when the query is ambiguous or multi-intent; use extract to turn a page into Markdown. Works anonymously with lower rate limits, or with ANYSEARCH_API_KEY for higher limits.
+description: Use this skill for live web and vertical-domain search, parallel batch search, and full-page URL extraction via AnySearch. Prefer vertical search for domain-specific or realtime queries (finance, academic, security, legal, code, travel, health, etc.); call get_sub_domains before vertical search; use batch_search when the query is ambiguous or multi-intent; use extract to turn a page into Markdown. The primary supported runtime is Python 3 with the requests package; the bundled Node.js CLI is an optional direct-use alternative. Works anonymously with lower rate limits, or with ANYSEARCH_API_KEY for higher limits.
 author: AnySearch Team
 tags: [search, web, extract, anysearch, vertical]
 license: Apache-2.0 (see LICENSE and NOTICE in this skill directory)
 version: 3.1.1
+deps:
+  - system:python3
+  - pip:requests>=2.20
 upstream: anysearch-ai/anysearch-skill@v3.1.1
 ---
 

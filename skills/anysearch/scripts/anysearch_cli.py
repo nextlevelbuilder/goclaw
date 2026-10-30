@@ -107,9 +107,12 @@ def _call_rest(method: str, path: str, api_key: str, *, payload=None, params=Non
     return body
 
 
+def _request_id_detail(request_id) -> str:
+    return f" (request_id: {request_id})" if request_id else ""
+
+
 def _print_api_error(error: ApiError):
-    detail = f" (request_id: {error.request_id})" if error.request_id else ""
-    print(f"API Error: {error}{detail}", file=sys.stderr)
+    print(f"API Error: {error}{_request_id_detail(error.request_id)}", file=sys.stderr)
     if isinstance(error.data, dict) and error.data:
         print(f"Response data: {json.dumps(error.data, ensure_ascii=False)}", file=sys.stderr)
 
@@ -122,12 +125,25 @@ def _call_or_exit(method: str, path: str, api_key: str, *, payload=None, params=
         sys.exit(1)
 
 
+def _request_id_footer(envelope: dict) -> str:
+    request_id = envelope.get("request_id")
+    return f"\n\n_Request ID: {request_id}_" if request_id else ""
+
+
 def _format_search_response(envelope: dict) -> str:
-    data = envelope.get("data") or {}
-    results = data.get("results") or []
+    data = envelope.get("data")
+    if not isinstance(data, dict):
+        raise ValueError("invalid search response: data must be an object")
+    results = data.get("results", [])
+    if not isinstance(results, list):
+        raise ValueError("invalid search response: data.results must be an array")
     metadata = data.get("metadata") or {}
+    if not isinstance(metadata, dict):
+        raise ValueError("invalid search response: data.metadata must be an object")
     if not results:
-        return "No relevant results found."
+        return "No relevant results found." + _request_id_footer(envelope)
+    if any(not isinstance(result, dict) for result in results):
+        raise ValueError("invalid search response: each result must be an object")
     total = metadata.get("total_results", len(results))
     elapsed = metadata.get("search_time_ms", 0)
     lines = [f"## Search Results ({total} results, {elapsed}ms)", ""]
@@ -140,7 +156,7 @@ def _format_search_response(envelope: dict) -> str:
         if description:
             lines.append(f"- {description}")
         lines.append("")
-    return "\n".join(lines).rstrip() + "\n"
+    return "\n".join(lines).rstrip() + _request_id_footer(envelope) + "\n"
 
 
 def _format_capabilities_response(envelope: dict, requested_domains: list) -> str:
@@ -167,8 +183,8 @@ def _format_capabilities_response(envelope: dict, requested_domains: list) -> st
             matched += 1
     if not matched:
         joined = ", ".join(requested_domains)
-        return f'No capabilities available for domain "{joined}".\n'
-    return "\n".join(lines).rstrip() + "\n"
+        return f'No capabilities available for domain "{joined}".' + _request_id_footer(envelope) + "\n"
+    return "\n".join(lines).rstrip() + _request_id_footer(envelope) + "\n"
 
 
 def _format_extract_response(envelope: dict) -> str:
@@ -180,7 +196,7 @@ def _format_extract_response(envelope: dict) -> str:
     if data.get("title"):
         lines.extend([f"## {data['title']}", ""])
     lines.extend([f"**Source**: {data.get('url', '')}", "", "---", "", data.get("content", "")])
-    return "\n".join(lines)
+    return "\n".join(lines) + _request_id_footer(envelope)
 
 
 def _normalize_search_item(item: dict) -> dict:
@@ -283,7 +299,14 @@ def cmd_search(args):
     if args.max_results is not None:
         arguments["max_results"] = max(1, min(args.max_results, 10))
 
-    print(_format_search_response(_call_or_exit("POST", "/v1/search", args.api_key, payload=arguments)), end="")
+    envelope = _call_or_exit("POST", "/v1/search", args.api_key, payload=arguments)
+    try:
+        formatted = _format_search_response(envelope)
+    except (TypeError, ValueError) as error:
+        detail = _request_id_detail(envelope.get("request_id"))
+        print(f"Error: failed to format search response: {error}{detail}", file=sys.stderr)
+        sys.exit(1)
+    print(formatted, end="")
 
 
 def cmd_get_sub_domains(args):
@@ -470,18 +493,29 @@ def cmd_batch_search(args):
         results[index] = (response, error)
 
     output = []
+    api_failures = 0
+    format_failures = 0
     for index, item in enumerate(queries):
         query = item.get("query", "") if isinstance(item, dict) else ""
         output.extend([f"## Query {index + 1}: {query}", ""])
         response, error = results[index]
         if error:
-            request_id = f" (request_id: {error.request_id})" if isinstance(error, ApiError) and error.request_id else ""
-            output.append(f"Search failed: {error}{request_id}")
+            api_failures += 1
+            detail = _request_id_detail(error.request_id) if isinstance(error, ApiError) else ""
+            output.append(f"Search failed: {error}{detail}")
         else:
-            output.append(_format_search_response(response).rstrip())
+            try:
+                output.append(_format_search_response(response).rstrip())
+            except (TypeError, ValueError) as format_error:
+                format_failures += 1
+                detail = _request_id_detail(response.get("request_id"))
+                print(f"failed to format search response for query {index + 1}: {format_error}{detail}", file=sys.stderr)
+                output.append(f"Search failed: invalid API response{detail}")
         if index < len(queries) - 1:
             output.extend(["", "---", ""])
     print("\n".join(output))
+    if format_failures or api_failures == len(queries):
+        sys.exit(1)
 
 
 # BEGIN GENERATED:DOC_SPEC

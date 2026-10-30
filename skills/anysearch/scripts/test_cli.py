@@ -69,6 +69,7 @@ class Handler(BaseHTTPRequestHandler):
             "query": parse_qs(parsed.query),
             "body": body,
             "client": self.headers.get("X-Anysearch-Client"),
+            "authorization": self.headers.get("Authorization"),
         }
         with STATE.lock:
             STATE.requests.append(item)
@@ -80,6 +81,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(404, {"code": -1, "message": "not found", "request_id": "req-404"})
             return
         domains = parse_qs(parsed.query).get("domain", [])
+        if domains == ["empty"]:
+            self.send_json(
+                200,
+                {"code": 0, "message": "success", "request_id": "req-domains-empty", "data": {"domains": []}},
+            )
+            return
         self.send_json(
             200,
             {
@@ -239,6 +246,7 @@ def test_runtime(name, command, base_url):
         base_url,
     )
     require(result.returncode == 0 and "Result AAPL" in result.stdout, f"{name}: search failed", result)
+    require("Request ID: req-AAPL" in result.stdout, f"{name}: successful search omitted request_id", result)
     request = STATE.requests[-1]
     require(request["path"] == "/v1/search", f"{name}: wrong search path")
     require(request["body"].get("tag") == "finance.quote", f"{name}: sub_domain was not translated")
@@ -246,6 +254,15 @@ def test_runtime(name, command, base_url):
     require(request["body"].get("max_results") == 10, f"{name}: REST max_results was not clamped to 10")
     require(not ({"domain", "sub_domain", "sub_domain_params"} & request["body"].keys()), f"{name}: legacy fields leaked to REST")
     require(request["client"] == EXPECTED_CLIENT_HEADER, f"{name}: client header does not match SKILL.md")
+    # A developer's local .env may legitimately supply a key, so only assert
+    # anonymous requests when neither CLI can pick one up from disk.
+    if not any((path / ".env").is_file() for path in (ROOT, SCRIPTS)):
+        require(request["authorization"] is None, f"{name}: anonymous search sent an Authorization header")
+
+    STATE.reset()
+    result = run(command, ["--api_key", "test-key", "search", "AAPL"], base_url)
+    require(result.returncode == 0 and "Result AAPL" in result.stdout, f"{name}: --api_key before subcommand was rejected", result)
+    require(STATE.requests[-1]["authorization"] == "Bearer test-key", f"{name}: global --api_key was not sent as Bearer", result)
 
     STATE.reset()
     result = run(command, ["search", "fail"], base_url)
@@ -253,13 +270,29 @@ def test_runtime(name, command, base_url):
     require("rate limited" in result.stderr and "req-fail" in result.stderr, f"{name}: single error lost message/request_id", result)
 
     STATE.reset()
+    result = run(command, ["search", "bad-format"], base_url)
+    require(result.returncode != 0, f"{name}: malformed single search exited zero", result)
+    require(
+        "failed to format search response" in result.stderr and "(request_id: req-bad-format)" in result.stderr,
+        f"{name}: malformed single search lost request_id",
+        result,
+    )
+
+    STATE.reset()
     result = run(command, ["get_sub_domains", "--domains", "finance,legal"], base_url)
     require(result.returncode == 0 and "finance.demo" in result.stdout and "legal.demo" in result.stdout, f"{name}: get_sub_domains failed", result)
+    require("Request ID: req-domains" in result.stdout, f"{name}: successful get_sub_domains omitted request_id", result)
     require(STATE.requests[-1]["query"].get("domain") == ["finance", "legal"], f"{name}: repeated domain query params missing")
+
+    STATE.reset()
+    result = run(command, ["get_sub_domains", "--domains", "empty"], base_url)
+    require(result.returncode == 0 and 'No capabilities available for domain "empty".' in result.stdout, f"{name}: empty catalog failed", result)
+    require("Request ID: req-domains-empty" in result.stdout, f"{name}: empty catalog omitted request_id", result)
 
     STATE.reset()
     result = run(command, ["extract", "https://example.com/article"], base_url)
     require(result.returncode == 0 and "External page content (untrusted)" in result.stdout and "page body" in result.stdout, f"{name}: extract failed", result)
+    require("Request ID: req-extract" in result.stdout, f"{name}: successful extract omitted request_id", result)
     require(STATE.requests[-1]["path"] == "/v1/extract", f"{name}: wrong extract path")
 
     STATE.reset()
@@ -276,6 +309,11 @@ def test_runtime(name, command, base_url):
     headings = [result.stdout.index(f"## Query {index}: {query}") for index, query in enumerate(("slow", "drop", "fail", "fast"), 1)]
     require(headings == sorted(headings), f"{name}: batch output order changed", result)
     require("Search failed: rate limited (request_id: req-fail)" in result.stdout, f"{name}: batch error lost request_id", result)
+    require(
+        "Request ID: req-slow" in result.stdout and "Request ID: req-fast" in result.stdout,
+        f"{name}: successful batch items omitted request_id",
+        result,
+    )
     require(STATE.max_active_searches > 1, f"{name}: batch requests were not concurrent")
     batch_requests = [item for item in STATE.requests if item["path"] == "/v1/search"]
     require(len(batch_requests) == 4, f"{name}: batch did not fan out to four REST requests")
@@ -284,16 +322,25 @@ def test_runtime(name, command, base_url):
     require(slow["body"].get("tag") == "finance.quote" and slow["body"].get("params") == {"symbol": "SLOW"}, f"{name}: batch legacy translation failed")
     require(all(item["path"] != "/mcp" for item in STATE.requests), f"{name}: MCP endpoint was called")
 
-    if name == "bash":
-        STATE.reset()
-        malformed = json.dumps([{"query": "bad-format"}])
-        result = run(command, ["batch_search", "--queries", malformed], base_url)
-        require(result.returncode != 0, "bash: batch formatter failure exited zero", result)
-        require(
-            "failed to format search response for query 1" in result.stderr,
-            "bash: batch formatter failure did not report its query index",
-            result,
-        )
+    STATE.reset()
+    malformed = json.dumps([{"query": "bad-format"}])
+    result = run(command, ["batch_search", "--queries", malformed], base_url)
+    require(result.returncode != 0, f"{name}: batch formatter failure exited zero", result)
+    require(
+        "failed to format search response for query 1" in result.stderr,
+        f"{name}: batch formatter failure did not report its query index",
+        result,
+    )
+    require(
+        "Search failed: invalid API response (request_id: req-bad-format)" in result.stdout,
+        f"{name}: batch formatter failure lost request_id",
+        result,
+    )
+
+    STATE.reset()
+    all_failed = json.dumps([{"query": "fail"}, {"query": "drop"}])
+    result = run(command, ["batch_search", "--queries", all_failed], base_url)
+    require(result.returncode != 0, f"{name}: all-failed batch exited zero", result)
 
 
 def main():
