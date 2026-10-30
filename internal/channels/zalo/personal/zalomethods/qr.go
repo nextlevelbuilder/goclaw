@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,6 +23,10 @@ import (
 // in sync.Map.CompareAndDelete (function types are not comparable).
 type cancelEntry struct {
 	cancel context.CancelFunc
+	// superseded is set when a newer QR session for the same instance replaced
+	// this one; the old flow must then exit without emitting a failure event,
+	// since the client cannot tell which session a qr.done event belongs to.
+	superseded atomic.Bool
 }
 
 // QRMethods handles QR login for zalo_personal channel instances.
@@ -65,6 +70,7 @@ func (m *QRMethods) handleQRStart(ctx context.Context, client *gateway.Client, r
 	// Atomically swap cancel entry; cancel any previous QR session so the user can retry.
 	if prev, loaded := m.activeSessions.Swap(params.InstanceID, entry); loaded {
 		if prevEntry, ok := prev.(*cancelEntry); ok {
+			prevEntry.superseded.Store(true)
 			prevEntry.cancel()
 		}
 	}
@@ -93,6 +99,10 @@ func (m *QRMethods) runQRFlow(ctx context.Context, entry *cancelEntry, client *g
 	})
 
 	if err != nil {
+		if entry.superseded.Load() {
+			slog.Debug("Zalo Personal QR session superseded by a newer one", "instance", instanceIDStr)
+			return
+		}
 		slog.Warn("Zalo Personal QR login failed", "instance", instanceIDStr, "error", err)
 		client.SendEvent(*goclawprotocol.NewEvent(goclawprotocol.EventZaloPersonalQRDone, map[string]any{
 			"instance_id": instanceIDStr,
