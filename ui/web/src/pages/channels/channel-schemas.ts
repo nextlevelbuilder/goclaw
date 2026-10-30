@@ -68,6 +68,12 @@ export const groupPolicyOptions = [
   { value: "disabled", label: "Disabled" },
 ];
 
+const zaloBotGroupPolicyOptions = [
+  { value: "open", label: "Open (accept all)" },
+  { value: "allowlist", label: "Allowlist only" },
+  { value: "disabled", label: "Disabled" },
+];
+
 const mentionModeOptions = [
   { value: "strict", label: "Default (follow @mention setting)" },
   { value: "yield", label: "Multi-bot (respond unless another bot is @mentioned)" },
@@ -101,6 +107,9 @@ export const credentialsSchema: Record<string, FieldDef[]> = {
     { key: "app_secret", label: "App Secret", type: "password", required: true },
     { key: "encrypt_key", label: "Encrypt Key", type: "password", help: "For webhook event decryption", showWhen: { key: "connection_mode", value: "webhook" } },
     { key: "verification_token", label: "Verification Token", type: "password", help: "For webhook event verification", showWhen: { key: "connection_mode", value: "webhook" } },
+  ],
+  zalo_bot: [
+    { key: "token", label: "Bot Token", type: "password", required: true, help: "Bot Token from Zalo Bot Creator / OA Zalo Bot Manager" },
   ],
   zalo_oa: [
     { key: "token", label: "OA Access Token", type: "password", required: true },
@@ -207,6 +216,16 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "reaction_level", label: "Reaction Level", type: "select", options: [{ value: "off", label: "Off" }, { value: "minimal", label: "Minimal" }, { value: "full", label: "Full" }], defaultValue: "off", help: "Typing emoji reaction on user messages while bot is processing" },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Lark open_ids (ou_...)" },
     { key: "group_allow_from", label: "Group Allowed Users", type: "tags", help: "Separate allowlist for group senders" },
+    ...chatBehaviorOverrideFields,
+  ],
+  zalo_bot: [
+    { key: "dm_policy", label: "DM Policy", type: "select", options: dmPolicyOptions, defaultValue: "pairing" },
+    { key: "group_policy", label: "Group Policy", type: "select", options: zaloBotGroupPolicyOptions, defaultValue: "open" },
+    { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true },
+    { key: "poll_timeout_sec", label: "Poll Timeout (s)", type: "number", defaultValue: 30, help: "Long polling timeout in seconds" },
+    { key: "media_max_mb", label: "Max Media Size (MB)", type: "number", defaultValue: 10, help: "Max inbound/outbound media size in MB" },
+    { key: "allow_from", label: "Allowed Users", type: "tags", help: "Allowed user IDs" },
+    { key: "group_allow_from", label: "Group Allowed IDs", type: "tags", help: "Allowed group IDs" },
     ...chatBehaviorOverrideFields,
   ],
   zalo_oa: [
