@@ -14,6 +14,9 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
+// minimaxImageAspectRatios is the aspect_ratio enum MiniMax image_generation accepts.
+var minimaxImageAspectRatios = []string{"1:1", "16:9", "4:3", "3:2", "2:3", "3:4", "9:16", "21:9"}
+
 // minimaxImageAspectRatio returns the aspect_ratio string for MiniMax image_generation.
 // See: https://platform.minimax.io/docs/guides/image-generation
 // Legacy chain settings may still pass "size" as "WIDTH*HEIGHT"; map those to ratios.
@@ -33,14 +36,14 @@ func minimaxImageAspectRatio(params map[string]any) string {
 		}
 	}
 	ar := GetParamString(params, "aspect_ratio", "")
-	switch ar {
-	case "1:1", "3:4", "4:3", "9:16", "16:9":
-		return ar
-	case "":
-		return "1:1"
-	default:
+	if ar == "" {
 		return "1:1"
 	}
+	mapped := nearestAspectRatio(ar, minimaxImageAspectRatios)
+	if mapped != ar {
+		slog.Warn("minimax image gen: aspect_ratio not supported, using closest", "requested", ar, "using", mapped)
+	}
+	return mapped
 }
 
 // callMinimaxImageGen calls the MiniMax image generation API.
