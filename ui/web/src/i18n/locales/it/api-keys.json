@@ -1,0 +1,87 @@
+{
+  "title": "Chiavi API",
+  "description": "Gestisci le chiavi API del gateway con permessi granulari.",
+  "addKey": "Crea chiave API",
+  "searchPlaceholder": "Cerca chiavi...",
+  "emptyTitle": "Nessuna chiave API",
+  "emptyDescription": "Crea la tua prima chiave API per autenticarti con il gateway.",
+  "columns": {
+    "name": "Nome",
+    "prefix": "Chiave",
+    "scopes": "Ambiti",
+    "lastUsed": "Ultimo utilizzo",
+    "created": "Creata",
+    "status": "Stato",
+    "actions": "Azioni"
+  },
+  "status": {
+    "active": "Attiva",
+    "revoked": "Revocata",
+    "expired": "Scaduta"
+  },
+  "form": {
+    "title": "Crea chiave API",
+    "name": "Nome",
+    "namePlaceholder": "es. ci-deploy, dashboard-readonly",
+    "scopes": "Ambiti",
+    "scopeDescriptions": {
+      "operator.admin": "Accesso amministrativo completo",
+      "operator.read": "Accesso di sola lettura",
+      "operator.write": "Accesso in lettura e scrittura",
+      "operator.approvals": "Gestisci le approvazioni di esecuzione",
+      "operator.pairing": "Gestisci l'associazione dei dispositivi",
+      "operator.provision": "Effettua il provisioning di nuovi tenant"
+    },
+    "tenant": "Tenant",
+    "tenantSystem": "Sistema (tutti i tenant)",
+    "expiry": "Scadenza",
+    "expiryOptions": {
+      "never": "Mai",
+      "7d": "7 giorni",
+      "30d": "30 giorni",
+      "90d": "90 giorni"
+    },
+    "cancel": "Annulla",
+    "create": "Crea",
+    "creating": "Creazione in corso..."
+  },
+  "created": {
+    "title": "Chiave API creata",
+    "description": "Copia questa chiave ora: non verrà mostrata di nuovo.",
+    "copied": "Copiata!",
+    "copy": "Copia negli appunti",
+    "done": "Fatto"
+  },
+  "revoke": {
+    "title": "Revoca chiave API",
+    "description": "Sei sicuro di voler revocare \"{{name}}\"? Questa azione non può essere annullata.",
+    "confirmLabel": "Revoca"
+  },
+  "toast": {
+    "created": "Chiave API creata",
+    "revoked": "Chiave API revocata",
+    "failedCreate": "Impossibile creare la chiave API",
+    "failedRevoke": "Impossibile revocare la chiave API"
+  },
+  "never": "Mai",
+  "neverUsed": "Mai utilizzata",
+  "tenantBadgeSystem": "Sistema",
+  "tenantBadgeUnknown": "Sconosciuto",
+  "columns.expiry": "Scadenza",
+  "codeDialog": {
+    "title": "Utilizzo della chiave API",
+    "description": "Usa questa chiave API per autenticarti con l'API HTTP del gateway.",
+    "copy": "Copia",
+    "copied": "Copiata!",
+    "tabs": {
+      "curl": "cURL",
+      "typescript": "TypeScript",
+      "go": "Go"
+    },
+    "comments": {
+      "chat": "Chatta con un agente (compatibile con OpenAI)",
+      "listAgents": "Elenca gli agenti",
+      "listSessions": "Elenca le sessioni"
+    }
+  }
+}

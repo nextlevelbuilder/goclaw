@@ -1,0 +1,59 @@
+{
+  "title": "Contatti",
+  "description": "Contatti raccolti automaticamente da tutte le interazioni dei canali.",
+  "searchPlaceholder": "Cerca per nome, nome utente o ID...",
+  "filter": "Filtra",
+  "emptyTitle": "Nessun contatto",
+  "emptyDescription": "I contatti appariranno qui man mano che gli utenti interagiranno con i tuoi agenti attraverso i canali.",
+  "noMatchTitle": "Nessun contatto corrispondente",
+  "noMatchDescription": "Prova con un termine di ricerca o un filtro diverso.",
+  "columns": {
+    "name": "Nome",
+    "username": "Nome utente",
+    "senderId": "ID mittente",
+    "channelType": "Canale",
+    "peerKind": "Tipo",
+    "lastSeen": "Ultimo avvistamento",
+    "merged": "Unito"
+  },
+  "permissionsNote": {
+    "title": "Permessi dei canali per i nomi dei contatti",
+    "telegram": "Telegram — Nomi e nomi utente disponibili automaticamente.",
+    "discord": "Discord — Nomi visualizzati e nomi utente disponibili automaticamente.",
+    "zalo": "Zalo — Nomi visualizzati disponibili automaticamente.",
+    "slack": "Slack — Nomi visualizzati risolti tramite l'API di Slack (il bot deve essere presente nello spazio di lavoro).",
+    "feishu": "Feishu/Lark — Richiede il permesso contact:user.base:readonly. In assenza di questo, i nomi rimarranno vuoti.",
+    "bitrix24": "Bitrix24 — Richiede l'ambito `user` + una chiamata `user.get` per ciascun nuovo mittente. I nomi potrebbero risultare temporaneamente vuoti al primo messaggio."
+  },
+  "selectedCount": "{{count}} selezionati",
+  "merge": {
+    "button": "Unisci",
+    "unmergeButton": "Disunisci",
+    "dialogTitle": "Unisci contatti",
+    "dialogDescription": "Collega i contatti selezionati all'identità di un utente del tenant. Questo permetterà di identificarli come la stessa persona su canali diversi.",
+    "linkExisting": "Collega a un utente esistente",
+    "createNew": "Crea nuovo utente",
+    "selectUser": "Seleziona un utente del tenant...",
+    "displayName": "Nome visualizzato",
+    "displayNamePlaceholder": "es. Mario Rossi",
+    "userId": "ID utente",
+    "userIdPlaceholder": "Identificativo univoco",
+    "confirm": "Unisci",
+    "cancel": "Annulla",
+    "success": "Contatti uniti con successo",
+    "unmergeSuccess": "Contatti disuniti con successo",
+    "error": "Impossibile unire i contatti",
+    "unmergeError": "Impossibile disunire i contatti",
+    "comingSoon": "Questa funzionalità è in fase di sviluppo e non è ancora disponibile."
+  },
+  "types": {
+    "user": "Utente",
+    "group": "Gruppo"
+  },
+  "filters": {
+    "allChannels": "Tutti i canali",
+    "allTypes": "Tutti i tipi",
+    "direct": "Diretto",
+    "group": "Gruppo"
+  }
+}
