@@ -214,7 +214,15 @@ func (d *gatewayDeps) wireTeamProgressNotifySubscriber() {
 		case protocol.EventTeamTaskAssigned:
 			content = fmt.Sprintf("📋 Task #%d \"%s\" → assigned to %s", payload.TaskNumber, payload.Subject, agentName)
 		case protocol.EventTeamTaskCompleted:
-			content = fmt.Sprintf("✅ Task #%d \"%s\" completed", payload.TaskNumber, payload.Subject)
+			if payload.Result != "" {
+				result := payload.Result
+				if len(result) > 300 {
+					result = result[:300] + "…"
+				}
+				content = fmt.Sprintf("✅ Task #%d \"%s\" completed\n%s", payload.TaskNumber, payload.Subject, result)
+			} else {
+				content = fmt.Sprintf("✅ Task #%d \"%s\" completed", payload.TaskNumber, payload.Subject)
+			}
 		case protocol.EventTeamTaskProgress:
 			if payload.ProgressStep != "" {
 				content = fmt.Sprintf("⏳ Task #%d \"%s\": %d%% — %s", payload.TaskNumber, payload.Subject, payload.ProgressPercent, payload.ProgressStep)

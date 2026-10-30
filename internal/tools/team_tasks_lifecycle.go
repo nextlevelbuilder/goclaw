@@ -104,6 +104,7 @@ func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any
 		WithOwner(ownerKey, t.manager.AgentDisplayName(ctx, ownerKey)),
 		WithContextInfo(ctx),
 		WithLocalKey(taskLocalKey),
+		WithResult(result),
 	))
 
 	// Dependent tasks are dispatched by the consumer after this agent's turn ends
