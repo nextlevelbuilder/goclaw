@@ -23,6 +23,8 @@ func buildProviderByName(name, apiKey string, maxResults int) SearchProvider {
 		return newParallelSearchProvider(maxResults)
 	case searchProviderSerply:
 		return newSerplySearchProvider(apiKey, maxResults)
+	case searchProviderKeenable:
+		return newKeenableSearchProvider(apiKey, maxResults)
 	case searchProviderDuckDuckGo:
 		return newDuckDuckGoSearchProvider(maxResults)
 	default:
@@ -61,7 +63,7 @@ func NormalizeWebSearchProviderOrder(order []string) []string {
 }
 
 func isKnownSearchProvider(id string) bool {
-	return id == searchProviderParallel || slices.Contains(defaultSearchProviderOrder, id)
+	return id == searchProviderParallel || id == searchProviderKeenable || slices.Contains(defaultSearchProviderOrder, id)
 }
 
 // --- Shared provider helpers ---

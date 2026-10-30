@@ -167,12 +167,14 @@
         "brave": "Brave Search",
         "parallel": "Parallel",
         "serply": "Serply",
+        "keenable": "Keenable",
         "duckduckgo": "DuckDuckGo"
       },
       "apiKey": "Ключ API",
       "apiKeySet": "✓ Ключ задан",
       "apiKeyChange": "Изменить",
       "apiKeyPlaceholder": "Введите ключ API",
+      "apiKeyOptionalPlaceholder": "Необязательно, снимает лимит запросов без ключа",
       "apiKeyReplacePlaceholder": "Введите новый ключ для замены"
     },
     "ttsForm": {

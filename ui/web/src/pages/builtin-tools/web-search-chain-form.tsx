@@ -25,7 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
-type ProviderKey = "exa" | "tavily" | "brave" | "parallel" | "serply" | "duckduckgo";
+type ProviderKey = "exa" | "tavily" | "brave" | "parallel" | "serply" | "keenable" | "duckduckgo";
 
 interface ProviderEntry {
   id: string;
@@ -44,9 +44,11 @@ interface Props {
   onCancel: () => void;
 }
 
-const SORTABLE_PROVIDERS: ProviderKey[] = ["exa", "tavily", "brave", "parallel", "serply"];
+const SORTABLE_PROVIDERS: ProviderKey[] = ["exa", "tavily", "brave", "parallel", "serply", "keenable"];
 const LOCKED_PROVIDER: ProviderKey = "duckduckgo";
-const DEFAULT_ORDER: ProviderKey[] = ["exa", "tavily", "brave", "parallel", "serply"];
+const DEFAULT_ORDER: ProviderKey[] = ["exa", "tavily", "brave", "parallel", "serply", "keenable"];
+/** Keyless providers stay off until a tenant switches them on. */
+const OPT_IN_PROVIDERS: ProviderKey[] = ["parallel", "keenable"];
 
 const RAIL_COLOR: Record<ProviderKey, string> = {
   exa: "bg-blue-600",
@@ -54,6 +56,7 @@ const RAIL_COLOR: Record<ProviderKey, string> = {
   brave: "bg-orange-500",
   parallel: "bg-violet-500",
   serply: "bg-emerald-500",
+  keenable: "bg-indigo-500",
   duckduckgo: "bg-slate-500",
 };
 
@@ -75,7 +78,7 @@ function parseInitialEntries(settings: Record<string, unknown>): ProviderEntry[]
     return {
       id: uniqueId(),
       name,
-      enabled: Boolean(cfg.enabled ?? name !== "parallel"),
+      enabled: Boolean(cfg.enabled ?? !OPT_IN_PROVIDERS.includes(name)),
       max_results: cfg.max_results != null ? Number(cfg.max_results) : undefined,
     };
   });
@@ -174,7 +177,9 @@ function SortableProviderCard({ entry, index, secretsSet, onUpdate }: SortableCa
               placeholder={
                 keyIsSet
                   ? t("builtin.searchChain.apiKeyReplacePlaceholder")
-                  : t("builtin.searchChain.apiKeyPlaceholder")
+                  : entry.name === "keenable"
+                    ? t("builtin.searchChain.apiKeyOptionalPlaceholder")
+                    : t("builtin.searchChain.apiKeyPlaceholder")
               }
               value={entry.apiKey ?? ""}
               onChange={(e) => onUpdate(entry.id, { apiKey: e.target.value })}

@@ -82,12 +82,14 @@
         "brave": "Brave Search",
         "parallel": "Parallel",
         "serply": "Serply",
+        "keenable": "Keenable",
         "duckduckgo": "DuckDuckGo"
       },
       "apiKey": "API Key",
       "apiKeySet": "✓ 已设置",
       "apiKeyChange": "更换",
       "apiKeyPlaceholder": "输入 API Key",
+      "apiKeyOptionalPlaceholder": "可选，解除无 Key 时的速率限制",
       "apiKeyReplacePlaceholder": "输入新 Key 以替换"
     },
     "ttsForm": {

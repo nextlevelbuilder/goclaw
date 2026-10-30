@@ -168,12 +168,14 @@
         "brave": "Brave Search",
         "parallel": "Parallel",
         "serply": "Serply",
+        "keenable": "Keenable",
         "duckduckgo": "DuckDuckGo"
       },
       "apiKey": "API Key",
       "apiKeySet": "✓ Đã có key",
       "apiKeyChange": "Thay đổi",
       "apiKeyPlaceholder": "Nhập API key",
+      "apiKeyOptionalPlaceholder": "Không bắt buộc, gỡ giới hạn tốc độ khi không có key",
       "apiKeyReplacePlaceholder": "Nhập key mới để thay thế"
     },
     "ttsForm": {
