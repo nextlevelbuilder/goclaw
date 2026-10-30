@@ -36,7 +36,7 @@
     "teamWorkClassify": "Team Work 分类",
     "teamWorkClassifyHint": "将新请求分类为自行处理或 team/delegate 工作流。",
     "teamWorkClassifyInfo": "当请求超出当前 Agent 的职责范围或适合拆分协作时，系统使用 embedding 作为证据，并让模型决定自行处理还是使用 team/delegate 工作流。系统还会检查 lead/member 权限；member 只有在团队启用成员请求并开启自动分配时才能创建求助 request。",
-    "teamWorkClassifyEmbeddingRequired": "需要先配置 embedding 才能启用 Team Work 分类。"
+    "teamWorkClassifyEmbeddingRequired": "需要先配置 embedding 或至少一条团队路由规则，才能启用 Team Work 分类。"
   },
   "kg": {
     "title": "知识图谱",
@@ -103,5 +103,26 @@
       "model_not_found": "模型未找到（模型名称无效或不可用）",
       "unknown": "未知的提供商错误"
     }
+  },
+  "decisionModel": {
+    "title": "决策模型 (System One)",
+    "description": "用于在团队分工模棱两可时代替LLM仲裁器的快速类型化决策模型。",
+    "enabled": "启用决策模型",
+    "egressWarningTitle": "第三方数据出境",
+    "egressWarningBody": "启用后，原始用户消息文本（截断至下方字符上限）和团队角色将被发送到配置的端点，以决定由哪位成员处理任务。绝不会发送会话历史、附件媒体或系统提示词。",
+    "endpoint": "端点 URL",
+    "endpointHint": "必须是 https:// 格式。已启用 SSRF 防护（阻止私有和元数据地址）。",
+    "model": "模型 ID",
+    "modelHint": "推荐固定具体版本号（例如 jev-1.13.0）；服务商的别名可能随发布发生变动。",
+    "apiKey": "API 密钥",
+    "apiKeyPlaceholder": "输入 API 密钥",
+    "apiKeyHint": "采用 AES-256-GCM 加密存储，绝不会记录在日志中。",
+    "timeout": "超时时间 (ms)",
+    "timeoutHint": "单次调用的硬性超时（100–5000 毫秒）。失败时不重试。",
+    "maxStateChars": "最大消息字符数",
+    "maxStateCharsHint": "请求中发送的消息字符上限（200–20000）。",
+    "verify": "测试连接",
+    "verifySuccess": "成功：选择 {{choice}}（置信度 {{confidence}}%，耗时 {{latency}}ms）",
+    "verifyFailed": "验证失败"
   }
 }

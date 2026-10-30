@@ -92,7 +92,7 @@ export function TeamInfoDialog({
           </div>
 
           {/* Settings form */}
-          <TeamSettingsTab teamId={teamId} team={team} onSaved={() => { onSaved(); onOpenChange(false); }} />
+          <TeamSettingsTab teamId={teamId} team={team} members={members} onSaved={() => { onSaved(); onOpenChange(false); }} />
           </div>
         </DialogContent>
       </Dialog>
