@@ -29,16 +29,10 @@ func bailianModels() []ModelInfo {
 func minimaxModels() []ModelInfo {
 	return []ModelInfo{
 		// Chat / text
-		{ID: store.MiniMaxDefaultModel, Name: "MiniMax M3"},
-		{ID: "MiniMax-Text-01", Name: "MiniMax Text 01"},
-		{ID: "MiniMax-M1", Name: "MiniMax M1"},
-		{ID: "MiniMax-M2.7", Name: "MiniMax M2.7"},
-		{ID: "MiniMax-M2.7-highspeed", Name: "MiniMax M2.7 Highspeed"},
-		{ID: "MiniMax-M2.5", Name: "MiniMax M2.5"},
-		{ID: "MiniMax-M2.5-highspeed", Name: "MiniMax M2.5 Highspeed"},
-		{ID: "MiniMax-M2.1", Name: "MiniMax M2.1"},
-		{ID: "MiniMax-M2.1-highspeed", Name: "MiniMax M2.1 Highspeed"},
-		{ID: "MiniMax-M2", Name: "MiniMax M2"},
+		{ID: store.MiniMaxDefaultModel, Name: "MiniMax M3.1 Flash", Reasoning: &providers.ReasoningCapability{
+			Levels: []string{"low", "medium", "high", "xhigh", "max"}, DefaultEffort: "high",
+		}},
+		{ID: "MiniMax-M3", Name: "MiniMax M3"},
 		// Image generation
 		{ID: "image-01", Name: "Image 01"},
 		// Video generation
