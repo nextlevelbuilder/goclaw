@@ -36,7 +36,7 @@
     "teamWorkClassify": "Team Work Classification",
     "teamWorkClassifyHint": "Classify new requests as direct handling or team/delegate workflow.",
     "teamWorkClassifyInfo": "When a request exceeds the current agent's scope or should be split, the system uses embeddings as evidence and asks the model to decide between direct handling and team/delegate workflow. The system also checks lead/member permissions; members can only create help requests when the team has enabled member requests and auto-dispatch.",
-    "teamWorkClassifyEmbeddingRequired": "Configure embeddings before enabling Team Work Classification."
+    "teamWorkClassifyEmbeddingRequired": "Configure embeddings or at least one team routing rule before enabling Team Work Classification."
   },
   "kg": {
     "title": "Knowledge Graph",

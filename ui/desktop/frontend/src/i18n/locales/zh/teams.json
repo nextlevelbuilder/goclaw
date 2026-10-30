@@ -66,7 +66,14 @@
     "notifyMode_leader_desc": "Leader 重新表述更新后再发送",
     "notifyModeLeaderWarn": "Leader 模式使用 AI 重新表述（消耗 token，可能较慢）。",
     "save": "保存",
-    "ok": "确定"
+    "ok": "确定",
+    "routing": "路由规则",
+    "routingEnabled": "启用成员路由",
+    "routingFallbackToSelf": "回退到自身",
+    "routingConfidence": "置信度阈值",
+    "routingKeywordsHint": "关键词（例如 golang, deploy）…",
+    "routingFilePatternsHint": "文件模式（例如 .go, dockerfile）…",
+    "routingCriteriaHint": "决策标准（可选）…"
   },
   "taskCreateInfo": {
     "title": "如何创建任务",

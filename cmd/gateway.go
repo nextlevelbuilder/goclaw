@@ -33,6 +33,7 @@ import (
 	zalopersonal "github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/consolidation"
+	"github.com/nextlevelbuilder/goclaw/internal/decisionmodel"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/eventbus"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
@@ -419,6 +420,12 @@ func runGateway() {
 	}
 
 	teamWorkEmbedder := setupMemoryEmbeddings(pgStores, providerRegistry)
+	// Per-tenant decision model for the team-work gate. Off for every tenant
+	// until a tenant admin sets decision_model.enabled=true AND stores a key.
+	var decisionModels *decisionmodel.Resolver
+	if pgStores.SystemConfigs != nil && pgStores.ConfigSecrets != nil {
+		decisionModels = decisionmodel.NewResolver(pgStores.SystemConfigs, pgStores.ConfigSecrets)
+	}
 	usageCapSvc := usagecaps.NewService(pgStores.UsageCaps, pgStores.Providers)
 
 	// Resolve background provider for consolidation + vault enrichment.
@@ -644,6 +651,7 @@ func runGateway() {
 		usageCapSvc:      usageCapSvc,
 		audioMgr:         audioMgr,
 		teamWorkEmbedder: teamWorkEmbedder,
+		decisionModels:   decisionModels,
 	}
 
 	gatewayAddr := loopbackAddr(cfg.Gateway.Host, cfg.Gateway.Port)
@@ -779,6 +787,8 @@ func runGateway() {
 		wsMethods.Register(server.Router())
 		slog.Info("registered workstations RPC methods")
 	}
+
+	chatMethods.SetDecisionModelResolver(decisionModels)
 
 	// Wire post-turn processor for team task dispatch (WS chat.send + HTTP API paths).
 	if postTurn != nil {

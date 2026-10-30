@@ -42,7 +42,7 @@
     "teamWorkClassify": "Team Work 분류",
     "teamWorkClassifyHint": "새 요청을 직접 처리 또는 team/delegate 워크플로로 분류합니다.",
     "teamWorkClassifyInfo": "요청이 현재 에이전트의 범위를 넘거나 분담이 필요하면 시스템이 embedding을 근거로 사용하고 모델이 직접 처리와 team/delegate 워크플로 중 하나를 결정하게 합니다. 시스템은 lead/member 권한도 확인합니다. member는 팀에서 member request와 auto-dispatch를 모두 켠 경우에만 도움 요청을 만들 수 있습니다.",
-    "teamWorkClassifyEmbeddingRequired": "Team Work 분류를 켜려면 먼저 embedding을 설정해야 합니다."
+    "teamWorkClassifyEmbeddingRequired": "Team Work 분류를 켜려면 embedding 설정 또는 하나 이상의 팀 라우팅 규칙이 필요합니다."
   },
   "kg": {
     "title": "지식 그래프",
