@@ -458,6 +458,63 @@ func TestOpenAIModelsAPIBaseDefaultsRequesty(t *testing.T) {
 	}
 }
 
+func TestProvidersHandlerListProviderModelsCheaperInferenceUsesModelsEndpoint(t *testing.T) {
+	token := setupProvidersAdminToken(t)
+	var capturedPath, capturedAuth string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedPath = r.URL.Path
+		capturedAuth = r.Header.Get("Authorization")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"object": "list",
+			"data": []map[string]string{
+				{"id": "gpt-5.4-mini"},
+				{"id": "claude-sonnet-5"},
+			},
+		})
+	}))
+	t.Cleanup(upstream.Close)
+
+	providerStore := newMockProviderStore()
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		Name:         "cheaperinference",
+		ProviderType: store.ProviderCheaperInference,
+		APIBase:      upstream.URL,
+		APIKey:       "ci_live_test_key",
+		Enabled:      true,
+	}
+	if err := providerStore.CreateProvider(t.Context(), provider); err != nil {
+		t.Fatalf("CreateProvider() error = %v", err)
+	}
+
+	handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	result := providerModelsRequest(t, mux, provider.ID, token)
+	if capturedPath != "/models" {
+		t.Fatalf("request path = %q, want /models", capturedPath)
+	}
+	if capturedAuth != "Bearer ci_live_test_key" {
+		t.Fatalf("Authorization = %q, want Bearer ci_live_test_key", capturedAuth)
+	}
+	want := []string{"gpt-5.4-mini", "claude-sonnet-5"}
+	if len(result.Models) != len(want) {
+		t.Fatalf("models = %#v, want %v", result.Models, want)
+	}
+	for index, model := range result.Models {
+		if model.ID != want[index] {
+			t.Errorf("models[%d].ID = %q, want %q", index, model.ID, want[index])
+		}
+	}
+}
+
+func TestOpenAIModelsAPIBaseDefaultsCheaperInference(t *testing.T) {
+	if got := openAIModelsAPIBase(store.ProviderCheaperInference, ""); got != store.CheaperInferenceDefaultAPIBase {
+		t.Fatalf("Cheaper Inference default api base = %q, want %q", got, store.CheaperInferenceDefaultAPIBase)
+	}
+}
+
 func TestProvidersHandlerListProviderModelsAIMLAPIUsesCuratedCatalog(t *testing.T) {
 	token := setupProvidersAdminToken(t)
 	providerStore := newMockProviderStore()
