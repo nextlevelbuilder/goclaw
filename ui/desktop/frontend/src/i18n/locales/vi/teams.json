@@ -66,7 +66,14 @@
     "notifyMode_leader_desc": "Leader diễn đạt lại cập nhật trước khi gửi",
     "notifyModeLeaderWarn": "Chế độ Leader dùng AI để diễn đạt lại (tốn token, có thể chậm hơn).",
     "save": "Lưu",
-    "ok": "OK"
+    "ok": "OK",
+    "routing": "Quy tắc định tuyến",
+    "routingEnabled": "Bật định tuyến cho member",
+    "routingFallbackToSelf": "Dự phòng về chính mình",
+    "routingConfidence": "Ngưỡng tin cậy",
+    "routingKeywordsHint": "Từ khóa (ví dụ: golang, deploy)…",
+    "routingFilePatternsHint": "Mẫu tệp (ví dụ: .go, dockerfile)…",
+    "routingCriteriaHint": "Tiêu chí quyết định (tùy chọn)…"
   },
   "taskCreateInfo": {
     "title": "Cách tạo tác vụ",
