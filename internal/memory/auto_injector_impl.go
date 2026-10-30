@@ -10,7 +10,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/tokencount"
 )
+
+const defaultAutoInjectMaxTokens = 200
 
 // pgAutoInjector implements AutoInjector backed by EpisodicStore + FTS search.
 type pgAutoInjector struct {
@@ -35,6 +38,10 @@ func (a *pgAutoInjector) Inject(ctx context.Context, params InjectParams) (*Inje
 	maxEntries := params.MaxEntries
 	if maxEntries <= 0 {
 		maxEntries = 5
+	}
+	maxTokens := params.MaxTokens
+	if maxTokens <= 0 {
+		maxTokens = defaultAutoInjectMaxTokens
 	}
 	threshold := params.Threshold
 	if threshold <= 0 {
@@ -64,8 +71,13 @@ func (a *pgAutoInjector) Inject(ctx context.Context, params InjectParams) (*Inje
 	}
 
 	// Build prompt section from L0 abstracts
+	const sectionHeader = "## Memory Context\n\nRelevant memories from past sessions (use memory_search for details):\n"
+	counter := tokencount.NewFallbackCounter()
+	if counter.Count("", sectionHeader) > maxTokens {
+		return &InjectResult{MatchCount: len(results)}, nil
+	}
 	var sb strings.Builder
-	sb.WriteString("## Memory Context\n\nRelevant memories from past sessions (use memory_search for details):\n")
+	sb.WriteString(sectionHeader)
 
 	injected := 0
 	var topScore float64
@@ -76,9 +88,11 @@ func (a *pgAutoInjector) Inject(ctx context.Context, params InjectParams) (*Inje
 		if r.L0Abstract == "" {
 			continue
 		}
-		sb.WriteString("- ")
-		sb.WriteString(r.L0Abstract)
-		sb.WriteString("\n")
+		line := "- " + r.L0Abstract + "\n"
+		if counter.Count("", sb.String()+line) > maxTokens {
+			break
+		}
+		sb.WriteString(line)
 		injected++
 		if r.Score > topScore {
 			topScore = r.Score
