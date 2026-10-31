@@ -213,8 +213,8 @@
       "unprocessedCount": "{{count}} messaggi non elaborati",
       "enable": "Abilita estrazione passiva",
       "reviewMode": "Richiedi revisione prima di salvare",
-      "interval": "Intervallo"
-            "messageCap": "Tetto messaggi",
+      "interval": "Intervallo",
+      "messageCap": "Tetto messaggi",
       "retention": "Conservazione (ore)",
       "minMessages": "Messaggi minimi",
       "types": "Tipi di memoria",
