@@ -206,8 +206,8 @@
       "proxyApiKeyLabel": "Chiave API del proxy",
       "proxyTenantIdLabel": "ID tenant del proxy",
       "whatsappEnabledLabel": "Abilita STT per WhatsApp",
-      "whatsappPrivacyWarning": "L'abilitazione dell'STT per WhatsApp interrompe la crittografia end-to-end."
-            "providersRequiredError": "È necessario selezionare almeno un provider.",
+      "whatsappPrivacyWarning": "L'abilitazione dell'STT per WhatsApp interrompe la crittografia end-to-end.",
+      "providersRequiredError": "È necessario selezionare almeno un provider.",
       "cancel": "Annulla",
       "save": "Salva",
       "saving": "Salvataggio in corso...",
