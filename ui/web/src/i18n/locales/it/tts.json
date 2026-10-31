@@ -258,7 +258,7 @@
     "requiresProvider": "Seleziona un provider qui sopra per abilitare la riproduzione di prova."
   },
   "advanced": {
-    "title": "Impostazioni avanzate"
+    "title": "Impostazioni avanzate",
     "count": "{{count}} impostazioni avanzate",
     "count_one": "{{count}} impostazione avanzata"
   }
