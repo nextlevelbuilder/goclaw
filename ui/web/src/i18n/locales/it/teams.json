@@ -232,8 +232,8 @@
     "notifySlowTool": "Avviso strumento lento",
     "notifySlowToolHint": "Avviso di sistema quando la chiamata a uno strumento richiede un tempo anormalmente lungo. Sempre diretto — mai attraverso il responsabile.",
     "notifyMode": "Modalità di invio",
-    "notifyModeHint": "Scegli come ricevere le notifiche di sistema per le attività del team."
-        "notifyModeDirect": "Diretto",
+    "notifyModeHint": "Scegli come ricevere le notifiche di sistema per le attività del team.",
+    "notifyModeDirect": "Diretto",
     "notifyModeDirectDesc": "Invia le notifiche direttamente al canale di chat. Veloce, senza elaborazione da parte dell'IA.",
     "notifyModeLeader": "Tramite responsabile",
     "notifyModeLeaderDesc": "L'agente responsabile riformula gli aggiornamenti in modo naturale prima di inviarli all'utente.",
