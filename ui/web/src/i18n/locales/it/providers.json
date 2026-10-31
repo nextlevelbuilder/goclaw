@@ -366,7 +366,7 @@
     "selectOwner": "Proprietario del pool",
     "selectOwnerHint": "L'account principale che possiede la configurazione del pool.",
     "selectMembers": "Membri del pool",
-    "selectMembersHint": "Seleziona gli account da includere nel pool."
+    "selectMembersHint": "Seleziona gli account da includere nel pool.",
     "selectAll": "Seleziona tutto",
     "deselectAll": "Deseleziona tutto",
     "selectedCount": "{{count}} selezionati",
