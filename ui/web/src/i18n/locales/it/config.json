@@ -219,8 +219,8 @@
   "quota.enabledTip": "Se abilitato, gli utenti sono limitati ai conteggi dei messaggi definiti di seguito.",
   "quota.defaultLimits": "Limiti predefiniti",
   "quota.defaultLimitsTip": "Quota di fallback applicata a tutti gli utenti non coperti da una sostituzione specifica.",
-  "quota.hour": "All'ora"
-    "quota.hourTip": "Numero massimo di messaggi consentiti all'ora.",
+  "quota.hour": "All'ora",
+  "quota.hourTip": "Numero massimo di messaggi consentiti all'ora.",
   "quota.day": "Al giorno",
   "quota.dayTip": "Numero massimo di messaggi consentiti al giorno.",
   "quota.week": "Alla settimana",
