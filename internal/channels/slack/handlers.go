@@ -221,7 +221,7 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 
 	_, placeholderTS, err := c.api.PostMessage(channelID, placeholderOpts...)
 	if err == nil {
-		c.placeholders.Store(localKey, placeholderTS)
+		c.placeholders.Store(threadPlaceholderKey(localKey, replyThreadTS), placeholderTS)
 	}
 
 	// Build final content with group history context
@@ -247,7 +247,7 @@ func (c *Channel) handleMessage(ev *slackevents.MessageEvent) {
 		"channel_id":      channelID,
 		"is_dm":           fmt.Sprintf("%t", isDM),
 		"local_key":       localKey,
-		"placeholder_key": localKey,
+		"placeholder_key": threadPlaceholderKey(localKey, replyThreadTS),
 	}
 	if replyThreadTS != "" {
 		metadata["message_thread_id"] = replyThreadTS

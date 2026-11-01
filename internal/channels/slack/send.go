@@ -35,7 +35,7 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 		threadTS = extractThreadTS(chatID)
 	}
 
-	placeholderKey := chatID
+	placeholderKey := threadPlaceholderKey(chatID, threadTS)
 	if pk := msg.Metadata["placeholder_key"]; pk != "" {
 		placeholderKey = pk
 	}
