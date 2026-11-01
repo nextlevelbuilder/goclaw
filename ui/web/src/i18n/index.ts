@@ -389,7 +389,6 @@ i18n.use(initReactI18next).init({
       workstations: ruWorkstations,
     },
     it: {
-      common: it: {
       common: itCommon, sidebar: itSidebar, topbar: itTopbar, login: itLogin,
       overview: itOverview, chat: itChat, agents: itAgents, teams: itTeams,
       sessions: itSessions, skills: itSkills, cron: itCron, config: itConfig,
