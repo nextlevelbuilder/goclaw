@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -24,7 +26,7 @@ func TestHandleSkillDependenciesStatus_ReturnsStructuredMissingBySource(t *testi
 	skillID := skillStore.seedCustomSkill("dep-skill", skillDir, "archived", []string{"ffmpeg", "pip:requests"})
 
 	prevScan := scanSkillDeps
-	prevCheck := checkSkillDeps
+	prevCheck := checkSkillDepsContext
 	prevGitHubInstalled := githubSkillDependencyInstalled
 	scanSkillDeps = func(string) *skills.SkillManifest {
 		return &skills.SkillManifest{
@@ -34,13 +36,13 @@ func TestHandleSkillDependenciesStatus_ReturnsStructuredMissingBySource(t *testi
 			Explicit:       []string{"github:cli/cli@v2.40.0"},
 		}
 	}
-	checkSkillDeps = func(*skills.SkillManifest) (bool, []string) {
-		return false, []string{"ffmpeg", "pip:requests"}
+	checkSkillDepsContext = func(context.Context, *skills.SkillManifest) skills.DepCheckResult {
+		return skills.DepCheckResult{Status: skills.DepCheckMissing, Missing: []string{"ffmpeg", "pip:requests"}}
 	}
 	githubSkillDependencyInstalled = func(string) bool { return false }
 	t.Cleanup(func() {
 		scanSkillDeps = prevScan
-		checkSkillDeps = prevCheck
+		checkSkillDepsContext = prevCheck
 		githubSkillDependencyInstalled = prevGitHubInstalled
 	})
 
@@ -144,7 +146,7 @@ func TestHandleSkillDependenciesInstall_SplitsGitHubDepsToSingleInstaller(t *tes
 	skillID := skillStore.seedCustomSkill("dep-skill", skillDir, "archived", []string{"pip:requests", "github:cli/cli@v2.40.0"})
 
 	prevScan := scanSkillDeps
-	prevCheck := checkSkillDeps
+	prevCheck := checkSkillDepsContext
 	prevInstallManaged := installManagedDeps
 	prevInstallSingle := installSingleDep
 	prevGitHubInstalled := githubSkillDependencyInstalled
@@ -155,11 +157,11 @@ func TestHandleSkillDependenciesInstall_SplitsGitHubDepsToSingleInstaller(t *tes
 			Explicit:       []string{"github:cli/cli@v2.40.0"},
 		}
 	}
-	checkSkillDeps = func(*skills.SkillManifest) (bool, []string) {
+	checkSkillDepsContext = func(context.Context, *skills.SkillManifest) skills.DepCheckResult {
 		if githubInstalled {
-			return true, nil
+			return skills.DepCheckResult{Status: skills.DepCheckPresent}
 		}
-		return false, []string{"pip:requests"}
+		return skills.DepCheckResult{Status: skills.DepCheckMissing, Missing: []string{"pip:requests"}}
 	}
 	githubSkillDependencyInstalled = func(raw string) bool {
 		if raw != "github:cli/cli@v2.40.0" {
@@ -182,7 +184,7 @@ func TestHandleSkillDependenciesInstall_SplitsGitHubDepsToSingleInstaller(t *tes
 	}
 	t.Cleanup(func() {
 		scanSkillDeps = prevScan
-		checkSkillDeps = prevCheck
+		checkSkillDepsContext = prevCheck
 		installManagedDeps = prevInstallManaged
 		installSingleDep = prevInstallSingle
 		githubSkillDependencyInstalled = prevGitHubInstalled
@@ -433,5 +435,295 @@ func TestHandlePatchSkillAccessAcceptsModeAlias(t *testing.T) {
 	info, _ := skillStore.GetSkillByID(ctx, skillID)
 	if info.Visibility != "public" {
 		t.Fatalf("visibility = %q, want public", info.Visibility)
+	}
+}
+
+func TestRescanAndUpdate_CancelledPassLeavesSkillsUntouched(t *testing.T) {
+	handler, skillStore, ctx, root := newTestUploadHandler(t)
+	skillID := skillStore.seedCustomSkill("slow-skill", filepath.Join(root, "skills-store", "slow-skill", "1"), "active", []string{"pip:anthropic"})
+
+	prevScan := scanSkillDeps
+	prevCheck := checkSkillDepsContext
+	scanSkillDeps = func(string) *skills.SkillManifest {
+		return &skills.SkillManifest{RequiresPython: []string{"anthropic"}}
+	}
+	checkSkillDepsContext = func(context.Context, *skills.SkillManifest) skills.DepCheckResult {
+		t.Fatal("dependency probe ran after the pass deadline")
+		return skills.DepCheckResult{}
+	}
+	t.Cleanup(func() {
+		scanSkillDeps = prevScan
+		checkSkillDepsContext = prevCheck
+	})
+
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+
+	updated, results := handler.rescanAndUpdate(cancelled)
+	if updated != 0 {
+		t.Fatalf("updated = %d, want 0 after cancellation", updated)
+	}
+	if len(skillStore.lastUpdates) != 0 {
+		t.Fatalf("cancelled pass wrote updates: %v", skillStore.lastUpdates)
+	}
+	if got := skillStore.skills[skillID].MissingDeps; !reflect.DeepEqual(got, []string{"pip:anthropic"}) {
+		t.Fatalf("stored missing deps changed on cancellation: %v", got)
+	}
+	if got := skillStore.skills[skillID].Status; got != "active" {
+		t.Fatalf("status changed on cancellation: %q", got)
+	}
+	if len(results) != 1 || results[0].Status != "active" {
+		t.Fatalf("results = %#v, want the stored active status", results)
+	}
+}
+
+func TestRescanAndUpdate_RecoversArchivedSkillsAfterKnownSuccess(t *testing.T) {
+	handler, skillStore, ctx, root := newTestUploadHandler(t)
+	customID := skillStore.seedCustomSkill("custom-archived", filepath.Join(root, "skills-store", "custom-archived", "1"), "archived", nil)
+	systemID := skillStore.seedSystemSkill("system-archived", filepath.Join(root, "skills-store", "system-archived", "1"))
+	system := skillStore.skills[systemID]
+	system.Status = "archived"
+	skillStore.skills[systemID] = system
+
+	prevScan := scanSkillDeps
+	scanSkillDeps = func(string) *skills.SkillManifest {
+		return &skills.SkillManifest{}
+	}
+	t.Cleanup(func() { scanSkillDeps = prevScan })
+
+	updated, _ := handler.rescanAndUpdate(ctx)
+	if updated != 2 {
+		t.Fatalf("updated = %d, want both skills recovered", updated)
+	}
+	if got := skillStore.skills[customID].Status; got != "active" {
+		t.Fatalf("custom dependency archive = %q, want active", got)
+	}
+	if got := skillStore.skills[systemID].Status; got != "active" {
+		t.Fatalf("system archived skill = %q, want active", got)
+	}
+}
+
+func TestRescanAndUpdate_CancellationDuringProbeStopsRemainingChecks(t *testing.T) {
+	handler, skillStore, ctx, root := newTestUploadHandler(t)
+	ids := []uuid.UUID{
+		skillStore.seedCustomSkill("first", filepath.Join(root, "first"), "active", []string{"pip:anthropic"}),
+		skillStore.seedCustomSkill("second", filepath.Join(root, "second"), "archived", []string{"pip:anthropic"}),
+	}
+	parent, cancel := context.WithCancel(ctx)
+	defer cancel()
+	prevScan, prevCheck := scanSkillDeps, checkSkillDepsContext
+	scanSkillDeps = func(string) *skills.SkillManifest {
+		return &skills.SkillManifest{RequiresPython: []string{"anthropic"}}
+	}
+	calls := 0
+	checkSkillDepsContext = func(pass context.Context, _ *skills.SkillManifest) skills.DepCheckResult {
+		calls++
+		deadline, ok := pass.Deadline()
+		if !ok || time.Until(deadline) > depCheckPassTimeout {
+			t.Fatal("probe lacks bounded pass deadline")
+		}
+		cancel()
+		<-pass.Done()
+		return skills.DepCheckResult{Status: skills.DepCheckUnknown}
+	}
+	t.Cleanup(func() { scanSkillDeps, checkSkillDepsContext = prevScan, prevCheck })
+	updated, results := handler.rescanAndUpdate(parent)
+	if calls != 1 || updated != 0 || len(results) != 2 {
+		t.Fatalf("calls=%d updated=%d results=%v", calls, updated, results)
+	}
+	if len(skillStore.lastUpdates) != 0 {
+		t.Fatalf("cancelled pass updated skills: %v", skillStore.lastUpdates)
+	}
+	for _, id := range ids {
+		if !reflect.DeepEqual(skillStore.skills[id].MissingDeps, []string{"pip:anthropic"}) {
+			t.Fatalf("stored deps changed for %s", id)
+		}
+	}
+}
+
+func TestSingleSkillLifecycle_UnknownPreservesStateAndDoesNotInstall(t *testing.T) {
+	for _, action := range []string{"status", "install"} {
+		t.Run(action, func(t *testing.T) {
+			handler, skillStore, ctx, root := newTestUploadHandler(t)
+			id := skillStore.seedCustomSkill("unverified", filepath.Join(root, "unverified"), "archived", []string{"pip:requests"})
+			prevScan, prevCheck, prevInstall := scanSkillDeps, checkSkillDepsContext, installManagedDeps
+			scanSkillDeps = func(string) *skills.SkillManifest { return &skills.SkillManifest{RequiresPython: []string{"requests"}} }
+			calls := 0
+			checkSkillDepsContext = func(context.Context, *skills.SkillManifest) skills.DepCheckResult {
+				calls++
+				return skills.DepCheckResult{Status: skills.DepCheckUnknown, Incomplete: true}
+			}
+			installManagedDeps = func(context.Context, *skills.SkillManifest, []string) (*skills.InstallResult, error) {
+				t.Fatal("install ran without a verified missing dependency")
+				return nil, nil
+			}
+			t.Cleanup(func() { scanSkillDeps, checkSkillDepsContext, installManagedDeps = prevScan, prevCheck, prevInstall })
+			method := http.MethodPost
+			if action == "status" {
+				method = http.MethodGet
+			}
+			req := httptest.NewRequest(method, "/v1/skills/"+id.String()+"/dependencies/"+action, http.NoBody).WithContext(ctx)
+			req.SetPathValue("id", id.String())
+			w := httptest.NewRecorder()
+			if action == "install" {
+				handler.handleSkillDependenciesInstall(w, req)
+			} else {
+				handler.handleSkillDependenciesStatus(w, req)
+			}
+			var resp skillDependencyStatusResponse
+			if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+				t.Fatal(err)
+			}
+			if w.Code != http.StatusOK || resp.OK || resp.Status != "unknown" || calls != 1 {
+				t.Fatalf("code=%d response=%+v calls=%d", w.Code, resp, calls)
+			}
+			if len(resp.Dependencies) != 1 || resp.Dependencies[0].Status != "unknown" {
+				t.Fatalf("unverified dependency marked installed: %+v", resp.Dependencies)
+			}
+			if len(skillStore.lastUpdates) != 0 || skillStore.skills[id].Status != "archived" || !reflect.DeepEqual(skillStore.skills[id].MissingDeps, []string{"pip:requests"}) {
+				t.Fatalf("unknown check mutated state: %+v", skillStore.skills[id])
+			}
+		})
+	}
+}
+
+func TestSingleSkillLifecycle_CancellationReachesProbeWithoutRepeatedChecks(t *testing.T) {
+	handler, skillStore, ctx, root := newTestUploadHandler(t)
+	id := skillStore.seedCustomSkill("cancelled", filepath.Join(root, "cancelled"), "archived", []string{"pip:requests"})
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	prevScan, prevCheck := scanSkillDeps, checkSkillDepsContext
+	scanSkillDeps = func(string) *skills.SkillManifest { return &skills.SkillManifest{RequiresPython: []string{"requests"}} }
+	calls := 0
+	checkSkillDepsContext = func(probe context.Context, _ *skills.SkillManifest) skills.DepCheckResult {
+		calls++
+		if !errors.Is(probe.Err(), context.Canceled) {
+			t.Fatal("request cancellation lost")
+		}
+		return skills.DepCheckResult{Status: skills.DepCheckUnknown, Incomplete: true}
+	}
+	t.Cleanup(func() { scanSkillDeps, checkSkillDepsContext = prevScan, prevCheck })
+	req := httptest.NewRequest(http.MethodPost, "/v1/skills/"+id.String()+"/dependencies/install", http.NoBody).WithContext(cancelled)
+	req.SetPathValue("id", id.String())
+	w := httptest.NewRecorder()
+	handler.handleSkillDependenciesInstall(w, req)
+	var resp skillDependencyStatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || resp.OK || resp.Status != "unknown" || len(skillStore.lastUpdates) != 0 {
+		t.Fatalf("calls=%d response=%+v writes=%v", calls, resp, skillStore.lastUpdates)
+	}
+}
+
+func TestRescanAndUpdate_KnownResultAfterCancellationDoesNotWrite(t *testing.T) {
+	handler, skillStore, ctx, root := newTestUploadHandler(t)
+	id := skillStore.seedCustomSkill("partial", filepath.Join(root, "partial"), "active", []string{"pip:old"})
+	parent, cancel := context.WithCancel(ctx)
+	defer cancel()
+	prevScan, prevCheck := scanSkillDeps, checkSkillDepsContext
+	scanSkillDeps = func(string) *skills.SkillManifest { return &skills.SkillManifest{Requires: []string{"missing-bin"}} }
+	checkSkillDepsContext = func(context.Context, *skills.SkillManifest) skills.DepCheckResult {
+		cancel()
+		return skills.DepCheckResult{Status: skills.DepCheckMissing, Missing: []string{"missing-bin"}}
+	}
+	t.Cleanup(func() { scanSkillDeps, checkSkillDepsContext = prevScan, prevCheck })
+	updated, results := handler.rescanAndUpdate(parent)
+	if updated != 0 || len(skillStore.lastUpdates) != 0 || results[0].Status != "active" || !reflect.DeepEqual(results[0].Missing, []string{"pip:old"}) {
+		t.Fatalf("updated=%d results=%+v writes=%v", updated, results, skillStore.lastUpdates)
+	}
+	if skillStore.skills[id].Status != "active" {
+		t.Fatal("cancelled write changed status")
+	}
+}
+
+func TestRescanAndUpdate_PersistenceFailurePreservesBothValues(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status skills.DepCheckStatus
+	}{{"missing", skills.DepCheckMissing}, {"present", skills.DepCheckPresent}} {
+		t.Run(tc.name, func(t *testing.T) {
+			handler, skillStore, ctx, root := newTestUploadHandler(t)
+			id := skillStore.seedCustomSkill("write-failure", filepath.Join(root, "write-failure"), "archived", []string{"pip:old"})
+			skillStore.updateError = errors.New("database unavailable")
+			prevScan, prevCheck := scanSkillDeps, checkSkillDepsContext
+			scanSkillDeps = func(string) *skills.SkillManifest { return &skills.SkillManifest{Requires: []string{"dep"}} }
+			checkSkillDepsContext = func(context.Context, *skills.SkillManifest) skills.DepCheckResult {
+				if tc.status == skills.DepCheckPresent {
+					return skills.DepCheckResult{Status: tc.status}
+				}
+				return skills.DepCheckResult{Status: tc.status, Missing: []string{"dep"}}
+			}
+			t.Cleanup(func() { scanSkillDeps, checkSkillDepsContext = prevScan, prevCheck })
+			updated, results := handler.rescanAndUpdate(ctx)
+			if updated != 0 || len(skillStore.lastUpdates) != 0 || results[0].Status != "archived" || !reflect.DeepEqual(results[0].Missing, []string{"pip:old"}) {
+				t.Fatalf("updated=%d results=%+v writes=%v", updated, results, skillStore.lastUpdates)
+			}
+			if !reflect.DeepEqual(skillStore.skills[id].MissingDeps, []string{"pip:old"}) {
+				t.Fatal("failed atomic write cleared old missing list")
+			}
+		})
+	}
+}
+
+func TestSingleSkillInstall_UnknownAfterInstallPreservesArchivedState(t *testing.T) {
+	handler, skillStore, ctx, root := newTestUploadHandler(t)
+	id := skillStore.seedCustomSkill("post-install", filepath.Join(root, "post-install"), "archived", []string{"pip:requests"})
+	prevScan, prevCheck, prevInstall := scanSkillDeps, checkSkillDepsContext, installManagedDeps
+	scanSkillDeps = func(string) *skills.SkillManifest { return &skills.SkillManifest{RequiresPython: []string{"requests"}} }
+	calls := 0
+	checkSkillDepsContext = func(context.Context, *skills.SkillManifest) skills.DepCheckResult {
+		calls++
+		if calls == 1 {
+			return skills.DepCheckResult{Status: skills.DepCheckMissing, Missing: []string{"pip:requests"}}
+		}
+		return skills.DepCheckResult{Status: skills.DepCheckUnknown, Incomplete: true}
+	}
+	installManagedDeps = func(context.Context, *skills.SkillManifest, []string) (*skills.InstallResult, error) {
+		return &skills.InstallResult{Pip: []string{"requests"}}, nil
+	}
+	t.Cleanup(func() { scanSkillDeps, checkSkillDepsContext, installManagedDeps = prevScan, prevCheck, prevInstall })
+	req := httptest.NewRequest(http.MethodPost, "/v1/skills/"+id.String()+"/dependencies/install", http.NoBody).WithContext(ctx)
+	req.SetPathValue("id", id.String())
+	w := httptest.NewRecorder()
+	handler.handleSkillDependenciesInstall(w, req)
+	var resp struct {
+		Dependencies skillDependencyStatusResponse `json:"dependencies"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != http.StatusOK || calls != 2 || resp.Dependencies.OK || resp.Dependencies.Status != "unknown" {
+		t.Fatalf("code=%d calls=%d response=%+v", w.Code, calls, resp)
+	}
+	if len(skillStore.lastUpdates) != 0 || skillStore.skills[id].Status != "archived" || !reflect.DeepEqual(skillStore.skills[id].MissingDeps, []string{"pip:requests"}) {
+		t.Fatal("unverified installation cleared persisted dependency state")
+	}
+}
+
+func TestSingleSkillInstall_PartialMissingResultDoesNotLabelUncheckedPackagesInstalled(t *testing.T) {
+	handler, skillStore, ctx, root := newTestUploadHandler(t)
+	id := skillStore.seedCustomSkill("partial-known", filepath.Join(root, "partial-known"), "active", []string{"pip:old"})
+	prevScan, prevCheck := scanSkillDeps, checkSkillDepsContext
+	scanSkillDeps = func(string) *skills.SkillManifest {
+		return &skills.SkillManifest{Requires: []string{"missing-bin"}, RequiresPython: []string{"anthropic"}}
+	}
+	checkSkillDepsContext = func(context.Context, *skills.SkillManifest) skills.DepCheckResult {
+		return skills.DepCheckResult{Status: skills.DepCheckMissing, Missing: []string{"missing-bin"}, Incomplete: true}
+	}
+	t.Cleanup(func() { scanSkillDeps, checkSkillDepsContext = prevScan, prevCheck })
+	req := httptest.NewRequest(http.MethodPost, "/v1/skills/"+id.String()+"/dependencies/install", http.NoBody).WithContext(ctx)
+	req.SetPathValue("id", id.String())
+	w := httptest.NewRecorder()
+	handler.handleSkillDependenciesInstall(w, req)
+	var resp skillDependencyStatusResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.OK || resp.Status != "missing" || len(resp.Dependencies) != 2 || resp.Dependencies[0].Status != "missing" || resp.Dependencies[1].Status != "unknown" {
+		t.Fatalf("partial result=%+v", resp)
+	}
+	if len(skillStore.lastUpdates) != 0 || !reflect.DeepEqual(skillStore.skills[id].MissingDeps, []string{"pip:old"}) {
+		t.Fatal("partial result replaced old dependency evidence")
 	}
 }

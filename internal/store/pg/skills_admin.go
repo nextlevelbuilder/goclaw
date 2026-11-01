@@ -12,25 +12,26 @@ import (
 )
 
 // UpsertSystemSkill creates or updates a system skill.
-// Returns (id, changed, actualFilePath, error).
+// Returns (id, changed, actualFilePath, status, error).
 // When hash is unchanged, returns the existing file_path from DB so the caller
 // uses the correct directory for dep scanning (not a non-existent next-version dir).
-func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillCreateParams) (uuid.UUID, bool, string, error) {
+func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillCreateParams) (uuid.UUID, bool, string, string, error) {
 	// System skills always live in the master tenant. Do not match a custom
 	// skill from another tenant just because it happens to share a slug.
 	var existingID uuid.UUID
 	var existingHash *string
 	var existingFilePath string
+	var existingStatus string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, file_hash, file_path FROM skills
+		`SELECT id, file_hash, file_path, status FROM skills
 		 WHERE slug = $1 AND tenant_id = $2 AND is_system = true`,
 		p.Slug, store.MasterTenantID,
-	).Scan(&existingID, &existingHash, &existingFilePath)
+	).Scan(&existingID, &existingHash, &existingFilePath, &existingStatus)
 
 	if err == nil {
 		// Skill exists — check if hash changed
 		if existingHash != nil && p.FileHash != nil && *existingHash == *p.FileHash {
-			return existingID, false, existingFilePath, nil // unchanged, use existing path
+			return existingID, false, existingFilePath, existingStatus, nil // unchanged, use existing path
 		}
 		// existingHash is nil (old record without hash) — backfill hash without bumping version
 		if existingHash == nil && p.FileHash != nil {
@@ -38,7 +39,7 @@ func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillCreat
 				`UPDATE skills SET file_hash = $1, updated_at = NOW() WHERE id = $2`,
 				p.FileHash, existingID,
 			)
-			return existingID, false, existingFilePath, nil
+			return existingID, false, existingFilePath, existingStatus, nil
 		}
 		// Hash genuinely changed — full update with new version
 		fmJSON := marshalFrontmatter(p.Frontmatter)
@@ -51,13 +52,13 @@ func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillCreat
 			p.FilePath, p.FileSize, p.FileHash, p.Status, existingID,
 		)
 		if err != nil {
-			return uuid.Nil, false, "", fmt.Errorf("update system skill: %w", err)
+			return uuid.Nil, false, "", "", fmt.Errorf("update system skill: %w", err)
 		}
 		s.BumpVersion()
-		return existingID, true, p.FilePath, nil
+		return existingID, true, p.FilePath, p.Status, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		return uuid.Nil, false, "", fmt.Errorf("find system skill: %w", err)
+		return uuid.Nil, false, "", "", fmt.Errorf("find system skill: %w", err)
 	}
 
 	// The master tenant has a unique slug index. Preserve a custom skill that
@@ -71,12 +72,12 @@ func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillCreat
 	).Scan(&customID, &recoveryMarker)
 	if err == nil {
 		if recoveryMarker == store.SkillRecoveryBundledSlugCollision {
-			return customID, false, "", store.ErrMisclassifiedCustomSkill
+			return customID, false, "", "", store.ErrMisclassifiedCustomSkill
 		}
-		return customID, false, "", store.ErrSystemSkillSlugConflict
+		return customID, false, "", "", store.ErrSystemSkillSlugConflict
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		return uuid.Nil, false, "", fmt.Errorf("find custom skill conflict: %w", err)
+		return uuid.Nil, false, "", "", fmt.Errorf("find custom skill conflict: %w", err)
 	}
 
 	// New skill — insert
@@ -90,7 +91,7 @@ func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillCreat
 		fmJSON, p.FilePath, p.FileSize, p.FileHash, store.MasterTenantID,
 	)
 	if err != nil {
-		return uuid.Nil, false, "", fmt.Errorf("insert system skill: %w", err)
+		return uuid.Nil, false, "", "", fmt.Errorf("insert system skill: %w", err)
 	}
 	s.BumpVersion()
 	// Generate embedding asynchronously
@@ -99,7 +100,7 @@ func (s *PGSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillCreat
 		desc = *p.Description
 	}
 	go s.generateEmbedding(context.Background(), p.Slug, p.Name, desc)
-	return id, true, p.FilePath, nil
+	return id, true, p.FilePath, p.Status, nil
 }
 
 // skillDirRow is an sqlx scan struct for slug→file_path queries.

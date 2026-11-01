@@ -241,27 +241,28 @@ func (s *SQLiteSkillStore) GetSkillOwnerIDBySlug(ctx context.Context, slug strin
 }
 
 // UpsertSystemSkill creates or updates a system skill.
-// Returns (id, changed, actualFilePath, error).
-func (s *SQLiteSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillCreateParams) (uuid.UUID, bool, string, error) {
+// Returns (id, changed, actualFilePath, status, error).
+func (s *SQLiteSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillCreateParams) (uuid.UUID, bool, string, string, error) {
 	var existingID uuid.UUID
 	var existingHash *string
 	var existingFilePath string
+	var existingStatus string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, file_hash, file_path FROM skills
+		`SELECT id, file_hash, file_path, status FROM skills
 		 WHERE slug = ? AND tenant_id = ? AND is_system = 1`,
 		p.Slug, store.MasterTenantID,
-	).Scan(&existingID, &existingHash, &existingFilePath)
+	).Scan(&existingID, &existingHash, &existingFilePath, &existingStatus)
 
 	if err == nil {
 		if existingHash != nil && p.FileHash != nil && *existingHash == *p.FileHash {
-			return existingID, false, existingFilePath, nil
+			return existingID, false, existingFilePath, existingStatus, nil
 		}
 		if existingHash == nil && p.FileHash != nil {
 			_, _ = s.db.ExecContext(ctx,
 				`UPDATE skills SET file_hash = ?, updated_at = ? WHERE id = ?`,
 				p.FileHash, time.Now().UTC(), existingID,
 			)
-			return existingID, false, existingFilePath, nil
+			return existingID, false, existingFilePath, existingStatus, nil
 		}
 		fmJSON := marshalFrontmatter(p.Frontmatter)
 		_, err = s.db.ExecContext(ctx,
@@ -273,13 +274,13 @@ func (s *SQLiteSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillC
 			p.FilePath, p.FileSize, p.FileHash, p.Status, time.Now().UTC(), existingID,
 		)
 		if err != nil {
-			return uuid.Nil, false, "", fmt.Errorf("update system skill: %w", err)
+			return uuid.Nil, false, "", "", fmt.Errorf("update system skill: %w", err)
 		}
 		s.BumpVersion()
-		return existingID, true, p.FilePath, nil
+		return existingID, true, p.FilePath, p.Status, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		return uuid.Nil, false, "", fmt.Errorf("find system skill: %w", err)
+		return uuid.Nil, false, "", "", fmt.Errorf("find system skill: %w", err)
 	}
 
 	// The master tenant has a unique slug index. Preserve a custom skill that
@@ -296,12 +297,12 @@ func (s *SQLiteSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillC
 	).Scan(&customID, &recoveryMarker)
 	if err == nil {
 		if recoveryMarker == store.SkillRecoveryBundledSlugCollision {
-			return customID, false, "", store.ErrMisclassifiedCustomSkill
+			return customID, false, "", "", store.ErrMisclassifiedCustomSkill
 		}
-		return customID, false, "", store.ErrSystemSkillSlugConflict
+		return customID, false, "", "", store.ErrSystemSkillSlugConflict
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		return uuid.Nil, false, "", fmt.Errorf("find custom skill conflict: %w", err)
+		return uuid.Nil, false, "", "", fmt.Errorf("find custom skill conflict: %w", err)
 	}
 
 	id := store.GenNewID()
@@ -315,10 +316,10 @@ func (s *SQLiteSkillStore) UpsertSystemSkill(ctx context.Context, p store.SkillC
 		fmJSON, p.FilePath, p.FileSize, p.FileHash, store.MasterTenantID, now, now,
 	)
 	if err != nil {
-		return uuid.Nil, false, "", fmt.Errorf("insert system skill: %w", err)
+		return uuid.Nil, false, "", "", fmt.Errorf("insert system skill: %w", err)
 	}
 	s.BumpVersion()
-	return id, true, p.FilePath, nil
+	return id, true, p.FilePath, p.Status, nil
 }
 
 // ListSystemSkillDirs returns slug->file_path map for all enabled system skills.

@@ -19,11 +19,10 @@ import (
 
 // SystemSkillStore is the minimal interface needed by the seeder.
 type SystemSkillStore interface {
-	UpsertSystemSkill(ctx context.Context, p store.SkillCreateParams) (uuid.UUID, bool, string, error)
+	UpsertSystemSkill(ctx context.Context, p store.SkillCreateParams) (uuid.UUID, bool, string, string, error)
 	GetNextVersion(ctx context.Context, slug string) int
 	BumpVersion()
 	UpdateSkill(ctx context.Context, id uuid.UUID, updates map[string]interface{}) error
-	StoreMissingDeps(ctx context.Context, id uuid.UUID, missing []string) error
 }
 
 // seededSkill tracks a skill that was seeded and needs async dep checking.
@@ -31,6 +30,7 @@ type seededSkill struct {
 	id      uuid.UUID
 	slug    string
 	baseDir string // managed dir path for ScanSkillDeps
+	status  string // status stored in the DB at seed time ("active" or "archived")
 }
 
 // Seeder seeds system/bundled skills into the database.
@@ -120,7 +120,7 @@ func (s *Seeder) Seed(ctx context.Context) (seeded int, skipped int, skills []se
 			Frontmatter: fmMap,
 		}
 
-		id, changed, actualDir, upsertErr := s.store.UpsertSystemSkill(ctx, p)
+		id, changed, actualDir, status, upsertErr := s.store.UpsertSystemSkill(ctx, p)
 		if upsertErr != nil {
 			if errors.Is(upsertErr, store.ErrMisclassifiedCustomSkill) {
 				if err := s.restoreCustomSkillMetadata(ctx, id, p); err != nil {
@@ -140,6 +140,10 @@ func (s *Seeder) Seed(ctx context.Context) (seeded int, skipped int, skills []se
 			continue
 		}
 
+		if status == "" {
+			status = "active"
+		}
+
 		if !changed {
 			// Use the existing file_path from DB — destDir is GetNextVersion+1 which doesn't exist yet.
 			// Also check if the managed dir is intact: a previous copy may have failed mid-way due to
@@ -152,7 +156,7 @@ func (s *Seeder) Seed(ctx context.Context) (seeded int, skipped int, skills []se
 				}
 			}
 			skipped++
-			skills = append(skills, seededSkill{id: id, slug: slug, baseDir: actualDir})
+			skills = append(skills, seededSkill{id: id, slug: slug, baseDir: actualDir, status: status})
 			continue
 		}
 
@@ -163,7 +167,7 @@ func (s *Seeder) Seed(ctx context.Context) (seeded int, skipped int, skills []se
 		}
 
 		slog.Info("seeder: skill seeded", "id", id, "slug", slug, "version", version)
-		skills = append(skills, seededSkill{id: id, slug: slug, baseDir: actualDir})
+		skills = append(skills, seededSkill{id: id, slug: slug, baseDir: actualDir, status: status})
 		seeded++
 	}
 
@@ -293,42 +297,58 @@ func looksLikeBundledVersion(meta *Metadata, frontmatter map[string]string, p st
 // Emits WS events per-skill so the UI can update in realtime.
 // After each check, bumps the skills cache version so the next agent turn picks up changes.
 func (s *Seeder) CheckDepsAsync(skills []seededSkill, msgBus *bus.MessageBus) {
-	go func() {
-		checked := 0
-		for _, sk := range skills {
-			manifest := ScanSkillDeps(sk.baseDir)
-			if manifest == nil || manifest.IsEmpty() {
-				emitDepEvent(msgBus, sk.slug, "active", nil)
-				checked++
-				continue
-			}
+	go s.checkDeps(skills, msgBus)
+}
 
-			ok, missing := CheckSkillDeps(manifest)
-			// Always persist missing deps so UI can display them per-skill
-			_ = s.store.StoreMissingDeps(context.Background(), sk.id, missing)
-			status := "active"
-			if !ok {
-				status = "archived"
-				_ = s.store.UpdateSkill(store.WithTenantID(context.Background(), store.MasterTenantID), sk.id, map[string]interface{}{"status": "archived"})
-				s.store.BumpVersion()
-				slog.Warn("seeder: skill deps missing", "slug", sk.slug, "missing", FormatMissing(missing))
-			}
-
-			emitDepEvent(msgBus, sk.slug, status, missing)
-			checked++
+// checkDeps performs the dependency checks synchronously. It is separated from
+// CheckDepsAsync so tests can exercise the state transitions without sleeping.
+//
+// Only a known result may change a status. An unknown result (cancelled or
+// timed-out probe) leaves the stored status and missing-deps list untouched,
+// because absence of evidence is not evidence of absence.
+func (s *Seeder) checkDeps(skills []seededSkill, msgBus *bus.MessageBus) {
+	checked := 0
+	for _, sk := range skills {
+		checked++
+		result := CheckSkillDepsContext(context.Background(), ScanSkillDeps(sk.baseDir))
+		if result.Incomplete || result.Status == DepCheckUnknown {
+			slog.Warn("seeder: dependency check incomplete, keeping current state", "slug", sk.slug, "status", sk.status)
+			continue
 		}
-
-		// Emit completion event
-		if msgBus != nil {
-			msgBus.Broadcast(bus.Event{
-				Name: protocol.EventSkillDepsComplete,
-				Payload: map[string]interface{}{
-					"count": checked,
-				},
-			})
+		status := "active"
+		if result.Status == DepCheckMissing {
+			status = "archived"
 		}
-		slog.Info("seeder: async dep check complete", "checked", checked)
-	}()
+		if err := s.setKnownDependencyState(sk, status, result.Missing); err != nil {
+			slog.Warn("seeder: dependency state not persisted", "slug", sk.slug, "error", err)
+			continue
+		}
+		emitDepEvent(msgBus, sk.slug, status, result.Missing)
+	}
+	if msgBus != nil {
+		msgBus.Broadcast(bus.Event{Name: protocol.EventSkillDepsComplete, Payload: map[string]interface{}{"count": checked}})
+	}
+	slog.Info("seeder: async dep check complete", "checked", checked)
+}
+
+// setKnownDependencyState writes the status and missing list in one SQL
+// statement. No per-skill success event is published if either value fails.
+func (s *Seeder) setKnownDependencyState(sk seededSkill, status string, missing []string) error {
+	if missing == nil {
+		missing = []string{}
+	}
+	encoded, err := json.Marshal(map[string]any{"missing": missing})
+	if err != nil {
+		return err
+	}
+	if err := s.store.UpdateSkill(
+		store.WithTenantID(context.Background(), store.MasterTenantID), sk.id,
+		map[string]interface{}{"status": status, "deps": string(encoded)},
+	); err != nil {
+		return err
+	}
+	s.store.BumpVersion()
+	return nil
 }
 
 func emitDepEvent(msgBus *bus.MessageBus, slug, status string, missing []string) {

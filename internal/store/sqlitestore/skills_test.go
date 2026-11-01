@@ -84,7 +84,7 @@ func TestSQLiteSkillStore_UpsertSystemSkill_DoesNotReclassifyCustomSkill(t *test
 		t.Fatalf("CreateSkillManaged error: %v", err)
 	}
 
-	returnedID, changed, _, err := skillStore.UpsertSystemSkill(ctx, store.SkillCreateParams{
+	returnedID, changed, _, _, err := skillStore.UpsertSystemSkill(ctx, store.SkillCreateParams{
 		Name:     "Bundled Lark PM",
 		Slug:     "lark-pm",
 		Status:   "active",
@@ -131,7 +131,7 @@ func TestSQLiteSkillStore_UpsertSystemSkill_DoesNotReclassifyOtherTenantCustomSk
 		t.Fatalf("CreateSkillManaged error: %v", err)
 	}
 
-	_, changed, _, err := skillStore.UpsertSystemSkill(context.Background(), store.SkillCreateParams{
+	_, changed, _, _, err := skillStore.UpsertSystemSkill(context.Background(), store.SkillCreateParams{
 		Name:     "Bundled Lark Playbook",
 		Slug:     "lark-playbook",
 		Status:   "active",
@@ -213,7 +213,7 @@ func TestEnsureSchema_RestoresMisclassifiedCustomSkills(t *testing.T) {
 	}
 
 	skillStore := NewSQLiteSkillStore(db, t.TempDir())
-	repairedID, changed, _, err := skillStore.UpsertSystemSkill(context.Background(), store.SkillCreateParams{
+	repairedID, changed, _, _, err := skillStore.UpsertSystemSkill(context.Background(), store.SkillCreateParams{
 		Name:     "Bundled Lark PM",
 		Slug:     "lark-pm",
 		Status:   "active",
@@ -700,4 +700,39 @@ func seedSQLiteTenantAgent(t *testing.T, db *sql.DB) (uuid.UUID, uuid.UUID) {
 		t.Fatalf("insert agent: %v", err)
 	}
 	return tenantID, agentID
+}
+
+func TestSQLiteSkillStore_UpsertSystemSkillReturnsPersistedArchivedStatus(t *testing.T) {
+	ctx, skillStore := newTestSQLiteSkillStore(t)
+	hash := "unchanged-content-hash"
+	params := store.SkillCreateParams{Name: "System", Slug: "persisted-status", Status: "active", Version: 1, FilePath: filepath.Join(t.TempDir(), "system", "1"), FileHash: &hash}
+	id, _, _, status, err := skillStore.UpsertSystemSkill(ctx, params)
+	if err != nil || status != "active" {
+		t.Fatalf("initial status=%q err=%v", status, err)
+	}
+	if err := skillStore.UpdateSkill(ctx, id, map[string]any{"status": "archived"}); err != nil {
+		t.Fatal(err)
+	}
+	gotID, changed, dir, status, err := skillStore.UpsertSystemSkill(ctx, params)
+	if err != nil || gotID != id || changed || dir != params.FilePath || status != "archived" {
+		t.Fatalf("unchanged upsert = (%s,%t,%q,%q,%v), want persisted archive", gotID, changed, dir, status, err)
+	}
+}
+
+func TestSQLiteSkillStore_DependencyStateUpdateIsAtomicOnWriteFailure(t *testing.T) {
+	ctx, s := newTestSQLiteSkillStore(t)
+	id, err := s.CreateSkillManaged(ctx, store.SkillCreateParams{Name: "Atomic", Slug: "atomic-deps", OwnerID: "owner", Visibility: "private", Status: "archived", MissingDeps: []string{"pip:old"}, FilePath: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`CREATE TRIGGER reject_dependency_update BEFORE UPDATE OF deps ON skills BEGIN SELECT RAISE(ABORT, 'injected dependency write failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateSkill(ctx, id, map[string]any{"status": "active", "deps": `{"missing":[]}`}); err == nil {
+		t.Fatal("injected write failure did not fail")
+	}
+	got, ok := s.GetSkillByID(ctx, id)
+	if !ok || got.Status != "archived" || !reflect.DeepEqual(got.MissingDeps, []string{"pip:old"}) {
+		t.Fatalf("failed statement partially changed dependency state: %+v", got)
+	}
 }
