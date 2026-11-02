@@ -174,7 +174,7 @@
       "apiKeySet": "✓ Ключ задан",
       "apiKeyChange": "Изменить",
       "apiKeyPlaceholder": "Введите ключ API",
-      "apiKeyOptionalPlaceholder": "Необязательно, снимает лимит запросов без ключа",
+      "apiKeyOptionalPlaceholder": "Необязательно, снимает общий для установки почасовой лимит без ключа",
       "apiKeyReplacePlaceholder": "Введите новый ключ для замены"
     },
     "ttsForm": {

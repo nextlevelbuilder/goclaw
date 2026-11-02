@@ -175,7 +175,7 @@
       "apiKeySet": "✓ Đã có key",
       "apiKeyChange": "Thay đổi",
       "apiKeyPlaceholder": "Nhập API key",
-      "apiKeyOptionalPlaceholder": "Không bắt buộc, gỡ giới hạn tốc độ khi không có key",
+      "apiKeyOptionalPlaceholder": "Không bắt buộc, gỡ giới hạn theo giờ dùng chung cho cả bản cài đặt khi không có key",
       "apiKeyReplacePlaceholder": "Nhập key mới để thay thế"
     },
     "ttsForm": {

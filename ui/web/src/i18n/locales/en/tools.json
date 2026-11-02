@@ -175,7 +175,7 @@
       "apiKeySet": "✓ Key set",
       "apiKeyChange": "Change",
       "apiKeyPlaceholder": "Enter API key",
-      "apiKeyOptionalPlaceholder": "Optional, lifts the keyless rate limit",
+      "apiKeyOptionalPlaceholder": "Optional, lifts the per-install keyless hourly limit",
       "apiKeyReplacePlaceholder": "Enter new key to replace"
     },
     "ttsForm": {

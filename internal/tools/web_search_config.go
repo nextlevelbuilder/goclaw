@@ -3,7 +3,28 @@ package tools
 import (
 	"slices"
 	"strings"
+	"unicode/utf8"
 )
+
+// keylessSearchProvider describes a provider that answers without an API key.
+type keylessSearchProvider struct {
+	// optionalKey providers read tools.web.<name>.api_key when one is stored
+	// and switch to their keyed endpoint; the others never read a secret.
+	optionalKey bool
+}
+
+// keylessSearchProviders stay out of defaultSearchProviderOrder: a keyless
+// provider joins a tenant's chain only when the tenant names it in
+// provider_order, so a fresh install never sends queries to it unasked.
+var keylessSearchProviders = map[string]keylessSearchProvider{
+	searchProviderParallel: {},
+	searchProviderKeenable: {optionalKey: true},
+}
+
+func isKeylessSearchProvider(id string) bool {
+	_, ok := keylessSearchProviders[id]
+	return ok
+}
 
 // buildProviderByName returns the SearchProvider for a known name.
 // Returns nil for unknown names. DDG ignores apiKey (not required).
@@ -63,14 +84,19 @@ func NormalizeWebSearchProviderOrder(order []string) []string {
 }
 
 func isKnownSearchProvider(id string) bool {
-	return id == searchProviderParallel || id == searchProviderKeenable || slices.Contains(defaultSearchProviderOrder, id)
+	return isKeylessSearchProvider(id) || slices.Contains(defaultSearchProviderOrder, id)
 }
 
 // --- Shared provider helpers ---
 
+// truncateStr cuts s to at most max bytes plus "...", backing off to a rune
+// boundary so a multi-byte character is never split.
 func truncateStr(s string, max int) string {
 	if len(s) <= max {
 		return s
+	}
+	for max > 0 && !utf8.RuneStart(s[max]) {
+		max--
 	}
 	return s[:max] + "..."
 }

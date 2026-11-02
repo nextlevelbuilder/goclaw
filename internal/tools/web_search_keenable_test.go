@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,8 +10,10 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -164,7 +167,7 @@ func TestKeenableSearchResponseErrors(t *testing.T) {
 	}{
 		{name: "missing app title", status: http.StatusBadRequest, body: `{"error":"Missing app identifier"}`, want: "returned 400"},
 		{name: "invalid key", status: http.StatusUnauthorized, body: `{"error":"Authentication failed"}`, want: "returned 401"},
-		{name: "rate limited", status: http.StatusTooManyRequests, body: ``, want: "returned 429"},
+		{name: "rate limited", status: http.StatusTooManyRequests, body: ``, want: "rate limited (429)"},
 		{name: "malformed body", status: http.StatusOK, body: `{`, want: "parse response"},
 	}
 	for _, tc := range tests {
@@ -216,6 +219,17 @@ func TestKeenableProviderIsExplicitOnly(t *testing.T) {
 	}
 }
 
+func TestKeylessProvidersStayOutOfDefaultOrder(t *testing.T) {
+	for name := range keylessSearchProviders {
+		if containsString(defaultSearchProviderOrder, name) {
+			t.Errorf("keyless provider %q is in defaultSearchProviderOrder", name)
+		}
+		if !isKnownSearchProvider(name) || buildProviderByName(name, "", 3) == nil {
+			t.Errorf("keyless provider %q is not wired into isKnownSearchProvider/buildProviderByName", name)
+		}
+	}
+}
+
 func TestBuildChainFromStorageKeenableUsesStoredKey(t *testing.T) {
 	ctx := store.WithTenantID(context.Background(), uuid.New())
 	fake := newFakeSecretsStore()
@@ -236,6 +250,140 @@ func TestBuildChainFromStorageKeenableUsesStoredKey(t *testing.T) {
 	}
 	if p.apiKey != "test-key-keenable" || p.endpoint != keenableSearchEndpoint {
 		t.Fatalf("provider apiKey=%q endpoint=%q, want stored key on the keyed endpoint", p.apiKey, p.endpoint)
+	}
+}
+
+// failingSecretsStore answers every Get with err, standing in for a database
+// outage or a decrypt failure after an encryption-key rotation.
+type failingSecretsStore struct {
+	*fakeSecretsStore
+	err error
+}
+
+func (f failingSecretsStore) Get(context.Context, string) (string, error) { return "", f.err }
+
+func TestBuildChainFromStorageKeenableSecretsErrors(t *testing.T) {
+	settings := BuiltinToolSettings{
+		"web_search": []byte(`{"provider_order":["parallel","keenable"]}`),
+	}
+	tests := []struct {
+		name      string
+		err       error
+		wantNames []string
+	}{
+		// No stored key: Keenable runs keyless.
+		{name: "key not found", err: sql.ErrNoRows, wantNames: []string{"parallel", "keenable", "duckduckgo"}},
+		// The key may exist but cannot be read: skip Keenable rather than move
+		// the tenant onto the shared keyless quota. Parallel reads no secret.
+		{name: "store unavailable", err: errors.New("connection refused"), wantNames: []string{"parallel", "duckduckgo"}},
+		{name: "decrypt failure", err: fmt.Errorf("decrypt secret %q: %w", "tools.web.keenable.api_key", errors.New("cipher: message authentication failed")), wantNames: []string{"parallel", "duckduckgo"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := WithTenantToolSettings(store.WithTenantID(context.Background(), uuid.New()), settings)
+			secrets := failingSecretsStore{fakeSecretsStore: newFakeSecretsStore(), err: tc.err}
+			chain := BuildChainFromStorage(ctx, secrets)
+			if names := chainNames(chain); !reflect.DeepEqual(names, tc.wantNames) {
+				t.Fatalf("chain = %v, want %v", names, tc.wantNames)
+			}
+			if errors.Is(tc.err, sql.ErrNoRows) {
+				if p := chain[1].(*keenableSearchProvider); p.apiKey != "" || p.endpoint != keenablePublicSearchEndpoint {
+					t.Fatalf("provider apiKey=%q endpoint=%q, want keyless public endpoint", p.apiKey, p.endpoint)
+				}
+			}
+		})
+	}
+}
+
+func TestKeenableRateLimitHoldsBackUntilRetryAfter(t *testing.T) {
+	t.Parallel()
+	var hits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Retry-After", "120")
+		w.WriteHeader(http.StatusTooManyRequests)
+		fmt.Fprint(w, `{"error":"Too many requests","retryAfter":120}`)
+	}))
+	defer server.Close()
+
+	keyless := &keenableSearchProvider{maxResults: 1, client: server.Client(), endpoint: server.URL}
+	_, err := keyless.Search(context.Background(), searchParams{Query: "q", Count: 1})
+	if err == nil || !strings.Contains(err.Error(), "keyless quota") || !strings.Contains(err.Error(), "next try in 2m0s") {
+		t.Fatalf("first error = %v, want keyless rate-limit error with the Retry-After wait", err)
+	}
+
+	// A fresh provider, as the chain cache builds every minute, stays held
+	// back without sending a request.
+	again := &keenableSearchProvider{maxResults: 1, client: server.Client(), endpoint: server.URL}
+	_, err = again.Search(context.Background(), searchParams{Query: "q", Count: 1})
+	if err == nil || !strings.Contains(err.Error(), "rate limited (429)") {
+		t.Fatalf("second error = %v, want rate-limit error", err)
+	}
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("server hits = %d, want 1 (second call must not re-probe)", got)
+	}
+
+	// A stored key draws on its own quota, so it is not held back by the
+	// keyless cooldown.
+	keyed := &keenableSearchProvider{apiKey: "test-key-keenable", maxResults: 1, client: server.Client(), endpoint: server.URL}
+	_, err = keyed.Search(context.Background(), searchParams{Query: "q", Count: 1})
+	if err == nil || !strings.Contains(err.Error(), "on the stored API key") {
+		t.Fatalf("keyed error = %v, want keyed rate-limit error", err)
+	}
+	if got := hits.Load(); got != 2 {
+		t.Fatalf("server hits = %d, want 2 (keyed call has its own cooldown)", got)
+	}
+}
+
+func TestKeenableRetryAfter(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 3, 15, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		header string
+		want   time.Duration
+	}{
+		{header: "", want: keenableDefaultCooldown},
+		{header: "garbage", want: keenableDefaultCooldown},
+		{header: "1", want: time.Second},
+		{header: "0", want: time.Second},
+		{header: "1800", want: 30 * time.Minute},
+		{header: "86400", want: keenableMaxCooldown},
+		{header: now.Add(90 * time.Second).Format(http.TimeFormat), want: 90 * time.Second},
+		{header: now.Add(-time.Minute).Format(http.TimeFormat), want: time.Second},
+	}
+	for _, tc := range tests {
+		h := http.Header{}
+		if tc.header != "" {
+			h.Set("Retry-After", tc.header)
+		}
+		if got := keenableRetryAfter(h, now); got != tc.want {
+			t.Errorf("keenableRetryAfter(%q) = %s, want %s", tc.header, got, tc.want)
+		}
+	}
+}
+
+func TestKeenableSnippetTruncationKeepsUTF8Valid(t *testing.T) {
+	t.Parallel()
+	// 239 ASCII bytes then a 3-byte rune: a byte cut at 240 would split it.
+	snippet := strings.Repeat("a", 239) + strings.Repeat("界", 10)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"results": []map[string]string{{"title": "t", "url": "https://example.com", "snippet": snippet}},
+		})
+	}))
+	defer server.Close()
+
+	provider := &keenableSearchProvider{maxResults: 1, client: server.Client(), endpoint: server.URL}
+	results, err := provider.Search(context.Background(), searchParams{Query: "q", Count: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := results[0].Description; !utf8.ValidString(got) || got != strings.Repeat("a", 239)+"..." {
+		t.Fatalf("description = %q, want the ASCII prefix cut before the split rune", got)
+	}
+	if got := truncateStr("héllo", 2); got != "h..." {
+		t.Fatalf("truncateStr = %q, want %q", got, "h...")
 	}
 }
 
