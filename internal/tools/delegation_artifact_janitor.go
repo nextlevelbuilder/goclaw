@@ -640,7 +640,10 @@ func (t *DelegateTool) sweepRetainedDelegationExchanges(now time.Time) {
 
 	for _, item := range due {
 		if err := t.cleanupRetainedDelegationArtifact(item); err != nil {
-			slog.Warn("delegate.artifact_retention_cleanup_failed")
+			slog.Warn("delegate.artifact_retention_cleanup_failed",
+				"delegation_id", item.delegationID,
+				"error", err,
+			)
 			continue
 		}
 		t.retainedMu.Lock()
@@ -653,10 +656,13 @@ func (t *DelegateTool) sweepRetainedDelegationExchanges(now time.Time) {
 }
 
 func (t *DelegateTool) cleanupRetainedDelegationArtifact(item retainedDelegationArtifact) error {
-	if item.publicationTempPath != "" && !item.publicationDurable {
-		if item.callerLocation == nil {
-			return ErrArtifactState
-		}
+	if item.publicationTempPath != "" && !item.publicationDurable && item.callerLocation == nil {
+		// No caller destination was recorded, so the temp publication cannot be
+		// located; only the exchange itself can still be cleaned.
+		slog.Warn("delegate.artifact_caller_cleanup_skipped",
+			"delegation_id", item.delegationID,
+		)
+	} else if item.publicationTempPath != "" && !item.publicationDurable {
 		if err := validateDelegationPublicationTempPath(item.delegationID, item.publicationTempPath); err != nil {
 			return err
 		}
