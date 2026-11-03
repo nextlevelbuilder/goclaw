@@ -4,11 +4,11 @@
 //
 // The server (goclaw-server.exe) runs detached from this process, so closing the
 // window does not stop bots or cron. It stops through "Quit and stop server",
-// `GoClaw.exe --quit`, or the installer.
+// `GoClawDesktop.exe --quit`, or the installer.
 //
-//	GoClaw.exe              open the window (starts the server when needed)
-//	GoClaw.exe --background start the server only
-//	GoClaw.exe --quit       stop the server this app started
+//	GoClawDesktop.exe              open the window (starts the server when needed)
+//	GoClawDesktop.exe --background start the server only
+//	GoClawDesktop.exe --quit       stop the server this app started
 package main
 
 import (

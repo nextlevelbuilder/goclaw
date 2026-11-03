@@ -54,6 +54,7 @@ func newApp(p appPaths, installDir string) *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	go applyWindowIcon(filepath.Join(a.installDir, "goclaw.ico"))
 	if x, y, ok := loadWindowPosition(a.paths.WindowFile); ok {
 		wailsRuntime.WindowSetPosition(ctx, x, y)
 	}
