@@ -44,7 +44,7 @@ func TestExtractAttachments_KeepsInvalidBlocks(t *testing.T) {
 func TestSend_AttachmentCardGoesUnderLastChunk(t *testing.T) {
 	fs := newFakeServer(t)
 	ch, _ := newTestChannel(t, fs, nil)
-	ch.placeholders.Store("dm1", "ph1")
+	ch.storePlaceholder("dm1", "ph1")
 
 	err := ch.Send(context.Background(), bus.OutboundMessage{
 		ChatID:  "dm1",

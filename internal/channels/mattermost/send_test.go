@@ -15,7 +15,7 @@ import (
 func TestSend_EditsPlaceholderThenPostsRemainingChunks(t *testing.T) {
 	fs := newFakeServer(t)
 	ch, _ := newTestChannel(t, fs, nil)
-	ch.placeholders.Store("c1:thread:r1", "ph1")
+	ch.storePlaceholder("c1:thread:r1", "ph1")
 
 	long := strings.Repeat("a", maxMessageLen-10) + "\n\n" + strings.Repeat("b", 100)
 	err := ch.Send(context.Background(), bus.OutboundMessage{
@@ -38,7 +38,7 @@ func TestSend_EditsPlaceholderThenPostsRemainingChunks(t *testing.T) {
 	if len(posts) != 1 || posts[0].Body["root_id"] != "r1" || !strings.HasPrefix(posts[0].Body["message"].(string), "bbb") {
 		t.Fatalf("second chunk must be posted in the thread, got %+v", posts)
 	}
-	if _, ok := ch.placeholders.Load("c1:thread:r1"); ok {
+	if _, ok := ch.loadPlaceholder("c1:thread:r1"); ok {
 		t.Fatal("placeholder must be consumed")
 	}
 }
@@ -78,7 +78,7 @@ func TestSend_InterimMessageToThreadLocalKey(t *testing.T) {
 func TestSend_EmptyContentDeletesPlaceholder(t *testing.T) {
 	fs := newFakeServer(t)
 	ch, _ := newTestChannel(t, fs, nil)
-	ch.placeholders.Store("dm1", "ph1")
+	ch.storePlaceholder("dm1", "ph1")
 
 	if err := ch.Send(context.Background(), bus.OutboundMessage{ChatID: "dm1"}); err != nil {
 		t.Fatalf("Send: %v", err)
@@ -94,7 +94,7 @@ func TestSend_EmptyContentDeletesPlaceholder(t *testing.T) {
 func TestSend_PlaceholderUpdateKeepsPlaceholder(t *testing.T) {
 	fs := newFakeServer(t)
 	ch, _ := newTestChannel(t, fs, nil)
-	ch.placeholders.Store("dm1", "ph1")
+	ch.storePlaceholder("dm1", "ph1")
 
 	err := ch.Send(context.Background(), bus.OutboundMessage{
 		ChatID:   "dm1",
@@ -107,7 +107,7 @@ func TestSend_PlaceholderUpdateKeepsPlaceholder(t *testing.T) {
 	if len(fs.callsTo("PUT", "/api/v4/posts/ph1/patch")) != 1 {
 		t.Fatal("placeholder update must patch the placeholder")
 	}
-	if _, ok := ch.placeholders.Load("dm1"); !ok {
+	if _, ok := ch.loadPlaceholder("dm1"); !ok {
 		t.Fatal("placeholder update must keep the placeholder for the final reply")
 	}
 }
@@ -115,7 +115,7 @@ func TestSend_PlaceholderUpdateKeepsPlaceholder(t *testing.T) {
 func TestSend_UploadsMediaAsAttachmentPost(t *testing.T) {
 	fs := newFakeServer(t)
 	ch, _ := newTestChannel(t, fs, nil)
-	ch.placeholders.Store("dm1", "ph1")
+	ch.storePlaceholder("dm1", "ph1")
 
 	path := filepath.Join(t.TempDir(), "report.csv")
 	if err := os.WriteFile(path, []byte("a,b\n1,2\n"), 0o600); err != nil {
@@ -159,7 +159,7 @@ func TestSend_RequiresRunningChannel(t *testing.T) {
 func TestStream_EditsPlaceholderAndHandsItBack(t *testing.T) {
 	fs := newFakeServer(t)
 	ch, _ := newTestChannel(t, fs, nil)
-	ch.placeholders.Store("dm1", "ph1")
+	ch.storePlaceholder("dm1", "ph1")
 
 	stream, err := ch.CreateStream(context.Background(), "dm1", true)
 	if err != nil {
@@ -170,9 +170,9 @@ func TestStream_EditsPlaceholderAndHandsItBack(t *testing.T) {
 		t.Fatal("stream update must edit the placeholder")
 	}
 
-	ch.placeholders.Delete("dm1")
+	ch.takePlaceholder("dm1")
 	ch.FinalizeStream(context.Background(), "dm1", stream)
-	if pID, ok := ch.placeholders.Load("dm1"); !ok || pID != "ph1" {
+	if pID, ok := ch.loadPlaceholder("dm1"); !ok || pID != "ph1" {
 		t.Fatal("FinalizeStream must hand the placeholder back to Send")
 	}
 }
@@ -231,5 +231,67 @@ func TestReactions_FollowLevelAndClear(t *testing.T) {
 	}
 	if len(fs.callsTo("DELETE", "/api/v4/users/"+testBotID+"/posts/p1/reactions/thinking_face")) != 1 {
 		t.Fatal("ClearReaction must remove the status emoji")
+	}
+}
+
+func TestSend_FailedPlaceholderEditDeletesPlaceholder(t *testing.T) {
+	fs := newFakeServer(t)
+	fs.failPatch = true
+	ch, _ := newTestChannel(t, fs, nil)
+	ch.storePlaceholder("dm1", "ph1")
+
+	if err := ch.Send(context.Background(), bus.OutboundMessage{
+		ChatID:   "dm1",
+		Content:  "the answer",
+		Metadata: map[string]string{"placeholder_key": "dm1"},
+	}); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+
+	if len(fs.callsTo("DELETE", "/api/v4/posts/ph1")) != 1 {
+		t.Fatal("placeholder must be deleted when its edit fails")
+	}
+	posts := fs.callsTo("POST", "/api/v4/posts")
+	if len(posts) != 1 || posts[0].Body["message"] != "the answer" {
+		t.Fatalf("reply must be posted as a new post, got %+v", posts)
+	}
+}
+
+func TestSweepRunState_EvictsStaleEntries(t *testing.T) {
+	fs := newFakeServer(t)
+	ch, _ := newTestChannel(t, fs, nil)
+	old := time.Now().Add(-staleRunTTL - time.Minute)
+
+	ch.placeholders.Store("stale", pendingPlaceholder{postID: "ph-stale", createdAt: old})
+	ch.storePlaceholder("fresh", "ph-fresh")
+	ch.reactions.Store("c1:p-stale", &reactionState{createdAt: old})
+	ch.reactions.Store("c1:p-fresh", &reactionState{createdAt: old, lastUpdate: time.Now()})
+	ch.startTyping("typing-stale", "c1", "")
+	ch.startTyping("typing-fresh", "c1", "")
+	v, _ := ch.typingCtrls.Load("typing-stale")
+	ch.typingCtrls.Store("typing-stale", typingEntry{ctrl: v.(typingEntry).ctrl, startedAt: old})
+
+	ch.sweepMaps()
+
+	if _, ok := ch.loadPlaceholder("stale"); ok {
+		t.Error("stale placeholder must be evicted")
+	}
+	if len(fs.callsTo("DELETE", "/api/v4/posts/ph-stale")) != 1 {
+		t.Error("stale placeholder post must be deleted")
+	}
+	if _, ok := ch.loadPlaceholder("fresh"); !ok {
+		t.Error("fresh placeholder must be kept")
+	}
+	if _, ok := ch.reactions.Load("c1:p-stale"); ok {
+		t.Error("stale reaction state must be evicted")
+	}
+	if _, ok := ch.reactions.Load("c1:p-fresh"); !ok {
+		t.Error("recently updated reaction state must be kept")
+	}
+	if _, ok := ch.typingCtrls.Load("typing-stale"); ok {
+		t.Error("stale typing entry must be evicted")
+	}
+	if _, ok := ch.typingCtrls.Load("typing-fresh"); !ok {
+		t.Error("fresh typing entry must be kept")
 	}
 }

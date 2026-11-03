@@ -160,25 +160,7 @@ func (c *Channel) handlePost(ctx context.Context, in inboundPost) {
 		content = joinNonEmpty(content, docContent)
 	}
 
-	// Thread replies carry the root post as context, like a quoted reply.
-	if post.RootID != "" {
-		rootCtx, rootItems := c.fetchThreadRootContext(ctx, post.RootID)
-		content = joinNonEmpty(rootCtx, content)
-		items = append(rootItems, items...)
-	}
-
-	var mediaPaths []string
-	var mediaFiles []bus.MediaFile
-	if len(items) > 0 {
-		content = joinNonEmpty(media.BuildMediaTags(items), content)
-		for _, it := range items {
-			if it.FilePath == "" {
-				continue
-			}
-			mediaPaths = append(mediaPaths, it.FilePath)
-			mediaFiles = append(mediaFiles, bus.MediaFile{Path: it.FilePath, MimeType: it.ContentType, Filename: it.FileName})
-		}
-	}
+	content, mediaPaths, mediaFiles := withMedia(content, items, nil, nil)
 
 	if strings.TrimSpace(content) == "" {
 		return
@@ -236,6 +218,14 @@ func (c *Channel) handlePost(ctx context.Context, in inboundPost) {
 	}
 
 	content = strings.TrimSpace(c.stripBotMention(content))
+
+	// Thread replies carry the root post as context, like a quoted reply.
+	// Fetched only once the post is known to reach the agent.
+	if post.RootID != "" {
+		rootCtx, rootItems := c.fetchThreadRootContext(ctx, post.RootID)
+		content = joinNonEmpty(rootCtx, content)
+		content, _, mediaFiles = withMedia(content, rootItems, nil, mediaFiles)
+	}
 	if content == "" {
 		return
 	}
@@ -248,13 +238,13 @@ func (c *Channel) handlePost(ctx context.Context, in inboundPost) {
 	// (merged by the inbound debouncer, or a concurrent run) reuses the
 	// pending one instead of leaving an orphaned "Thinking..." behind. The
 	// first reply to arrive takes it; later ones are posted as new posts.
-	if _, pending := c.placeholders.Load(localKey); !pending {
+	if _, pending := c.loadPlaceholder(localKey); !pending {
 		if placeholder, err := c.api.createPost(ctx, &mmPost{
 			ChannelID: channelID,
 			RootID:    replyRootID,
 			Message:   placeholderText,
 		}); err == nil {
-			c.placeholders.Store(localKey, placeholder.ID)
+			c.storePlaceholder(localKey, placeholder.ID)
 		} else {
 			slog.Debug("mattermost: placeholder post failed", "channel_id", channelID, "error", err)
 		}
@@ -298,6 +288,23 @@ func (c *Channel) handlePost(ctx context.Context, in inboundPost) {
 		c.threadParticip.Store(participKey(channelID, replyRootID), time.Now())
 		c.GroupHistory().Clear(historyKey)
 	}
+}
+
+// withMedia prepends media tags for items to content and appends their local
+// files to paths and files.
+func withMedia(content string, items []media.MediaInfo, paths []string, files []bus.MediaFile) (string, []string, []bus.MediaFile) {
+	if len(items) == 0 {
+		return content, paths, files
+	}
+	content = joinNonEmpty(media.BuildMediaTags(items), content)
+	for _, it := range items {
+		if it.FilePath == "" {
+			continue
+		}
+		paths = append(paths, it.FilePath)
+		files = append(files, bus.MediaFile{Path: it.FilePath, MimeType: it.ContentType, Filename: it.FileName})
+	}
+	return content, paths, files
 }
 
 // fetchThreadRootContext returns the thread root post as reply context plus

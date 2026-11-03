@@ -21,7 +21,19 @@ var statusEmoji = map[string]string{
 type reactionState struct {
 	currentEmoji string
 	lastUpdate   time.Time
+	createdAt    time.Time
 	mu           sync.Mutex
+}
+
+// idleSince returns how long the state has gone without a reaction update.
+func (st *reactionState) idleSince(now time.Time) time.Duration {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	last := st.createdAt
+	if st.lastUpdate.After(last) {
+		last = st.lastUpdate
+	}
+	return now.Sub(last)
 }
 
 // OnReactionEvent sets a status emoji on the user's post, replacing the
@@ -39,7 +51,7 @@ func (c *Channel) OnReactionEvent(ctx context.Context, chatID string, messageID 
 		return nil
 	}
 
-	stateVal, _ := c.reactions.LoadOrStore(chatID+":"+messageID, &reactionState{})
+	stateVal, _ := c.reactions.LoadOrStore(chatID+":"+messageID, &reactionState{createdAt: time.Now()})
 	st := stateVal.(*reactionState)
 
 	st.mu.Lock()

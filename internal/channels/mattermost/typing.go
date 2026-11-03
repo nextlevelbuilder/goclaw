@@ -15,6 +15,11 @@ const (
 	typingTimeout   = 5 * time.Second
 )
 
+type typingEntry struct {
+	ctrl      *typing.Controller
+	startedAt time.Time
+}
+
 // startTyping shows the typing indicator for a reply under localKey until
 // stopTyping, with keepalive and a TTL safety net.
 func (c *Channel) startTyping(localKey, channelID, parentID string) {
@@ -27,16 +32,16 @@ func (c *Channel) startTyping(localKey, channelID, parentID string) {
 			return c.api.userTyping(ctx, c.botUserID, channelID, parentID)
 		},
 	})
-	if prev, loaded := c.typingCtrls.Swap(localKey, ctrl); loaded {
-		prev.(*typing.Controller).Stop()
+	if prev, loaded := c.typingCtrls.Swap(localKey, typingEntry{ctrl: ctrl, startedAt: time.Now()}); loaded {
+		prev.(typingEntry).ctrl.Stop()
 	}
 	ctrl.Start()
 }
 
 // stopTyping stops the indicator for localKey, if any.
 func (c *Channel) stopTyping(localKey string) {
-	if ctrl, ok := c.typingCtrls.LoadAndDelete(localKey); ok {
-		ctrl.(*typing.Controller).Stop()
+	if e, ok := c.typingCtrls.LoadAndDelete(localKey); ok {
+		e.(typingEntry).ctrl.Stop()
 	}
 }
 

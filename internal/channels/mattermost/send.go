@@ -43,8 +43,8 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 
 	// Placeholder update (LLM retry notification) keeps the placeholder.
 	if msg.Metadata["placeholder_update"] == "true" {
-		if pID, ok := c.placeholders.Load(placeholderKey); ok {
-			if err := c.api.patchPost(ctx, pID.(string), msg.Content, nil); err != nil {
+		if placeholderID, ok := c.loadPlaceholder(placeholderKey); ok {
+			if err := c.api.patchPost(ctx, placeholderID, msg.Content, nil); err != nil {
 				slog.Debug("mattermost: placeholder update failed", "error", err)
 			}
 		}
@@ -81,8 +81,7 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	}
 
 	sent := 0
-	if pID, ok := c.placeholders.LoadAndDelete(placeholderKey); ok {
-		placeholderID := pID.(string)
+	if placeholderID, ok := c.takePlaceholder(placeholderKey); ok {
 		switch {
 		case len(chunks) == 0:
 			// NO_REPLY or files only: the placeholder has nothing to show.
@@ -93,8 +92,13 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 			if err := c.api.patchPost(ctx, placeholderID, chunks[0], propsFor(0)); err == nil {
 				sent = 1
 			} else {
+				// The chunks go out as new posts; drop the placeholder so no
+				// "Thinking..." is left behind.
 				slog.Warn("mattermost: placeholder edit failed, sending new post",
 					"channel_id", channelID, "error", err)
+				if err := c.api.deletePost(ctx, placeholderID); err != nil {
+					slog.Debug("mattermost: placeholder delete failed", "error", err)
+				}
 			}
 		}
 	}

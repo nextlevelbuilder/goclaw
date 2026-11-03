@@ -40,11 +40,13 @@ func (e *apiError) Error() string {
 }
 
 // isAuthError reports whether err is a permanent authentication failure
-// (revoked token, deactivated bot) that reconnecting will not fix.
+// (revoked token, deactivated bot) that reconnecting will not fix. Only 401:
+// Mattermost answers 403 for missing permissions too, which must not stop
+// the channel.
 func isAuthError(err error) bool {
 	var ae *apiError
 	if errors.As(err, &ae) {
-		return ae.StatusCode == http.StatusUnauthorized || ae.StatusCode == http.StatusForbidden
+		return ae.StatusCode == http.StatusUnauthorized
 	}
 	return false
 }

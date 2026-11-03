@@ -39,7 +39,7 @@ func TestHandlePosted_DMPublishesInbound(t *testing.T) {
 	if len(placeholders) != 1 || placeholders[0].Body["message"] != placeholderText {
 		t.Fatalf("expected one placeholder post, got %+v", placeholders)
 	}
-	if pID, ok := ch.placeholders.Load("dm1"); !ok || pID == "" {
+	if pID, ok := ch.loadPlaceholder("dm1"); !ok || pID == "" {
 		t.Fatal("placeholder not stored under local key")
 	}
 }
@@ -147,6 +147,20 @@ func TestHandlePosted_ThreadParticipationAndRootContext(t *testing.T) {
 	}
 	if !strings.Contains(msg.Content, "[Replying to Alice Smith]") || !strings.Contains(msg.Content, "summarize the incident") {
 		t.Fatalf("thread root context missing:\n%s", msg.Content)
+	}
+}
+
+func TestHandlePosted_UnmentionedThreadReplySkipsRootFetch(t *testing.T) {
+	fs := newFakeServer(t)
+	ch, msgBus := newTestChannel(t, fs, nil)
+	fs.addPost(&mmPost{ID: "r1", UserID: "u1", ChannelID: "c1", Message: "people talking"})
+
+	ch.handlePostedEvent(context.Background(), postedEvent(t, mmPost{ID: "p2", UserID: "u1", ChannelID: "c1", RootID: "r1", Message: "just chatting"}, "O", nil))
+	if _, ok := consumeInbound(t, msgBus, shortWait); ok {
+		t.Fatal("un-mentioned reply in a thread the bot is not in must not be delivered")
+	}
+	if calls := fs.callsTo("GET", "/api/v4/posts/r1"); len(calls) != 0 {
+		t.Fatalf("thread root must not be fetched for a post the bot will not answer, got %d calls", len(calls))
 	}
 }
 

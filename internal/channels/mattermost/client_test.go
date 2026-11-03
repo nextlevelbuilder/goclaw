@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -63,6 +64,18 @@ func TestAPIClient_AuthErrorIsClassified(t *testing.T) {
 	me, err := newAPIClient(fs.URL, testToken).getMe(context.Background())
 	if err != nil || me.ID != testBotID || me.Username != testBotUsername {
 		t.Fatalf("getMe = %+v, %v", me, err)
+	}
+}
+
+func TestIsAuthError_OnlyUnauthorized(t *testing.T) {
+	if !isAuthError(&apiError{StatusCode: http.StatusUnauthorized}) {
+		t.Error("401 must be an auth error")
+	}
+	// Mattermost answers 403 for missing permissions as well; that must not
+	// stop the channel as a rejected token.
+	forbidden := &apiError{StatusCode: http.StatusForbidden, ID: "api.context.permissions.app_error"}
+	if isAuthError(forbidden) || isAuthError(fmt.Errorf("wrapped: %w", forbidden)) {
+		t.Error("403 must not be an auth error")
 	}
 }
 

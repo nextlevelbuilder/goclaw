@@ -43,6 +43,8 @@ type fakeServer struct {
 	channels map[string]mmChannel // GET /channels/{id}; unknown IDs are public channels
 	nextID   int
 
+	failPatch bool // PUT /posts/{id}/patch answers 500
+
 	// wsHandler, when set, serves /api/v4/websocket after the upgrade.
 	wsHandler func(conn *websocket.Conn)
 }
@@ -65,6 +67,7 @@ func newFakeServer(t *testing.T) *fakeServer {
 		writeJSONResponse(w, mmUser{ID: id, Username: "alice", FirstName: "Alice", LastName: "Smith"})
 	})
 	mux.HandleFunc("GET /api/v4/posts/{id}", func(w http.ResponseWriter, r *http.Request) {
+		fs.record(r)
 		fs.mu.Lock()
 		p, ok := fs.posts[r.PathValue("id")]
 		fs.mu.Unlock()
@@ -95,6 +98,13 @@ func newFakeServer(t *testing.T) *fakeServer {
 	})
 	mux.HandleFunc("PUT /api/v4/posts/{id}/patch", func(w http.ResponseWriter, r *http.Request) {
 		fs.record(r)
+		fs.mu.Lock()
+		fail := fs.failPatch
+		fs.mu.Unlock()
+		if fail {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		writeJSONResponse(w, map[string]string{"id": r.PathValue("id")})
 	})
 	mux.HandleFunc("DELETE /api/v4/posts/{id}", func(w http.ResponseWriter, r *http.Request) {

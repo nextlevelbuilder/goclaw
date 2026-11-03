@@ -62,8 +62,8 @@ func (c *Channel) StreamEnabled(isGroup bool) bool {
 // (the local key). Without a placeholder the stream does nothing.
 func (c *Channel) CreateStream(_ context.Context, chatID string, _ bool) (channels.ChannelStream, error) {
 	s := &mmStream{api: c.api}
-	if pID, ok := c.placeholders.Load(chatID); ok {
-		s.postID = pID.(string)
+	if pID, ok := c.loadPlaceholder(chatID); ok {
+		s.postID = pID
 	}
 	return s, nil
 }
@@ -75,7 +75,7 @@ func (c *Channel) FinalizeStream(_ context.Context, chatID string, stream channe
 	if !ok || s.postID == "" {
 		return
 	}
-	c.placeholders.Store(chatID, s.postID)
+	c.storePlaceholder(chatID, s.postID)
 }
 
 // ReasoningStreamEnabled returns false: reasoning is not shown as a separate

@@ -28,6 +28,7 @@ const (
 	channelCacheTTL       = 1 * time.Hour
 	dedupTTL              = 5 * time.Minute
 	editWindow            = 24 * time.Hour // how long an edit can still trigger an unanswered post
+	staleRunTTL           = 1 * time.Hour  // per-run state of a run that never sent its final reply
 	mediaMaxBytes         = int64(20 * 1024 * 1024)
 	defaultHistoryLimit   = 50
 	defaultThreadTTLHours = 24
@@ -45,12 +46,12 @@ type Channel struct {
 
 	events chan wsEvent
 
-	placeholders   sync.Map // localKey -> placeholder post ID
+	placeholders   sync.Map // localKey -> pendingPlaceholder
 	dedup          sync.Map // post ID -> time.Time
 	dispatched     sync.Map // post ID -> time.Time (post reached the agent; edits must not re-trigger it)
 	threadParticip sync.Map // channelID:particip:rootID -> time.Time (auto-reply without @mention)
 	reactions      sync.Map // chatID:postID -> *reactionState
-	typingCtrls    sync.Map // localKey -> *typing.Controller
+	typingCtrls    sync.Map // localKey -> typingEntry
 
 	userCacheMu sync.RWMutex
 	userCache   map[string]cachedUser
@@ -63,6 +64,11 @@ type Channel struct {
 	wg          sync.WaitGroup
 	lifecycleMu sync.Mutex
 	cancelFn    context.CancelFunc // set by Start, taken by Stop
+}
+
+type pendingPlaceholder struct {
+	postID    string
+	createdAt time.Time
 }
 
 type cachedUser struct {
@@ -216,6 +222,8 @@ func (c *Channel) sweepMaps() {
 		})
 	}
 
+	c.sweepRunState(now)
+
 	c.userCacheMu.Lock()
 	for k, v := range c.userCache {
 		if now.Sub(v.fetchedAt) > userCacheTTL {
@@ -231,6 +239,61 @@ func (c *Channel) sweepMaps() {
 		}
 	}
 	c.channelCacheMu.Unlock()
+}
+
+// sweepRunState evicts per-run state that is normally removed by the final
+// reply. A run that fails without one would otherwise pin it for the process
+// lifetime; its leftover "Thinking..." post is deleted too.
+func (c *Channel) sweepRunState(now time.Time) {
+	c.placeholders.Range(func(k, v any) bool {
+		p := v.(pendingPlaceholder)
+		if now.Sub(p.createdAt) <= staleRunTTL || !c.placeholders.CompareAndDelete(k, v) {
+			return true
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), typingTimeout)
+		if err := c.api.deletePost(ctx, p.postID); err != nil {
+			slog.Debug("mattermost: stale placeholder delete failed", "error", err)
+		}
+		cancel()
+		return true
+	})
+
+	c.reactions.Range(func(k, v any) bool {
+		if v.(*reactionState).idleSince(now) > staleRunTTL {
+			c.reactions.CompareAndDelete(k, v)
+		}
+		return true
+	})
+
+	// Controllers stop themselves after typingMaxTime; only the entry is left.
+	c.typingCtrls.Range(func(k, v any) bool {
+		if e := v.(typingEntry); now.Sub(e.startedAt) > typingMaxTime {
+			e.ctrl.Stop()
+			c.typingCtrls.CompareAndDelete(k, v)
+		}
+		return true
+	})
+}
+
+func (c *Channel) storePlaceholder(localKey, postID string) {
+	c.placeholders.Store(localKey, pendingPlaceholder{postID: postID, createdAt: time.Now()})
+}
+
+func (c *Channel) loadPlaceholder(localKey string) (string, bool) {
+	v, ok := c.placeholders.Load(localKey)
+	if !ok {
+		return "", false
+	}
+	return v.(pendingPlaceholder).postID, true
+}
+
+// takePlaceholder removes the placeholder for localKey and returns its post ID.
+func (c *Channel) takePlaceholder(localKey string) (string, bool) {
+	v, ok := c.placeholders.LoadAndDelete(localKey)
+	if !ok {
+		return "", false
+	}
+	return v.(pendingPlaceholder).postID, true
 }
 
 // Stop closes the websocket and waits for background goroutines.
