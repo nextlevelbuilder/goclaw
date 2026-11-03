@@ -36,20 +36,141 @@ type uiState struct {
 	Detail  string `json:"detail"`
 }
 
-// App is bound to the start page. Its exported methods are what the page calls.
+// App is bound to the start and settings pages. Its exported methods are what
+// those pages call.
 type App struct {
 	ctx        context.Context
 	paths      appPaths
 	installDir string
+	exePath    string
+	// startOnSettings opens the settings page right after startup (--settings).
+	startOnSettings bool
 
-	mu     sync.Mutex // guards st and sup
-	st     uiState
-	sup    *supervisor
-	booted sync.Mutex // serializes boot attempts
+	mu      sync.Mutex // guards st, sup and version
+	st      uiState
+	sup     *supervisor
+	version string
+	booted  sync.Mutex // serializes boot attempts
 }
 
-func newApp(p appPaths, installDir string) *App {
-	return &App{paths: p, installDir: installDir, st: uiState{Phase: phaseStarting, Message: "Starting GoClaw..."}}
+func newApp(p appPaths, installDir, exePath string) *App {
+	return &App{paths: p, installDir: installDir, exePath: exePath, st: uiState{Phase: phaseStarting, Message: "Starting GoClaw..."}}
+}
+
+// settingsView is what the settings page shows.
+type settingsView struct {
+	Autostart     bool   `json:"autostart"`
+	Minimized     bool   `json:"minimized"`
+	ServerRunning bool   `json:"serverRunning"`
+	ServerURL     string `json:"serverUrl"`
+	Version       string `json:"version"`
+	SettingsFile  string `json:"settingsFile"`
+	LogDir        string `json:"logDir"`
+	BackupDir     string `json:"backupDir"`
+}
+
+func (a *App) supervisorOrDefault() *supervisor {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.sup != nil {
+		return a.sup
+	}
+	return newSupervisor(serverConfig{Exe: serverExePath(a.installDir), PidPath: a.paths.PidFile, Port: defaultPort})
+}
+
+const settingsPageURL = "http://wails.localhost/settings/"
+
+// OpenSettings shows the settings page. It is served by the app itself, so it
+// can reach the bound methods; the gateway page cannot.
+func (a *App) OpenSettings() {
+	if a.ctx == nil {
+		return
+	}
+	wailsRuntime.WindowExecJS(a.ctx, `location.href = "`+settingsPageURL+`"`)
+}
+
+// openSettingsWhenReady opens the settings page once the gateway page has loaded
+// (used by --settings).
+func (a *App) openSettingsWhenReady() {
+	for i := 0; i < 120; i++ {
+		if a.State().Phase == phaseReady {
+			time.Sleep(2 * time.Second) // let the start page redirect first
+			a.OpenSettings()
+			return
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+// GetSettings returns the current state for the settings page.
+func (a *App) GetSettings() settingsView {
+	sup := a.supervisorOrDefault()
+	enabled, minimized := autostartState()
+	a.mu.Lock()
+	if a.version == "" {
+		a.version = serverVersion(serverExePath(a.installDir))
+	}
+	version := a.version
+	a.mu.Unlock()
+	return settingsView{
+		Autostart:     enabled,
+		Minimized:     minimized,
+		ServerRunning: sup.ownedPid() != 0,
+		ServerURL:     sup.baseURL() + "/",
+		Version:       version,
+		SettingsFile:  a.paths.EnvFile,
+		LogDir:        a.paths.LogDir,
+		BackupDir:     a.paths.BackupDir,
+	}
+}
+
+func serverVersion(exe string) string {
+	// A hung binary must not block the settings page.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, exe, "version")
+	cmd.SysProcAttr = hiddenSysProcAttr()
+	out, err := cmd.Output()
+	if err != nil {
+		return "unknown"
+	}
+	line, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
+	return strings.TrimSpace(line)
+}
+
+// SetAutostart changes the per-user "start at sign-in" entry. With minimized the
+// window opens minimized to the taskbar, otherwise only the server starts.
+func (a *App) SetAutostart(enabled, minimized bool) error {
+	return setAutostart(a.exePath, enabled, minimized)
+}
+
+// OpenFolder opens one of the app's own folders in Explorer.
+func (a *App) OpenFolder(which string) {
+	dir := map[string]string{"logs": a.paths.LogDir, "backups": a.paths.BackupDir, "settings": a.paths.ConfigDir}[which]
+	if dir == "" {
+		return
+	}
+	if err := exec.Command("explorer.exe", dir).Start(); err != nil {
+		slog.Warn("cannot open folder", "dir", dir, "err", err)
+	}
+}
+
+// StopServer stops the server gracefully but keeps the window open.
+func (a *App) StopServer() {
+	go func() {
+		graceful, err := a.supervisorOrDefault().Stop(30 * time.Second)
+		slog.Info("server stopped from settings", "graceful", graceful, "err", err)
+		a.set(uiState{Phase: phaseError, Message: "The server is stopped."})
+	}()
+}
+
+// RestartServer stops the server gracefully and starts it again.
+func (a *App) RestartServer() {
+	go func() {
+		graceful, err := a.supervisorOrDefault().Stop(30 * time.Second)
+		slog.Info("server restart from settings", "graceful", graceful, "err", err)
+		a.boot(nil)
+	}()
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -59,6 +180,9 @@ func (a *App) startup(ctx context.Context) {
 		wailsRuntime.WindowSetPosition(ctx, x, y)
 	}
 	go a.boot(nil)
+	if a.startOnSettings {
+		go a.openSettingsWhenReady()
+	}
 }
 
 func (a *App) set(s uiState) {
@@ -250,6 +374,18 @@ func runBackground(p appPaths, installDir string) int {
 		return 1
 	}
 	slog.Info("background start ok", "reused", reused, "port", strconv.Itoa(rc.Server.Port))
+	return 0
+}
+
+// runImport imports settings from a folder without the window; the result is
+// logged by key name only, never by value.
+func runImport(p appPaths, dir string) int {
+	res, err := importFromDir(dir, p.EnvFile, p.ConfigFile)
+	if err != nil {
+		slog.Error("import failed", "err", err)
+		return 1
+	}
+	slog.Info("settings imported", "keys", res.Keys, "names", strings.Join(res.KeyNames, ","), "config_copied", res.ConfigCopied)
 	return 0
 }
 

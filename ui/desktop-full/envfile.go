@@ -141,6 +141,7 @@ func writePrivateFile(path string, data []byte) error {
 
 type importResult struct {
 	Keys         int
+	KeyNames     []string // names only, safe to log
 	ConfigCopied bool
 }
 
@@ -170,6 +171,9 @@ func importFromDir(srcDir, dstEnv, dstConfig string) (importResult, error) {
 		return importResult{}, err
 	}
 	res := importResult{Keys: len(merged)}
+	for _, e := range merged {
+		res.KeyNames = append(res.KeyNames, e.Key)
+	}
 	if cfg, err := os.ReadFile(filepath.Join(srcDir, "config.json")); err == nil {
 		if err := writePrivateFile(dstConfig, cfg); err != nil {
 			return res, err

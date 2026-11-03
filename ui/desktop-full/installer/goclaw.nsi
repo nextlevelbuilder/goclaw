@@ -128,6 +128,7 @@ Section "GoClaw (required)" SecMain
 
   CreateDirectory "$SMPROGRAMS\GoClaw"
   CreateShortcut "$SMPROGRAMS\GoClaw\GoClaw.lnk" "$INSTDIR\GoClawDesktop.exe" "" "$INSTDIR\goclaw.ico"
+  CreateShortcut "$SMPROGRAMS\GoClaw\GoClaw Settings.lnk" "$INSTDIR\GoClawDesktop.exe" "--settings" "$INSTDIR\goclaw.ico"
   CreateShortcut "$SMPROGRAMS\GoClaw\Quit GoClaw.lnk" "$INSTDIR\GoClawDesktop.exe" "--quit" "$INSTDIR\goclaw.ico"
   CreateShortcut "$SMPROGRAMS\GoClaw\Uninstall GoClaw.lnk" "$INSTDIR\Uninstall.exe"
 
@@ -166,6 +167,7 @@ Section "Uninstall"
   !insertmacro StopGoClaw
 
   Delete "$SMPROGRAMS\GoClaw\GoClaw.lnk"
+  Delete "$SMPROGRAMS\GoClaw\GoClaw Settings.lnk"
   Delete "$SMPROGRAMS\GoClaw\Quit GoClaw.lnk"
   Delete "$SMPROGRAMS\GoClaw\Uninstall GoClaw.lnk"
   RMDir "$SMPROGRAMS\GoClaw"

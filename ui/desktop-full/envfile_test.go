@@ -84,7 +84,7 @@ func TestImportFromDirMergesCopiesConfigAndRestrictsAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Keys != 3 || !res.ConfigCopied {
+	if res.Keys != 3 || len(res.KeyNames) != 3 || !res.ConfigCopied {
 		t.Fatalf("result = %#v", res)
 	}
 	entries, err := loadEnvFile(envPath)

@@ -9,6 +9,8 @@
 //	GoClawDesktop.exe              open the window (starts the server when needed)
 //	GoClawDesktop.exe --background start the server only
 //	GoClawDesktop.exe --quit       stop the server this app started
+//	GoClawDesktop.exe --import <folder>  import settings without the dialog
+//	GoClawDesktop.exe --settings    open the window on the settings page
 package main
 
 import (
@@ -51,36 +53,48 @@ func main() {
 	}
 	installDir := filepath.Dir(exe)
 
-	for _, arg := range os.Args[1:] {
+	minimized, settings := false, false
+	for i, arg := range os.Args[1:] {
 		switch arg {
+		case flagMinimized:
+			minimized = true
+		case "--settings":
+			settings = true
 		case "--quit":
 			os.Exit(runQuit(p, installDir))
 		case "--background":
 			os.Exit(runBackground(p, installDir))
+		case "--import":
+			if i+2 >= len(os.Args) {
+				slog.Error("import: folder argument missing")
+				os.Exit(2)
+			}
+			os.Exit(runImport(p, os.Args[i+2]))
 		}
 	}
-	os.Exit(runWindow(p, installDir, exe))
+	os.Exit(runWindow(p, installDir, exe, minimized, settings))
 }
 
-func runWindow(p appPaths, installDir, exe string) int {
-	app := newApp(p, installDir)
+func runWindow(p appPaths, installDir, exe string, minimized, settings bool) int {
+	app := newApp(p, installDir, exe)
+	app.startOnSettings = settings
 	width, height := windowSize(p.WindowFile)
 
 	appMenu := menu.NewMenu()
 	file := appMenu.AddSubmenu("File")
+	file.AddText("Settings...", keys.CmdOrCtrl(","), func(*menu.CallbackData) { app.OpenSettings() })
+	file.AddSeparator()
 	file.AddText("Quit and stop server", keys.CmdOrCtrl("q"), func(*menu.CallbackData) { app.QuitAndStop() })
 	file.AddText("Close window (server keeps running)", keys.CmdOrCtrl("w"), func(*menu.CallbackData) {
 		wailsRuntime.Quit(app.ctx)
 	})
-	file.AddSeparator()
-	file.AddCheckbox("Start server when I sign in to Windows", autostartEnabled(), nil, func(d *menu.CallbackData) {
-		if err := setAutostart(exe, d.MenuItem.Checked); err != nil {
-			slog.Warn("cannot change autostart", "err", err)
-			d.MenuItem.Checked = !d.MenuItem.Checked
-		}
-	})
 
+	startState := options.Normal
+	if minimized {
+		startState = options.Minimised
+	}
 	err := wails.Run(&options.App{
+		WindowStartState: startState,
 		Title:     "GoClaw",
 		Width:     width,
 		Height:    height,
@@ -95,10 +109,16 @@ func runWindow(p appPaths, installDir, exe string) int {
 		OnBeforeClose: app.beforeClose,
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: singleInstanceID,
-			OnSecondInstanceLaunch: func(options.SecondInstanceData) {
-				if app.ctx != nil {
-					wailsRuntime.WindowUnminimise(app.ctx)
-					wailsRuntime.WindowShow(app.ctx)
+			OnSecondInstanceLaunch: func(d options.SecondInstanceData) {
+				if app.ctx == nil {
+					return
+				}
+				wailsRuntime.WindowUnminimise(app.ctx)
+				wailsRuntime.WindowShow(app.ctx)
+				for _, a := range d.Args {
+					if a == "--settings" {
+						app.OpenSettings()
+					}
 				}
 			},
 		},
