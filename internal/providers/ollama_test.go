@@ -90,6 +90,47 @@ func TestOllamaChatStream_ToolCallsBeforeDoneChunk(t *testing.T) {
 	assert.Equal(t, "get_weather", resp.ToolCalls[0].Name)
 	assert.Equal(t, "Paris", resp.ToolCalls[0].Arguments["city"])
 	assert.Equal(t, "tool_calls", resp.FinishReason)
+	assert.Empty(t, resp.Content)
 	require.NotNil(t, resp.Usage)
 	assert.Equal(t, 8, resp.Usage.TotalTokens)
+}
+
+func TestOllamaChatStream_ToolCallsOnlyInDoneChunk(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		_, _ = io.WriteString(w, `{"model":"m","message":{"role":"assistant","content":""},"done":false}`+"\n")
+		_, _ = io.WriteString(w, `{"model":"m","message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"get_weather","arguments":{"city":"Paris"}}}]},"done":true,"done_reason":"stop"}`+"\n")
+	}))
+	defer srv.Close()
+
+	numCtx := 4096
+	p := NewOllamaProvider("ollama", srv.URL, "m", &numCtx, nil)
+	resp, err := p.ChatStream(context.Background(),
+		ChatRequest{Messages: []Message{{Role: "user", Content: "weather in Paris?"}}},
+		func(StreamChunk) {})
+
+	require.NoError(t, err)
+	require.Len(t, resp.ToolCalls, 1)
+	assert.Equal(t, "get_weather", resp.ToolCalls[0].Name)
+	assert.Equal(t, "tool_calls", resp.FinishReason)
+	assert.Empty(t, resp.Content)
+}
+
+func TestOllamaChatStream_ToolCallRepeatedInDoneChunkIsNotDuplicated(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		call := `"tool_calls":[{"function":{"name":"get_weather","arguments":{"city":"Paris"}}}]`
+		_, _ = io.WriteString(w, `{"model":"m","message":{"role":"assistant","content":"",`+call+`},"done":false}`+"\n")
+		_, _ = io.WriteString(w, `{"model":"m","message":{"role":"assistant","content":"",`+call+`},"done":true,"done_reason":"stop"}`+"\n")
+	}))
+	defer srv.Close()
+
+	numCtx := 4096
+	p := NewOllamaProvider("ollama", srv.URL, "m", &numCtx, nil)
+	resp, err := p.ChatStream(context.Background(),
+		ChatRequest{Messages: []Message{{Role: "user", Content: "weather in Paris?"}}},
+		func(StreamChunk) {})
+
+	require.NoError(t, err)
+	require.Len(t, resp.ToolCalls, 1)
 }
