@@ -882,6 +882,8 @@ The Mattermost channel connects through a bot account: inbound posts arrive over
 
    A server on a private network (10.x, 172.16–31.x, 192.168.x, localhost) also needs `GOCLAW_ALLOW_PRIVATE_MATTERMOST_URLS=true` on the gateway (see Egress policy below).
 
+   The gateway must reach the server directly: `HTTP_PROXY` / `HTTPS_PROXY` are ignored for Mattermost, so a server reachable only through a proxy is not supported yet.
+
    Or set `channels.mattermost` in `config.json` (same keys as the instance config, plus `enabled` and `bot_token`).
 
 ### Environment Variables
@@ -901,22 +903,22 @@ Auto-enables when both are set. `bot_token` is masked in `config.get` and never 
 - Every REST and websocket connection is checked at dial time against `security.IsBlocked` (`internal/channels/mattermost/egress.go`), on the IP actually dialed — so redirects (e.g. file downloads redirected to object storage) and DNS rebinding are covered too
 - Private and loopback addresses are refused unless `GOCLAW_ALLOW_PRIVATE_MATTERMOST_URLS=true`; ranges opened with `GOCLAW_SSRF_ALLOWED_CIDRS` are honoured
 - Link-local (cloud metadata `169.254.169.254`), multicast, unspecified and reserved ranges are always refused
-- No HTTP proxy is used for Mattermost traffic, so the check sees the real server address
+- No HTTP proxy is used for Mattermost traffic (`HTTP_PROXY` / `HTTPS_PROXY` are ignored), so the check sees the real server address. Deployments that can reach Mattermost only through a proxy are not supported yet
 - A refused address fails `Start` with a non-retryable `config` health state and a hint about the env var; blocks are logged as `security.mattermost.ssrf_block`
 
 ### Key Behaviors
 
-- **Websocket**: `/api/v4/websocket` with `authentication_challenge`; client pings every 30s, reconnects with exponential backoff (1s → 60s). A rejected token stops the channel with an `auth` failure instead of reconnecting forever; when a session drops before authenticating, `/users/me` is checked first, because a bad challenge may just close the socket
+- **Websocket**: `/api/v4/websocket` with `authentication_challenge`; client pings every 30s, reconnects with exponential backoff (1s → 60s). A rejected token (HTTP 401) stops the channel with an `auth` failure instead of reconnecting forever; a 403 (missing permission) is retried like a network error; when a session drops before authenticating, `/users/me` is checked first, because a bad challenge may just close the socket
 - **Peer kinds**: channel type `D` → direct; `O`, `P` (public, private) → group. Group DMs (`G`, 3–8 people) are group by default; `group_dm_as_direct: true` answers every post there flat, like a DM (no mention gating, no reply threads), but they stay group peers: group policy, one shared group session and group-scoped user context, so participants never share DM-level access
 - **Mention gating**: `require_mention` default true. A post counts as a mention only when the text contains `@botusername` as a whole word; the mention is stripped from content. The server's `mentions` list is ignored because it also includes everyone notified by `@channel`, `@all`, `@here` and group mentions
-- **Threads**: in channels the bot always answers in a thread (rooted at the triggering post), and the whole thread is one session (`local_key = channelID:thread:rootID`). DMs stay flat unless the user replies in a thread. Thread replies include the root post as `[Replying to …]` context
+- **Threads**: in channels the bot always answers in a thread (rooted at the triggering post), and the whole thread is one session (`local_key = channelID:thread:rootID`). DMs stay flat unless the user replies in a thread. Thread replies include the root post as `[Replying to …]` context (fetched only for posts that reach the agent)
 - **Thread participation cache**: after the bot replies in a thread, later posts there trigger it without @mention for `thread_ttl` hours (default 24, `0` = always require @mention)
 - **Group history**: un-mentioned posts are kept per channel (top-level) or per thread (`parent_history_key` = channel) and prepended on the next mention
 - **Ignored posts**: the bot's own posts, system posts (`type` set) and posts from other bots/integrations (`props.from_bot`)
 - **Edited posts**: a `post_edited` event that adds an @mention to a channel post the bot has not answered yet triggers it once, as if the post had just been sent (within 24h of the post; the channel type and title are looked up via `/api/v4/channels/{id}` and cached for 1h). Edits of answered posts, DM posts and the bot's own posts are ignored
 - **Dedup**: post ID cache (5 min) against replays after reconnect. No channel-level debounce — bursts are merged by the gateway inbound debouncer
 - **Typing indicator**: after the placeholder, `POST /api/v4/users/{bot}/typing` (with `parent_id` in threads) is re-sent every 4s until the final reply (the outbound carrying `placeholder_key`) is delivered, with a 60s safety TTL (`internal/channels/typing`). Retry notices, block replies, quick-acks and progress messages keep it running
-- **Placeholder editing**: posts "Thinking..." and edits it with the first chunk of the reply; message limit 16,000 bytes per post (server limit 16,383 runes). One placeholder per local key: further posts to the same DM or thread while one is pending reuse it, and the first message to arrive (interim or final) takes it
+- **Placeholder editing**: posts "Thinking..." and edits it with the first chunk of the reply; message limit 16,000 bytes per post (server limit 16,383 runes). One placeholder per local key: further posts to the same DM or thread while one is pending reuse it, and the first message to arrive (interim or final) takes it. If the edit fails, the reply is posted as a new post and the placeholder is deleted. Placeholders, reaction state and typing entries of a run that never delivered its final reply are swept after 1h (the leftover placeholder post is deleted)
 - **Run-scoped messages**: block replies, quick-acks and progress arrive with the local key as `ChatID`; `Send` splits it back into the channel ID and thread root
 - **Streaming**: optional (`dm_stream`, `group_stream`), edits the placeholder with 1000ms throttle
 - **Media**: inbound attachments downloaded from `/api/v4/files/{id}` with the bot token (20 MB per file), documents extracted to text; outbound files streamed to `/api/v4/files` (multipart through a pipe, never buffered in memory) and posted as one attachment post (up to 10 files per post)
