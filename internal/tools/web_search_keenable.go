@@ -30,7 +30,9 @@ import (
 const (
 	keenableSearchEndpoint       = "https://api.keenable.ai/v1/search"
 	keenablePublicSearchEndpoint = "https://api.keenable.ai/v1/search/public"
-	keenableAppTitle             = "goclaw"
+	// Fixed at build time on purpose: Keenable limits keyless calls per IP,
+	// so a per-install title would not change the quota.
+	keenableAppTitle = "goclaw"
 
 	// keenableDefaultCooldown applies after a 429 without a usable
 	// Retry-After; keenableMaxCooldown caps what a Retry-After can ask for.
