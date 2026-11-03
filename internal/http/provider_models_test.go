@@ -240,11 +240,10 @@ func TestProvidersHandlerListProviderModelsZaiUsesLocalCatalog(t *testing.T) {
 
 			result := providerModelsRequest(t, mux, provider.ID, token)
 			assertModelIDsInOrder(t, result.Models, []string{
-				"glm-5.2",
-				"glm-5.1",
-				"glm-5",
-				"glm-4.7",
-				"glm-4.5",
+				"glm-5.3-flash",
+				"glm-5.3",
+				"glm-5.3-flashx",
+				"glm-5.3-flashx-legal",
 			})
 		})
 	}

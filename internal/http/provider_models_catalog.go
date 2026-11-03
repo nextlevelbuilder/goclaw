@@ -54,15 +54,24 @@ func minimaxModels() []ModelInfo {
 	}
 }
 
-// zaiModels returns a hardcoded list of Z.AI GLM models.
+// zaiModels returns a hardcoded list of Z.AI GLM models, shared by the
+// pay-per-use API (zai) and the GLM Coding Plan (zai-coding).
 // Z.AI supports OpenAI-compatible chat completions, but /models availability is
 // not required for GoClaw's model picker.
-// The GLM Coding Plan serves only GLM-5.3 and GLM-5.3-Flash: legacy model IDs
-// (GLM-5.2/5.1, GLM-4.x) are routed to these and no longer exist as distinct options.
+//
+// Only the current GLM-5.3 family is listed. The Coding Plan routes legacy IDs
+// (GLM-5.2/5.1 -> GLM-5.3, GLM-4.7 -> GLM-5.3-Flash); older IDs still sold on the
+// pay-per-use API can be entered as a custom model in the picker. FlashX variants
+// may not be granted on every plan yet; such requests fail upstream and the user
+// can pick another model.
+//
+// GLM-5.3-Flash is the default because it accepts image input; GLM-5.3 is text-only.
 func zaiModels() []ModelInfo {
 	return []ModelInfo{
 		{ID: store.ZaiDefaultModel, Name: "GLM 5.3 Flash"},
 		{ID: "glm-5.3", Name: "GLM 5.3"},
+		{ID: "glm-5.3-flashx", Name: "GLM 5.3 FlashX"},
+		{ID: "glm-5.3-flashx-legal", Name: "GLM 5.3 FlashX Legal"},
 	}
 }
 
