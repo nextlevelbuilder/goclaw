@@ -19,7 +19,7 @@ import (
 
 // SystemSkillStore is the minimal interface needed by the seeder.
 type SystemSkillStore interface {
-	UpsertSystemSkill(ctx context.Context, p store.SkillCreateParams) (uuid.UUID, bool, string, string, error)
+	UpsertSystemSkill(ctx context.Context, p store.SkillCreateParams) (uuid.UUID, bool, string, error)
 	GetNextVersion(ctx context.Context, slug string) int
 	BumpVersion()
 	UpdateSkill(ctx context.Context, id uuid.UUID, updates map[string]interface{}) error
@@ -30,7 +30,6 @@ type seededSkill struct {
 	id      uuid.UUID
 	slug    string
 	baseDir string // managed dir path for ScanSkillDeps
-	status  string // status stored in the DB at seed time ("active" or "archived")
 }
 
 // Seeder seeds system/bundled skills into the database.
@@ -120,7 +119,7 @@ func (s *Seeder) Seed(ctx context.Context) (seeded int, skipped int, skills []se
 			Frontmatter: fmMap,
 		}
 
-		id, changed, actualDir, status, upsertErr := s.store.UpsertSystemSkill(ctx, p)
+		id, changed, actualDir, upsertErr := s.store.UpsertSystemSkill(ctx, p)
 		if upsertErr != nil {
 			if errors.Is(upsertErr, store.ErrMisclassifiedCustomSkill) {
 				if err := s.restoreCustomSkillMetadata(ctx, id, p); err != nil {
@@ -140,10 +139,6 @@ func (s *Seeder) Seed(ctx context.Context) (seeded int, skipped int, skills []se
 			continue
 		}
 
-		if status == "" {
-			status = "active"
-		}
-
 		if !changed {
 			// Use the existing file_path from DB — destDir is GetNextVersion+1 which doesn't exist yet.
 			// Also check if the managed dir is intact: a previous copy may have failed mid-way due to
@@ -156,7 +151,7 @@ func (s *Seeder) Seed(ctx context.Context) (seeded int, skipped int, skills []se
 				}
 			}
 			skipped++
-			skills = append(skills, seededSkill{id: id, slug: slug, baseDir: actualDir, status: status})
+			skills = append(skills, seededSkill{id: id, slug: slug, baseDir: actualDir})
 			continue
 		}
 
@@ -167,7 +162,7 @@ func (s *Seeder) Seed(ctx context.Context) (seeded int, skipped int, skills []se
 		}
 
 		slog.Info("seeder: skill seeded", "id", id, "slug", slug, "version", version)
-		skills = append(skills, seededSkill{id: id, slug: slug, baseDir: actualDir, status: status})
+		skills = append(skills, seededSkill{id: id, slug: slug, baseDir: actualDir})
 		seeded++
 	}
 
@@ -305,16 +300,20 @@ func (s *Seeder) CheckDepsAsync(skills []seededSkill, msgBus *bus.MessageBus) {
 //
 // Only a known result may change a status. An unknown result (cancelled or
 // timed-out probe) leaves the stored status and missing-deps list untouched,
-// because absence of evidence is not evidence of absence.
+// because absence of evidence is not evidence of absence. This includes a
+// result where one runtime is verified missing but another probe had no
+// verdict, since the missing list would be incomplete.
 func (s *Seeder) checkDeps(skills []seededSkill, msgBus *bus.MessageBus) {
 	checked := 0
 	for _, sk := range skills {
 		checked++
 		result := CheckSkillDepsContext(context.Background(), ScanSkillDeps(sk.baseDir))
 		if result.Incomplete || result.Status == DepCheckUnknown {
-			slog.Warn("seeder: dependency check incomplete, keeping current state", "slug", sk.slug, "status", sk.status)
+			slog.Warn("seeder: dependency check incomplete, keeping current state", "slug", sk.slug)
 			continue
 		}
+		// A skill with no declared deps is a known success, so an archived
+		// one is set back to active and its deps reset on every start.
 		status := "active"
 		if result.Status == DepCheckMissing {
 			status = "archived"

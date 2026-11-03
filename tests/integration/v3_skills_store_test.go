@@ -121,7 +121,7 @@ func TestStoreSkill_UpsertSystemSkillPreservesCustomCollision(t *testing.T) {
 	customID := seedSkill(t, s, ctx, slug, "Custom Skill")
 	bundledHash := "bundled-hash"
 
-	returnedID, changed, _, _, err := s.UpsertSystemSkill(ctx, store.SkillCreateParams{
+	returnedID, changed, _, err := s.UpsertSystemSkill(ctx, store.SkillCreateParams{
 		Name:       "Bundled Skill",
 		Slug:       slug,
 		Status:     "active",

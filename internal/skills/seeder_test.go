@@ -22,7 +22,6 @@ type customSlugConflictStore struct {
 	customID       uuid.UUID
 	nextVersion    int
 	conflictErr    error
-	upsertStatus   string
 	updatedID      uuid.UUID
 	updatedCtx     context.Context
 	updates        map[string]any
@@ -31,8 +30,8 @@ type customSlugConflictStore struct {
 	updateAttempts int
 }
 
-func (s *customSlugConflictStore) UpsertSystemSkill(context.Context, store.SkillCreateParams) (uuid.UUID, bool, string, string, error) {
-	return s.customID, false, "", s.upsertStatus, s.conflictErr
+func (s *customSlugConflictStore) UpsertSystemSkill(context.Context, store.SkillCreateParams) (uuid.UUID, bool, string, error) {
+	return s.customID, false, "", s.conflictErr
 }
 
 func (s *customSlugConflictStore) GetNextVersion(context.Context, string) int { return s.nextVersion }
@@ -247,7 +246,7 @@ func TestSeeder_CheckDepsRestoresArchivedSkillOnKnownSuccess(t *testing.T) {
 
 	st := &customSlugConflictStore{}
 	seeder := NewSeeder("", "", st)
-	seeder.checkDeps([]seededSkill{{id: uuid.New(), slug: slug, baseDir: skillDir, status: "archived"}}, nil)
+	seeder.checkDeps([]seededSkill{{id: uuid.New(), slug: slug, baseDir: skillDir}}, nil)
 
 	if got := st.updates["status"]; got != "active" {
 		t.Fatalf("persisted status = %v, want active (recovery from archived)", got)
@@ -274,13 +273,43 @@ func TestSeeder_CheckDepsLeavesArchivedSkillOnUnknown(t *testing.T) {
 
 	st := &customSlugConflictStore{}
 	seeder := NewSeeder("", "", st)
-	seeder.checkDeps([]seededSkill{{id: uuid.New(), slug: slug, baseDir: skillDir, status: "archived"}}, nil)
+	seeder.checkDeps([]seededSkill{{id: uuid.New(), slug: slug, baseDir: skillDir}}, nil)
 
 	if st.updatedID != uuid.Nil {
 		t.Fatalf("unknown check updated status: %v", st.updates)
 	}
 	if st.updateAttempts != 0 {
 		t.Fatalf("unknown check attempted %d writes", st.updateAttempts)
+	}
+	if st.bumps != 0 {
+		t.Fatalf("BumpVersion calls = %d, want 0", st.bumps)
+	}
+}
+
+// TestSeeder_CheckDepsKeepsStateWhenMissingAndUnknownMix pins the mixed case:
+// one dependency is verified missing while another probe times out. The
+// missing list is incomplete, so the seeder keeps the stored state.
+func TestSeeder_CheckDepsKeepsStateWhenMissingAndUnknownMix(t *testing.T) {
+	sleep := sleepPath(t)
+	writeFakeBin(t, "python3", "#!/bin/sh\nexec "+sleep+" 7\n")
+	t.Setenv("GOCLAW_DEP_CHECK_TIMEOUT", "1s")
+
+	slug := "missing-and-slow"
+	skillDir := filepath.Join(t.TempDir(), slug)
+	writeSeederSkillFile(t, filepath.Join(skillDir, "SKILL.md"),
+		"---\nname: missing-and-slow\ndeps:\n  - system:missing_goclaw_test_binary_xyz\n  - pip:anthropic\n---\n")
+
+	result := CheckSkillDepsContext(context.Background(), ScanSkillDeps(skillDir))
+	if result.Status != DepCheckMissing || !result.Incomplete {
+		t.Fatalf("precondition: result = %+v, want Missing and Incomplete", result)
+	}
+
+	st := &customSlugConflictStore{}
+	seeder := NewSeeder("", "", st)
+	seeder.checkDeps([]seededSkill{{id: uuid.New(), slug: slug, baseDir: skillDir}}, nil)
+
+	if st.updateAttempts != 0 {
+		t.Fatalf("incomplete missing result attempted %d writes: %v", st.updateAttempts, st.updates)
 	}
 	if st.bumps != 0 {
 		t.Fatalf("BumpVersion calls = %d, want 0", st.bumps)
@@ -302,9 +331,9 @@ func hashSeederContent(content string) string {
 }
 
 func TestSeeder_FailedDependencyStateWriteDoesNotPublishSuccess(t *testing.T) {
-	for _, tc := range []struct{ name, deps, oldStatus string }{
-		{"recover", "", "archived"},
-		{"archive", "deps:\n  - system:missing_goclaw_test_binary_xyz\n", "active"},
+	for _, tc := range []struct{ name, deps string }{
+		{"recover", ""},
+		{"archive", "deps:\n  - system:missing_goclaw_test_binary_xyz\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -314,7 +343,7 @@ func TestSeeder_FailedDependencyStateWriteDoesNotPublishSuccess(t *testing.T) {
 			messages := bus.New()
 			messages.Subscribe("state-write-test", func(e bus.Event) { events = append(events, e) })
 			seeder := NewSeeder("", "", st)
-			seeder.checkDeps([]seededSkill{{id: uuid.New(), slug: "failure", baseDir: dir, status: tc.oldStatus}}, messages)
+			seeder.checkDeps([]seededSkill{{id: uuid.New(), slug: "failure", baseDir: dir}}, messages)
 			if st.updateAttempts != 1 || st.updatedID != uuid.Nil || st.updates != nil || st.bumps != 0 {
 				t.Fatalf("failed write published local state: %+v", st)
 			}
