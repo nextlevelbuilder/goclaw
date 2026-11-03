@@ -5,15 +5,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
-	"net/url"
+	neturl "net/url"
+	"strconv"
 	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
-// anthropicModelsMaxPages bounds pagination so a misbehaving upstream cannot loop forever.
-const anthropicModelsMaxPages = 20
+const (
+	// anthropicModelsPageSize is the largest `limit` the Anthropic models API accepts (default 20).
+	anthropicModelsPageSize = 1000
+	// anthropicModelsMaxPages bounds pagination so a misbehaving upstream cannot loop forever.
+	anthropicModelsMaxPages = 20
+)
 
 // fetchAnthropicModels calls the Anthropic models API, following pagination
 // (limit/after_id/has_more) so that models beyond the first page are included.
@@ -26,7 +32,7 @@ func fetchAnthropicModels(ctx context.Context, apiKey, apiBase string) ([]ModelI
 	var models []ModelInfo
 	afterID := ""
 	for page := 0; page < anthropicModelsMaxPages; page++ {
-		q := url.Values{"limit": {"1000"}}
+		q := neturl.Values{"limit": {strconv.Itoa(anthropicModelsPageSize)}}
 		if afterID != "" {
 			q.Set("after_id", afterID)
 		}
@@ -34,18 +40,26 @@ func fetchAnthropicModels(ctx context.Context, apiKey, apiBase string) ([]ModelI
 		if err != nil {
 			return nil, err
 		}
+		// A failure after the first page keeps the models already collected.
+		failPage := func(err error) ([]ModelInfo, error) {
+			if page == 0 {
+				return nil, err
+			}
+			slog.Warn("anthropic models: later page failed, returning partial list", "page", page+1, "models", len(models), "error", err)
+			return models, nil
+		}
 		req.Header.Set("x-api-key", apiKey)
 		req.Header.Set("anthropic-version", "2023-06-01")
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			return nil, err
+			return failPage(err)
 		}
 
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 			resp.Body.Close()
-			return nil, fmt.Errorf("anthropic API returned %d: %s", resp.StatusCode, string(body))
+			return failPage(fmt.Errorf("anthropic API returned %d: %s", resp.StatusCode, string(body)))
 		}
 
 		var result struct {
@@ -59,7 +73,7 @@ func fetchAnthropicModels(ctx context.Context, apiKey, apiBase string) ([]ModelI
 		err = json.NewDecoder(resp.Body).Decode(&result)
 		resp.Body.Close()
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode anthropic response: %w", err)
+			return failPage(fmt.Errorf("failed to decode anthropic response: %w", err))
 		}
 
 		for _, m := range result.Data {

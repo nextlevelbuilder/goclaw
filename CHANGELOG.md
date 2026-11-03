@@ -90,6 +90,12 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Fixed
 
+- **Anthropic model picker lists every model, not only the first 20** — the
+  models request used the API's default page size and never followed
+  `has_more` / `after_id`. It now asks for 1000 per page and follows the cursor
+  (bounded to 20 pages); a failure on a later page keeps the models already
+  fetched.
+
 - **Channel reload no longer hangs after a failed channel start (#1627)** —
   `PendingHistory.StopFlusher` waited on the flush goroutine's `stopped`
   channel even when `StartFlusher` had never run. Telegram starts its flusher
