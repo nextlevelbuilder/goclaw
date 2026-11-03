@@ -186,6 +186,7 @@ func TestBridgeContextMiddleware_InjectsAgentBudget(t *testing.T) {
 	}{
 		{"explicit", &store.AgentData{AgentKey: "a", ContextWindow: 120000, MaxTokens: 4096}, 120000, 4096},
 		{"unset falls back to defaults", &store.AgentData{AgentKey: "a"}, config.DefaultContextWindow, config.DefaultMaxTokens},
+		{"missing row falls back to defaults", nil, config.DefaultContextWindow, config.DefaultMaxTokens},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

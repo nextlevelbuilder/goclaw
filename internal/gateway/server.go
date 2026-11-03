@@ -437,6 +437,12 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 				if id, err := uuid.Parse(agentIDStr); err == nil {
 					ctx = store.WithAgentID(ctx, id)
 
+					// Start from the default request budget so media tools (read_image/
+					// read_audio/read_video) pass the budget guard even when the agent
+					// row cannot be read. Overwritten below from the row when it can.
+					ctx = store.WithAgentContextWindow(ctx, config.DefaultContextWindow)
+					ctx = store.WithAgentMaxTokens(ctx, config.DefaultMaxTokens)
+
 					// Inject per-agent shell deny group overrides so the exec tool
 					// respects the same policy as the normal agent loop.
 					if agentStore != nil {
@@ -456,19 +462,18 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 							if groups != nil {
 								ctx = store.WithShellDenyGroups(ctx, groups)
 							}
-							// Propagate the agent's request budget so media tools (read_image/
-							// read_audio/read_video) pass the budget guard. Unset (0) columns
-							// fall back to the same defaults the agent loop uses.
-							contextWindow := ag.ContextWindow
-							if contextWindow <= 0 {
-								contextWindow = config.DefaultContextWindow
+							// Overwrite the default budget with the agent's own settings.
+							// Unset (0) columns keep the defaults the agent loop uses.
+							if ag.ContextWindow > 0 {
+								ctx = store.WithAgentContextWindow(ctx, ag.ContextWindow)
 							}
-							maxTokens := ag.MaxTokens
-							if maxTokens <= 0 {
-								maxTokens = config.DefaultMaxTokens
+							if ag.MaxTokens > 0 {
+								ctx = store.WithAgentMaxTokens(ctx, ag.MaxTokens)
 							}
-							ctx = store.WithAgentContextWindow(ctx, contextWindow)
-							ctx = store.WithAgentMaxTokens(ctx, maxTokens)
+						} else if err != nil {
+							slog.Warn("mcp_bridge: agent lookup failed, using default request budget",
+								"agent_id", agentIDStr, "err", err,
+								"context_window", config.DefaultContextWindow, "max_tokens", config.DefaultMaxTokens)
 						}
 					}
 				}
