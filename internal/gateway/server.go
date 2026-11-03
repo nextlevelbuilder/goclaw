@@ -456,6 +456,19 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 							if groups != nil {
 								ctx = store.WithShellDenyGroups(ctx, groups)
 							}
+							// Propagate the agent's request budget so media tools (read_image/
+							// read_audio/read_video) pass the budget guard. Unset (0) columns
+							// fall back to the same defaults the agent loop uses.
+							contextWindow := ag.ContextWindow
+							if contextWindow <= 0 {
+								contextWindow = config.DefaultContextWindow
+							}
+							maxTokens := ag.MaxTokens
+							if maxTokens <= 0 {
+								maxTokens = config.DefaultMaxTokens
+							}
+							ctx = store.WithAgentContextWindow(ctx, contextWindow)
+							ctx = store.WithAgentMaxTokens(ctx, maxTokens)
 						}
 					}
 				}
