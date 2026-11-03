@@ -70,6 +70,10 @@ deploy-*.sh
 # fork-dev integration worktree (created by scripts/deploy-forkdev.sh)
 .goclaw-forkdev/
 
+# Windows desktop app build output (scripts/build-winapp.ps1)
+winapp-out/
+winapp-out.staging/
+
 docs/technical-diaries
 docs/zuey
 plans/
