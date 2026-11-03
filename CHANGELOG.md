@@ -95,8 +95,8 @@ All notable changes to GoClaw are documented here. For full documentation, see [
   error: missing agent_context_window,agent_max_tokens` because the MCP bridge
   middleware and the `/v1/tools/invoke` handler never put the agent's context
   window and max tokens into the tool context. Both now start from the default
-  budget and overwrite it from the agent row, and log a warning when the row
-  cannot be read. Subagents spawned through the bridge now inherit the calling
+  budget and overwrite it from the agent row, and log a warning when the agent
+  lookup returns an error. Subagents spawned through the bridge now inherit the calling
   agent's context window instead of the default.
 
 - **Channel reload no longer hangs after a failed channel start (#1627)** —

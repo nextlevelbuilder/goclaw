@@ -433,15 +433,15 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 				return
 			}
 
+			// Start from the default request budget so media tools (read_image/
+			// read_audio/read_video) pass the budget guard even when the agent id
+			// is missing or the row cannot be read. Overwritten below from the row.
+			ctx = store.WithAgentContextWindow(ctx, config.DefaultContextWindow)
+			ctx = store.WithAgentMaxTokens(ctx, config.DefaultMaxTokens)
+
 			if agentIDStr != "" {
 				if id, err := uuid.Parse(agentIDStr); err == nil {
 					ctx = store.WithAgentID(ctx, id)
-
-					// Start from the default request budget so media tools (read_image/
-					// read_audio/read_video) pass the budget guard even when the agent
-					// row cannot be read. Overwritten below from the row when it can.
-					ctx = store.WithAgentContextWindow(ctx, config.DefaultContextWindow)
-					ctx = store.WithAgentMaxTokens(ctx, config.DefaultMaxTokens)
 
 					// Inject per-agent shell deny group overrides so the exec tool
 					// respects the same policy as the normal agent loop.
