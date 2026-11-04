@@ -39,6 +39,7 @@ export const ROUTES = {
   KNOWLEDGE_GRAPH: "/knowledge-graph",
   ACTIVITY: "/activity",
   API_KEYS: "/api-keys",
+  SECRET_VAULT: "/secret-vault",
   PACKAGES: "/packages",
   TENANTS: "/admin/tenants",
   TENANT_DETAIL: "/admin/tenants/:id",

@@ -34,6 +34,7 @@ import enContacts from "./locales/en/contacts.json";
 import enActivity from "./locales/en/activity.json";
 import enApiKeys from "./locales/en/api-keys.json";
 import enCliCredentials from "./locales/en/cli-credentials.json";
+import enSecretVault from "./locales/en/secret-vault.json";
 import enPackages from "./locales/en/packages.json";
 import enTenants from "./locales/en/tenants.json";
 import enSystemSettings from "./locales/en/system-settings.json";
@@ -77,6 +78,7 @@ import viContacts from "./locales/vi/contacts.json";
 import viActivity from "./locales/vi/activity.json";
 import viApiKeys from "./locales/vi/api-keys.json";
 import viCliCredentials from "./locales/vi/cli-credentials.json";
+import viSecretVault from "./locales/vi/secret-vault.json";
 import viPackages from "./locales/vi/packages.json";
 import viTenants from "./locales/vi/tenants.json";
 import viSystemSettings from "./locales/vi/system-settings.json";
@@ -160,6 +162,7 @@ import zhContacts from "./locales/zh/contacts.json";
 import zhActivity from "./locales/zh/activity.json";
 import zhApiKeys from "./locales/zh/api-keys.json";
 import zhCliCredentials from "./locales/zh/cli-credentials.json";
+import zhSecretVault from "./locales/zh/secret-vault.json";
 import zhPackages from "./locales/zh/packages.json";
 import zhTenants from "./locales/zh/tenants.json";
 import zhSystemSettings from "./locales/zh/system-settings.json";
@@ -232,7 +235,7 @@ const ns = [
   "channels", "providers", "traces", "events",
   "usage", "approvals", "nodes", "logs", "tools", "mcp", "tts",
   "setup", "memory", "vault", "storage", "pending-messages", "contacts", "activity", "api-keys",
-  "cli-credentials", "packages", "tenants", "system-settings", "import-export",
+  "cli-credentials", "secret-vault", "packages", "tenants", "system-settings", "import-export",
   "v3-capabilities",
   "backup",
   "hooks",
@@ -252,7 +255,7 @@ i18n.use(initReactI18next).init({
       mcp: enMcp, tts: enTts, setup: enSetup, memory: enMemory, vault: enVault, storage: enStorage,
       "pending-messages": enPendingMessages,
       contacts: enContacts, activity: enActivity, "api-keys": enApiKeys,
-      "cli-credentials": enCliCredentials,
+      "cli-credentials": enCliCredentials, "secret-vault": enSecretVault,
       packages: enPackages,
       tenants: enTenants,
       "system-settings": enSystemSettings,
@@ -273,7 +276,7 @@ i18n.use(initReactI18next).init({
       mcp: viMcp, tts: viTts, setup: viSetup, memory: viMemory, vault: viVault, storage: viStorage,
       "pending-messages": viPendingMessages,
       contacts: viContacts, activity: viActivity, "api-keys": viApiKeys,
-      "cli-credentials": viCliCredentials,
+      "cli-credentials": viCliCredentials, "secret-vault": viSecretVault,
       packages: viPackages,
       tenants: viTenants,
       "system-settings": viSystemSettings,
@@ -294,7 +297,7 @@ i18n.use(initReactI18next).init({
       mcp: zhMcp, tts: zhTts, setup: zhSetup, memory: zhMemory, vault: zhVault, storage: zhStorage,
       "pending-messages": zhPendingMessages,
       contacts: zhContacts, activity: zhActivity, "api-keys": zhApiKeys,
-      "cli-credentials": zhCliCredentials,
+      "cli-credentials": zhCliCredentials, "secret-vault": zhSecretVault,
       packages: zhPackages,
       tenants: zhTenants,
       "system-settings": zhSystemSettings,

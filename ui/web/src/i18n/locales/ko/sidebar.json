@@ -38,6 +38,7 @@
     "tts": "TTS",
     "activity": "활동",
     "cliCredentials": "CLI 자격 증명",
+    "secretVault": "Secret Vault",
     "apiKeys": "API 키",
     "apiDocs": "API 문서",
     "packages": "패키지",

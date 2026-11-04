@@ -753,6 +753,11 @@ func runGateway() {
 		mediaStore,
 	)
 
+	// Secret vault admin API (write-only values). Absent without an encryption key.
+	if pgStores.SecretVault != nil {
+		server.SetSecretVaultHandler(httpapi.NewSecretVaultHandler(pgStores.SecretVault, pgStores.Tenants))
+	}
+
 	// System backup API — admin + owner only, SSE progress streaming.
 	server.SetBackupHandler(httpapi.NewBackupHandler(cfg, cfg.Database.PostgresDSN, Version, permPE.IsOwner))
 

@@ -206,6 +206,11 @@ export const Methods = {
   // Phase 7: activity audit log
   WORKSTATIONS_LIST_ACTIVITY: "workstations.activity.list",
 
+  // Secret vault: answers to chat Secure Forms / use approvals (values never go through chat)
+  SECRET_VAULT_FORM_SUBMIT: "secretVault.form.submit",
+  SECRET_VAULT_FORM_CANCEL: "secretVault.form.cancel",
+  SECRET_VAULT_APPROVAL_RESPOND: "secretVault.approval.respond",
+
   // Phase 3+ - NICE TO HAVE
   LOGS_TAIL: "logs.tail",
 } as const;
@@ -229,6 +234,8 @@ export const Events = {
   VOICEWAKE_CHANGED: "voicewake.changed",
   CONNECT_CHALLENGE: "connect.challenge",
   TALK_MODE: "talk.mode",
+  SECRET_VAULT_FORM_REQUESTED: "secretVault.form.requested",
+  SECRET_VAULT_FORM_RESOLVED: "secretVault.form.resolved",
 
   // Team tasks
   TEAM_TASK_CREATED: "team.task.created",

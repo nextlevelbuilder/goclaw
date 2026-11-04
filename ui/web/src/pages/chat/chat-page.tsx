@@ -17,6 +17,7 @@ import { useChatSend } from "./hooks/use-chat-send";
 import { isOwnSession, parseSessionKey } from "@/lib/session-key";
 import { useVirtualKeyboard } from "@/hooks/use-virtual-keyboard";
 import { TaskPanel } from "@/components/chat/task-panel";
+import { SecretRequestHost } from "@/components/chat/secret-request-host";
 
 export function ChatPage() {
   const { t } = useTranslation("chat");
@@ -295,6 +296,7 @@ export function ChatPage() {
 
       {/* Task panel — toggleable sidebar on the right (Sheet on mobile) */}
       <TaskPanel tasks={teamTasks} open={taskPanelOpen} onClose={() => setTaskPanelOpen(false)} />
+      <SecretRequestHost />
     </div>
   );
 }

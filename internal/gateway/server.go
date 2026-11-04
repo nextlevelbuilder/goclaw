@@ -719,6 +719,11 @@ func (s *Server) SetSecureCLIGrantHandler(h *httpapi.SecureCLIGrantHandler) {
 	s.handlers = append(s.handlers, h)
 }
 
+// SetSecretVaultHandler sets the secret vault admin handler.
+func (s *Server) SetSecretVaultHandler(h *httpapi.SecretVaultHandler) {
+	s.handlers = append(s.handlers, h)
+}
+
 // SetBrowserCookiesHandler sets the selected browser-cookie sync handler.
 func (s *Server) SetBrowserCookiesHandler(h *httpapi.BrowserCookiesHandler) {
 	s.handlers = append(s.handlers, h)
