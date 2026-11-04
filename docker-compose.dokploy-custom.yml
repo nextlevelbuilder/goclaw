@@ -64,7 +64,7 @@ services:
       - CHOWN
 
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=5g
+      - /tmp:rw,noexec,nosuid,size=1g
 
     deploy:
       resources:
