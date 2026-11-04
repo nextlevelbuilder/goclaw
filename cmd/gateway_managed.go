@@ -252,6 +252,7 @@ func wireExtras(
 		TeamStore:              stores.Teams,
 		DataDir:                workspace,
 		SecureCLIStore:         stores.SecureCLI,
+		SecretVault:            stores.SecretVault,
 		BuiltinToolStore:       stores.BuiltinTools,
 		MCPStore:               stores.MCP,
 		MCPPool:                mcpPool,

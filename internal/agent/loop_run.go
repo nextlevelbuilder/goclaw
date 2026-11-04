@@ -18,6 +18,9 @@ import (
 func (l *Loop) Run(ctx context.Context, req RunRequest) (*RunResult, error) {
 	l.activeRuns.Add(1)
 	defer l.activeRuns.Add(-1)
+	// Vault first: it installs the run's secret redactor on req, which the
+	// combined redactor below then applies to ctx, events, session and result.
+	ctx = l.withSecretVault(ctx, &req)
 	ctx = withDelegationArtifactTextRedactor(ctx, &req)
 
 	// Model selection precedence (highest first), for runs that carry a role:
