@@ -71,6 +71,8 @@ func setupToolRegistry(
 		}
 	}
 
+	toolsReg.Register(tools.NewRequestSecretTool())
+
 	// Register file tools + exec tool (with sandbox routing via FsBridge if enabled)
 	if sandboxMgr != nil {
 		toolsReg.Register(tools.NewSandboxedReadFileTool(workspace, agentCfg.RestrictToWorkspace, sandboxMgr))

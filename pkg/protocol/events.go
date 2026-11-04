@@ -9,6 +9,10 @@ const (
 	EventHeartbeat         = "heartbeat"
 	EventExecApprovalReq   = "exec.approval.requested"
 	EventExecApprovalRes   = "exec.approval.resolved"
+
+	// Secret vault events; payloads never carry secret values.
+	EventSecretVaultFormRequested = "secretVault.form.requested"
+	EventSecretVaultFormResolved  = "secretVault.form.resolved"
 	EventPresence          = "presence"
 	EventTick              = "tick"
 	EventShutdown          = "shutdown"

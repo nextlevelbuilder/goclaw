@@ -374,6 +374,8 @@ func init() {
 		MsgSecretVaultDomainInvalid:  "allowed domain %q is not valid",
 		MsgSecretVaultPayloadInvalid: "secret value is missing or invalid for this kind",
 		MsgSecretVaultAgentInvalid:   "agent %s not found in this tenant",
+		MsgSecretFormNotFound:        "secret request not found or already resolved",
+		MsgSecretFormScopeInvalid:    "scope must be \"save\" or \"session\"",
 
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Forwarded to %s as requested: %q",

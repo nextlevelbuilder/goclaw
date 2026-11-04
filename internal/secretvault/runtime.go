@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -20,6 +21,7 @@ var (
 	ErrDomainNotAllowed    = errors.New("secret is not allowed for this host")
 	ErrInvalidPlaceholder  = errors.New("invalid secret placeholder")
 	ErrPlaceholderLocation = errors.New("secret placeholder is not allowed in this field")
+	ErrApprovalDenied      = errors.New("the user did not approve using this secret")
 )
 
 // Runtime is the per-run vault context: which agent is running, the store to
@@ -29,6 +31,14 @@ type Runtime struct {
 	AgentID  uuid.UUID
 	UserID   string
 	Redactor *Redactor
+
+	// Forms brokers Secure Forms and approvals; nil when the run cannot reach
+	// a Web UI. SessionKey scopes session-only secrets.
+	Forms      *FormManager
+	SessionKey string
+
+	approvedMu sync.Mutex
+	approved   map[string]bool // "name|host" approved earlier in this run
 }
 
 // NewRuntime builds a runtime with an empty redactor.
@@ -47,6 +57,67 @@ func (rt *Runtime) Preload(ctx context.Context) error {
 	for _, g := range granted {
 		rt.Redactor.AddPayload(g.Payload)
 	}
+	rt.addSessionSecrets(ctx)
+	return nil
+}
+
+func (rt *Runtime) addSessionSecrets(ctx context.Context) {
+	if rt.Forms == nil || rt.SessionKey == "" {
+		return
+	}
+	for _, g := range rt.Forms.Sessions.List(store.TenantIDFromContext(ctx), rt.SessionKey) {
+		rt.Redactor.AddPayload(g.Payload)
+	}
+}
+
+// MarkApproved records that the user already vouched for name in this run
+// (for example by typing it into a Secure Form), so it is not asked again.
+func (rt *Runtime) MarkApproved(name string) {
+	rt.approvedMu.Lock()
+	defer rt.approvedMu.Unlock()
+	if rt.approved == nil {
+		rt.approved = make(map[string]bool)
+	}
+	rt.approved[name+"|*"] = true
+}
+
+func (rt *Runtime) isApproved(name, host string) bool {
+	rt.approvedMu.Lock()
+	defer rt.approvedMu.Unlock()
+	return rt.approved[name+"|*"] || rt.approved[name+"|"+host]
+}
+
+func (rt *Runtime) rememberApproval(name, host string) {
+	rt.approvedMu.Lock()
+	defer rt.approvedMu.Unlock()
+	if rt.approved == nil {
+		rt.approved = make(map[string]bool)
+	}
+	rt.approved[name+"|"+host] = true
+}
+
+// requireApproval asks the user once per (secret, host) per run. Without a way
+// to ask, a secret that needs approval is refused (fail closed).
+func (rt *Runtime) requireApproval(ctx context.Context, e *store.SecretVaultEntry, host string) error {
+	if rt.isApproved(e.Name, host) {
+		return nil
+	}
+	if rt.Forms == nil {
+		rt.audit(ctx, e, store.SecretAuditDenied, host, "approval_unavailable")
+		return fmt.Errorf("%w: %q (no Web UI to ask)", ErrApprovalDenied, e.Name)
+	}
+	ok, err := rt.Forms.RequestApproval(ctx, FormSpec{
+		Name: e.Name, Host: host, Action: "use secret " + e.Name + " for " + host,
+		AgentID: rt.AgentID, SessionKey: rt.SessionKey,
+	})
+	if err != nil || !ok {
+		rt.audit(ctx, e, store.SecretAuditDenied, host, "approval_denied")
+		return fmt.Errorf("%w: %q", ErrApprovalDenied, e.Name)
+	}
+	if err := rt.appendAudit(ctx, e, store.SecretAuditApproved, host, "ok"); err != nil {
+		return fmt.Errorf("secret vault: audit failed for %q", e.Name)
+	}
+	rt.rememberApproval(e.Name, host)
 	return nil
 }
 
@@ -67,7 +138,11 @@ func (rt *Runtime) Use(ctx context.Context, name, kind, host string) (*Secret, e
 	entry, payload, err := rt.Store.ResolveForUse(ctx, rt.AgentID, name)
 	switch {
 	case errors.Is(err, store.ErrSecretVaultNotFound), errors.Is(err, store.ErrSecretVaultNotGranted):
-		return nil, fmt.Errorf("%w: %q", ErrUnavailable, name)
+		se, sp, ok := rt.sessionSecret(ctx, name)
+		if !ok {
+			return nil, fmt.Errorf("%w: %q", ErrUnavailable, name)
+		}
+		entry, payload = se, sp
 	case err != nil:
 		return nil, fmt.Errorf("secret vault: resolve %q failed", name)
 	}
@@ -81,10 +156,27 @@ func (rt *Runtime) Use(ctx context.Context, name, kind, host string) (*Secret, e
 		rt.audit(ctx, entry, store.SecretAuditDenied, host, "domain_not_allowed")
 		return nil, fmt.Errorf("%w: %q", ErrDomainNotAllowed, name)
 	}
+	if entry.RequireApproval {
+		if err := rt.requireApproval(ctx, entry, host); err != nil {
+			return nil, err
+		}
+	}
 	if err := rt.appendAudit(ctx, entry, store.SecretAuditUsed, host, "ok"); err != nil {
 		return nil, fmt.Errorf("secret vault: audit failed for %q", name)
 	}
 	return &Secret{Entry: *entry, Payload: payload}, nil
+}
+
+// sessionSecret looks up a secret the user provided for this session only.
+func (rt *Runtime) sessionSecret(ctx context.Context, name string) (*store.SecretVaultEntry, store.SecretVaultPayload, bool) {
+	if rt.Forms == nil || rt.SessionKey == "" {
+		return nil, store.SecretVaultPayload{}, false
+	}
+	e, p, ok := rt.Forms.Sessions.Get(store.TenantIDFromContext(ctx), rt.SessionKey, name)
+	if !ok {
+		return nil, store.SecretVaultPayload{}, false
+	}
+	return &e, p, true
 }
 
 func (rt *Runtime) audit(ctx context.Context, e *store.SecretVaultEntry, action, host, outcome string) {

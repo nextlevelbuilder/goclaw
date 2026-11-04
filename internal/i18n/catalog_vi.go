@@ -374,6 +374,8 @@ func init() {
 		MsgSecretVaultDomainInvalid:  "domain được phép %q không hợp lệ",
 		MsgSecretVaultPayloadInvalid: "giá trị secret thiếu hoặc không hợp lệ với loại này",
 		MsgSecretVaultAgentInvalid:   "không tìm thấy agent %s trong tenant này",
+		MsgSecretFormNotFound:        "không tìm thấy yêu cầu secret hoặc yêu cầu đã được xử lý",
+		MsgSecretFormScopeInvalid:    "scope phải là \"save\" hoặc \"session\"",
 
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Đã forward sang %s theo yêu cầu: %q",

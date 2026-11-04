@@ -27,6 +27,8 @@ func (l *Loop) withSecretVault(ctx context.Context, req *RunRequest) context.Con
 		return secretvault.WithRuntime(ctx, nil)
 	}
 	rt := secretvault.NewRuntime(l.secretVault, l.agentUUID, req.UserID)
+	rt.Forms = secretvault.DefaultForms()
+	rt.SessionKey = req.SessionKey
 	if err := rt.Preload(ctx); err != nil {
 		// Without a preloaded redactor the run must not resolve secrets.
 		slog.Warn("secretvault.preload_failed", "agent", l.id, "error", err)

@@ -373,6 +373,8 @@ func init() {
 		MsgSecretVaultDomainInvalid:  "разрешённый домен %q недопустим",
 		MsgSecretVaultPayloadInvalid: "значение секрета отсутствует или недопустимо для этого типа",
 		MsgSecretVaultAgentInvalid:   "агент %s не найден в этом тенанте",
+		MsgSecretFormNotFound:        "запрос секрета не найден или уже обработан",
+		MsgSecretFormScopeInvalid:    "scope должен быть \"save\" или \"session\"",
 
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Переслано на %s согласно запросу: %q",

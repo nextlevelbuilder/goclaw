@@ -1039,6 +1039,19 @@ func (s *Server) ClientList() []*Client {
 	return list
 }
 
+// HasUserClient reports whether the user has a connected WS client in the
+// tenant, so a Secure Form or approval can actually be shown.
+func (s *Server) HasUserClient(tenant uuid.UUID, user string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, c := range s.clients {
+		if c.tenantID == tenant && c.userID == user {
+			return true
+		}
+	}
+	return false
+}
+
 // BroadcastEvent sends an event to all connected clients.
 func (s *Server) BroadcastEvent(event protocol.EventFrame) {
 	s.mu.RLock()

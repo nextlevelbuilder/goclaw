@@ -374,6 +374,8 @@ func init() {
 		MsgSecretVaultDomainInvalid:  "允许的域名 %q 无效",
 		MsgSecretVaultPayloadInvalid: "该类型的密钥值缺失或无效",
 		MsgSecretVaultAgentInvalid:   "在此租户中未找到智能体 %s",
+		MsgSecretFormNotFound:        "未找到该密钥请求或已处理",
+		MsgSecretFormScopeInvalid:    "scope 必须为 \"save\" 或 \"session\"",
 
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 已按请求转发至 %s:%q",
