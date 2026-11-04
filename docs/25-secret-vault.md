@@ -90,6 +90,25 @@ metadata only, and every route requires a tenant admin.
   avoid corrupting normal text. A secret embedded in a larger base64 payload at
   a non-aligned offset is not recognised.
 
+## Browser take over
+
+When a step needs a person (SSO, CAPTCHA, QR code, one-time code), the agent
+calls the browser tool with `action: "takeover"`. The Web UI shows a card with
+the site and a countdown (10 minutes at most); the user finishes the step in the
+browser window and presses Done, or declines.
+
+- Works only from the Web UI and only with a visible, locally launched Chrome.
+  A headless or remote (Docker sidecar) browser has no window yet, so the action
+  returns an error telling the agent to ask the user to do the step another way.
+- What the user types stays in the browser. It is never sent to the agent.
+- Afterwards the tab is treated like a secret tab: input values are hidden in
+  snapshots, `evaluate`, console and screenshot are closed until the agent
+  navigates to another site, and only the run that asked can use the tab.
+- Events `browser.takeover.requested` and `.resolved` reach only the owning
+  user. Answers are bound to tenant and user; a foreign answer looks like
+  "not found" and leaves the request open.
+- Passkeys (WebAuthn) cannot be completed this way.
+
 ## Known limits
 
 - `request_secret` is registered as a tool but not seeded in `builtin_tools`,
@@ -110,4 +129,5 @@ metadata only, and every route requires a tenant admin.
 | Tools | `internal/tools/http_request.go`, `internal/tools/request_secret.go`, `pkg/browser/fill_secret.go` |
 | REST, WebSocket, CLI | `internal/http/secret_vault.go`, `internal/gateway/methods/`, `cmd/secret_vault.go` |
 | Web UI | `ui/web/src/pages/secret-vault/`, `ui/web/src/components/chat/secret-request-host.tsx` |
+| Browser take over | `internal/browsertakeover/`, `pkg/browser/takeover.go`, `internal/gateway/methods/browser_takeover.go`, `ui/web/src/components/chat/takeover-request-host.tsx` |
 | Tests | `internal/tools/secret_vault_leak_test.go`, `tests/invariants/secret_vault_tenant_isolation_test.go` |

@@ -7,6 +7,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/browsertakeover"
 	"github.com/nextlevelbuilder/goclaw/internal/secretvault"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
@@ -81,6 +82,7 @@ func registerAllMethods(server *gateway.Server, agents *agent.Router, sessStore 
 
 	// Secret vault: Secure Form + approval answers
 	methods.NewSecretVaultMethods(secretvault.DefaultForms()).Register(router)
+	methods.NewBrowserTakeoverMethods(browsertakeover.Default()).Register(router)
 
 	// Phase 2: Send (outbound message routing)
 	methods.NewSendMethods(msgBus).Register(router)

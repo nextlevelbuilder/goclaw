@@ -376,6 +376,7 @@ func init() {
 		MsgSecretVaultAgentInvalid:   "在此租户中未找到智能体 %s",
 		MsgSecretFormNotFound:        "未找到该密钥请求或已处理",
 		MsgSecretFormScopeInvalid:    "scope 必须为 \"save\" 或 \"session\"",
+		MsgBrowserTakeoverNotFound:   "未找到该浏览器接管请求或已处理",
 
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 已按请求转发至 %s:%q",

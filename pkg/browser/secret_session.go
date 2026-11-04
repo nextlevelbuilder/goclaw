@@ -22,6 +22,7 @@ type secretSession struct {
 	origin    string // scheme://host[:port] of the top frame at fill time
 	fillURL   string // full top-frame URL at fill time
 	submitted bool   // the fill pressed Enter; the next navigation ends the session
+	maskAll   bool   // take over: every input value is hidden, not just the filled fields
 	mu        sync.Mutex
 	masked    map[int]bool // backend DOM node ids of fields that received a secret
 }
@@ -162,6 +163,15 @@ func (m *Manager) secretMaskIDs(page *rod.Page, targetID string) map[int]bool {
 		return nil
 	}
 	ids := s.maskedIDs()
+	if s.maskAll {
+		if els, err := page.Elements("input, textarea"); err == nil {
+			for _, el := range els {
+				if n, err := (proto.DOMDescribeNode{ObjectID: el.Object.ObjectID}).Call(page); err == nil && n.Node != nil {
+					ids[int(n.Node.BackendNodeID)] = true
+				}
+			}
+		}
+	}
 	if els, err := page.Elements("input[type=password]"); err == nil {
 		for _, el := range els {
 			if n, err := (proto.DOMDescribeNode{ObjectID: el.Object.ObjectID}).Call(page); err == nil && n.Node != nil {

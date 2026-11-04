@@ -83,6 +83,10 @@ const (
 	MethodSecretVaultFormSubmit      = "secretVault.form.submit"
 	MethodSecretVaultFormCancel      = "secretVault.form.cancel"
 	MethodSecretVaultApprovalRespond = "secretVault.approval.respond"
+
+	// Browser take over: the user finishes or dismisses a request (camelCase params).
+	MethodBrowserTakeoverDone   = "browser.takeover.done"
+	MethodBrowserTakeoverCancel = "browser.takeover.cancel"
 	MethodApprovalsApprove = "exec.approval.approve"
 	MethodApprovalsDeny    = "exec.approval.deny"
 

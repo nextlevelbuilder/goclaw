@@ -9,18 +9,20 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/secretvault"
+	"github.com/nextlevelbuilder/goclaw/internal/browsertakeover"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
 // BrowserTool implements tools.Tool for browser automation.
 type BrowserTool struct {
-	manager *Manager
+	manager  *Manager
+	takeover *browsertakeover.Manager
 }
 
 // NewBrowserTool creates a BrowserTool wrapping a Manager.
 func NewBrowserTool(manager *Manager) *BrowserTool {
-	return &BrowserTool{manager: manager}
+	return &BrowserTool{manager: manager, takeover: browsertakeover.Default()}
 }
 
 func (t *BrowserTool) Name() string { return "browser" }
@@ -40,6 +42,7 @@ Actions:
 - navigate: Navigate tab to URL (requires targetId, targetUrl)
 - console: Get browser console messages (requires targetId)
 - act: Interact with elements (requires request object with kind, ref, etc.)
+- takeover: Hand a tab to the user for a step only a person can do (SSO, CAPTCHA, QR, OTP, passkey). Use targetId and reason (say what they must do, never include secrets). Blocks until they finish; then snapshot to continue. Input values stay hidden afterwards.
 
 Act kinds: click, type, press, hover, wait, evaluate, fill_secret
 - click: Click element (request: {kind:"click", ref:"e1"})
@@ -61,7 +64,7 @@ func (t *BrowserTool) Parameters() map[string]any {
 		"properties": map[string]any{
 			"action": map[string]any{
 				"type":        "string",
-				"enum":        []string{"status", "start", "stop", "tabs", "open", "close", "snapshot", "screenshot", "navigate", "console", "act"},
+				"enum":        []string{"status", "start", "stop", "tabs", "open", "close", "snapshot", "screenshot", "navigate", "console", "act", "takeover"},
 				"description": "The browser action to perform",
 			},
 			"targetUrl": map[string]any{
@@ -248,6 +251,8 @@ func (t *BrowserTool) execute(ctx context.Context, args map[string]any) *tools.R
 		return t.handleConsole(ctx, args)
 	case "act":
 		return t.handleAct(ctx, args)
+	case "takeover":
+		return t.handleTakeover(ctx, args)
 	default:
 		return tools.ErrorResult(fmt.Sprintf("unknown action: %s", action))
 	}

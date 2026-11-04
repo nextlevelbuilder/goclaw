@@ -376,6 +376,7 @@ func init() {
 		MsgSecretVaultAgentInvalid:   "không tìm thấy agent %s trong tenant này",
 		MsgSecretFormNotFound:        "không tìm thấy yêu cầu secret hoặc yêu cầu đã được xử lý",
 		MsgSecretFormScopeInvalid:    "scope phải là \"save\" hoặc \"session\"",
+		MsgBrowserTakeoverNotFound:   "không tìm thấy yêu cầu tiếp quản trình duyệt hoặc yêu cầu đã được xử lý",
 
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Đã forward sang %s theo yêu cầu: %q",

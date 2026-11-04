@@ -13,6 +13,10 @@ const (
 	// Secret vault events; payloads never carry secret values.
 	EventSecretVaultFormRequested = "secretVault.form.requested"
 	EventSecretVaultFormResolved  = "secretVault.form.resolved"
+
+	// Browser take over: an agent hands a tab to the user. Metadata only.
+	EventBrowserTakeoverRequested = "browser.takeover.requested"
+	EventBrowserTakeoverResolved  = "browser.takeover.resolved"
 	EventPresence          = "presence"
 	EventTick              = "tick"
 	EventShutdown          = "shutdown"

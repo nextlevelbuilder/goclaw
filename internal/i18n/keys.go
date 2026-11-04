@@ -428,4 +428,5 @@ const (
 	MsgSecretVaultAgentInvalid   = "error.secret_vault_agent_invalid"   // "agent %s not found in this tenant"
 	MsgSecretFormNotFound        = "error.secret_form_not_found"        // "secret request not found or already resolved"
 	MsgSecretFormScopeInvalid    = "error.secret_form_scope_invalid"    // "scope must be \"save\" or \"session\""
+	MsgBrowserTakeoverNotFound   = "error.browser_takeover_not_found"   // "take over request not found or already resolved"
 )

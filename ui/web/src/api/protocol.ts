@@ -211,6 +211,10 @@ export const Methods = {
   SECRET_VAULT_FORM_CANCEL: "secretVault.form.cancel",
   SECRET_VAULT_APPROVAL_RESPOND: "secretVault.approval.respond",
 
+  // Browser take over: the user finishes a step in the browser, or declines
+  BROWSER_TAKEOVER_DONE: "browser.takeover.done",
+  BROWSER_TAKEOVER_CANCEL: "browser.takeover.cancel",
+
   // Phase 3+ - NICE TO HAVE
   LOGS_TAIL: "logs.tail",
 } as const;
@@ -236,6 +240,8 @@ export const Events = {
   TALK_MODE: "talk.mode",
   SECRET_VAULT_FORM_REQUESTED: "secretVault.form.requested",
   SECRET_VAULT_FORM_RESOLVED: "secretVault.form.resolved",
+  BROWSER_TAKEOVER_REQUESTED: "browser.takeover.requested",
+  BROWSER_TAKEOVER_RESOLVED: "browser.takeover.resolved",
 
   // Team tasks
   TEAM_TASK_CREATED: "team.task.created",

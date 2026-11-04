@@ -376,6 +376,7 @@ func init() {
 		MsgSecretVaultAgentInvalid:   "agent %s not found in this tenant",
 		MsgSecretFormNotFound:        "secret request not found or already resolved",
 		MsgSecretFormScopeInvalid:    "scope must be \"save\" or \"session\"",
+		MsgBrowserTakeoverNotFound:   "take over request not found or already resolved",
 
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Forwarded to %s as requested: %q",
