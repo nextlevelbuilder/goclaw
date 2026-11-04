@@ -4,6 +4,23 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+## 2026-11-04
+
+### Telegram inbound tenant scope
+
+**Fixes**
+
+- Scoped inbound Telegram messages to the channel's tenant, so pairing requests
+  from a non-master bot appear under that tenant instead of master. Existing
+  pairings stored under master for those bots must be paired again.
+
+**Tests**
+
+- Added regression coverage that the pairing check and request run under the
+  channel tenant.
+
+---
+
 ## 2026-06-13
 
 ### Cron NO_REPLY delivery suppression (issue #141)
