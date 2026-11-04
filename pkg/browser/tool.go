@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/secretvault"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
@@ -40,13 +41,16 @@ Actions:
 - console: Get browser console messages (requires targetId)
 - act: Interact with elements (requires request object with kind, ref, etc.)
 
-Act kinds: click, type, press, hover, wait, evaluate
+Act kinds: click, type, press, hover, wait, evaluate, fill_secret
 - click: Click element (request: {kind:"click", ref:"e1"})
 - type: Type text (request: {kind:"type", ref:"e1", text:"hello"})
 - press: Press key (request: {kind:"press", key:"Enter"})
 - hover: Hover element (request: {kind:"hover", ref:"e1"})
 - wait: Wait for condition (request: {kind:"wait", timeMs:1000} or {kind:"wait", text:"loaded"})
 - evaluate: Run JavaScript (request: {kind:"evaluate", fn:"document.title"})
+- fill_secret: Fill a vault secret into an input of the page (request: {kind:"fill_secret", ref:"e1", secret:"my-login", field:"username"|"password", submit:false}).
+  ALWAYS use this for passwords and API keys; never use type for them and never write the value. The secret must be allowed for the page's domain.
+  While a secret is on the page its fields are masked in snapshots, and evaluate, wait with fn, console and screenshot are disabled.
 
 Workflow: start → open URL → snapshot (get refs) → act (use refs) → snapshot again`
 }
@@ -98,7 +102,7 @@ func (t *BrowserTool) Parameters() map[string]any {
 				"properties": map[string]any{
 					"kind": map[string]any{
 						"type":        "string",
-						"enum":        []string{"click", "type", "press", "hover", "wait", "evaluate"},
+						"enum":        []string{"click", "type", "press", "hover", "wait", "evaluate", "fill_secret"},
 						"description": "The interaction kind",
 					},
 					"ref": map[string]any{
@@ -112,6 +116,15 @@ func (t *BrowserTool) Parameters() map[string]any {
 					"key": map[string]any{
 						"type":        "string",
 						"description": "Key to press (e.g. Enter, Tab, Escape)",
+					},
+					"secret": map[string]any{
+						"type":        "string",
+						"description": "Vault secret name for fill_secret (plain name, not a placeholder)",
+					},
+					"field": map[string]any{
+						"type":        "string",
+						"enum":        []string{"username", "password"},
+						"description": "Which part of the secret fill_secret types (default password)",
 					},
 					"submit": map[string]any{
 						"type":        "boolean",
@@ -132,7 +145,37 @@ func (t *BrowserTool) Parameters() map[string]any {
 	}
 }
 
+// Execute runs a browser action. Every result passes through the run's secret
+// redactor, so page text or an error string can never carry a vault value back
+// to the model.
 func (t *BrowserTool) Execute(ctx context.Context, args map[string]any) *tools.Result {
+	res := t.execute(ctx, args)
+	if rt := secretvault.RuntimeFrom(ctx); rt != nil && res != nil {
+		res.ForLLM = rt.Redactor.Redact(res.ForLLM)
+		res.ForUser = rt.Redactor.Redact(res.ForUser)
+		res.Deliverable = rt.Redactor.Redact(res.Deliverable)
+	}
+	return res
+}
+
+// secretGuardOp maps a request to the operation name the secret-tab guard
+// understands; "" means the request does not touch a page.
+func secretGuardOp(action string, args map[string]any) string {
+	switch action {
+	case "snapshot", "navigate", "close", "screenshot", "console":
+		return action
+	case "act":
+		req, _ := args["request"].(map[string]any)
+		kind, _ := req["kind"].(string)
+		if fn, _ := req["fn"].(string); kind == "wait" && fn != "" {
+			return "wait_fn"
+		}
+		return kind
+	}
+	return ""
+}
+
+func (t *BrowserTool) execute(ctx context.Context, args map[string]any) *tools.Result {
 	action, _ := args["action"].(string)
 	if action == "" {
 		return tools.ErrorResult("action is required")
@@ -150,6 +193,17 @@ func (t *BrowserTool) Execute(ctx context.Context, args map[string]any) *tools.R
 		scope.AgentID = store.AgentKeyFromContext(ctx)
 	}
 	ctx = WithScope(ctx, scope)
+
+	if op := secretGuardOp(action, args); op != "" {
+		runSession := ""
+		if rt := secretvault.RuntimeFrom(ctx); rt != nil {
+			runSession = rt.SessionKey
+		}
+		targetID, _ := args["targetId"].(string)
+		if err := t.manager.guardSecretTab(ctx, targetID, op, runSession); err != nil {
+			return tools.ErrorResult(err.Error())
+		}
+	}
 
 	// Apply per-action timeout before startup so remote Chrome failures are bounded too.
 	switch action {
@@ -413,6 +467,20 @@ func (t *BrowserTool) handleAct(ctx context.Context, args map[string]any) *tools
 			return tools.ErrorResult(fmt.Sprintf("wait failed: %v", err))
 		}
 		return tools.NewResult("Wait condition met.")
+
+	case "fill_secret":
+		ref, _ := req["ref"].(string)
+		name, _ := req["secret"].(string)
+		if ref == "" || name == "" {
+			return tools.ErrorResult("request.ref and request.secret are required for fill_secret")
+		}
+		opts := FillSecretOpts{Secret: name}
+		opts.Field, _ = req["field"].(string)
+		opts.Submit, _ = req["submit"].(bool)
+		if err := t.manager.FillSecret(ctx, targetID, ref, opts); err != nil {
+			return tools.ErrorResult(fmt.Sprintf("fill_secret failed: %v", err))
+		}
+		return tools.NewResult("Secret filled. Its value is hidden from snapshots; do not try to read it back.")
 
 	case "evaluate":
 		fn, _ := req["fn"].(string)
