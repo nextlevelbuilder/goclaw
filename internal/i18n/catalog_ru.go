@@ -363,6 +363,17 @@ func init() {
 		MsgGitCredBlobMissingField:         "в блобе учётных данных отсутствует обязательное поле %q",
 		MsgGitCredUnsupportedCredType:      "credential_type %q не поддерживается",
 
+		// Secret vault
+		MsgSecretVaultNoKey:          "хранилищу секретов нужен ключ шифрования (GOCLAW_ENCRYPTION_KEY)",
+		MsgSecretVaultNotFound:       "секрет %q не найден",
+		MsgSecretVaultNameInvalid:    "имя секрета %q недопустимо (1-64 строчных букв, цифр, '-' или '_')",
+		MsgSecretVaultNameTaken:      "секрет с именем %q уже существует",
+		MsgSecretVaultKindInvalid:    "тип секрета %q не поддерживается",
+		MsgSecretVaultDomainRequired: "нужен хотя бы один разрешённый домен",
+		MsgSecretVaultDomainInvalid:  "разрешённый домен %q недопустим",
+		MsgSecretVaultPayloadInvalid: "значение секрета отсутствует или недопустимо для этого типа",
+		MsgSecretVaultAgentInvalid:   "агент %s не найден в этом тенанте",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Переслано на %s согласно запросу: %q",
 

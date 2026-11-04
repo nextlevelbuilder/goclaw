@@ -41,6 +41,7 @@ type Stores struct {
 	BrowserCookies        BrowserCookieStore
 	SecureCLI             SecureCLIStore
 	SecureCLIGrants       SecureCLIAgentGrantStore
+	SecretVault           SecretVaultStore // nil when no encryption key is configured
 	APIKeys               APIKeyStore
 	Heartbeats            HeartbeatStore
 	ConfigPermissions     ConfigPermissionStore

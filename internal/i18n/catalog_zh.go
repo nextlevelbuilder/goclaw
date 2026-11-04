@@ -364,6 +364,17 @@ func init() {
 		MsgGitCredBlobMissingField:         "凭据 blob 缺少必填字段 %q",
 		MsgGitCredUnsupportedCredType:      "不支持的 credential_type %q",
 
+		// Secret vault
+		MsgSecretVaultNoKey:          "密钥保险库需要加密密钥 (GOCLAW_ENCRYPTION_KEY)",
+		MsgSecretVaultNotFound:       "未找到密钥 %q",
+		MsgSecretVaultNameInvalid:    "密钥名称 %q 无效（使用 1-64 个小写字母、数字、'-' 或 '_'）",
+		MsgSecretVaultNameTaken:      "已存在名为 %q 的密钥",
+		MsgSecretVaultKindInvalid:    "不支持的密钥类型 %q",
+		MsgSecretVaultDomainRequired: "至少需要一个允许的域名",
+		MsgSecretVaultDomainInvalid:  "允许的域名 %q 无效",
+		MsgSecretVaultPayloadInvalid: "该类型的密钥值缺失或无效",
+		MsgSecretVaultAgentInvalid:   "在此租户中未找到智能体 %s",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 已按请求转发至 %s:%q",
 

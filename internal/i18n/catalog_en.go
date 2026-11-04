@@ -364,6 +364,17 @@ func init() {
 		MsgGitCredBlobMissingField:         "credential blob is missing required field %q",
 		MsgGitCredUnsupportedCredType:      "credential_type %q is not supported",
 
+		// Secret vault
+		MsgSecretVaultNoKey:          "secret vault requires an encryption key (GOCLAW_ENCRYPTION_KEY)",
+		MsgSecretVaultNotFound:       "secret %q not found",
+		MsgSecretVaultNameInvalid:    "secret name %q is invalid (use 1-64 lowercase letters, digits, '-' or '_')",
+		MsgSecretVaultNameTaken:      "a secret named %q already exists",
+		MsgSecretVaultKindInvalid:    "secret kind %q is not supported",
+		MsgSecretVaultDomainRequired: "at least one allowed domain is required",
+		MsgSecretVaultDomainInvalid:  "allowed domain %q is not valid",
+		MsgSecretVaultPayloadInvalid: "secret value is missing or invalid for this kind",
+		MsgSecretVaultAgentInvalid:   "agent %s not found in this tenant",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Forwarded to %s as requested: %q",
 

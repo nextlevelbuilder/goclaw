@@ -53,6 +53,7 @@ func NewPGStores(cfg store.StoreConfig) (*store.Stores, error) {
 		BrowserCookies:         NewPGBrowserCookieStore(db, cfg.EncryptionKey),
 		SecureCLI:              NewPGSecureCLIStore(db, cfg.EncryptionKey),
 		SecureCLIGrants:        NewPGSecureCLIAgentGrantStore(db, cfg.EncryptionKey),
+		SecretVault:            newPGSecretVaultStoreOrNil(db, cfg.EncryptionKey),
 		APIKeys:                NewPGAPIKeyStore(db),
 		Heartbeats:             NewPGHeartbeatStore(db),
 		ConfigPermissions:      NewPGConfigPermissionStore(db),

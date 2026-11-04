@@ -414,3 +414,16 @@ const (
 	MsgGitCredBlobMissingField         = "error.git_cred_blob_missing_field"         // "blob missing required field %q"
 	MsgGitCredUnsupportedCredType      = "error.git_cred_unsupported_cred_type"      // "credential_type %q is not supported"
 )
+
+// Secret vault errors.
+const (
+	MsgSecretVaultNoKey          = "error.secret_vault_no_key"          // "secret vault requires an encryption key"
+	MsgSecretVaultNotFound       = "error.secret_vault_not_found"       // "secret %q not found"
+	MsgSecretVaultNameInvalid    = "error.secret_vault_name_invalid"    // "secret name %q is invalid"
+	MsgSecretVaultNameTaken      = "error.secret_vault_name_taken"      // "a secret named %q already exists"
+	MsgSecretVaultKindInvalid    = "error.secret_vault_kind_invalid"    // "secret kind %q is not supported"
+	MsgSecretVaultDomainRequired = "error.secret_vault_domain_required" // "at least one allowed domain is required"
+	MsgSecretVaultDomainInvalid  = "error.secret_vault_domain_invalid"  // "allowed domain %q is not valid"
+	MsgSecretVaultPayloadInvalid = "error.secret_vault_payload_invalid" // "secret value is missing or invalid for this kind"
+	MsgSecretVaultAgentInvalid   = "error.secret_vault_agent_invalid"   // "agent %s not found in this tenant"
+)
