@@ -16,6 +16,12 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Added
 
+- **Built-in skill `cohesivity`** lets agents set up a backend for the apps
+  they build (hosting, Postgres, auth, storage, and more) through the
+  Cohesivity MCP server. It stays inactive until an admin adds that server.
+  Adapted from `cohesivity-org/cohesivity-skill` (MIT, see
+  `skills/cohesivity/UPSTREAM.txt`). Guide: `docs/cohesivity-skill.md`.
+
 - **Task detail dialog shows the full task UUID with one-click copy** — the
   short identifier (`T-015-cc8e`) carries only the last four hex characters of
   the UUID, while the agent-facing `team_tasks` tool and RPCs take the full
