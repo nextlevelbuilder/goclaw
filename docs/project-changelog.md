@@ -4,6 +4,20 @@ Significant changes, features, and fixes in reverse chronological order.
 
 ---
 
+## 2026-11-04
+
+### ChatGPT Subscription (OAuth) model catalog refresh
+
+**Fixes**
+
+- Replaced retired and deprecated models in the ChatGPT OAuth catalog with the
+  current GPT-6 and GPT-5.6 models, and changed the default to `gpt-6.1-sol`
+  because `gpt-5.5` no longer works with ChatGPT sign-in.
+- Added reasoning metadata for the new models. `max` and `ultra` are not
+  selectable yet.
+
+---
+
 ## 2026-07-08
 
 ### Passive memory extraction tuning

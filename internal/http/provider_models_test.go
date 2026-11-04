@@ -112,32 +112,32 @@ func TestProvidersHandlerListProviderModelsChatGPTOAuthIncludesReasoningMetadata
 		t.Fatalf("reasoning_defaults.effort = %q, want high", result.ReasoningDefaults.Effort)
 	}
 
-	assertModelIDsInOrder(t, result.Models, []string{
-		"gpt-5.6-sol",
-		"gpt-5.6-terra",
-		"gpt-5.5",
-	})
+	if result.Models[0].ID != providers.DefaultCodexModel {
+		t.Fatalf("first model = %q, want default %q", result.Models[0].ID, providers.DefaultCodexModel)
+	}
 
-	for _, wantID := range []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.5"} {
-		var found bool
-		for _, model := range result.Models {
-			if model.ID != wantID {
-				continue
-			}
-			found = true
-			if model.Reasoning == nil {
-				t.Fatalf("%s reasoning = nil, want capability metadata", wantID)
-			}
-			if model.Reasoning.DefaultEffort != "medium" {
-				t.Fatalf("%s default_effort = %q, want medium", wantID, model.Reasoning.DefaultEffort)
-			}
-			if got := model.Reasoning.Levels; len(got) != 5 || got[4] != "xhigh" {
-				t.Fatalf("%s levels = %#v, want none..xhigh", wantID, got)
-			}
+	var found bool
+	for _, model := range result.Models {
+		switch model.ID {
+		case "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5.2":
+			t.Fatalf("%s is no longer available with ChatGPT sign-in", model.ID)
 		}
-		if !found {
-			t.Fatalf("%s not found in ChatGPT OAuth model list", wantID)
+		if model.Reasoning == nil {
+			t.Fatalf("%s reasoning = nil, want capability metadata", model.ID)
 		}
+		if model.ID != "gpt-6.1-sol" {
+			continue
+		}
+		found = true
+		if model.Reasoning.DefaultEffort != "low" {
+			t.Fatalf("gpt-6.1-sol default_effort = %q, want low", model.Reasoning.DefaultEffort)
+		}
+		if got := model.Reasoning.Levels; len(got) != 4 || got[0] != "low" || got[3] != "xhigh" {
+			t.Fatalf("gpt-6.1-sol levels = %#v, want low..xhigh", got)
+		}
+	}
+	if !found {
+		t.Fatal("gpt-6.1-sol not found in ChatGPT OAuth model list")
 	}
 }
 
