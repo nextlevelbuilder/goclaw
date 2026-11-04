@@ -72,6 +72,7 @@ func setupToolRegistry(
 	}
 
 	toolsReg.Register(tools.NewRequestSecretTool())
+	toolsReg.Register(tools.NewHTTPRequestTool())
 
 	// Register file tools + exec tool (with sandbox routing via FsBridge if enabled)
 	if sandboxMgr != nil {

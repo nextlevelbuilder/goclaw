@@ -14,7 +14,7 @@ import (
 // Do NOT modify at runtime — each Registry gets a deep copy in NewRegistry().
 var builtinToolGroups = map[string][]string{
 	"memory":     {"memory_search", "memory_get", "memory_expand", "knowledge_graph_search"},
-	"web":        {"web_search", "web_fetch"},
+	"web":        {"web_search", "web_fetch", "http_request"},
 	"fs":         {"read_file", "write_file", "list_files", "edit"},
 	"runtime":    {"exec", "wait"},
 	"sessions":   {"sessions_list", "sessions_history", "sessions_send", "spawn", "session_status"},
@@ -27,7 +27,7 @@ var builtinToolGroups = map[string][]string{
 	// Composite group: all goclaw native tools (excludes MCP/custom plugins).
 	"goclaw": {
 		"read_file", "write_file", "list_files", "edit", "exec", "wait",
-		"web_search", "web_fetch", "browser",
+		"web_search", "web_fetch", "http_request", "browser",
 		"memory_search", "memory_get", "memory_expand",
 		"knowledge_graph_search", "vault_search", "vault_read", "request_secret",
 		"sessions_list", "sessions_history", "sessions_send", "spawn", "session_status",
