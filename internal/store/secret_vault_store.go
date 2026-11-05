@@ -159,6 +159,10 @@ type SecretVaultStore interface {
 
 	// SetGrants replaces the set of agents allowed to use the entry.
 	SetGrants(ctx context.Context, entryID uuid.UUID, agentIDs []uuid.UUID) error
+	// AddGrant adds one agent to the entry's grants and leaves the others as
+	// they are. Granting an agent that already has it is a no-op. The agent
+	// must belong to the tenant (ErrSecretVaultAgentInvalid).
+	AddGrant(ctx context.Context, entryID, agentID uuid.UUID) error
 	ListGrants(ctx context.Context, entryID uuid.UUID) ([]uuid.UUID, error)
 	// ListGrantedMeta returns metadata of the active entries granted to an agent.
 	ListGrantedMeta(ctx context.Context, agentID uuid.UUID) ([]SecretVaultEntry, error)

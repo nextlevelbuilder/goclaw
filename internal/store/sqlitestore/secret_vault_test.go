@@ -158,6 +158,46 @@ func TestSecretVault_TenantIsolationAndGuards(t *testing.T) {
 	}
 }
 
+// AddGrant adds one agent without rewriting the set, so a grant removed by
+// someone else in between stays removed.
+func TestSecretVault_AddGrantKeepsOtherChanges(t *testing.T) {
+	db := openVaultTestDB(t)
+	ta, tb := seedTenant(t, db, "vault-add-a"), seedTenant(t, db, "vault-add-b")
+	agentA, agentA2 := seedAgent(t, db, ta, "add-a1"), seedAgent(t, db, ta, "add-a2")
+	agentB := seedAgent(t, db, tb, "add-b")
+	s := NewSQLiteSecretVaultStore(db, vaultTestKey)
+	ctx := vaultCtx(ta)
+
+	e := newVaultEntry("add-grant", store.SecretKindAPIKey)
+	if err := s.Create(ctx, e, store.SecretVaultPayload{Secret: "v-add-grant"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetGrants(ctx, e.ID, []uuid.UUID{agentA}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetGrants(ctx, e.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddGrant(ctx, e.ID, agentA2); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if err := s.AddGrant(ctx, e.ID, agentA2); err != nil {
+		t.Fatalf("add twice must be a no-op: %v", err)
+	}
+	if got, err := s.ListGrants(ctx, e.ID); err != nil || len(got) != 1 || got[0] != agentA2 {
+		t.Fatalf("grants %v err=%v", got, err)
+	}
+	if err := s.AddGrant(ctx, e.ID, agentB); !errors.Is(err, store.ErrSecretVaultAgentInvalid) {
+		t.Fatalf("foreign-tenant agent: %v", err)
+	}
+	if err := s.AddGrant(ctx, uuid.New(), agentA2); !errors.Is(err, store.ErrSecretVaultNotFound) {
+		t.Fatalf("unknown entry: %v", err)
+	}
+	if err := s.AddGrant(vaultCtx(tb), e.ID, agentA2); !errors.Is(err, store.ErrSecretVaultNotFound) {
+		t.Fatalf("other tenant: %v", err)
+	}
+}
+
 func TestSecretVault_ListGrantedSecrets(t *testing.T) {
 	db := openVaultTestDB(t)
 	tid, tother := seedTenant(t, db, "vault-lg"), seedTenant(t, db, "vault-lg2")

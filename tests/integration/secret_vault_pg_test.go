@@ -174,3 +174,46 @@ func TestSecretVaultPG_AgentCreatedPendingUntilApproved(t *testing.T) {
 		t.Fatalf("pending cap: %v", err)
 	}
 }
+
+// AddGrant adds one agent without rewriting the set, so a grant removed by
+// someone else in between stays removed.
+func TestSecretVaultPG_AddGrantKeepsOtherChanges(t *testing.T) {
+	t.Parallel()
+
+	db := testDB(t)
+	tenantA, agentA := seedTenantAgent(t, db)
+	agentA2 := seedAgentInTenant(t, db, tenantA)
+	_, agentB := seedTenantAgent(t, db)
+	s := pg.NewPGSecretVaultStore(db, testEncryptionKey)
+	ctxA := tenantCtx(tenantA)
+
+	e := &store.SecretVaultEntry{Name: "add-grant", Kind: store.SecretKindAPIKey, AllowedDomains: []string{"a.example.com"}, CreatedBy: "user1"}
+	if err := s.Create(ctxA, e, store.SecretVaultPayload{Secret: "v-add-grant"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetGrants(ctxA, e.ID, []uuid.UUID{agentA}); err != nil {
+		t.Fatal(err)
+	}
+	// An admin revokes agentA; the add that follows must not bring it back.
+	if err := s.SetGrants(ctxA, e.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddGrant(ctxA, e.ID, agentA2); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if err := s.AddGrant(ctxA, e.ID, agentA2); err != nil {
+		t.Fatalf("add twice must be a no-op: %v", err)
+	}
+	if got, err := s.ListGrants(ctxA, e.ID); err != nil || len(got) != 1 || got[0] != agentA2 {
+		t.Fatalf("grants %v err=%v", got, err)
+	}
+	if err := s.AddGrant(ctxA, e.ID, agentB); !errors.Is(err, store.ErrSecretVaultAgentInvalid) {
+		t.Fatalf("foreign-tenant agent: %v", err)
+	}
+	if err := s.AddGrant(ctxA, uuid.New(), agentA2); !errors.Is(err, store.ErrSecretVaultNotFound) {
+		t.Fatalf("unknown entry: %v", err)
+	}
+	if err := s.AddGrant(tenantCtx(uuid.New()), e.ID, agentA2); !errors.Is(err, store.ErrSecretVaultNotFound) {
+		t.Fatalf("other tenant: %v", err)
+	}
+}

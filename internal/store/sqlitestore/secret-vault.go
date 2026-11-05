@@ -407,6 +407,48 @@ func (s *SQLiteSecretVaultStore) SetGrants(ctx context.Context, entryID uuid.UUI
 	return tx.Commit()
 }
 
+func (s *SQLiteSecretVaultStore) AddGrant(ctx context.Context, entryID, agentID uuid.UUID) error {
+	tid, err := secretVaultTenant(ctx)
+	if err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var exists bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM secret_vault_entries WHERE id = ? AND tenant_id = ?)`,
+		entryID, tid).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return store.ErrSecretVaultNotFound
+	}
+	res, err := tx.ExecContext(ctx,
+		`INSERT OR IGNORE INTO secret_vault_grants (entry_id, agent_id, tenant_id, created_at)
+		 SELECT ?, a.id, ?, ? FROM agents a WHERE a.id = ? AND a.tenant_id = ? AND a.deleted_at IS NULL`,
+		entryID, tid, time.Now().UTC().Format(time.RFC3339Nano), agentID, tid)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		// Already granted is a no-op; a foreign or missing agent is invalid.
+		var granted bool
+		if err := tx.QueryRowContext(ctx,
+			`SELECT EXISTS(SELECT 1 FROM secret_vault_grants WHERE entry_id = ? AND agent_id = ? AND tenant_id = ?)`,
+			entryID, agentID, tid).Scan(&granted); err != nil {
+			return err
+		}
+		if !granted {
+			return fmt.Errorf("%w: %s", store.ErrSecretVaultAgentInvalid, agentID)
+		}
+	}
+	return tx.Commit()
+}
+
 func (s *SQLiteSecretVaultStore) ListGrants(ctx context.Context, entryID uuid.UUID) ([]uuid.UUID, error) {
 	tid, err := secretVaultTenant(ctx)
 	if err != nil {
