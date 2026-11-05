@@ -90,7 +90,7 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Fixed
 
-- **Queued agent runs no longer inherit the context of the session's first request** — a run
+- **Queued agent runs no longer inherit the context of the session's first request (#1662)** — a run
   that waited behind an active one started from the context of the first `Enqueue` of that
   session. It got that request's team dispatch tracker, so the team create lock taken by
   `team_tasks` `list`/`search` was never released (all later calls for that team and chat
