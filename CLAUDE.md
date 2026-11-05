@@ -280,3 +280,15 @@ When implementing or modifying web UI components, follow these rules to ensure m
 - **Timezone:** User timezone stored in Zustand (`useUiStore`). Charts use `formatBucketTz()` from `lib/format.ts` with native `Intl.DateTimeFormat` — no date-fns-tz dependency
 - **ErrorBoundary key:** `AppLayout` uses `<ErrorBoundary key={stableErrorBoundaryKey(pathname)}>` which strips dynamic segments (`/chat/session-A` → `/chat`). NEVER use `key={location.pathname}` on ErrorBoundary/Suspense wrapping `<Outlet>` — it causes full page remount on param changes. Pages with sub-navigation (chat sessions, detail pages) must share a stable key
 - **Route params as source of truth:** For pages with URL params (e.g. `/chat/:sessionKey`), derive state from `useParams()` — do NOT duplicate into `useState`. Dual state causes race conditions between `setState` and `navigate()` leading to UI flash (state bounces: B→A→B). Use optional params (`/chat/:sessionKey?`) instead of two separate routes
+
+## Dev Pipeline Rules (fork: brucele944/goclaw)
+
+This fork is maintained in-house. Automated coding agents (Claude Code) execute pre-approved plans written by the team.
+
+- **Scope lock:** edit only the files listed in the current step's scope. If something outside that scope must change, stop and report instead of editing.
+- **Verify before reporting done:** run `go build ./...` and the package-specific tests named in the step.
+- **Never deploy:** do not run `make up-build`, do not restart the gateway, do not touch the running `goclaw.exe` or any live process.
+- **Off-limits unless the step explicitly allows it:** `migrations/`, `internal/providers/*`, `cmd/*`.
+- **No commits:** leave changes in the working tree for review.
+- **No new dependencies** without explicit approval.
+- **Leave no temp files** behind.

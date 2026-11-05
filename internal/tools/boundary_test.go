@@ -653,3 +653,104 @@ func TestTenantAllowedPathsFromCtx_Inheritance(t *testing.T) {
 		t.Errorf("unexpected result: %v", result)
 	}
 }
+
+// A granted skill root lives outside the agent workspace. It is passed through
+// the allow-list, so reads must succeed while writes stay blocked and anything
+// outside workspace + allow-list stays blocked.
+func TestReadFileTool_GrantedSkillRootOutsideWorkspace(t *testing.T) {
+	workspace := t.TempDir()
+	skillRoot := filepath.Join(t.TempDir(), "skills", "my-skill")
+	if err := os.MkdirAll(skillRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+	skillFile := filepath.Join(skillRoot, "SKILL.md")
+	if err := os.WriteFile(skillFile, []byte("# my skill"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "secret.md")
+	if err := os.WriteFile(outside, []byte("secret"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	tool := NewReadFileTool(workspace, true)
+	tool.AllowPaths(skillRoot)
+
+	res := tool.Execute(context.Background(), map[string]any{"path": skillFile})
+	if res.IsError {
+		t.Fatalf("expected granted skill SKILL.md to be readable, got error: %s", res.ForLLM)
+	}
+	if !strings.Contains(res.ForLLM, "# my skill") {
+		t.Fatalf("expected SKILL.md content, got: %s", res.ForLLM)
+	}
+
+	res = tool.Execute(context.Background(), map[string]any{"path": outside})
+	if !res.IsError {
+		t.Fatal("expected path outside workspace and allow-list to stay blocked")
+	}
+}
+
+// A relative path is anchored at the agent workspace, so one that climbs out of
+// the workspace into a granted skill root must resolve against the workspace
+// (not the process working directory) before the allow-list is consulted.
+func TestResolvePathWithAllowed_RelativePathIntoGrantedRoot(t *testing.T) {
+	workspace := t.TempDir()
+	skillRoot := filepath.Join(t.TempDir(), "skills", "my-skill")
+	if err := os.MkdirAll(skillRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+	skillFile := filepath.Join(skillRoot, "SKILL.md")
+	if err := os.WriteFile(skillFile, []byte("# my skill"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "secret.md")
+	if err := os.WriteFile(outside, []byte("secret"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	relSkill, err := filepath.Rel(workspace, skillFile)
+	if err != nil {
+		t.Skipf("no relative path between workspace and skill root: %v", err)
+	}
+	relOutside, err := filepath.Rel(workspace, outside)
+	if err != nil {
+		t.Skipf("no relative path between workspace and outside file: %v", err)
+	}
+
+	// Relative path that lands inside the granted root: allowed.
+	if _, err := resolvePathWithAllowed(relSkill, workspace, true, []string{skillRoot}); err != nil {
+		t.Fatalf("expected relative path into granted skill root to resolve, got: %v", err)
+	}
+
+	// Relative path that lands outside workspace and allow-list: still blocked.
+	if _, err := resolvePathWithAllowed(relOutside, workspace, true, []string{skillRoot}); err == nil {
+		t.Fatal("expected relative path outside workspace and allow-list to stay blocked")
+	}
+}
+
+func TestGrantedSkillRoot_ReadOnlyForWrite(t *testing.T) {
+	workspace := t.TempDir()
+	skillRoot := filepath.Join(t.TempDir(), "skills", "my-skill")
+	if err := os.MkdirAll(skillRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+	skillFile := filepath.Join(skillRoot, "SKILL.md")
+	if err := os.WriteFile(skillFile, []byte("# my skill"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// The read tool gets the granted root; the write tool is never handed it.
+	read := NewReadFileTool(workspace, true)
+	read.AllowPaths(skillRoot)
+	if res := read.Execute(context.Background(), map[string]any{"path": skillFile}); res.IsError {
+		t.Fatalf("expected granted skill root to be readable, got: %s", res.ForLLM)
+	}
+
+	write := NewWriteFileTool(workspace, true)
+	res := write.Execute(context.Background(), map[string]any{"path": skillFile, "content": "changed"})
+	if !res.IsError {
+		t.Fatal("expected write into granted skill root to be blocked")
+	}
+	if data, _ := os.ReadFile(skillFile); string(data) != "# my skill" {
+		t.Fatalf("skill file was modified: %q", data)
+	}
+}

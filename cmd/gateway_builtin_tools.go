@@ -42,6 +42,8 @@ func builtinToolSeedData() []store.BuiltinToolDef {
 			Settings: json.RawMessage(`{"extractors":[{"name":"defuddle","enabled":true,"base_url":"https://fetch.goclaw.sh/","max_retries":2},{"name":"html-to-markdown","enabled":true}]}`),
 		},
 
+		{Name: "http_request", DisplayName: "HTTP Request", Description: "Call an HTTP API (GET/POST/PUT/PATCH/DELETE); supports vault secret placeholders in headers, body and URL", Category: "web", Enabled: true},
+
 		// memory
 		{Name: "memory_search", DisplayName: "Memory Search", Description: "Search through the agent's long-term memory using semantic similarity", Category: "memory", Enabled: true,
 			Requires: []string{"memory"},

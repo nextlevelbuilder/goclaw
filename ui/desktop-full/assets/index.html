@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GoClaw</title>
+<style>
+  :root { color-scheme: light dark; --bg:#f6f7f9; --fg:#1b1f24; --muted:#5b6672; --card:#fff; --line:#d9dee4; --accent:#2457d6; --danger:#b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#14171b; --fg:#e8ebef; --muted:#97a1ad; --card:#1d2227; --line:#2d343b; --accent:#7ba2ff; --danger:#ff8a80; } }
+  html, body { height:100%; margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 "Segoe UI", system-ui, sans-serif; }
+  main { max-width:640px; margin:0 auto; padding:12vh 24px 24px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:24px; }
+  h1 { font-size:1.25rem; margin:0 0 8px; }
+  p { margin:0 0 16px; color:var(--muted); }
+  .err h1 { color:var(--danger); }
+  pre { max-height:220px; overflow:auto; background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:12px; font:12px/1.4 Consolas, monospace; white-space:pre-wrap; word-break:break-all; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; }
+  button { font:inherit; padding:8px 16px; min-height:40px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--fg); cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  @media (prefers-color-scheme: dark) { button.primary { color:#0b1220; } }
+  button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .spin { width:20px; height:20px; border:3px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:s 1s linear infinite; display:inline-block; vertical-align:middle; margin-right:8px; }
+  @keyframes s { to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation:none; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="card" id="card" role="status" aria-live="polite">
+    <h1 id="title">GoClaw</h1>
+    <p id="msg"><span class="spin" aria-hidden="true"></span>Starting...</p>
+    <pre id="detail" hidden></pre>
+    <div class="row" id="actions"></div>
+  </div>
+</main>
+<script>
+(function () {
+  var card = document.getElementById('card'), title = document.getElementById('title'),
+      msg = document.getElementById('msg'), detail = document.getElementById('detail'),
+      actions = document.getElementById('actions');
+  var last = '';
+
+  function api() { return window.go && window.go.main && window.go.main.App; }
+
+  function button(label, fn, primary) {
+    var b = document.createElement('button');
+    b.textContent = label;
+    if (primary) b.className = 'primary';
+    b.addEventListener('click', function () { b.disabled = true; fn(); });
+    actions.appendChild(b);
+  }
+
+  function render(s) {
+    var key = JSON.stringify(s);
+    if (key === last) return;
+    last = key;
+    actions.textContent = '';
+    detail.hidden = !s.detail;
+    detail.textContent = s.detail || '';
+    var bad = s.phase === 'error' || s.phase === 'portheld';
+    card.className = bad ? 'card err' : 'card';
+    var A = api();
+    switch (s.phase) {
+      case 'setup':
+        title.textContent = 'Set up GoClaw';
+        msg.textContent = s.message;
+        button('Import settings from a folder...', function () { A.ImportEnv(); }, true);
+        break;
+      case 'upgrade':
+        title.textContent = 'Database upgrade needed';
+        msg.textContent = s.message;
+        button('Back up and upgrade', function () { A.BackupAndUpgrade(); }, true);
+        button('Retry', function () { A.Retry(); });
+        break;
+      case 'portheld':
+        title.textContent = 'Port already in use';
+        msg.textContent = s.message;
+        button('Retry', function () { A.Retry(); }, true);
+        break;
+      case 'error':
+        title.textContent = 'GoClaw could not start';
+        msg.textContent = s.message;
+        button('Retry', function () { A.Retry(); }, true);
+        break;
+      default:
+        title.textContent = 'GoClaw';
+        msg.textContent = '';
+        var sp = document.createElement('span');
+        sp.className = 'spin';
+        sp.setAttribute('aria-hidden', 'true');
+        msg.appendChild(sp);
+        msg.appendChild(document.createTextNode(s.message || 'Starting...'));
+    }
+  }
+
+  function tick() {
+    var A = api();
+    if (!A) { setTimeout(tick, 100); return; }
+    A.State().then(function (s) {
+      if (s.phase === 'ready' && s.url) { location.replace(s.url); return; }
+      render(s);
+      setTimeout(tick, 500);
+    }, function () { setTimeout(tick, 1000); });
+  }
+  tick();
+})();
+</script>
+</body>
+</html>

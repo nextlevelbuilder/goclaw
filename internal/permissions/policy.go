@@ -378,6 +378,11 @@ func isWriteMethod(method string) bool {
 		protocol.MethodApprovalsApprove,
 		protocol.MethodApprovalsDeny,
 
+		// Secret vault: the session owner answers their own Secure Form / approval.
+		protocol.MethodSecretVaultFormSubmit,
+		protocol.MethodSecretVaultFormCancel,
+		protocol.MethodSecretVaultApprovalRespond,
+
 		// TTS synthesis — invokes provider API (quota/credentials).
 		protocol.MethodTTSConvert,
 

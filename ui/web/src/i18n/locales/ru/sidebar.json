@@ -40,6 +40,7 @@
     "tts": "TTS",
     "activity": "Активность",
     "cliCredentials": "Учётные данные CLI",
+    "secretVault": "Secret Vault",
     "apiKeys": "Ключи API",
     "apiDocs": "Документация API",
     "packages": "Пакеты",

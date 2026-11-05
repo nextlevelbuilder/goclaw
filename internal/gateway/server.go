@@ -719,6 +719,11 @@ func (s *Server) SetSecureCLIGrantHandler(h *httpapi.SecureCLIGrantHandler) {
 	s.handlers = append(s.handlers, h)
 }
 
+// SetSecretVaultHandler sets the secret vault admin handler.
+func (s *Server) SetSecretVaultHandler(h *httpapi.SecretVaultHandler) {
+	s.handlers = append(s.handlers, h)
+}
+
 // SetBrowserCookiesHandler sets the selected browser-cookie sync handler.
 func (s *Server) SetBrowserCookiesHandler(h *httpapi.BrowserCookiesHandler) {
 	s.handlers = append(s.handlers, h)
@@ -1037,6 +1042,19 @@ func (s *Server) ClientList() []*Client {
 		list = append(list, c)
 	}
 	return list
+}
+
+// HasUserClient reports whether the user has a connected WS client in the
+// tenant, so a Secure Form or approval can actually be shown.
+func (s *Server) HasUserClient(tenant uuid.UUID, user string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, c := range s.clients {
+		if c.tenantID == tenant && c.userID == user {
+			return true
+		}
+	}
+	return false
 }
 
 // BroadcastEvent sends an event to all connected clients.

@@ -31,6 +31,7 @@ For system design see `docs/00-architecture-overview.md`; for API contract see `
 | `migrations/` | PostgreSQL migration files |
 | `ui/web/` | React SPA (Vite, Tailwind, Radix UI, Zustand) |
 | `ui/desktop/` | Wails v2 desktop app (SQLite, embedded gateway) |
+| `ui/desktop-full/` | Windows window + supervisor for the full PostgreSQL gateway, installer and `pg_dump` shim (see `docs/windows-desktop-app.md`) |
 
 ---
 

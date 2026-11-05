@@ -47,7 +47,21 @@ func validateDelegationArtifactWorkspace(delegationID, inputsPath, outputsPath s
 		filepath.Base(filepath.Dir(filepath.Dir(exchangeRoot))) == "collaboration"
 }
 
+// delegationArtifactTextRedactor is the run's combined redactor: the delegate
+// path aliasing (delegate runs only) followed by vault secret removal.
 func delegationArtifactTextRedactor(req *RunRequest) tracing.TextRedactor {
+	paths := delegationPathRedactor(req)
+	if req == nil || req.SecretRedactor == nil {
+		return paths
+	}
+	secrets := req.SecretRedactor
+	if paths == nil {
+		return secrets
+	}
+	return func(value string) string { return secrets(paths(value)) }
+}
+
+func delegationPathRedactor(req *RunRequest) tracing.TextRedactor {
 	if req == nil || req.RunKind != "delegate" ||
 		req.DelegateInputsPath == "" || req.DelegateOutputsPath == "" {
 		return nil
@@ -117,7 +131,10 @@ func redactDelegationMessage(req *RunRequest, message providers.Message) provide
 		message.ToolCalls[i].ParseError = redactor(message.ToolCalls[i].ParseError)
 	}
 	// Pre-publication paths are ephemeral and cannot be durable session media.
-	message.MediaRefs = nil
+	// Delegate runs only: a vault-only redactor must not drop ordinary media.
+	if delegationPathRedactor(req) != nil {
+		message.MediaRefs = nil
+	}
 	return message
 }
 
@@ -135,7 +152,9 @@ func redactDelegationRunResult(req *RunRequest, result *RunResult) *RunResult {
 	for i := range result.Deliverables {
 		result.Deliverables[i] = redactor(result.Deliverables[i])
 	}
-	// The outer artifact publisher is the only egress path.
-	result.Media = nil
+	// The outer artifact publisher is the only egress path (delegate runs only).
+	if delegationPathRedactor(req) != nil {
+		result.Media = nil
+	}
 	return result
 }

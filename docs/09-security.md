@@ -643,6 +643,7 @@ Use `grep` or your editor's symbol search for specific files.
 
 | Document | Relevant Content |
 |----------|-----------------|
+| [25-secret-vault.md](./25-secret-vault.md) | Tenant secret vault: placeholders, redaction, domain binding, threat model |
 | [03-tools-system.md](./03-tools-system.md) | Shell deny patterns, exec approval, PathDenyable, delegation system |
 | [04-gateway-protocol.md](./04-gateway-protocol.md) | WebSocket auth, RBAC, rate limiting |
 | [06-store-data-model.md](./06-store-data-model.md) | API key encryption, agent access control pipeline |

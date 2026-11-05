@@ -42,6 +42,14 @@ func clientCanReceiveEvent(c *Client, event bus.Event) bool {
 		return false // fail-closed: regular users blocked from unscoped events
 	}
 
+	// Secret vault forms and approvals: only the user who owns the session sees
+	// them. Admins and owners are deliberately not special-cased: they must not
+	// see or answer another user's request for a credential.
+	if strings.HasPrefix(event.Name, "secretVault.") || strings.HasPrefix(event.Name, "browser.takeover.") {
+		uid := extractMapField(event.Payload, "userId")
+		return uid != "" && uid == c.userID
+	}
+
 	// Admin sees everything (when not tenant-scoped, handled above).
 	if permissions.HasMinRole(c.role, permissions.RoleAdmin) {
 		return true

@@ -41,6 +41,10 @@ type SnapshotOptions struct {
 	Compact     bool // remove unnamed structural elements
 	MaxChars    int  // truncate output (default 8000)
 	Limit       int  // max AX nodes to process (default 500)
+
+	// MaskNodes lists backend DOM node ids whose value must be hidden (fields
+	// that hold a vault secret). Matching is by node, never by ref.
+	MaskNodes map[int]bool
 }
 
 // DefaultSnapshotOptions returns sensible defaults.

@@ -364,6 +364,20 @@ func init() {
 		MsgGitCredBlobMissingField:         "blob credential thiếu trường bắt buộc %q",
 		MsgGitCredUnsupportedCredType:      "credential_type %q không được hỗ trợ",
 
+		// Secret vault
+		MsgSecretVaultNoKey:          "secret vault cần khóa mã hóa (GOCLAW_ENCRYPTION_KEY)",
+		MsgSecretVaultNotFound:       "không tìm thấy secret %q",
+		MsgSecretVaultNameInvalid:    "tên secret %q không hợp lệ (dùng 1-64 ký tự thường, số, '-' hoặc '_')",
+		MsgSecretVaultNameTaken:      "đã có secret tên %q",
+		MsgSecretVaultKindInvalid:    "loại secret %q không được hỗ trợ",
+		MsgSecretVaultDomainRequired: "cần ít nhất một domain được phép",
+		MsgSecretVaultDomainInvalid:  "domain được phép %q không hợp lệ",
+		MsgSecretVaultPayloadInvalid: "giá trị secret thiếu hoặc không hợp lệ với loại này",
+		MsgSecretVaultAgentInvalid:   "không tìm thấy agent %s trong tenant này",
+		MsgSecretFormNotFound:        "không tìm thấy yêu cầu secret hoặc yêu cầu đã được xử lý",
+		MsgSecretFormScopeInvalid:    "scope phải là \"save\" hoặc \"session\"",
+		MsgBrowserTakeoverNotFound:   "không tìm thấy yêu cầu tiếp quản trình duyệt hoặc yêu cầu đã được xử lý",
+
 		// Message tool cross-target forward notice
 		MessageCrossTargetForwarded: "📤 Đã forward sang %s theo yêu cầu: %q",
 

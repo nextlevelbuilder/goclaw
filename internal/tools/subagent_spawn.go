@@ -10,6 +10,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	orchestration "github.com/nextlevelbuilder/goclaw/internal/childrun"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
+	"github.com/nextlevelbuilder/goclaw/internal/secretvault"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 )
@@ -71,6 +72,9 @@ func (sm *SubagentManager) SpawnWithReceipt(
 	// WithoutCancel preserves all context values (agent ID, workspace, trace info, etc.)
 	// but parent Done() no longer propagates. Manual cancel via taskCancel() still works.
 	detached := context.WithoutCancel(ctx)
+	// Subagents do not inherit the parent's vault secrets. The parent's output
+	// redactor stays in ctx, so anything they return is still scrubbed.
+	detached = secretvault.WithRuntime(detached, nil)
 	// The subagent runs after the parent's turn has ended, so the parent's
 	// post-turn drain has already fired by the time it calls team_tasks. Give
 	// this run its own tracker, drained when the subagent finishes, so tasks it

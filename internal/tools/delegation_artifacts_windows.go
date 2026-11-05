@@ -277,7 +277,7 @@ func removeArtifactTreeAt(parent windows.Handle, name string, depth int, remaini
 	handle, err := artifactNtOpen(
 		parent,
 		name,
-		windows.FILE_GENERIC_READ|windows.DELETE|windows.SYNCHRONIZE,
+		windows.FILE_GENERIC_READ|windows.FILE_WRITE_ATTRIBUTES|windows.DELETE|windows.SYNCHRONIZE,
 		windows.FILE_OPEN,
 		windows.FILE_OPEN_REPARSE_POINT,
 		0,
@@ -293,6 +293,13 @@ func removeArtifactTreeAt(parent windows.Handle, name string, depth int, remaini
 	var info windows.ByHandleFileInformation
 	if err := windows.GetFileInformationByHandle(handle, &info); err != nil {
 		return err
+	}
+	// Staged inputs are chmodded read-only, and Windows refuses to delete a
+	// read-only entry, so the attribute has to be cleared before deletion.
+	if info.FileAttributes&windows.FILE_ATTRIBUTE_READONLY != 0 {
+		if err := clearArtifactReadOnly(handle, info.FileAttributes); err != nil {
+			return err
+		}
 	}
 	isDirectory := info.FileAttributes&windows.FILE_ATTRIBUTE_DIRECTORY != 0
 	isReparsePoint := info.FileAttributes&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0
@@ -328,6 +335,31 @@ func removeArtifactTreeAt(parent windows.Handle, name string, depth int, remaini
 		windows.FileDispositionInfo,
 		&deleteFlag,
 		1,
+	)
+}
+
+// artifactFileBasicInfo mirrors the Win32 FILE_BASIC_INFO layout. Zero
+// timestamps leave the existing values untouched.
+type artifactFileBasicInfo struct {
+	CreationTime   int64
+	LastAccessTime int64
+	LastWriteTime  int64
+	ChangeTime     int64
+	FileAttributes uint32
+	_              uint32
+}
+
+func clearArtifactReadOnly(handle windows.Handle, attributes uint32) error {
+	attributes &^= windows.FILE_ATTRIBUTE_READONLY
+	if attributes == 0 {
+		attributes = windows.FILE_ATTRIBUTE_NORMAL
+	}
+	info := artifactFileBasicInfo{FileAttributes: attributes}
+	return windows.SetFileInformationByHandle(
+		handle,
+		windows.FileBasicInfo,
+		(*byte)(unsafe.Pointer(&info)),
+		uint32(unsafe.Sizeof(info)),
 	)
 }
 

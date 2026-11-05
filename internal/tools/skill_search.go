@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 
 	"github.com/google/uuid"
@@ -259,6 +260,11 @@ func (t *SkillSearchTool) hybridSearch(ctx context.Context, query string, bm25Re
 		if existing, ok := seen[r.Name]; ok {
 			existing.score += r.Score * vecW
 		} else {
+			// Vector hits take Location from the DB row, which can outlive the files on disk.
+			if _, statErr := os.Stat(r.Path); statErr != nil {
+				slog.Debug("skill_search: dropped vector hit with missing SKILL.md", "slug", r.Slug, "path", r.Path, "error", statErr)
+				continue
+			}
 			seen[r.Name] = &merged{
 				result: skills.SkillSearchResult{
 					Name:        r.Name,

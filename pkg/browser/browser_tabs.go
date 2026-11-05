@@ -308,6 +308,7 @@ func (m *Manager) closeManagedPageLocked(targetID string) {
 	delete(m.console, targetID)
 	delete(m.pageTenants, targetID)
 	delete(m.pageLastUsed, targetID)
+	delete(m.secretTabs, targetID)
 	m.refs.Remove(targetID)
 }
 
