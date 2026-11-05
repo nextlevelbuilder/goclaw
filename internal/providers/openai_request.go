@@ -287,7 +287,9 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 
 	// reasoning_effort is OpenAI-specific; do not send to third-party OpenAI-compatible APIs.
 	if level, ok := req.Options[OptThinkingLevel].(string); ok && level != "" && level != "off" {
-		if openAIModelSupportsReasoningEffort(model) {
+		// MiniMax Flash is registered for runtime resolution, but its wire field
+		// remains native-endpoint-only and is handled by the guarded block below.
+		if !strings.EqualFold(capabilityModel, "minimax-m3.1-flash") && openAIModelSupportsReasoningEffort(model) {
 			body[OptReasoningEffort] = level
 		}
 	}

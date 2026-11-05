@@ -173,20 +173,17 @@ func TestProvidersHandlerListProviderModelsBailianIncludesQwen37Plus(t *testing.
 		t.Fatalf("Decode() error = %v", err)
 	}
 
+	found := make(map[string]ModelInfo, len(result.Models))
 	for _, model := range result.Models {
-		if model.ID != "qwen3.7-plus" {
-			continue
-		}
-		if model.Name != "Qwen 3.7 Plus" {
-			t.Fatalf("model name = %q, want Qwen 3.7 Plus", model.Name)
-		}
-		if model.Reasoning != nil {
-			t.Fatalf("model reasoning = %#v, want nil for Bailian OpenAI-compatible catalog entry", model.Reasoning)
-		}
-		return
+		found[model.ID] = model
 	}
-
-	t.Fatalf("qwen3.7-plus not found in Bailian model list: %#v", result.Models)
+	qwen, ok := found["qwen3.7-plus"]
+	if !ok || qwen.Name != "Qwen 3.7 Plus" || qwen.Reasoning != nil {
+		t.Fatalf("qwen3.7-plus entry = %#v, want unchanged Bailian catalog entry", qwen)
+	}
+	if minimax, ok := found["MiniMax-M2.5"]; !ok || minimax.Name != "MiniMax M2.5" {
+		t.Fatalf("MiniMax-M2.5 entry = %#v, want provider-owned Bailian model preserved", minimax)
+	}
 }
 
 func TestProvidersHandlerListProviderModelsMiniMaxPrefersFlash(t *testing.T) {
@@ -222,7 +219,7 @@ func TestProvidersHandlerListProviderModelsMiniMaxPrefersFlash(t *testing.T) {
 		}
 	}
 	capability := result.Models[0].Reasoning
-	if capability == nil || capability.DefaultEffort != "high" || !capability.Supports("max") || capability.Supports("none") {
+	if capability == nil || capability.DefaultEffort != "max" || !capability.Supports("max") || capability.Supports("none") {
 		t.Fatalf("Flash reasoning capability = %#v", capability)
 	}
 }

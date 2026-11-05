@@ -87,6 +87,10 @@ func TestMiniMaxFlashSerializedRequests(t *testing.T) {
 
 func TestMiniMaxSavedModelsAndEndpointIsolation(t *testing.T) {
 	p := NewOpenAIProvider("minimax", "key", "https://api.minimax.io/v1", "MiniMax-M3.1-Flash")
+	autoDecision := ResolveReasoningDecision(p, p.DefaultModel(), "auto", "provider_default", "reasoning")
+	if !autoDecision.KnownModel || !autoDecision.UsedProviderDefault || autoDecision.EffectiveEffort != "max" || autoDecision.RequestEffort() != "" {
+		t.Fatalf("auto reasoning did not resolve to the Flash API default: %#v", autoDecision)
+	}
 	decision := ResolveReasoningDecision(p, p.DefaultModel(), "max", "downgrade", "reasoning")
 	if decision.RequestEffort() != "max" {
 		t.Fatalf("max effort was lost before serialization: %#v", decision)

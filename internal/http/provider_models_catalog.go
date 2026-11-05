@@ -30,7 +30,7 @@ func minimaxModels() []ModelInfo {
 	return []ModelInfo{
 		// Chat / text
 		{ID: store.MiniMaxDefaultModel, Name: "MiniMax M3.1 Flash", Reasoning: &providers.ReasoningCapability{
-			Levels: []string{"low", "medium", "high", "xhigh", "max"}, DefaultEffort: "high",
+			Levels: []string{"low", "medium", "high", "xhigh", "max"}, DefaultEffort: "max",
 		}},
 		{ID: "MiniMax-M3", Name: "MiniMax M3"},
 		// Image generation

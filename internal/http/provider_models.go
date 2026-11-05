@@ -126,7 +126,13 @@ func (h *ProvidersHandler) handleListProviderModels(w http.ResponseWriter, r *ht
 		return
 	}
 
-	respond(withReasoningCapabilities(currentMiniMaxTextModels(models)))
+	// Retire stale MiniMax text suggestions only for catalogs whose MiniMax
+	// entries are managed here. Provider-owned catalogs such as Bailian may
+	// intentionally expose older models and must remain unchanged.
+	if p.ProviderType == store.ProviderMiniMax || p.ProviderType == store.ProviderOpenRouter {
+		models = currentMiniMaxTextModels(models)
+	}
+	respond(withReasoningCapabilities(models))
 }
 
 func aimlapiModels() []ModelInfo {
