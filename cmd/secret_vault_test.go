@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -69,6 +70,69 @@ func TestSecretVaultCLI_SetListNeverPrintValue(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "gh") || strings.Join(st.audit, ",") != "created,updated" {
 		t.Errorf("list %q audit %v", out.String(), st.audit)
+	}
+}
+
+func (c *cliVault) Approve(_ context.Context, id uuid.UUID, domains []string) error {
+	norm, err := store.NormalizeSecretDomains(domains)
+	if err != nil {
+		return err
+	}
+	for i := range c.entries {
+		if c.entries[i].ID != id {
+			continue
+		}
+		if c.entries[i].Status != store.SecretVaultStatusPending {
+			return store.ErrSecretVaultNotPending
+		}
+		c.entries[i].Status, c.entries[i].AllowedDomains = store.SecretVaultStatusActive, norm
+		c.audit = append(c.audit, store.SecretAuditApproved)
+		return nil
+	}
+	return store.ErrSecretVaultNotFound
+}
+
+func TestSecretVaultCLI_ListShowsStatusAndApprove(t *testing.T) {
+	agent := uuid.New()
+	st := &cliVault{values: map[uuid.UUID]string{}, entries: []store.SecretVaultEntry{
+		{ID: uuid.New(), Name: "mine", Kind: store.SecretKindAPIKey, AllowedDomains: []string{"a.com"},
+			Status: store.SecretVaultStatusActive, CreatedVia: store.SecretVaultCreatedViaUser},
+		{ID: uuid.New(), Name: "captured", Kind: store.SecretKindAPIKey, AllowedDomains: []string{"proposed.com"},
+			Status: store.SecretVaultStatusPending, CreatedVia: store.SecretVaultCreatedViaAgent, CreatedByAgent: &agent},
+	}}
+	ctx := store.WithUserID(context.Background(), "cli")
+
+	var out bytes.Buffer
+	if err := listSecretVault(ctx, st, &out); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if !strings.Contains(lines[0], "STATUS") || !strings.Contains(lines[0], "AGENT") {
+		t.Errorf("header lacks status/agent: %q", lines[0])
+	}
+	if !strings.Contains(out.String(), "pending") || !strings.Contains(out.String(), agent.String()) {
+		t.Errorf("list must show the pending entry and its agent:\n%s", out.String())
+	}
+
+	if _, err := approveSecretVault(ctx, st, "captured", nil); err == nil {
+		t.Error("approve without domains must fail")
+	}
+	if _, err := approveSecretVault(ctx, st, "missing", []string{"b.com"}); err == nil {
+		t.Error("approve of an unknown name must fail")
+	}
+	msg, err := approveSecretVault(ctx, st, "captured", []string{"B.com"})
+	if err != nil || !strings.Contains(msg, "Approved") {
+		t.Fatalf("approve: %q %v", msg, err)
+	}
+	if st.entries[1].Status != store.SecretVaultStatusActive || strings.Join(st.entries[1].AllowedDomains, ",") != "b.com" {
+		t.Errorf("entry after approve = %+v", st.entries[1])
+	}
+	if _, err := approveSecretVault(ctx, st, "mine", []string{"a.com"}); !errors.Is(err, store.ErrSecretVaultNotPending) {
+		t.Errorf("approving an active entry = %v, want ErrSecretVaultNotPending", err)
+	}
+	// The store writes the approved audit row; the CLI must not add another.
+	if strings.Join(st.audit, ",") != "approved" {
+		t.Errorf("audit = %v", st.audit)
 	}
 }
 
