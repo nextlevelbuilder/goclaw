@@ -195,7 +195,7 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 		var tools []map[string]any
 		for _, t := range req.Tools {
 			// Native tools of other providers can arrive through model fallback.
-			if t.Function == nil {
+			if t.Type != "function" || t.Function == nil {
 				continue
 			}
 			cleanedParams := CleanSchemaForProvider("anthropic", t.Function.Parameters)
