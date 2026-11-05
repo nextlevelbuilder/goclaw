@@ -77,6 +77,10 @@ func (m *Manager) HandleAgentEvent(eventType, runID string, payload any) {
 					break
 				}
 				rc.mu.Lock()
+				if rc.thinkingDone {
+					rc.mu.Unlock()
+					break
+				}
 				rc.thinkingBuffer += content
 				rc.hasThinking = true
 				thinkText := rc.thinkingBuffer

@@ -54,6 +54,12 @@ func syncOpenRouterCatalog(ctx context.Context, s store.UsageCapStore, client *h
 		slog.Warn("usage_pricing.openrouter_auto_store_failed", "error", err)
 		return
 	}
+	if count < len(entries) {
+		// Partial imports are expected when the upstream payload carries an
+		// unusable row; the store logs each skipped entry (Issue #1605).
+		slog.Warn("usage_pricing.openrouter_auto_sync_partial",
+			"upserted", count, "fetched", len(entries))
+	}
 	slog.Info("usage_pricing.openrouter_auto_synced", "count", count)
 	if onSync != nil {
 		onSync(ctx, count)

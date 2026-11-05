@@ -77,7 +77,7 @@ func (c *Channel) handleAppMention(ev *slackevents.AppMentionEvent) {
 
 	_, placeholderTS, err := c.api.PostMessage(channelID, placeholderOpts...)
 	if err == nil {
-		c.placeholders.Store(localKey, placeholderTS)
+		c.placeholders.Store(threadPlaceholderKey(localKey, replyThreadTS), placeholderTS)
 	}
 
 	annotated := fmt.Sprintf("[From: %s]\n%s", displayName, content)
@@ -93,7 +93,7 @@ func (c *Channel) handleAppMention(ev *slackevents.AppMentionEvent) {
 		"channel_id":      channelID,
 		"is_dm":           "false",
 		"local_key":       localKey,
-		"placeholder_key": localKey,
+		"placeholder_key": threadPlaceholderKey(localKey, replyThreadTS),
 	}
 	if replyThreadTS != "" {
 		metadata["message_thread_id"] = replyThreadTS

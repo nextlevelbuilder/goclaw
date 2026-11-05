@@ -282,18 +282,26 @@ func (p *ACPProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk f
 
 	var buf strings.Builder
 	var updateCount int
+	var hasContent bool
+	stripThinking, _ := req.Options[OptStripThinking].(bool)
+	lastToolStatus := make(map[string]string) // toolCallId → last status surfaced, "__acp_plan__" → last rendered plan
 	promptResp, err := proc.Prompt(ctx, acpSessionID, content, func(update acp.SessionUpdate) {
 		if update.Message != nil {
 			for _, block := range update.Message.Content {
 				if block.Type == "text" {
+					hasContent = true
 					onChunk(StreamChunk{Content: block.Text})
 					buf.WriteString(block.Text)
 					updateCount++
 				}
 			}
 		}
-		if update.ToolCall != nil && update.ToolCall.Status == "running" {
-			slog.Debug("acp: tool call", "name", update.ToolCall.Name)
+		// Progress as thinking is only emitted before answer content starts,
+		// preventing late thinking from overwriting streamed answer text.
+		if !hasContent {
+			if text := acpProgressThinking(&update, lastToolStatus, stripThinking); text != "" {
+				onChunk(StreamChunk{Thinking: text})
+			}
 		}
 	})
 	if err != nil {
@@ -313,6 +321,73 @@ func (p *ACPProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk f
 		FinishReason: mapStopReason(promptResp),
 		Usage:        &Usage{},
 	}, nil
+}
+
+// acpProgressThinking turns non-text ACP session updates into a short progress
+// string for StreamChunk.Thinking, so the UI shows what the agent is doing
+// instead of a black box. Returns "" when there is nothing to surface.
+// lastStatus dedupes tool_call_update by toolCallId and plans by content;
+// session/update notifications arrive sequentially from the conn read loop,
+// so it needs no lock.
+func acpProgressThinking(u *acp.SessionUpdate, lastStatus map[string]string, stripThinking ...bool) string {
+	shouldStrip := len(stripThinking) > 0 && stripThinking[0]
+	switch u.Update.SessionUpdate {
+	case "agent_thought_chunk":
+		if shouldStrip {
+			return ""
+		}
+		return u.ContentText()
+	case "tool_call", "tool_call_update":
+		id := strings.TrimSpace(u.Update.ToolCallID)
+		label := strings.TrimSpace(u.Update.Title)
+		if label == "" {
+			label = strings.TrimSpace(u.Update.Kind)
+		}
+		if label == "" {
+			label = id
+		}
+		if label == "" {
+			return ""
+		}
+		status := strings.TrimSpace(u.Update.Status)
+		if status == "" {
+			status = "pending"
+		}
+		key := id
+		if key == "" {
+			key = label
+		}
+		if lastStatus[key] == status {
+			return ""
+		}
+		lastStatus[key] = status
+		return fmt.Sprintf("\n🔧 %s [%s]\n", label, status)
+	case "plan":
+		entries := u.Update.Entries
+		if len(entries) == 0 {
+			return ""
+		}
+		const maxPlanEntries = 10
+		var sb strings.Builder
+		count := len(entries)
+		if count > maxPlanEntries {
+			count = maxPlanEntries
+		}
+		for i := 0; i < count; i++ {
+			e := entries[i]
+			fmt.Fprintf(&sb, "\n- [%s] %s", e.Status, e.Content)
+		}
+		if len(entries) > maxPlanEntries {
+			fmt.Fprintf(&sb, "\n- ... (+%d more)", len(entries)-maxPlanEntries)
+		}
+		rendered := "\n📋 Plan:" + sb.String() + "\n"
+		if lastStatus["__acp_plan__"] == rendered {
+			return ""
+		}
+		lastStatus["__acp_plan__"] = rendered
+		return rendered
+	}
+	return ""
 }
 
 // purgeSession removes a session entry from both tracking maps.

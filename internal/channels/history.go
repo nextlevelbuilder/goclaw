@@ -14,6 +14,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -70,6 +71,13 @@ type PendingHistory struct {
 	flushSignal chan struct{}
 	stopCh      chan struct{}
 	stopped     chan struct{}
+	// flusherStarted is set by StartFlusher once flushLoop is running, so
+	// StopFlusher knows whether there is a goroutine to wait for. A channel
+	// whose Start() failed before reaching StartFlusher() is still Stop()ped
+	// by InstanceLoader.Reload; without this flag StopFlusher would block
+	// forever on <-stopped and wedge the loader mutex.
+	flusherStarted atomic.Bool
+	stopOnce       sync.Once // guards close(stopCh) so Stop() can run twice
 
 	// Tenant isolation for DB operations.
 	tenantID uuid.UUID
