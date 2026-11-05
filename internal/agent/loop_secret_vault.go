@@ -29,6 +29,8 @@ func (l *Loop) withSecretVault(ctx context.Context, req *RunRequest) context.Con
 	rt := secretvault.NewRuntime(l.secretVault, l.agentUUID, req.UserID)
 	rt.Forms = secretvault.DefaultForms()
 	rt.SessionKey = req.SessionKey
+	rt.AllowWrite = l.secretVaultWrite
+	rt.Agents = l.secretVaultAgents
 	if err := rt.Preload(ctx); err != nil {
 		// Without a preloaded redactor the run must not resolve secrets.
 		slog.Warn("secretvault.preload_failed", "agent", l.id, "error", err)
@@ -54,4 +56,45 @@ func redactToolResult(ctx context.Context, r *tools.Result) *tools.Result {
 		}
 	}
 	return r
+}
+
+// sensitiveArgTools lists tools whose arguments carry a secret value. The
+// value is registered with the run redactor before the tool call is emitted as
+// an event, traced or stored, because those sinks see the arguments before the
+// tool itself runs.
+var sensitiveArgTools = map[string]bool{"vault_secret_set": true}
+
+// maskSensitiveToolArgs registers the secret value carried in the arguments of
+// a sensitive tool with the run's redactor. Call it before the tool.call event
+// and the tool span are emitted. Without a vault runtime there is no redactor
+// and the tool refuses to run.
+func maskSensitiveToolArgs(ctx context.Context, toolName string, args map[string]any) {
+	if !sensitiveArgTools[toolName] {
+		return
+	}
+	rt := secretvault.RuntimeFrom(ctx)
+	if rt == nil {
+		return
+	}
+	value, _ := args["value"].(string)
+	username, _ := args["username"].(string)
+	if value != "" {
+		rt.Redactor.AddPayload(store.SecretVaultPayload{Username: username, Secret: value})
+	}
+}
+
+// secretVaultAgentLookup resolves an agent key to its id within the context
+// tenant. A cross-tenant store lookup is rejected by comparing tenants.
+func secretVaultAgentLookup(agents store.AgentStore) secretvault.AgentLookup {
+	if agents == nil {
+		return nil
+	}
+	return func(ctx context.Context, agentKey string) (uuid.UUID, error) {
+		tenant := store.TenantIDFromContext(ctx)
+		ag, err := agents.GetByKey(ctx, agentKey)
+		if err != nil || ag == nil || tenant == uuid.Nil || ag.TenantID != tenant {
+			return uuid.Nil, secretvault.ErrAgentNotFound
+		}
+		return ag.ID, nil
+	}
 }

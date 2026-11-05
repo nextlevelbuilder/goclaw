@@ -654,6 +654,8 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			TeamStore:              deps.TeamStore,
 			SecureCLIStore:         deps.SecureCLIStore,
 			SecretVault:            deps.SecretVault,
+			SecretVaultWrite:       ag.ParseAllowVaultWrite(),
+			SecretVaultAgents:      secretVaultAgentLookup(deps.AgentStore),
 			OnTextUploaded:         deps.OnTextUploaded,
 			MediaStore:             deps.MediaStore,
 			ModelPricing:           deps.ModelPricing,

@@ -18,6 +18,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/sandbox"
+	"github.com/nextlevelbuilder/goclaw/internal/secretvault"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tokencount"
@@ -238,6 +239,10 @@ type Loop struct {
 
 	// Secret vault (nil when no encryption key is configured).
 	secretVault store.SecretVaultStore
+	// secretVaultWrite is the agent's other_config.vault_agent_write opt-in;
+	// secretVaultAgents resolves agent keys for vault_grant.
+	secretVaultWrite  bool
+	secretVaultAgents secretvault.AgentLookup
 
 	// Vault hook: called when a text file is persisted from user upload.
 	// Enables vault registration without agent package importing vault.
@@ -447,6 +452,10 @@ type LoopConfig struct {
 
 	// Secret vault store (nil when disabled).
 	SecretVault store.SecretVaultStore
+	// SecretVaultWrite lets the agent write secrets (other_config.vault_agent_write).
+	SecretVaultWrite bool
+	// SecretVaultAgents resolves agent keys in the tenant for vault_grant.
+	SecretVaultAgents secretvault.AgentLookup
 
 	// Vault hook: called asynchronously when a text file is persisted from user upload.
 	OnTextUploaded func(ctx context.Context, path, content string)
@@ -611,6 +620,8 @@ func NewLoop(cfg LoopConfig) *Loop {
 		teamStore:              cfg.TeamStore,
 		secureCLIStore:         cfg.SecureCLIStore,
 		secretVault:            cfg.SecretVault,
+		secretVaultWrite:       cfg.SecretVaultWrite,
+		secretVaultAgents:      cfg.SecretVaultAgents,
 		onTextUploaded:         cfg.OnTextUploaded,
 		mediaStore:             cfg.MediaStore,
 		modelPricing:           cfg.ModelPricing,
@@ -637,7 +648,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 type RunRequest struct {
 	// SecretRedactor removes vault secret values from events, session messages
 	// and results. Set by Run from the agent's granted secrets; never by callers.
-	SecretRedactor tracing.TextRedactor
+	SecretRedactor             tracing.TextRedactor
 	SessionKey                 string             // composite key: agent:{agentId}:{channel}:{peerKind}:{chatId}
 	Message                    string             // user message
 	Media                      []bus.MediaFile    // local media files with MIME types
@@ -748,7 +759,7 @@ type RunResult struct {
 	// ("stop", "tool_calls", "length"); empty when the run never reached a
 	// response.
 	FinishReason string `json:"finishReason,omitempty"`
-	StopReason     string                `json:"stopReason,omitempty"`     // why the pipeline (not the model) ended the run
+	StopReason   string `json:"stopReason,omitempty"` // why the pipeline (not the model) ended the run
 }
 
 // MediaResult represents a media file produced by a tool during the agent run.
