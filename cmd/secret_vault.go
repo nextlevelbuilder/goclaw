@@ -33,7 +33,7 @@ func secretVaultCmd() *cobra.Command {
 Values are write-only. "set" reads the value from stdin (hidden when stdin is a
 terminal); nothing prints it back. Requires GOCLAW_ENCRYPTION_KEY.`,
 	}
-	cmd.AddCommand(secretVaultListCmd(), secretVaultSetCmd(), secretVaultDeleteCmd())
+	cmd.AddCommand(secretVaultListCmd(), secretVaultSetCmd(), secretVaultApproveCmd(), secretVaultDeleteCmd())
 	return cmd
 }
 
@@ -92,11 +92,71 @@ func listSecretVault(ctx context.Context, st store.SecretVaultStore, out io.Writ
 		return err
 	}
 	w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tKIND\tAPPROVAL\tDOMAINS")
+	fmt.Fprintln(w, "NAME\tKIND\tSTATUS\tAPPROVAL\tDOMAINS\tAGENT")
 	for _, e := range entries {
-		fmt.Fprintf(w, "%s\t%s\t%v\t%s\n", e.Name, e.Kind, e.RequireApproval, strings.Join(e.AllowedDomains, ","))
+		agent := "-"
+		if e.CreatedByAgent != nil {
+			agent = e.CreatedByAgent.String()
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%v\t%s\t%s\n",
+			e.Name, e.Kind, e.Status, e.RequireApproval, strings.Join(e.AllowedDomains, ","), agent)
 	}
 	return w.Flush()
+}
+
+func secretVaultApproveCmd() *cobra.Command {
+	var (
+		tenantID, name string
+		domains        []string
+	)
+	cmd := &cobra.Command{
+		Use:     "approve",
+		Short:   "Approve a secret an agent saved (pending) and confirm its allowed domains",
+		Example: `  goclaw secret-vault approve --tenant-id <uuid> --name captured-token --domains api.example.com`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			st, ctx, closeFn, err := openSecretVault(cmd, tenantID)
+			if err != nil {
+				return err
+			}
+			defer closeFn()
+			msg, err := approveSecretVault(ctx, st, name, domains)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), msg)
+			return nil
+		},
+	}
+	f := cmd.Flags()
+	f.StringVar(&tenantID, "tenant-id", "", "Tenant UUID (required)")
+	f.StringVar(&name, "name", "", "Secret name (required)")
+	f.StringSliceVar(&domains, "domains", nil, "Allowed domains you confirm, comma separated (required)")
+	_ = cmd.MarkFlagRequired("tenant-id")
+	_ = cmd.MarkFlagRequired("name")
+	_ = cmd.MarkFlagRequired("domains")
+	return cmd
+}
+
+// approveSecretVault activates a pending entry by name with the confirmed
+// domains. The store writes the approved audit row.
+func approveSecretVault(ctx context.Context, st store.SecretVaultStore, name string, domains []string) (string, error) {
+	if len(domains) == 0 {
+		return "", fmt.Errorf("--domains is required: confirm where the secret may be sent")
+	}
+	entries, err := st.List(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, e := range entries {
+		if e.Name != name {
+			continue
+		}
+		if err := st.Approve(ctx, e.ID, domains); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Approved secret %q.", name), nil
+	}
+	return "", fmt.Errorf("secret %q not found", name)
 }
 
 type secretVaultSetOpts struct {

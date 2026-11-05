@@ -22,9 +22,10 @@ The vault is **local to the tenant that owns it** and is off when
 Entries can also be managed with the CLI (PostgreSQL only):
 
 ```bash
-goclaw secret-vault list   --tenant-id <uuid>
-goclaw secret-vault set    --tenant-id <uuid> --name gh --kind api_key --domains api.github.com   # value read from stdin
-goclaw secret-vault delete --tenant-id <uuid> --name gh
+goclaw secret-vault list    --tenant-id <uuid>   # shows STATUS (active|pending) and the creating AGENT
+goclaw secret-vault set     --tenant-id <uuid> --name gh --kind api_key --domains api.github.com   # value read from stdin
+goclaw secret-vault approve --tenant-id <uuid> --name captured-token --domains api.example.com     # activate a pending entry
+goclaw secret-vault delete  --tenant-id <uuid> --name gh
 ```
 
 The CLI needs `GOCLAW_ENCRYPTION_KEY` and a database DSN. The value is read from
@@ -46,6 +47,73 @@ Form timeout is 5 minutes and approval timeout 2 minutes. A secret saved with
 scope "this session only" lives in gateway memory for about 30 minutes and is
 never written to the database.
 
+## Agents saving secrets
+
+An agent can also put a secret *into* the vault, for example a session token
+it finds after a login. This is off by default and needs two decisions from a
+person: the agent must be allowed to save, and every saved secret must be
+approved before anyone can use it.
+
+### Per-agent opt-in
+
+The flag is `other_config.vault_agent_write` on the agent (boolean, default
+`false`). Only an explicit `true` enables it. Set it on the Secret Vault page
+with **Agents allowed to save** ("Allow this agent to save secrets"), or with
+`PUT /v1/agents/{id}`.
+
+`PUT /v1/agents/{id}` replaces the whole `other_config` object; it does not
+merge keys. Send the agent's current `other_config` with only this key
+changed. The web UI does this for you: it re-reads the agent right before
+the write. The flag is read from the agent record when a run starts, never
+from tool arguments.
+
+### Tools
+
+| Tool | What it does |
+|---|---|
+| Browser `act` `capture_secret` | Reads a value from `localStorage`, `sessionStorage` or a cookie of the current page and writes it straight to the vault. The value is read inside the gateway's browser code and never goes through the model, the tool result, `evaluate`, logs or traces. The allowed domain is the page's own host, taken from the page, never from arguments. The result holds only a status and `{{secret:name}}`. Top frame only, 8 KB max, an existing name is rejected. **Use this when the secret is already in the browser.** |
+| `vault_secret_set` | Saves a value the agent passes as an argument, either for the session only or as a pending vault entry. See the limit below. |
+| `vault_grant` | Asks to grant a secret the agent created to another agent in the same tenant. Always needs a live approval from the user; with no UI it is refused (no queue). |
+
+**`vault_secret_set` cannot meet the "never in a transcript" bar.** The value
+is a tool argument, so the model has already produced it and it is already in
+the model context and the session history before the tool runs. Redacting the
+result does not undo that. Stored tool-call arguments are masked after the
+call as a mitigation, but the provider has seen the value. Prefer
+`capture_secret` (value in the browser) or `request_secret` (value from the
+user through the Secure Form).
+
+### Pending approval
+
+Every entry an agent saves is created with `status = pending`,
+`created_via = agent` and `created_by_agent = <agent UUID>`. A pending entry
+is invisible to every resolution path (placeholders, `fill_secret`, granted
+lists): it behaves as if it did not exist until approved. Agents cannot
+overwrite or delete entries; edits and deletes stay with tenant admins. Each
+agent may hold at most 20 pending entries; further saves are refused.
+
+When the Web UI is open during the run, the user is asked live and approving
+activates the entry. Otherwise it waits on the Secret Vault page, where it shows
+a **Pending approval** badge and can be filtered. **Approve** shows the
+domains the agent proposed and the creating agent; the user confirms or edits
+the domains, and only the confirmed list is stored.
+
+```http
+POST /v1/secret-vault/{id}/approve
+{"allowed_domains": ["api.example.com"]}
+```
+
+| Result | Status |
+|---|---|
+| Activated; body is the entry with `status: "active"` | 200 |
+| `allowed_domains` missing, empty or invalid; bad id or JSON | 400 |
+| Caller is not a tenant admin | 403 |
+| Unknown id, or an entry of another tenant | 404 |
+| Entry is already active | 409 |
+
+The store writes one `approved` audit row with the approving user in the same
+transaction. Every agent write and refusal is audited as well.
+
 ## Data model
 
 Migration `000103` (PostgreSQL) and `schema.sql` (SQLite) add:
@@ -54,10 +122,15 @@ Migration `000103` (PostgreSQL) and `schema.sql` (SQLite) add:
 |---|---|
 | `secret_vault_entries` | Name, kind, allowed domains, approval flag, hints, AES-256-GCM encrypted payload. Unique per tenant and name. |
 | `secret_vault_grants` | Which agents may use an entry. |
-| `secret_vault_audit` | Created, updated, deleted, used and denied events with agent, user, host and outcome. Never holds a value. Survives entry deletion. |
+| `secret_vault_audit` | Created, updated, deleted, used, denied and approved events with agent, user, host and outcome. Never holds a value. Survives entry deletion. |
+
+Migration `000104` (PostgreSQL) and SQLite schema version 65 add `status`
+(`active` or `pending`), `created_via` (`user` or `agent`) and
+`created_by_agent` to `secret_vault_entries`. Existing entries are `active`.
 
 No endpoint returns a secret value. The REST API (`/v1/secret-vault`) returns
-metadata only, and every route requires a tenant admin.
+metadata only (including `status`, `created_via` and `created_by_agent`), and
+every route requires a tenant admin.
 
 ## Threat model
 
@@ -89,6 +162,25 @@ metadata only, and every route requires a tenant admin.
 - Values shorter than 4 characters are redacted only on word boundaries to
   avoid corrupting normal text. A secret embedded in a larger base64 payload at
   a non-aligned offset is not recognised.
+- A value given to `vault_secret_set`: it is a tool argument and has already
+  reached the model and the session history (see above).
+
+**Agents saving secrets**
+
+- Prompt injection could make an agent save an attacker-chosen value or
+  propose an attacker-chosen domain. Mitigations: the per-agent flag is off by
+  default, every saved entry is pending until a person approves it and
+  confirms the domains, `capture_secret` takes the domain from the page and
+  not from arguments, and the pending cap limits flooding.
+- Browser state is isolated per tenant + user + agent through incognito
+  browser contexts, so another agent or user does not see this agent's
+  `localStorage` or cookies.
+- Browser scopes with no user and no agent use the main Chrome profile, which
+  is not isolated. `capture_secret` must not run there.
+- The agent that owns a browser context can still read its own storage with
+  `evaluate`, in the same run or a later one. `capture_secret` does not block
+  that: what it guarantees is that the value it captures does not pass through
+  the model context, logs or traces of the run, and that the write is audited.
 
 ## Browser take over
 
@@ -126,8 +218,8 @@ browser window and presses Done, or declines.
 | Runtime, redactor, forms, session store | `internal/secretvault/` |
 | Stores | `internal/store/pg/secret_vault.go`, `internal/store/sqlitestore/secret_vault.go` |
 | Agent loop wiring | `internal/agent/loop_secret_vault.go` |
-| Tools | `internal/tools/http_request.go`, `internal/tools/request_secret.go`, `pkg/browser/fill_secret.go` |
+| Tools | `internal/tools/http_request.go`, `internal/tools/request_secret.go`, `internal/tools/vault_secret_set.go`, `internal/tools/vault_grant.go`, `pkg/browser/fill_secret.go`, `pkg/browser/capture_secret.go` |
 | REST, WebSocket, CLI | `internal/http/secret_vault.go`, `internal/gateway/methods/`, `cmd/secret_vault.go` |
-| Web UI | `ui/web/src/pages/secret-vault/`, `ui/web/src/components/chat/secret-request-host.tsx` |
+| Web UI (incl. approve dialog and agent opt-in) | `ui/web/src/pages/secret-vault/`, `ui/web/src/components/chat/secret-request-host.tsx` |
 | Browser take over | `internal/browsertakeover/`, `pkg/browser/takeover.go`, `internal/gateway/methods/browser_takeover.go`, `ui/web/src/components/chat/takeover-request-host.tsx` |
 | Tests | `internal/tools/secret_vault_leak_test.go`, `tests/invariants/secret_vault_tenant_isolation_test.go` |
