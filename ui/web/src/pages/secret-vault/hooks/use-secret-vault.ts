@@ -86,6 +86,9 @@ export function useSecretVault() {
   return { items: data ?? [], loading, refresh: invalidate, createSecret, updateMeta, replaceValue, deleteSecret };
 }
 
+// Stable reference: a fresh [] per render would retrigger the dialog's effect forever.
+const NO_AGENT_IDS: string[] = [];
+
 export function useSecretVaultGrants(id: string, enabled: boolean) {
   const http = useHttp();
   const queryClient = useQueryClient();
@@ -111,7 +114,7 @@ export function useSecretVaultGrants(id: string, enabled: boolean) {
     [http, id, queryClient],
   );
 
-  return { agentIds: data ?? [], loading, saveGrants };
+  return { agentIds: data ?? NO_AGENT_IDS, loading, saveGrants };
 }
 
 export function useSecretVaultAudit(id: string, enabled: boolean) {

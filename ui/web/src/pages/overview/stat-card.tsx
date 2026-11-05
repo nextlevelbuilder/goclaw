@@ -1,5 +1,39 @@
-import { AreaChart, Area, ResponsiveContainer } from "recharts";
 import { TrendingUp, TrendingDown } from "lucide-react";
+
+const SPARK_W = 100;
+const SPARK_H = 40;
+
+/**
+ * Static SVG sparkline. It stretches to its container through the viewBox and never
+ * measures the DOM, so it cannot trigger a resize/re-render loop.
+ */
+function Sparkline({ values, className }: { values: number[]; className?: string }) {
+  const min = Math.min(...values);
+  const range = Math.max(...values) - min || 1;
+  const step = SPARK_W / (values.length - 1);
+  const pts = values.map((v, i) => {
+    const y = SPARK_H - 2 - ((v - min) / range) * (SPARK_H - 4);
+    return `${(i * step).toFixed(2)},${y.toFixed(2)}`;
+  });
+  const line = `M${pts.join(" L")}`;
+  return (
+    <svg
+      viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}
+      preserveAspectRatio="none"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d={`${line} L${SPARK_W},${SPARK_H} L0,${SPARK_H} Z`} fill="var(--color-primary)" fillOpacity={0.15} />
+      <path
+        d={line}
+        fill="none"
+        stroke="var(--color-primary)"
+        strokeWidth={1.5}
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
+}
 
 export function StatCard({
   icon: Icon,
@@ -16,7 +50,6 @@ export function StatCard({
   sparkline?: number[];
   trend?: number | null;
 }) {
-  const sparkData = sparkline?.map((v) => ({ v }));
   const hasTrend = trend != null && trend !== 0;
 
   return (
@@ -47,28 +80,8 @@ export function StatCard({
           {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
         </div>
       </div>
-      {sparkData && sparkData.length > 1 && (
-        <div className="mt-3 h-[40px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={sparkData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <Area
-                type="monotone"
-                dataKey="v"
-                stroke="var(--color-primary)"
-                strokeWidth={1.5}
-                fill="url(#sparkGrad)"
-                dot={false}
-                isAnimationActive={false}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+      {sparkline && sparkline.length > 1 && (
+        <Sparkline values={sparkline} className="mt-3 h-[40px] w-full" />
       )}
     </div>
   );
