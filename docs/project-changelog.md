@@ -12,9 +12,11 @@ Significant changes, features, and fixes in reverse chronological order.
 
 - Replaced retired and deprecated models in the ChatGPT OAuth catalog with the
   current GPT-6 and GPT-5.6 models, and changed the default to `gpt-6.1-sol`
-  because `gpt-5.5` no longer works with ChatGPT sign-in.
+  because OpenAI retired `gpt-5.5` for ChatGPT sign-in on 2026-10-14.
 - Added reasoning metadata for the new models. `max` and `ultra` are not
   selectable yet.
+- Added GPT-6 to token counting and to the OpenAI forward-compat model specs,
+  so these models no longer fall back to the character heuristic.
 
 ---
 

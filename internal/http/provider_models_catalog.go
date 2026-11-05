@@ -118,16 +118,17 @@ func acpModels() []ModelInfo {
 
 // chatGPTOAuthModels returns models available via ChatGPT OAuth integration.
 // Order and names follow the listed entries in the openai/codex model catalog
-// (codex-rs/models-manager/models.json). gpt-5.5 stays listed there, but OpenAI
-// retired it for ChatGPT sign-in, so it is only reachable with an API key.
+// (codex-rs/models-manager/models.json), with the default moved to the front.
+// gpt-5.5 stays listed there, but OpenAI retired it for ChatGPT sign-in on
+// 2026-10-14, so it is only reachable with an API key.
 func chatGPTOAuthModels() []ModelInfo {
 	return withReasoningCapabilities([]ModelInfo{
 		{ID: providers.DefaultCodexModel, Name: "GPT-6.1-Sol"},
 		{ID: "gpt-6-astra", Name: "GPT-6-Astra"},
+		{ID: "gpt-6.1-terra", Name: "GPT-6.1 Terra"},
 		{ID: "gpt-6-sol", Name: "GPT-6-Sol"},
 		{ID: "gpt-6-luna", Name: "GPT-6-Luna"},
 		{ID: "gpt-5.6-sol", Name: "GPT-5.6-Sol"},
-		{ID: "gpt-6.1-terra", Name: "GPT-6.1 Terra"},
 		{ID: "gpt-5.6-terra", Name: "GPT-5.6-Terra"},
 		{ID: "gpt-5.6-luna", Name: "GPT-5.6-Luna"},
 	})
