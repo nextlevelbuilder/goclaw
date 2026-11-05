@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -175,6 +176,33 @@ func TestRedactorConcurrentUse(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+// Redact reads the short-needle slice outside the lock, so adding a value must
+// publish a new slice and leave the one a reader may hold untouched.
+func TestRedactorRebuildDoesNotReuseTheShortSliceReadersHold(t *testing.T) {
+	for range 20 {
+		r := NewRedactor()
+		r.AddValue("abc")
+		r.AddValue("ab")
+		r.mu.RLock()
+		held := r.short
+		r.mu.RUnlock()
+		before := append([]string(nil), held...)
+
+		r.AddValue("x")
+		r.AddValue("yz")
+
+		if !slices.Equal(held, before) {
+			t.Fatalf("a slice held by a reader was rewritten: %q -> %q", before, held)
+		}
+		r.mu.RLock()
+		now := r.short
+		r.mu.RUnlock()
+		if len(now) == 0 || &now[0] == &held[0] {
+			t.Fatal("rebuild must publish a fresh short slice")
+		}
+	}
 }
 
 func TestHostAllowed(t *testing.T) {
