@@ -279,6 +279,19 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Fixed
 
+- **Channel reload no longer hangs after a failed channel start (#1627)** —
+  `PendingHistory.StopFlusher` waited on the flush goroutine's `stopped`
+  channel even when `StartFlusher` had never run. Telegram starts its flusher
+  only after `getMe` and long polling succeed, so a Telegram instance whose
+  `Start()` failed (network down at boot) blocked `InstanceLoader.Reload`
+  forever inside `Stop()` with the loader mutex held — every later channel
+  save from the dashboard queued silently behind it and only a process
+  restart recovered. The same wait sat in `LoadInstanceByID`, loader `Stop`
+  and the timed-out-start cleanup path. `StopFlusher` now returns immediately
+  when the flusher was never started and is idempotent (`sync.Once` around
+  `close(stopCh)`, so a second `Stop()` no longer panics with
+  `close of closed channel`); `StartFlusher` spawns at most one loop.
+
 - **SQLite (desktop/lite) agent export and import: shared export SQL assumed
   PostgreSQL.** The export helpers take a `*sql.DB` and run on both backends, but
   only ever had PostgreSQL as a caller. On the desktop/lite build the failures were

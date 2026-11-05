@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"strconv"
 	"strings"
@@ -44,11 +45,16 @@ ON CONFLICT (model_id) DO UPDATE SET
 	synced_at = EXCLUDED.synced_at,
 	updated_at = now()`
 	upserted := 0
-	for _, e := range entries {
+	for i, e := range entries {
 		if strings.TrimSpace(e.ModelID) == "" {
 			continue
 		}
 		if err := validateUsagePricingFields(e.Pricing); err != nil {
+			// Skip the entry but keep the rest of the catalog: one malformed
+			// price must not abort the whole sync (Issue #1605). The model ID
+			// and position are logged so the offending upstream row is findable.
+			slog.Warn("usage_pricing.catalog_entry_skipped",
+				"model", e.ModelID, "index", i, "total", len(entries), "error", err)
 			continue
 		}
 		if len(e.RawPricing) == 0 {
@@ -64,7 +70,7 @@ ON CONFLICT (model_id) DO UPDATE SET
 			priceVal(e.Pricing.Reasoning), priceVal(e.Pricing.Request),
 			priceVal(e.Pricing.Image), priceVal(e.Pricing.WebSearch), e.SyncedAt,
 		); err != nil {
-			return 0, err
+			return 0, fmt.Errorf("upsert pricing catalog entry %d/%d (model %s): %w", i+1, len(entries), e.ModelID, err)
 		}
 		upserted++
 	}
