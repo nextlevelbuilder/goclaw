@@ -1,0 +1,13 @@
+{
+  "title": "Agent cần bạn tiếp quản trình duyệt",
+  "description": "Hoàn tất bước này trong cửa sổ trình duyệt (đăng nhập, CAPTCHA, mã QR hoặc mã dùng một lần), rồi bấm Xong.",
+  "agent": "Agent",
+  "host": "Trang web",
+  "reason": "Lý do",
+  "timeLeft": "Còn lại",
+  "privacy": "Những gì bạn gõ trong trình duyệt không được gửi cho agent. Sau đó agent chỉ thấy trang với mọi giá trị ô nhập bị ẩn.",
+  "done": "Xong",
+  "cancel": "Từ chối",
+  "failed": "Không gửi được phản hồi của bạn",
+  "expired": "Yêu cầu đã kết thúc hoặc hết thời gian."
+}

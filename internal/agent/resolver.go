@@ -72,6 +72,9 @@ type ResolverDeps struct {
 	// Secure CLI credential store for credentialed exec
 	SecureCLIStore store.SecureCLIStore
 
+	// Secret vault store (nil when no encryption key is configured)
+	SecretVault store.SecretVaultStore
+
 	// Builtin tool settings
 	BuiltinToolStore store.BuiltinToolStore
 
@@ -650,6 +653,7 @@ func NewManagedResolver(deps ResolverDeps) ResolverFunc {
 			ConfigPermStore:        deps.ConfigPermStore,
 			TeamStore:              deps.TeamStore,
 			SecureCLIStore:         deps.SecureCLIStore,
+			SecretVault:            deps.SecretVault,
 			OnTextUploaded:         deps.OnTextUploaded,
 			MediaStore:             deps.MediaStore,
 			ModelPricing:           deps.ModelPricing,

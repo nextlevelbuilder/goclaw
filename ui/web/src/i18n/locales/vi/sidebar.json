@@ -39,6 +39,7 @@
     "tts": "TTS",
     "activity": "Hoạt động",
     "cliCredentials": "Xác thực CLI",
+    "secretVault": "Kho bí mật",
     "apiKeys": "API Keys",
     "apiDocs": "Tài liệu API",
     "packages": "Gói phần mềm",

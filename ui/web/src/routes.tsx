@@ -96,6 +96,9 @@ const ContactsPage = lazyWithRetry(() =>
 const ActivityPage = lazyWithRetry(() =>
   import("@/pages/activity/activity-page").then((m) => ({ default: m.ActivityPage })),
 );
+const SecretVaultPage = lazyWithRetry(() =>
+  import("@/pages/secret-vault/secret-vault-page").then((m) => ({ default: m.SecretVaultPage })),
+);
 const ApiKeysPage = lazyWithRetry(() =>
   import("@/pages/api-keys/api-keys-page").then((m) => ({ default: m.ApiKeysPage })),
 );
@@ -186,6 +189,7 @@ export function AppRoutes() {
           <Route path={ROUTES.PROVIDER_DETAIL} element={<RequireAdmin><ProvidersPage key="detail" /></RequireAdmin>} />
           <Route path={ROUTES.CLI_CREDENTIALS} element={<Navigate to="/packages?tab=cli-credentials" replace />} />
           <Route path={ROUTES.API_KEYS} element={<RequireAdmin><ApiKeysPage /></RequireAdmin>} />
+          <Route path={ROUTES.SECRET_VAULT} element={<RequireAdmin><SecretVaultPage /></RequireAdmin>} />
           <Route path={ROUTES.CHANNELS} element={<RequireAdmin><ChannelsPage key="list" /></RequireAdmin>} />
           <Route path={ROUTES.CHANNEL_DETAIL} element={<RequireAdmin><ChannelsPage key="detail" /></RequireAdmin>} />
           <Route path={ROUTES.WEBHOOKS} element={<RequireAdmin><WebhooksPage /></RequireAdmin>} />

@@ -14,7 +14,7 @@ import (
 // Do NOT modify at runtime — each Registry gets a deep copy in NewRegistry().
 var builtinToolGroups = map[string][]string{
 	"memory":     {"memory_search", "memory_get", "memory_expand", "knowledge_graph_search"},
-	"web":        {"web_search", "web_fetch"},
+	"web":        {"web_search", "web_fetch", "http_request"},
 	"fs":         {"read_file", "write_file", "list_files", "edit"},
 	"runtime":    {"exec", "wait"},
 	"sessions":   {"sessions_list", "sessions_history", "sessions_send", "spawn", "session_status"},
@@ -23,12 +23,13 @@ var builtinToolGroups = map[string][]string{
 	"messaging":  {"message", "create_forum_topic", "list_group_members", "zalo_list_groups"},
 	"team":       {"team_tasks"},
 	"vault":      {"vault_search", "vault_read"},
+	"secrets":    {"request_secret"},
 	// Composite group: all goclaw native tools (excludes MCP/custom plugins).
 	"goclaw": {
 		"read_file", "write_file", "list_files", "edit", "exec", "wait",
-		"web_search", "web_fetch", "browser",
+		"web_search", "web_fetch", "http_request", "browser",
 		"memory_search", "memory_get", "memory_expand",
-		"knowledge_graph_search", "vault_search", "vault_read",
+		"knowledge_graph_search", "vault_search", "vault_read", "request_secret",
 		"sessions_list", "sessions_history", "sessions_send", "spawn", "session_status",
 		"delegate",
 		"cron", "datetime", "heartbeat",
@@ -47,8 +48,8 @@ var builtinToolGroups = map[string][]string{
 // Tool profiles define preset allow sets.
 var toolProfiles = map[string][]string{
 	"minimal":   {"session_status"},
-	"coding":    {"group:fs", "group:runtime", "group:sessions", "group:memory", "group:web", "group:vault", "read_image", "create_image", "skill_search"},
-	"messaging": {"group:messaging", "wait", "group:web", "group:vault", "sessions_list", "sessions_history", "sessions_send", "session_status", "read_image", "skill_search"},
+	"coding":    {"group:fs", "group:runtime", "group:sessions", "group:memory", "group:web", "group:vault", "group:secrets", "read_image", "create_image", "skill_search"},
+	"messaging": {"group:messaging", "wait", "group:web", "group:vault", "group:secrets", "sessions_list", "sessions_history", "sessions_send", "session_status", "read_image", "skill_search"},
 	"full":      {}, // empty = no restrictions
 }
 

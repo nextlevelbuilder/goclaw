@@ -192,6 +192,9 @@ func FormatSnapshot(nodes []*proto.AccessibilityAXNode, opts SnapshotOptions) *S
 		role := strings.ToLower(axValue(tn.node.Role))
 		name := axValue(tn.node.Name)
 		value := axValue(tn.node.Value)
+		if value != "" && opts.MaskNodes[int(tn.node.BackendDOMNodeID)] {
+			value = maskedValue
+		}
 		description := axValue(tn.node.Description)
 
 		// Skip empty/invisible roles

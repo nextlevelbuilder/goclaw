@@ -318,6 +318,17 @@ func (l *Loop) executeToolForActor(
 	args map[string]any,
 	channel, chatID, peerKind, sessionKey, actorUserID string,
 ) *tools.Result {
+	// Every result is scrubbed of vault secrets here, the one execution point
+	// shared by the sequential and parallel tool paths.
+	return redactToolResult(ctx, l.executeToolForActorRaw(ctx, name, args, channel, chatID, peerKind, sessionKey, actorUserID))
+}
+
+func (l *Loop) executeToolForActorRaw(
+	ctx context.Context,
+	name string,
+	args map[string]any,
+	channel, chatID, peerKind, sessionKey, actorUserID string,
+) *tools.Result {
 	if actorUserID != "" {
 		if cached, ok := l.mcpUserTools.Load(actorUserID); ok {
 			for _, t := range cached.([]tools.Tool) {

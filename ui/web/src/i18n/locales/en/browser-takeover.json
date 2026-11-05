@@ -1,0 +1,13 @@
+{
+  "title": "The agent needs you to take over the browser",
+  "description": "Finish the step in the browser window (sign-in, CAPTCHA, QR code or one-time code), then press Done.",
+  "agent": "Agent",
+  "host": "Site",
+  "reason": "Reason",
+  "timeLeft": "Time left",
+  "privacy": "What you type in the browser is not sent to the agent. Afterwards the agent sees the page with all input values hidden.",
+  "done": "Done",
+  "cancel": "Decline",
+  "failed": "Could not send your answer",
+  "expired": "The request already ended or timed out."
+}

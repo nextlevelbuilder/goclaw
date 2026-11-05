@@ -351,6 +351,8 @@ When FTS returns no results (e.g., cross-language queries), a `likeSearch()` fal
 
 ---
 
+> Secret vault tables (`secret_vault_entries`, `secret_vault_grants`, `secret_vault_audit`) are documented in [25-secret-vault.md](./25-secret-vault.md).
+
 ## 7. Context Files Routing
 
 Context files are stored in two tables and routed based on agent type.

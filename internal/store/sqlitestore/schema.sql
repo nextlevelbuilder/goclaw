@@ -2486,3 +2486,40 @@ CREATE TABLE IF NOT EXISTS provider_error_counts (
     count       INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (provider_id, error_class)
 );
+
+-- Secret Vault (PG migration 000103): encrypted secrets, per-agent grants, audit.
+CREATE TABLE IF NOT EXISTS secret_vault_entries (
+    id                TEXT NOT NULL PRIMARY KEY,
+    tenant_id         TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name              TEXT NOT NULL,
+    kind              TEXT NOT NULL CHECK (kind IN ('api_key', 'login')),
+    encrypted_payload TEXT NOT NULL,
+    allowed_domains   TEXT NOT NULL CHECK (json_valid(allowed_domains) AND json_array_length(allowed_domains) > 0),
+    require_approval  INTEGER NOT NULL DEFAULT 0,
+    hints             TEXT NOT NULL DEFAULT '',
+    created_by        TEXT NOT NULL DEFAULT '',
+    created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    UNIQUE (tenant_id, name)
+);
+CREATE TABLE IF NOT EXISTS secret_vault_grants (
+    entry_id   TEXT NOT NULL REFERENCES secret_vault_entries(id) ON DELETE CASCADE,
+    agent_id   TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    tenant_id  TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (entry_id, agent_id)
+);
+CREATE INDEX IF NOT EXISTS idx_secret_vault_grants_agent ON secret_vault_grants(agent_id, tenant_id);
+CREATE TABLE IF NOT EXISTS secret_vault_audit (
+    id          TEXT NOT NULL PRIMARY KEY,
+    tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    entry_id    TEXT NOT NULL,
+    entry_name  TEXT NOT NULL DEFAULT '',
+    agent_id    TEXT,
+    user_id     TEXT NOT NULL DEFAULT '',
+    action      TEXT NOT NULL,
+    target_host TEXT NOT NULL DEFAULT '',
+    outcome     TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_secret_vault_audit_entry ON secret_vault_audit(tenant_id, entry_id, created_at DESC);

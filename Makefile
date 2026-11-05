@@ -3,7 +3,7 @@ COMMIT_SHA ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 LDFLAGS  = -s -w -X github.com/nextlevelbuilder/goclaw/cmd.Version=$(VERSION) -X github.com/nextlevelbuilder/goclaw/cmd.CommitSHA=$(COMMIT_SHA)
 BINARY   = goclaw
 
-.PHONY: build build-full build-tui run clean version up up-build down logs reset test vet check-web dev migrate setup ci desktop-dev desktop-build desktop-dmg test-hooks test-hooks-unit test-hooks-e2e test-hooks-chaos test-hooks-rbac test-hooks-tracing
+.PHONY: build build-full build-tui run clean version up up-build down logs reset test vet check-web dev migrate setup ci desktop-dev desktop-build desktop-dmg winapp test-hooks test-hooks-unit test-hooks-e2e test-hooks-chaos test-hooks-rbac test-hooks-tracing
 
 # Build backend only (API-only, no embedded web UI)
 build:
@@ -134,6 +134,10 @@ vet:
 
 check-web:
 	cd ui/web && pnpm install --frozen-lockfile && pnpm build
+
+# Windows desktop app: goclaw-server.exe + GoClaw.exe + pg_dump.exe in winapp-out/
+winapp:
+	powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-winapp.ps1 -Version $(VERSION)
 
 dev:
 	cd ui/web && pnpm dev

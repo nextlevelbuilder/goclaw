@@ -47,6 +47,7 @@ func (m *Manager) Snapshot(ctx context.Context, targetID string, opts SnapshotOp
 		return nil, fmt.Errorf("get AX tree: %w", err)
 	}
 
+	opts.MaskNodes = m.secretMaskIDs(page, targetID)
 	snap := FormatSnapshot(result.Nodes, opts)
 	info, _ := page.Info()
 	snap.TargetID = targetID

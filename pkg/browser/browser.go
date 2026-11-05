@@ -49,6 +49,7 @@ type Manager struct {
 	tenantCtxs     map[string]*rod.Browser     // chrome only: browser scope key → incognito browser context
 	pageTenants    map[string]string           // targetID → browser scope key (for filtering)
 	pageLastUsed   map[string]time.Time        // targetID → last access time
+	secretTabs     map[string]*secretSession   // targetID → tab holding a vault secret
 	backend        Backend                     // "chrome" or "lightpanda"; auto-detected in Start() if empty
 	cdpURL         string                      // resolved CDP WS URL for remote sidecar; used to mint new conns on lightpanda
 	headless       bool
@@ -119,6 +120,7 @@ func New(opts ...Option) *Manager {
 		tenantCtxs:    make(map[string]*rod.Browser),
 		pageTenants:   make(map[string]string),
 		pageLastUsed:  make(map[string]time.Time),
+		secretTabs:    make(map[string]*secretSession),
 		actionTimeout: 30 * time.Second,
 		idleTimeout:   10 * time.Minute,
 		maxPages:      5,
@@ -166,6 +168,7 @@ func (m *Manager) resetPageMapsLocked() {
 	m.console = make(map[string][]ConsoleMessage)
 	m.pageTenants = make(map[string]string)
 	m.pageLastUsed = make(map[string]time.Time)
+	m.secretTabs = make(map[string]*secretSession)
 }
 
 // probeBackendLocked queries /json/version to detect whether the remote is

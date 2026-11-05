@@ -18,6 +18,8 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bgalert"
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/browsertakeover"
+	"github.com/nextlevelbuilder/goclaw/internal/secretvault"
 	"github.com/nextlevelbuilder/goclaw/internal/cache"
 	"github.com/nextlevelbuilder/goclaw/internal/channelmemory"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
@@ -554,6 +556,12 @@ func runGateway() {
 	// model override (the identity the capability DTO hands to the UIs).
 	server.SetProviderRegistry(providerRegistry)
 	server.SetExecApprovalManager(execApprovalMgr)
+	secretvault.DefaultForms().Configure(func(event string, tenant uuid.UUID, payload map[string]any) {
+		msgBus.Broadcast(bus.Event{Name: event, Payload: payload, TenantID: tenant})
+	}, server.HasUserClient)
+	browsertakeover.Default().Configure(func(event string, tenant uuid.UUID, payload map[string]any) {
+		msgBus.Broadcast(bus.Event{Name: event, Payload: payload, TenantID: tenant})
+	}, server.HasUserClient)
 	server.SetOAuthHandler(httpapi.NewOAuthHandler(pgStores.Providers, pgStores.ConfigSecrets, providerRegistry, msgBus))
 
 	// contextFileInterceptor is created inside wireExtras.
@@ -748,6 +756,11 @@ func runGateway() {
 		postTurn,
 		mediaStore,
 	)
+
+	// Secret vault admin API (write-only values). Absent without an encryption key.
+	if pgStores.SecretVault != nil {
+		server.SetSecretVaultHandler(httpapi.NewSecretVaultHandler(pgStores.SecretVault, pgStores.Tenants))
+	}
 
 	// System backup API — admin + owner only, SSE progress streaming.
 	server.SetBackupHandler(httpapi.NewBackupHandler(cfg, cfg.Database.PostgresDSN, Version, permPE.IsOwner))

@@ -236,6 +236,9 @@ type Loop struct {
 	// Secure CLI store for credentialed exec context injection
 	secureCLIStore store.SecureCLIStore
 
+	// Secret vault (nil when no encryption key is configured).
+	secretVault store.SecretVaultStore
+
 	// Vault hook: called when a text file is persisted from user upload.
 	// Enables vault registration without agent package importing vault.
 	onTextUploaded func(ctx context.Context, path, content string)
@@ -442,6 +445,9 @@ type LoopConfig struct {
 	// Secure CLI store for credentialed exec context injection
 	SecureCLIStore store.SecureCLIStore
 
+	// Secret vault store (nil when disabled).
+	SecretVault store.SecretVaultStore
+
 	// Vault hook: called asynchronously when a text file is persisted from user upload.
 	OnTextUploaded func(ctx context.Context, path, content string)
 
@@ -604,6 +610,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		configPermStore:        cfg.ConfigPermStore,
 		teamStore:              cfg.TeamStore,
 		secureCLIStore:         cfg.SecureCLIStore,
+		secretVault:            cfg.SecretVault,
 		onTextUploaded:         cfg.OnTextUploaded,
 		mediaStore:             cfg.MediaStore,
 		modelPricing:           cfg.ModelPricing,
@@ -628,6 +635,9 @@ func NewLoop(cfg LoopConfig) *Loop {
 
 // RunRequest is the input for processing a message through the agent.
 type RunRequest struct {
+	// SecretRedactor removes vault secret values from events, session messages
+	// and results. Set by Run from the agent's granted secrets; never by callers.
+	SecretRedactor tracing.TextRedactor
 	SessionKey                 string             // composite key: agent:{agentId}:{channel}:{peerKind}:{chatId}
 	Message                    string             // user message
 	Media                      []bus.MediaFile    // local media files with MIME types
