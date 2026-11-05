@@ -303,12 +303,12 @@ func wireExtras(
 					signed := make([]agent.MediaResult, len(rawMedia))
 					for i, mr := range rawMedia {
 						signed[i] = mr
-						// Use full path so backend resolves directly via os.Stat,
-						// no findInWorkspace fallback needed.
-						urlPath := strings.TrimPrefix(filepath.Clean(mr.Path), "/")
-						url := "/v1/files/" + urlPath
-						ft := httpapi.SignFileToken(url, secret, httpapi.FileTokenTTL)
-						signed[i].Path = url + "?ft=" + ft
+						// Full path so backend resolves directly via os.Stat. SignMediaPath
+						// normalizes separators and percent-encodes (spaces, ':' in Windows
+						// paths) so the URL survives the client round trip.
+						if u := httpapi.SignMediaPath(mr.Path, secret); u != "" {
+							signed[i].Path = u
+						}
 					}
 					m["media"] = signed
 				}

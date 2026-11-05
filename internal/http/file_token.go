@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"net/url"
 	"path"
 	"regexp"
 	"strconv"
@@ -90,7 +91,7 @@ func SignMediaPath(rawPath, secret string) string {
 	cleanPath = path.Clean(cleanPath)
 	urlPath := "/v1/files/" + strings.TrimPrefix(cleanPath, "/")
 	ft := SignFileToken(urlPath, secret, FileTokenTTL)
-	return urlPath + "?ft=" + ft
+	return escapedFileURL(urlPath) + "?ft=" + ft
 }
 
 func filepathToURLPath(rawPath string) string {
@@ -120,16 +121,49 @@ func SignFileURLs(content, secret string) string {
 	content = barePathInLinkRe.ReplaceAllString(content, "](/v1/files$1)")
 	// Heal legacy: clean ?ft=... from markdown link display text [name?ft=xxx](...) → [name](...)
 	content = linkTextFtRe.ReplaceAllString(content, "[$1]")
+	// Encode spaces inside markdown link targets so fileURLRe can match the full
+	// path (Windows user dirs like "Bruce Le" used to be truncated at the space).
+	content = encodeSpacesInLinkTargets(content)
 	// Sign URLs
-	return fileURLRe.ReplaceAllStringFunc(content, func(url string) string {
+	return fileURLRe.ReplaceAllStringFunc(content, func(rawURL string) string {
 		// Strip stale ft= token if present (legacy data may have persisted tokens).
-		cleanURL := stripFileToken(url)
-		ft := SignFileToken(cleanURL, secret, FileTokenTTL)
+		cleanURL := stripFileToken(rawURL)
+		// The signature must be computed over the same canonical form that
+		// handleServe rebuilds from r.PathValue("path"): separators normalized
+		// to '/' and percent-decoded (net/http decodes before the handler runs).
+		signPath := filepathToURLPath(cleanURL)
+		if decoded, err := url.PathUnescape(signPath); err == nil {
+			signPath = decoded
+		}
+		ft := SignFileToken(signPath, secret, FileTokenTTL)
 		sep := "?"
 		if strings.Contains(cleanURL, "?") {
 			sep = "&"
 		}
 		return cleanURL + sep + "ft=" + ft
+	})
+}
+
+// mdLinkTargetRe matches any markdown link target "]...)". It is used only to
+// percent-encode spaces inside targets that reference the files API, so the
+// stricter fileURLRe (which stops at whitespace) can match the complete path.
+var mdLinkTargetRe = regexp.MustCompile(`\]\(([^)\n]+)\)`)
+
+// encodeSpacesInLinkTargets percent-encodes spaces inside markdown link targets
+// that point at the files API. Chat links are emitted as full URLs
+// (http://127.0.0.1:18800/v1/files/C:\Users\Bruce Le\...) and fileURLRe stops at
+// whitespace, so without this pass only the prefix up to the first space gets a
+// signature and the download ends in 401 unauthorized.
+func encodeSpacesInLinkTargets(content string) string {
+	if !strings.Contains(content, " ") || !strings.Contains(content, "/v1/") {
+		return content
+	}
+	return mdLinkTargetRe.ReplaceAllStringFunc(content, func(m string) string {
+		if !strings.Contains(m, " ") || !strings.Contains(m, "/v1/") {
+			return m
+		}
+		inner := m[2 : len(m)-1] // strip "](" and trailing ")"
+		return "](" + strings.ReplaceAll(inner, " ", "%20") + ")"
 	})
 }
 

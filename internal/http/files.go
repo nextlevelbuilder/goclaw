@@ -76,8 +76,11 @@ func (h *FilesHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Priority 1: short-lived signed file token (?ft=) — decoupled from gateway token.
 		if ft := r.URL.Query().Get("ft"); ft != "" {
-			path := "/v1/files/" + r.PathValue("path")
-			if VerifyFileToken(ft, path, FileSigningKey()) {
+			// Most signers use the '/'-separated canonical form, but media links
+			// are signed over the OS-native path (Windows backslashes). Accept both.
+			raw := "/v1/files/" + r.PathValue("path")
+			slashed := strings.ReplaceAll(raw, `\`, "/")
+			if VerifyFileToken(ft, slashed, FileSigningKey()) || VerifyFileToken(ft, raw, FileSigningKey()) {
 				next(w, r)
 				return
 			}
