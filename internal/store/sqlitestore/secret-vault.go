@@ -35,7 +35,13 @@ func NewSQLiteSecretVaultStore(db *sql.DB, encryptionKey string) *SQLiteSecretVa
 
 var _ store.SecretVaultStore = (*SQLiteSecretVaultStore)(nil)
 
-const secretVaultCols = `id, tenant_id, name, kind, allowed_domains, require_approval, hints, created_by, created_at, updated_at`
+const (
+	secretVaultCols = `id, tenant_id, name, kind, allowed_domains, require_approval, hints, created_by, created_at, updated_at,
+	        status, created_via, created_by_agent`
+	// secretVaultColsE is secretVaultCols qualified with the entries alias e.
+	secretVaultColsE = `e.id, e.tenant_id, e.name, e.kind, e.allowed_domains, e.require_approval, e.hints, e.created_by,
+	        e.created_at, e.updated_at, e.status, e.created_via, e.created_by_agent`
+)
 
 func secretVaultTenant(ctx context.Context) (uuid.UUID, error) {
 	tid := store.TenantIDFromContext(ctx)
@@ -53,17 +59,27 @@ type secretVaultRowScanner interface{ Scan(dest ...any) error }
 
 func scanSecretVaultEntry(r secretVaultRowScanner) (*store.SecretVaultEntry, error) {
 	var e store.SecretVaultEntry
-	var domains string
-	created, updated := scanTimePair()
-	if err := r.Scan(&e.ID, &e.TenantID, &e.Name, &e.Kind, &domains, &e.RequireApproval,
-		&e.Hints, &e.CreatedBy, created, updated); err != nil {
+	if err := scanSecretVaultEntryInto(r, &e); err != nil {
 		return nil, err
 	}
+	return &e, nil
+}
+
+// scanSecretVaultEntryInto scans secretVaultCols (in order) followed by any
+// extra destinations.
+func scanSecretVaultEntryInto(r secretVaultRowScanner, e *store.SecretVaultEntry, extra ...any) error {
+	var domains string
+	created, updated := scanTimePair()
+	dest := append([]any{&e.ID, &e.TenantID, &e.Name, &e.Kind, &domains, &e.RequireApproval,
+		&e.Hints, &e.CreatedBy, created, updated, &e.Status, &e.CreatedVia, &e.CreatedByAgent}, extra...)
+	if err := r.Scan(dest...); err != nil {
+		return err
+	}
 	if err := json.Unmarshal([]byte(domains), &e.AllowedDomains); err != nil {
-		return nil, fmt.Errorf("secret vault: decode allowed_domains: %w", err)
+		return fmt.Errorf("secret vault: decode allowed_domains: %w", err)
 	}
 	e.CreatedAt, e.UpdatedAt = created.Time, updated.Time
-	return &e, nil
+	return nil
 }
 
 func (s *SQLiteSecretVaultStore) Create(ctx context.Context, e *store.SecretVaultEntry, p store.SecretVaultPayload) error {
@@ -92,15 +108,131 @@ func (s *SQLiteSecretVaultStore) Create(ctx context.Context, e *store.SecretVaul
 	e.TenantID, e.CreatedAt, e.UpdatedAt = tid, now, now
 	ts := now.Format(time.RFC3339Nano)
 
-	_, err = s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if e.CreatedByAgent != nil {
+		if err := s.checkAgentCanCreate(ctx, tx, tid, *e.CreatedByAgent); err != nil {
+			return err
+		}
+	}
+	_, err = tx.ExecContext(ctx,
 		`INSERT INTO secret_vault_entries (id, tenant_id, name, kind, encrypted_payload, allowed_domains,
-		 require_approval, hints, created_by, created_at, updated_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-		e.ID, tid, e.Name, e.Kind, enc, string(domains), e.RequireApproval, e.Hints, e.CreatedBy, ts, ts)
+		 require_approval, hints, created_by, created_at, updated_at, status, created_via, created_by_agent)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		e.ID, tid, e.Name, e.Kind, enc, string(domains), e.RequireApproval, e.Hints, e.CreatedBy, ts, ts,
+		e.Status, e.CreatedVia, e.CreatedByAgent)
 	if isSecretVaultUniqueViolation(err) {
 		return store.ErrSecretVaultNameTaken
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	if e.CreatedByAgent != nil {
+		if err := insertSecretVaultAudit(ctx, tx, tid, &store.SecretVaultAuditEntry{
+			EntryID: e.ID, EntryName: e.Name, AgentID: e.CreatedByAgent, UserID: e.CreatedBy,
+			Action: store.SecretAuditCreated, Outcome: store.SecretAuditOutcomeAgentPending,
+		}); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// checkAgentCanCreate verifies the creating agent lives in the tenant and is
+// still under its pending cap.
+func (s *SQLiteSecretVaultStore) checkAgentCanCreate(ctx context.Context, tx *sql.Tx, tid, agentID uuid.UUID) error {
+	var exists bool
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM agents WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL)`,
+		agentID, tid).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("%w: %s", store.ErrSecretVaultAgentInvalid, agentID)
+	}
+	n, err := countSecretVaultPending(ctx, tx, tid, agentID)
+	if err != nil {
+		return err
+	}
+	if n >= store.SecretVaultMaxPendingPerAgent {
+		return store.ErrSecretVaultPendingLimit
+	}
+	return nil
+}
+
+type secretVaultQueryer interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func countSecretVaultPending(ctx context.Context, q secretVaultQueryer, tid, agentID uuid.UUID) (int, error) {
+	var n int
+	err := q.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM secret_vault_entries WHERE tenant_id = ? AND created_by_agent = ? AND status = ?`,
+		tid, agentID, store.SecretVaultStatusPending).Scan(&n)
+	return n, err
+}
+
+func (s *SQLiteSecretVaultStore) CountPendingByAgent(ctx context.Context, agentID uuid.UUID) (int, error) {
+	tid, err := secretVaultTenant(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return countSecretVaultPending(ctx, s.db, tid, agentID)
+}
+
+func (s *SQLiteSecretVaultStore) Approve(ctx context.Context, id uuid.UUID, domains []string) error {
+	tid, err := secretVaultTenant(ctx)
+	if err != nil {
+		return err
+	}
+	norm, err := store.NormalizeSecretDomains(domains)
+	if err != nil {
+		return err
+	}
+	raw, err := json.Marshal(norm)
+	if err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var name, status string
+	err = tx.QueryRowContext(ctx,
+		`SELECT name, status FROM secret_vault_entries WHERE id = ? AND tenant_id = ?`, id, tid).Scan(&name, &status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return store.ErrSecretVaultNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if status != store.SecretVaultStatusPending {
+		return store.ErrSecretVaultNotPending
+	}
+	res, err := tx.ExecContext(ctx,
+		`UPDATE secret_vault_entries SET status = ?, allowed_domains = ?, updated_at = ?
+		 WHERE id = ? AND tenant_id = ? AND status = ?`,
+		store.SecretVaultStatusActive, string(raw), time.Now().UTC().Format(time.RFC3339Nano),
+		id, tid, store.SecretVaultStatusPending)
+	if err := secretVaultExpectOneRow(res, err); err != nil {
+		if errors.Is(err, store.ErrSecretVaultNotFound) {
+			return store.ErrSecretVaultNotPending
+		}
+		return err
+	}
+	if err := insertSecretVaultAudit(ctx, tx, tid, &store.SecretVaultAuditEntry{
+		EntryID: id, EntryName: name, UserID: store.UserIDFromContext(ctx),
+		Action: store.SecretAuditApproved, Outcome: "ok",
+	}); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *SQLiteSecretVaultStore) ReplaceValue(ctx context.Context, id uuid.UUID, p store.SecretVaultPayload) error {
@@ -304,11 +436,11 @@ func (s *SQLiteSecretVaultStore) ListGrantedMeta(ctx context.Context, agentID uu
 		return nil, err
 	}
 	return s.queryEntries(ctx,
-		`SELECT e.id, e.tenant_id, e.name, e.kind, e.allowed_domains, e.require_approval, e.hints,
-		        e.created_by, e.created_at, e.updated_at
+		`SELECT `+secretVaultColsE+`
 		 FROM secret_vault_entries e
 		 JOIN secret_vault_grants g ON g.entry_id = e.id AND g.tenant_id = e.tenant_id
-		 WHERE g.agent_id = ? AND e.tenant_id = ? ORDER BY e.name`, agentID, tid)
+		 WHERE g.agent_id = ? AND e.tenant_id = ? AND e.status = ? ORDER BY e.name`,
+		agentID, tid, store.SecretVaultStatusActive)
 }
 
 func (s *SQLiteSecretVaultStore) ResolveForUse(ctx context.Context, agentID uuid.UUID, name string) (*store.SecretVaultEntry, store.SecretVaultPayload, error) {
@@ -317,30 +449,24 @@ func (s *SQLiteSecretVaultStore) ResolveForUse(ctx context.Context, agentID uuid
 		return nil, store.SecretVaultPayload{}, err
 	}
 	var e store.SecretVaultEntry
-	var domains, enc string
+	var enc string
 	var granted bool
-	created, updated := scanTimePair()
-	err = s.db.QueryRowContext(ctx,
-		`SELECT e.id, e.tenant_id, e.name, e.kind, e.allowed_domains, e.require_approval, e.hints,
-		        e.created_by, e.created_at, e.updated_at, e.encrypted_payload,
+	err = scanSecretVaultEntryInto(s.db.QueryRowContext(ctx,
+		`SELECT `+secretVaultColsE+`, e.encrypted_payload,
 		        EXISTS(SELECT 1 FROM secret_vault_grants g
 		               WHERE g.entry_id = e.id AND g.agent_id = ? AND g.tenant_id = e.tenant_id)
 		 FROM secret_vault_entries e WHERE e.tenant_id = ? AND e.name = ?`,
-		agentID, tid, name).Scan(&e.ID, &e.TenantID, &e.Name, &e.Kind, &domains, &e.RequireApproval,
-		&e.Hints, &e.CreatedBy, created, updated, &enc, &granted)
+		agentID, tid, name), &e, &enc, &granted)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.SecretVaultPayload{}, store.ErrSecretVaultNotFound
 	}
 	if err != nil {
 		return nil, store.SecretVaultPayload{}, err
 	}
-	if !granted {
+	// A pending entry is reported exactly like an ungranted one.
+	if !granted || e.Status != store.SecretVaultStatusActive {
 		return nil, store.SecretVaultPayload{}, store.ErrSecretVaultNotGranted
 	}
-	if err := json.Unmarshal([]byte(domains), &e.AllowedDomains); err != nil {
-		return nil, store.SecretVaultPayload{}, fmt.Errorf("secret vault: decode allowed_domains: %w", err)
-	}
-	e.CreatedAt, e.UpdatedAt = created.Time, updated.Time
 	p, err := store.DecodeSecretPayload(enc, s.encKey)
 	if err != nil {
 		return nil, store.SecretVaultPayload{}, err
@@ -354,11 +480,11 @@ func (s *SQLiteSecretVaultStore) ListGrantedSecrets(ctx context.Context, agentID
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT e.id, e.tenant_id, e.name, e.kind, e.allowed_domains, e.require_approval, e.hints,
-		        e.created_by, e.created_at, e.updated_at, e.encrypted_payload
+		`SELECT `+secretVaultColsE+`, e.encrypted_payload
 		 FROM secret_vault_entries e
 		 JOIN secret_vault_grants g ON g.entry_id = e.id AND g.tenant_id = e.tenant_id
-		 WHERE g.agent_id = ? AND e.tenant_id = ? ORDER BY e.name`, agentID, tid)
+		 WHERE g.agent_id = ? AND e.tenant_id = ? AND e.status = ? ORDER BY e.name`,
+		agentID, tid, store.SecretVaultStatusActive)
 	if err != nil {
 		return nil, err
 	}
@@ -366,17 +492,10 @@ func (s *SQLiteSecretVaultStore) ListGrantedSecrets(ctx context.Context, agentID
 	var out []store.SecretVaultResolved
 	for rows.Next() {
 		var r store.SecretVaultResolved
-		var domains, enc string
-		e := &r.Entry
-		created, updated := scanTimePair()
-		if err := rows.Scan(&e.ID, &e.TenantID, &e.Name, &e.Kind, &domains, &e.RequireApproval,
-			&e.Hints, &e.CreatedBy, created, updated, &enc); err != nil {
+		var enc string
+		if err := scanSecretVaultEntryInto(rows, &r.Entry, &enc); err != nil {
 			return nil, err
 		}
-		if err := json.Unmarshal([]byte(domains), &e.AllowedDomains); err != nil {
-			return nil, fmt.Errorf("secret vault: decode allowed_domains: %w", err)
-		}
-		e.CreatedAt, e.UpdatedAt = created.Time, updated.Time
 		if r.Payload, err = store.DecodeSecretPayload(enc, s.encKey); err != nil {
 			return nil, err
 		}
@@ -390,12 +509,20 @@ func (s *SQLiteSecretVaultStore) AppendAudit(ctx context.Context, a *store.Secre
 	if err != nil {
 		return err
 	}
+	return insertSecretVaultAudit(ctx, s.db, tid, a)
+}
+
+type secretVaultExecer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+func insertSecretVaultAudit(ctx context.Context, x secretVaultExecer, tid uuid.UUID, a *store.SecretVaultAuditEntry) error {
 	if a.ID == uuid.Nil {
 		a.ID = store.GenNewID()
 	}
 	a.TenantID = tid
 	a.CreatedAt = time.Now().UTC()
-	_, err = s.db.ExecContext(ctx,
+	_, err := x.ExecContext(ctx,
 		`INSERT INTO secret_vault_audit (id, tenant_id, entry_id, entry_name, agent_id, user_id, action, target_host, outcome, created_at)
 		 VALUES (?,?,?,?,?,?,?,?,?,?)`,
 		a.ID, tid, a.EntryID, a.EntryName, a.AgentID, a.UserID, a.Action, a.TargetHost, a.Outcome,

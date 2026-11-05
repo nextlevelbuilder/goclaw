@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 64
+const SchemaVersion = 65
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -244,7 +244,17 @@ CREATE TABLE IF NOT EXISTS secret_vault_audit (
 CREATE INDEX IF NOT EXISTS idx_secret_vault_audit_entry ON secret_vault_audit(tenant_id, entry_id, created_at DESC);
 `
 
+// sqliteSecretVaultOriginIndex is the per-agent pending cap index from PG
+// migration 000104. Safe to re-run.
+const sqliteSecretVaultOriginIndex = `CREATE INDEX IF NOT EXISTS idx_secret_vault_entries_pending_agent
+    ON secret_vault_entries(tenant_id, created_by_agent) WHERE status = 'pending';
+`
+
 var migrations = map[int]string{
+	// Version 64 → 65: agent-written vault entries (status, created_via,
+	// created_by_agent). Mirrors PG migration 000104. Built at runtime by
+	// sqliteSecretVaultOriginMigrationPatch so existing columns are skipped.
+	64: sqliteSecretVaultOriginIndex,
 	// Version 63 → 64: Secret Vault tables. Mirrors PG migration 000103.
 	63: sqliteSecretVaultTables,
 	// Version 61 → 62: per-agent model roles (role → "provider/model").
@@ -1802,6 +1812,12 @@ func EnsureSchema(db *sql.DB) error {
 					return fmt.Errorf("inspect agent model_roles column: %w", err)
 				}
 			}
+			if v == 64 {
+				patch, err = sqliteSecretVaultOriginMigrationPatch(db)
+				if err != nil {
+					return fmt.Errorf("inspect secret vault origin columns: %w", err)
+				}
+			}
 			// Migrations that rebuild a table referenced by another table's FK
 			// require foreign_keys=OFF per SQLite altertable §7. The pragma is
 			// a no-op inside a transaction, so toggle it around BEGIN/COMMIT.
@@ -2024,6 +2040,31 @@ func sqliteProviderDeclarationMigrationPatch(db *sql.DB) (string, error) {
 	patch += sqliteProviderDeclarationTables
 	patch += sqliteProviderDeclarationBackfill
 	return patch, nil
+}
+
+// sqliteSecretVaultOriginMigrationPatch builds the v64 → v65 patch. SQLite has
+// no ADD COLUMN IF NOT EXISTS, so each column is only added when missing.
+// Existing rows take the defaults: user-created and active.
+func sqliteSecretVaultOriginMigrationPatch(db *sql.DB) (string, error) {
+	columns := []struct {
+		name string
+		ddl  string
+	}{
+		{"status", "ALTER TABLE secret_vault_entries ADD COLUMN status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending'));\n"},
+		{"created_via", "ALTER TABLE secret_vault_entries ADD COLUMN created_via TEXT NOT NULL DEFAULT 'user' CHECK (created_via IN ('user', 'agent'));\n"},
+		{"created_by_agent", "ALTER TABLE secret_vault_entries ADD COLUMN created_by_agent TEXT REFERENCES agents(id) ON DELETE SET NULL;\n"},
+	}
+	patch := ""
+	for _, col := range columns {
+		hasColumn, err := sqliteColumnExists(db, "secret_vault_entries", col.name)
+		if err != nil {
+			return "", err
+		}
+		if !hasColumn {
+			patch += col.ddl
+		}
+	}
+	return patch + sqliteSecretVaultOriginIndex, nil
 }
 
 func sqliteColumnExists(db *sql.DB, tableName, columnName string) (bool, error) {

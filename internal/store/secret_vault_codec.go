@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 )
 
@@ -69,7 +71,25 @@ func ValidateSecretVaultEntry(e *SecretVaultEntry) error {
 	if err := ValidateSecretHints(e.Hints); err != nil {
 		return err
 	}
-	return ValidateUserID(e.CreatedBy)
+	if err := ValidateUserID(e.CreatedBy); err != nil {
+		return err
+	}
+	return applySecretVaultOrigin(e)
+}
+
+// applySecretVaultOrigin derives status and origin from CreatedByAgent so a
+// caller can never create an agent entry that skips approval, nor mark a user
+// entry pending.
+func applySecretVaultOrigin(e *SecretVaultEntry) error {
+	if e.CreatedByAgent == nil {
+		e.CreatedVia, e.Status = SecretVaultCreatedViaUser, SecretVaultStatusActive
+		return nil
+	}
+	if *e.CreatedByAgent == uuid.Nil {
+		return fmt.Errorf("%w: creating agent id is empty", ErrSecretVaultInvalid)
+	}
+	e.CreatedVia, e.Status = SecretVaultCreatedViaAgent, SecretVaultStatusPending
+	return nil
 }
 
 // ValidateSecretHints bounds the free-text hints shown to the agent.
