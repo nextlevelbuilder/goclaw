@@ -96,6 +96,12 @@ All notable changes to GoClaw are documented here. For full documentation, see [
   (bounded to 20 pages); a failure on a later page keeps the models already
   fetched.
 
+- **Queued agent runs no longer inherit the context of the session's first request (#1662)** — a run
+  that waited behind an active one started from the context of the first `Enqueue` of that
+  session. It got that request's team dispatch tracker, so the team create lock taken by
+  `team_tasks` `list`/`search` was never released (all later calls for that team and chat
+  blocked forever) and tasks it created were never dispatched; if that context was cancelled,
+  the run was cancelled too. Each run now derives from the context of its own `Enqueue`.
 - **Channel reload no longer hangs after a failed channel start (#1627)** —
   `PendingHistory.StopFlusher` waited on the flush goroutine's `stopped`
   channel even when `StartFlusher` had never run. Telegram starts its flusher
