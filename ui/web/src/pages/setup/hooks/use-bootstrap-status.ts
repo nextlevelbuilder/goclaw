@@ -4,23 +4,27 @@ import { useChatGPTOAuthProviderStatuses } from "@/pages/providers/hooks/use-cha
 import { useAgents } from "@/pages/agents/hooks/use-agents";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { isSetupSkipped } from "@/lib/setup-skip";
+import { resolveBootstrapState } from "./resolve-bootstrap-state";
 
-export type SetupStep = 1 | 2 | 3 | 4 | "complete";
+export type { SetupStep } from "./resolve-bootstrap-state";
 
 export function useBootstrapStatus() {
   const connected = useAuthStore((s) => s.connected);
   const userId = useAuthStore((s) => s.userId);
   const tenantId = useAuthStore((s) => s.tenantId);
   const tenantSlug = useAuthStore((s) => s.tenantSlug);
-  const { providers, loading: providersLoading } = useProviders();
-  const { statuses: oauthStatuses, isLoading: oauthStatusesLoading } = useChatGPTOAuthProviderStatuses(providers);
+  const role = useAuthStore((s) => s.role);
+  // /v1/providers is admin-only, and only admins can finish the setup wizard.
+  const canManageProviders = role === "admin" || role === "owner";
+  const { providers, loading: providersLoading, loadFailed: providersLoadFailed } = useProviders(canManageProviders);
+  const { statuses: oauthStatuses, isLoading: oauthStatusesLoading } = useChatGPTOAuthProviderStatuses(providers, canManageProviders);
   const { agents, loading: agentsLoading } = useAgents();
 
   // Wait for WS to connect before considering agents loaded
   const loading = providersLoading || agentsLoading || oauthStatusesLoading || !connected;
 
   const { needsSetup, currentStep } = useMemo(() => {
-    if (loading) return { needsSetup: false, currentStep: "complete" as SetupStep };
+    if (loading) return { needsSetup: false, currentStep: "complete" as const };
 
     const readyOAuthProviders = new Set(
       oauthStatuses
@@ -33,16 +37,16 @@ export function useBootstrapStatus() {
       || provider.provider_type === "ollama"
       || (provider.provider_type === "chatgpt_oauth" && readyOAuthProviders.has(provider.name))
     ));
-    const hasAgent = agents.length > 0;
 
-    // Allow skipping setup entirely via localStorage
-    const skipped = isSetupSkipped({ userId, tenantId, tenantSlug });
-    if (skipped) return { needsSetup: false, currentStep: "complete" as SetupStep };
-
-    if (!hasProvider) return { needsSetup: true, currentStep: 1 as SetupStep };
-    if (!hasAgent) return { needsSetup: true, currentStep: 2 as SetupStep };
-    return { needsSetup: false, currentStep: "complete" as SetupStep };
-  }, [agents, loading, oauthStatuses, providers, tenantId, tenantSlug, userId]);
+    return resolveBootstrapState({
+      canManageProviders,
+      providersLoadFailed,
+      // Allow skipping setup entirely via localStorage
+      skipped: isSetupSkipped({ userId, tenantId, tenantSlug }),
+      hasProvider,
+      hasAgent: agents.length > 0,
+    });
+  }, [agents, canManageProviders, loading, oauthStatuses, providers, providersLoadFailed, tenantId, tenantSlug, userId]);
 
   return { needsSetup, currentStep, loading, providers, agents };
 }

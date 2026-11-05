@@ -58,7 +58,10 @@ export function OverviewPage() {
     useWsCall<CronListPayload>(Methods.CRON_LIST);
   const { call: fetchChannels, data: channelStatusData } =
     useWsCall<ChannelStatusPayload>(Methods.CHANNELS_STATUS);
-  const { providers, loading: providersLoading } = useProviders();
+  const role = useAuthStore((s) => s.role);
+  // /v1/providers is admin-only; other roles must not read that as "no providers".
+  const canManageProviders = role === "admin" || role === "owner";
+  const { providers, loading: providersLoading, loadFailed: providersLoadFailed } = useProviders(canManageProviders);
   const { runtimes } = useRuntimes();
   const { traces } = useTraces({ limit: 8 });
   const { instances: channelInstances, total: channelInstanceTotal } = useChannelInstances({
@@ -66,7 +69,8 @@ export function OverviewPage() {
     offset: 0,
   });
 
-  const hasNoProviders = !providersLoading && providers.length === 0;
+  const hasNoProviders =
+    canManageProviders && !providersLoading && !providersLoadFailed && providers.length === 0;
   const hasNoEnabledProviders =
     !providersLoading &&
     providers.length > 0 &&
@@ -259,7 +263,7 @@ export function OverviewPage() {
           <SystemHealthCard
             health={health}
             liveUptime={liveUptime}
-            enabledProviderCount={enabledProviders.length}
+            enabledProviderCount={canManageProviders ? enabledProviders.length : undefined}
             sessions={status?.sessions ?? 0}
             clientCount={clientList.length}
             channelEntries={channelEntries}
