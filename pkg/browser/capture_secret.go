@@ -73,28 +73,41 @@ func (m *Manager) CaptureSecret(ctx context.Context, targetID string, opts Captu
 		return "", errors.New("cannot read the page address")
 	}
 	page = page.Context(ctx)
-	return captureSecret(ctx, rt, info.URL, opts, func() (string, bool, error) {
+	return captureSecret(ctx, rt, info.URL, opts, func() (pageRead, error) {
 		return readPageSecret(page, info.URL, opts)
 	})
 }
 
+// pageRead is what one read of the page returned. origin is the origin of the
+// document the value actually came from ("scheme://host[:port]").
+type pageRead struct {
+	value  string
+	found  bool
+	origin string
+}
+
+var errCaptureOriginChanged = errors.New("the page changed while its storage was read; open the page again and retry")
+
 // captureSecret is the page-independent part of CaptureSecret: origin and
-// name checks before reading, then the vault write. read returns the value
-// and whether the key exists.
+// name checks before reading, then the vault write. The tab can navigate
+// between the address check and the read, so the origin the read reports is
+// checked again and must equal the one the allowed domain was taken from;
+// otherwise the value is dropped.
 func captureSecret(ctx context.Context, rt *secretvault.Runtime, pageURL string, opts CaptureSecretOpts,
-	read func() (string, bool, error)) (string, error) {
+	read func() (pageRead, error)) (string, error) {
 	host, err := checkFillOrigin(pageURL)
 	if err != nil {
 		rt.AuditWriteRefusal(ctx, opts.SecretName, "agent_capture_bad_origin")
 		return "", errors.New("secrets can only be captured from https pages (or http on localhost)")
 	}
+	checked, _, _ := topOrigin(pageURL) // cannot fail: checkFillOrigin parsed it
 	ns := secretvault.NewSecret{Name: opts.SecretName, Kind: store.SecretKindAPIKey, Domains: []string{host}}
 	if _, err := secretvault.ValidateNewSecret(ns); err != nil {
 		rt.AuditWriteRefusal(ctx, opts.SecretName, "agent_invalid")
 		return "", err
 	}
 
-	value, found, err := read()
+	got, err := read()
 	switch {
 	case errors.Is(err, errCaptureTooLarge):
 		rt.AuditWriteRefusal(ctx, opts.SecretName, "agent_value_too_large")
@@ -103,11 +116,24 @@ func captureSecret(ctx context.Context, rt *secretvault.Runtime, pageURL string,
 		// Never echo the driver error: it could carry page data.
 		rt.AuditWriteRefusal(ctx, opts.SecretName, "agent_capture_read_failed")
 		return "", errors.New("could not read the page storage")
-	case !found || value == "":
+	case !sameCaptureOrigin(checked, got.origin):
+		rt.AuditWriteRefusal(ctx, opts.SecretName, "agent_capture_origin_changed")
+		return "", errCaptureOriginChanged
+	case !got.found || got.value == "":
 		rt.AuditWriteRefusal(ctx, opts.SecretName, "agent_capture_not_found")
 		return "", fmt.Errorf("no %s value named %q on this page", opts.Source, opts.Key)
 	}
-	return rt.CreatePending(ctx, ns, store.SecretVaultPayload{Secret: value})
+	return rt.CreatePending(ctx, ns, store.SecretVaultPayload{Secret: got.value})
+}
+
+// sameCaptureOrigin reports whether the origin a read reported passes the
+// capture origin rule and equals the origin that was checked before reading.
+func sameCaptureOrigin(checked, readOrigin string) bool {
+	if _, err := checkFillOrigin(readOrigin); err != nil {
+		return false
+	}
+	o, _, err := topOrigin(readOrigin)
+	return err == nil && o == checked
 }
 
 func validateCaptureOpts(opts CaptureSecretOpts) error {
@@ -129,45 +155,45 @@ func validateCaptureOpts(opts CaptureSecretOpts) error {
 	return nil
 }
 
-// readStorageJS reads one storage item in the top frame. It returns the value
-// only when it fits the size cap, so an oversized value never leaves the page.
+// readStorageJS reads one storage item in the top frame, together with the
+// protocol and host of the document it read from. It returns the value only
+// when it fits the size cap, so an oversized value never leaves the page.
 const readStorageJS = `(src, key, max) => {
+	const origin = location.protocol + '//' + location.host;
 	const s = src === 'sessionStorage' ? window.sessionStorage : window.localStorage;
 	const v = s.getItem(key);
-	if (v === null) return { found: false };
-	if (v.length > max) return { found: true, tooLarge: true };
-	return { found: true, value: v };
+	if (v === null) return { origin, found: false };
+	if (v.length > max) return { origin, found: true, tooLarge: true };
+	return { origin, found: true, value: v };
 }`
 
 // readPageSecret reads the value in the browser: storage through a fixed
 // function in the page's top frame, cookies (including HttpOnly) through CDP
-// for the page URL.
-func readPageSecret(page *rod.Page, pageURL string, opts CaptureSecretOpts) (string, bool, error) {
+// for the page URL. Cookies are requested for pageURL explicitly, so their
+// origin is that URL's whatever the tab shows by then.
+func readPageSecret(page *rod.Page, pageURL string, opts CaptureSecretOpts) (pageRead, error) {
 	if opts.Source == captureCookie {
 		res, err := proto.NetworkGetCookies{Urls: []string{pageURL}}.Call(page)
 		if err != nil {
-			return "", false, err
+			return pageRead{}, err
 		}
 		for _, c := range res.Cookies {
 			if c.Name == opts.Key {
 				if len(c.Value) > secretvault.MaxWriteValueBytes {
-					return "", true, errCaptureTooLarge
+					return pageRead{}, errCaptureTooLarge
 				}
-				return c.Value, true, nil
+				return pageRead{value: c.Value, found: true, origin: pageURL}, nil
 			}
 		}
-		return "", false, nil
+		return pageRead{origin: pageURL}, nil
 	}
 	res, err := page.Eval(readStorageJS, opts.Source, opts.Key, secretvault.MaxWriteValueBytes)
 	if err != nil {
-		return "", false, err
+		return pageRead{}, err
 	}
 	obj := res.Value
-	if !obj.Get("found").Bool() {
-		return "", false, nil
-	}
 	if obj.Get("tooLarge").Bool() {
-		return "", true, errCaptureTooLarge
+		return pageRead{}, errCaptureTooLarge
 	}
-	return obj.Get("value").Str(), true, nil
+	return pageRead{value: obj.Get("value").Str(), found: obj.Get("found").Bool(), origin: obj.Get("origin").Str()}, nil
 }

@@ -3,10 +3,18 @@ package browser
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/launcher"
+	"github.com/go-rod/rod/lib/launcher/flags"
+	"github.com/go-rod/rod/lib/proto"
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/secretvault"
@@ -49,6 +57,16 @@ func (s *captureStore) Create(_ context.Context, e *store.SecretVaultEntry, p st
 	return nil
 }
 
+func (s *captureStore) List(context.Context) ([]store.SecretVaultEntry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []store.SecretVaultEntry
+	for _, e := range s.entries {
+		out = append(out, e)
+	}
+	return out, nil
+}
+
 func (s *captureStore) SetGrants(_ context.Context, id uuid.UUID, agents []uuid.UUID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -86,11 +104,15 @@ func captureOpts() CaptureSecretOpts {
 	return CaptureSecretOpts{Source: captureLocalStorage, Key: "access_token", SecretName: "app-jwt"}
 }
 
-func reader(value string, found bool, err error) (func() (string, bool, error), *int) {
+// reader fakes one page read from a document of the given origin.
+func reader(origin, value string, found bool, err error) (func() (pageRead, error), *int) {
 	calls := 0
-	return func() (string, bool, error) {
+	return func() (pageRead, error) {
 		calls++
-		return value, found, err
+		if err != nil {
+			return pageRead{}, err
+		}
+		return pageRead{value: value, found: found, origin: origin}, nil
 	}, &calls
 }
 
@@ -153,7 +175,7 @@ func TestCaptureSecret_RefusesBeforeTouchingThePage(t *testing.T) {
 func TestCaptureSecret_StoresPendingBoundToThePageHost(t *testing.T) {
 	st := newCaptureStore()
 	ctx, rt := captureRuntime(st, true)
-	read, _ := reader(captureValue, true, nil)
+	read, _ := reader("https://app.example.com:8443", captureValue, true, nil)
 
 	status, err := captureSecret(ctx, rt, "https://App.Example.com:8443/dashboard?x=1", captureOpts(), read)
 	if err != nil || status != secretvault.WritePending {
@@ -179,7 +201,8 @@ func TestCaptureSecret_StoresPendingBoundToThePageHost(t *testing.T) {
 	}
 
 	// Same name again: refused, value never echoed.
-	_, err = captureSecret(ctx, rt, "https://app.example.com/", captureOpts(), read)
+	again, _ := reader("https://app.example.com", captureValue, true, nil)
+	_, err = captureSecret(ctx, rt, "https://app.example.com/", captureOpts(), again)
 	if !errors.Is(err, secretvault.ErrNameTaken) {
 		t.Fatalf("taken name: %v", err)
 	}
@@ -190,7 +213,7 @@ func TestCaptureSecret_OriginNotFoundTooLargeAndReadErrors(t *testing.T) {
 	st := newCaptureStore()
 	ctx, rt := captureRuntime(st, true)
 
-	read, calls := reader(captureValue, true, nil)
+	read, calls := reader("https://a.example.com", captureValue, true, nil)
 	if _, err := captureSecret(ctx, rt, "http://evil.example.net/", captureOpts(), read); err == nil || *calls != 0 {
 		t.Fatalf("plain http must be refused before reading (calls=%d, err=%v)", *calls, err)
 	}
@@ -200,15 +223,15 @@ func TestCaptureSecret_OriginNotFoundTooLargeAndReadErrors(t *testing.T) {
 		t.Fatalf("invalid name must be refused before reading (calls=%d)", *calls)
 	}
 
-	missing, _ := reader("", false, nil)
+	missing, _ := reader("https://a.example.com", "", false, nil)
 	if _, err := captureSecret(ctx, rt, "https://a.example.com/", captureOpts(), missing); err == nil || !strings.Contains(err.Error(), "no localStorage value") {
 		t.Fatalf("missing key: %v", err)
 	}
-	big, _ := reader("", true, errCaptureTooLarge)
+	big, _ := reader("https://a.example.com", "", true, errCaptureTooLarge)
 	if _, err := captureSecret(ctx, rt, "https://a.example.com/", captureOpts(), big); !errors.Is(err, secretvault.ErrValueTooLarge) {
 		t.Fatalf("too large: %v", err)
 	}
-	broken, _ := reader("", false, errors.New("Runtime.evaluate: "+captureValue))
+	broken, _ := reader("https://a.example.com", "", false, errors.New("Runtime.evaluate: "+captureValue))
 	_, err := captureSecret(ctx, rt, "https://a.example.com/", captureOpts(), broken)
 	if err == nil {
 		t.Fatal("read error must fail")
@@ -216,12 +239,124 @@ func TestCaptureSecret_OriginNotFoundTooLargeAndReadErrors(t *testing.T) {
 	noCaptureValue(t, err)
 
 	// Loopback http is allowed, like fill_secret.
-	ok, _ := reader(captureValue, true, nil)
+	ok, _ := reader("http://127.0.0.1:9000", captureValue, true, nil)
 	if _, err := captureSecret(ctx, rt, "http://127.0.0.1:9000/", captureOpts(), ok); err != nil {
 		t.Fatalf("loopback: %v", err)
 	}
 	if len(st.entries) != 1 {
 		t.Fatalf("only the loopback capture may be stored, got %d", len(st.entries))
+	}
+}
+
+// The tab may navigate between the address check and the read. The origin the
+// read reports is checked again, so a value from another document is dropped.
+func TestCaptureSecret_RefusesAValueReadFromAnotherOrigin(t *testing.T) {
+	st := newCaptureStore()
+	ctx, rt := captureRuntime(st, true)
+
+	for name, origin := range map[string]string{
+		"other host":   "https://evil.example.net",
+		"other port":   "https://app.example.com:8443",
+		"plain http":   "http://app.example.com",
+		"opaque page":  "about:",
+		"empty":        "",
+		"other scheme": "file://",
+	} {
+		read, calls := reader(origin, captureValue, true, nil)
+		_, err := captureSecret(ctx, rt, "https://app.example.com/login", captureOpts(), read)
+		if !errors.Is(err, errCaptureOriginChanged) || *calls != 1 {
+			t.Errorf("%s: want errCaptureOriginChanged after one read, got %v (calls=%d)", name, err, *calls)
+		}
+		noCaptureValue(t, err)
+	}
+	if len(st.entries) != 0 {
+		t.Fatal("a value from another origin must not be stored")
+	}
+	if !strings.Contains(st.outcomes(), "agent_capture_origin_changed") {
+		t.Fatalf("refusal not audited: %s", st.outcomes())
+	}
+}
+
+// Against a real Chrome: the address was checked on one origin, then the tab
+// moved to another origin whose storage holds the key. The real read reports
+// the second origin and the capture is refused.
+func TestCaptureSecret_RealPageThatNavigatedAwayIsRefused(t *testing.T) {
+	if testing.Short() {
+		t.Skip("drives a real headless Chrome")
+	}
+	bin, ok := launcher.LookPath()
+	if !ok {
+		t.Skip("no Chrome or Chromium installed")
+	}
+	serve := func(body string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprint(w, body)
+		}))
+	}
+	checked := serve(`<!doctype html><title>checked</title><script>localStorage.setItem("access_token", "` + captureValue + `")</script>`)
+	defer checked.Close()
+	other := serve(`<!doctype html><title>other</title><script>localStorage.setItem("access_token", "` + captureValue + `")</script>`)
+	defer other.Close()
+
+	// Without the leakless helper, like the manager's fallback: endpoint
+	// security may block that unsigned exe.
+	l := launcher.New().Bin(bin).Headless(true).Leakless(false)
+	u, err := l.Launch()
+	if err != nil {
+		if dir := l.Get(flags.UserDataDir); dir != "" {
+			_ = os.RemoveAll(dir)
+		}
+		t.Skipf("Chrome cannot be started here: %v", err)
+	}
+	defer func() { l.Kill(); l.Cleanup() }()
+	b := rod.New().ControlURL(u)
+	if err := b.Connect(); err != nil {
+		t.Skipf("Chrome cannot be reached: %v", err)
+	}
+	defer b.Close()
+	p, err := b.Page(proto.TargetCreateTarget{URL: checked.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.WaitLoad(); err != nil {
+		t.Fatal(err)
+	}
+	info, err := p.Info()
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkedURL := info.URL
+	if err := p.Navigate(other.URL); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.WaitLoad(); err != nil {
+		t.Fatal(err)
+	}
+
+	st := newCaptureStore()
+	ctx, rt := captureRuntime(st, true)
+	_, err = captureSecret(ctx, rt, checkedURL, captureOpts(), func() (pageRead, error) {
+		return readPageSecret(p, checkedURL, captureOpts())
+	})
+	if !errors.Is(err, errCaptureOriginChanged) {
+		t.Fatalf("want errCaptureOriginChanged, got %v", err)
+	}
+	noCaptureValue(t, err)
+	if len(st.entries) != 0 {
+		t.Fatal("nothing may be stored")
+	}
+
+	// Control: the address checked is the one read from, so it is stored.
+	info, err = p.Info()
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, err := captureSecret(ctx, rt, info.URL, captureOpts(), func() (pageRead, error) {
+		return readPageSecret(p, info.URL, captureOpts())
+	})
+	if err != nil || status != secretvault.WritePending || st.values["app-jwt"].Secret != captureValue {
+		t.Fatalf("same-origin capture: status=%q err=%v", status, err)
 	}
 }
 
