@@ -11,6 +11,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/edition"
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -42,9 +44,14 @@ type Runtime struct {
 	// AllowWrite is the agent's vault_agent_write opt-in, read from the agent
 	// record by the resolver. Every agent write path checks it via CanWrite.
 	AllowWrite bool
-	// Agents resolves an agent key to its id in the context tenant; vault_grant
-	// needs it. Nil disables grants.
+	// Agents resolves an agent key to its id in the context tenant, for an
+	// agent the context user may access; vault_grant needs it. Nil disables
+	// grants.
 	Agents AgentLookup
+	// TenantRoles returns a user's role in a tenant. A live approval of an
+	// agent write counts only from a tenant owner or admin; nil means no live
+	// approval counts (entries stay pending, grants are refused).
+	TenantRoles TenantRoleLookup
 
 	approvedMu sync.Mutex
 	approved   map[string]bool // "name|host" approved earlier in this run
@@ -226,18 +233,35 @@ const MaxWriteValueBytes = 8 * 1024
 
 // Errors of the agent write path. Like the use errors they never carry a value.
 var (
-	ErrWriteDisabled = errors.New("writing secrets is not enabled for this agent")
-	ErrValueTooLarge = fmt.Errorf("the secret value exceeds %d bytes", MaxWriteValueBytes)
-	ErrNameTaken     = errors.New("a secret with this name already exists; choose another name")
+	ErrWriteDisabled    = errors.New("writing secrets is not enabled for this agent")
+	ErrWriteUnsupported = errors.New("agents cannot save secrets in this edition: it has no place to approve them")
+	ErrValueTooLarge    = fmt.Errorf("the secret value exceeds %d bytes", MaxWriteValueBytes)
+	// ErrNameTaken is the one answer for every name that cannot be used
+	// (another agent's, a pending one, one in this session...), so names
+	// cannot be probed. The audit row keeps the reason.
+	ErrNameTaken     = errors.New("this secret name cannot be used; choose another name")
 	ErrPendingLimit  = fmt.Errorf("too many secrets of this agent are waiting for approval (limit %d); ask the user to review them in the Secret Vault page", store.SecretVaultMaxPendingPerAgent)
+	ErrSessionLimit  = fmt.Errorf("this chat session already holds %d session-only secrets; reuse one or save to the vault", MaxSessionSecrets)
 	ErrNotOwner      = errors.New("only a secret this agent created can be granted")
 	ErrAgentNotFound = errors.New("agent not found")
 	ErrGrantDenied   = errors.New("the user did not approve the grant")
+	ErrGrantNotAdmin = errors.New("only a tenant admin can approve a grant; ask a tenant admin to grant it in the Secret Vault page")
 	ErrNoSession     = errors.New("session-only secrets are not available in this run")
 )
 
-// AgentLookup resolves an agent key to its id within the context tenant.
+// AgentLookup resolves an agent key to its id within the context tenant. It
+// must fail for an agent the context user cannot access.
 type AgentLookup func(ctx context.Context, agentKey string) (uuid.UUID, error)
+
+// TenantRoleLookup returns a user's role in a tenant ("" when not a member).
+type TenantRoleLookup func(ctx context.Context, tenant uuid.UUID, userID string) (string, error)
+
+// AgentWriteSupported reports whether agents may save secrets in the running
+// edition. Lite has no surface to approve a pending entry, so an agent-written
+// entry would wait forever there.
+func AgentWriteSupported() bool {
+	return edition.Current().Name != edition.Lite.Name
+}
 
 // Outcomes of an agent write.
 const (
@@ -257,18 +281,27 @@ type NewSecret struct {
 
 // CanWrite reports whether this run's agent may write secrets.
 func (rt *Runtime) CanWrite() bool {
-	return rt != nil && rt.Store != nil && rt.AllowWrite
+	return rt != nil && rt.Store != nil && rt.AllowWrite && AgentWriteSupported()
 }
 
-// CheckWrite refuses (and audits) a write when the agent has not opted in.
-// Callers that must do work before they have a value (browser capture) call
-// it first; the write methods check it again.
+// CheckWrite refuses (and audits) a write when the edition does not support
+// agent writes or the agent has not opted in. Callers that must do work
+// before they have a value (browser capture) call it first; the write
+// methods check it again.
 func (rt *Runtime) CheckWrite(ctx context.Context, name string) error {
+	return rt.checkWrite(ctx, name, "agent_write_disabled")
+}
+
+func (rt *Runtime) checkWrite(ctx context.Context, name, disabledOutcome string) error {
 	if rt == nil || rt.Store == nil {
 		return ErrNoRuntime
 	}
+	if !AgentWriteSupported() {
+		rt.AuditWriteRefusal(ctx, name, "agent_write_unsupported_edition")
+		return ErrWriteUnsupported
+	}
 	if !rt.AllowWrite {
-		rt.AuditWriteRefusal(ctx, name, "agent_write_disabled")
+		rt.AuditWriteRefusal(ctx, name, disabledOutcome)
 		return ErrWriteDisabled
 	}
 	return nil
@@ -342,7 +375,7 @@ func (rt *Runtime) CreatePending(ctx context.Context, ns NewSecret, p store.Secr
 	err = rt.Store.Create(ctx, entry, p)
 	switch {
 	case errors.Is(err, store.ErrSecretVaultNameTaken):
-		rt.auditWrite(ctx, uuid.Nil, entry.Name, store.SecretAuditDenied, "agent_name_taken")
+		rt.auditWrite(ctx, uuid.Nil, entry.Name, store.SecretAuditDenied, rt.nameTakenOutcome(ctx, entry.Name))
 		return "", ErrNameTaken
 	case errors.Is(err, store.ErrSecretVaultPendingLimit):
 		rt.auditWrite(ctx, uuid.Nil, entry.Name, store.SecretAuditDenied, "agent_pending_limit")
@@ -358,14 +391,15 @@ func (rt *Runtime) CreatePending(ctx context.Context, ns NewSecret, p store.Secr
 	return rt.approveNew(ctx, entry), nil
 }
 
-// approveNew asks the user to activate a freshly written entry. Anything but
-// a live yes leaves it pending.
+// approveNew asks the user to activate a freshly written entry. Only a live
+// yes that counts as a tenant admin's (see adminApproval) activates it;
+// anything else leaves it pending for the Secret Vault page.
 func (rt *Runtime) approveNew(ctx context.Context, e *store.SecretVaultEntry) string {
 	if rt.Forms == nil {
 		return WritePending
 	}
 	domains := strings.Join(e.AllowedDomains, ", ")
-	ok, err := rt.Forms.RequestApproval(ctx, FormSpec{
+	ok, err := rt.adminApproval(ctx, FormSpec{
 		Name: e.Name, Domains: e.AllowedDomains, Host: domains,
 		Action:  "save the new secret " + e.Name + " written by the agent, for use on " + domains,
 		AgentID: rt.AgentID, AgentKey: store.AgentKeyFromContext(ctx), SessionKey: rt.SessionKey,
@@ -373,20 +407,95 @@ func (rt *Runtime) approveNew(ctx context.Context, e *store.SecretVaultEntry) st
 	switch {
 	case errors.Is(err, ErrNoUI):
 		return WritePending
+	case errors.Is(err, errUserNotTenantAdmin):
+		// Not asked: the user could not approve it anyway.
+		return WritePending
+	case errors.Is(err, errApproverNotAdmin):
+		rt.audit(ctx, e, store.SecretAuditDenied, "", "agent_create_approver_not_admin")
+		return WritePending
 	case err != nil || !ok:
 		rt.audit(ctx, e, store.SecretAuditDenied, "", "agent_create_not_approved")
 		return WritePending
 	}
-	if err := rt.Store.Approve(ctx, e.ID, e.AllowedDomains); err != nil {
+	err = rt.Store.Approve(ctx, e.ID, e.AllowedDomains)
+	switch {
+	case err == nil, errors.Is(err, store.ErrSecretVaultNotPending):
+		// Not pending any more: an admin approved it meanwhile.
+		return WriteActive
+	default:
 		slog.Warn("secretvault.agent_approve_failed", "name", e.Name, "error", err)
 		return WritePending
 	}
-	return WriteActive
+}
+
+var (
+	errUserNotTenantAdmin = errors.New("the run's user is not a tenant admin")
+	errApproverNotAdmin   = errors.New("the approving client is not an admin")
+)
+
+// adminApproval asks the run's user (the only one who can answer an
+// approval of this run) and reports a yes only when it carries the rule of
+// the REST approve route: a system owner, or a client with at least the
+// admin role whose user is an owner or admin of the context tenant. When the
+// user is no tenant admin it does not ask (errUserNotTenantAdmin); a yes from
+// a client below admin is errApproverNotAdmin. Without a way to read the
+// tenant role it fails closed.
+func (rt *Runtime) adminApproval(ctx context.Context, spec FormSpec) (bool, error) {
+	tenantAdmin := rt.userIsTenantAdmin(ctx)
+	if !tenantAdmin && !store.IsOwnerRole(ctx) {
+		return false, errUserNotTenantAdmin
+	}
+	res, err := rt.Forms.requestApproval(ctx, spec)
+	if err != nil {
+		return false, err
+	}
+	if res.Status != StatusApproved {
+		return false, nil
+	}
+	if res.ApproverRole == permissions.RoleOwner ||
+		(tenantAdmin && permissions.HasMinRole(res.ApproverRole, permissions.RoleAdmin)) {
+		return true, nil
+	}
+	return false, errApproverNotAdmin
+}
+
+// userIsTenantAdmin reports whether the context user is an owner or admin of
+// the context tenant.
+func (rt *Runtime) userIsTenantAdmin(ctx context.Context) bool {
+	tenant, user := store.TenantIDFromContext(ctx), store.UserIDFromContext(ctx)
+	if rt.TenantRoles == nil || tenant == uuid.Nil || user == "" {
+		return false
+	}
+	role, err := rt.TenantRoles(ctx, tenant, user)
+	if err != nil {
+		slog.Warn("secretvault.tenant_role_lookup_failed", "error", err)
+		return false
+	}
+	return role == store.TenantRoleOwner || role == store.TenantRoleAdmin
+}
+
+// nameTakenOutcome is the audit outcome of a refused name. The agent gets the
+// generic ErrNameTaken; only the audit row says why.
+func (rt *Runtime) nameTakenOutcome(ctx context.Context, name string) string {
+	e, err := findByName(ctx, rt.Store, name)
+	switch {
+	case err != nil:
+		return "agent_name_taken"
+	case e.Status == store.SecretVaultStatusPending:
+		return "agent_name_taken_pending"
+	case e.CreatedByAgent == nil:
+		return "agent_name_taken_user_entry"
+	case *e.CreatedByAgent != rt.AgentID:
+		return "agent_name_taken_other_agent"
+	default:
+		return "agent_name_taken_own_entry"
+	}
 }
 
 // SetSessionSecret keeps a secret written by the agent in memory for this
 // chat session only. It never reaches the database. A name already used in
-// the session or in the vault is refused.
+// the session or in the vault is refused, and a session holds at most
+// MaxSessionSecrets secrets.
 func (rt *Runtime) SetSessionSecret(ctx context.Context, ns NewSecret, p store.SecretVaultPayload) error {
 	entry, err := rt.prepareWrite(ctx, ns, p)
 	if err != nil {
@@ -396,32 +505,37 @@ func (rt *Runtime) SetSessionSecret(ctx context.Context, ns NewSecret, p store.S
 		rt.auditWrite(ctx, uuid.Nil, entry.Name, store.SecretAuditDenied, "agent_no_session")
 		return ErrNoSession
 	}
-	tenant := store.TenantIDFromContext(ctx)
-	_, _, inSession := rt.Forms.Sessions.Get(tenant, rt.SessionKey, entry.Name)
 	_, lookupErr := findByName(ctx, rt.Store, entry.Name)
 	switch {
-	case inSession || lookupErr == nil:
-		rt.auditWrite(ctx, uuid.Nil, entry.Name, store.SecretAuditDenied, "agent_name_taken")
+	case lookupErr == nil:
+		rt.auditWrite(ctx, uuid.Nil, entry.Name, store.SecretAuditDenied, rt.nameTakenOutcome(ctx, entry.Name))
 		return ErrNameTaken
 	case !errors.Is(lookupErr, store.ErrSecretVaultNotFound):
 		return fmt.Errorf("secret vault: could not check the name %q", entry.Name)
 	}
 	entry.Status, entry.CreatedVia = store.SecretVaultStatusActive, store.SecretVaultCreatedViaAgent
-	rt.Forms.Sessions.Put(tenant, rt.SessionKey, *entry, p)
+	err = rt.Forms.Sessions.PutNew(store.TenantIDFromContext(ctx), rt.SessionKey, *entry, p, MaxSessionSecrets)
+	switch {
+	case errors.Is(err, errSessionNameTaken):
+		rt.auditWrite(ctx, uuid.Nil, entry.Name, store.SecretAuditDenied, "agent_name_taken_session")
+		return ErrNameTaken
+	case errors.Is(err, errSessionFull):
+		rt.auditWrite(ctx, uuid.Nil, entry.Name, store.SecretAuditDenied, "agent_session_limit")
+		return ErrSessionLimit
+	case err != nil:
+		return fmt.Errorf("secret vault: could not keep %q for this session", entry.Name)
+	}
 	rt.auditWrite(ctx, uuid.Nil, entry.Name, store.SecretAuditCreated, "agent_session")
 	return nil
 }
 
 // GrantToAgent lets another agent of the same tenant use a secret this agent
-// created. It always needs a live yes from the user; without a Web UI it is
-// refused (fail closed, no pending queue for grants).
+// created. It always needs a live yes from a tenant admin who can access the
+// target agent; without a Web UI, or when the run's user is no tenant admin,
+// it is refused (fail closed, no pending queue for grants).
 func (rt *Runtime) GrantToAgent(ctx context.Context, name, agentKey string) error {
-	if rt == nil || rt.Store == nil {
-		return ErrNoRuntime
-	}
-	if !rt.AllowWrite {
-		rt.AuditWriteRefusal(ctx, name, "agent_grant_write_disabled")
-		return ErrWriteDisabled
+	if err := rt.checkWrite(ctx, name, "agent_grant_write_disabled"); err != nil {
+		return err
 	}
 	entry, err := findByName(ctx, rt.Store, name)
 	switch {
@@ -455,7 +569,7 @@ func (rt *Runtime) GrantToAgent(ctx context.Context, name, agentKey string) erro
 		rt.audit(ctx, entry, store.SecretAuditDenied, "", "agent_grant_approval_unavailable")
 		return fmt.Errorf("%w: no Web UI to ask", ErrGrantDenied)
 	}
-	ok, err := rt.Forms.RequestApproval(ctx, FormSpec{
+	ok, err := rt.adminApproval(ctx, FormSpec{
 		Name: entry.Name, Domains: entry.AllowedDomains,
 		Action:  "let agent " + agentKey + " use the secret " + entry.Name,
 		AgentID: rt.AgentID, AgentKey: store.AgentKeyFromContext(ctx), SessionKey: rt.SessionKey,
@@ -464,11 +578,19 @@ func (rt *Runtime) GrantToAgent(ctx context.Context, name, agentKey string) erro
 	case errors.Is(err, ErrNoUI):
 		rt.audit(ctx, entry, store.SecretAuditDenied, "", "agent_grant_approval_unavailable")
 		return fmt.Errorf("%w: no Web UI to ask", ErrGrantDenied)
+	case errors.Is(err, errUserNotTenantAdmin):
+		rt.audit(ctx, entry, store.SecretAuditDenied, "", "agent_grant_user_not_tenant_admin")
+		return ErrGrantNotAdmin
+	case errors.Is(err, errApproverNotAdmin):
+		rt.audit(ctx, entry, store.SecretAuditDenied, "", "agent_grant_approver_not_admin")
+		return ErrGrantNotAdmin
 	case err != nil || !ok:
 		rt.audit(ctx, entry, store.SecretAuditDenied, "", "agent_grant_denied")
 		return ErrGrantDenied
 	}
-	if err := rt.Store.SetGrants(ctx, entry.ID, append(grants, target)); err != nil {
+	// Add one grant instead of writing back the set read before the wait, so
+	// a revoke an admin made meanwhile is not undone.
+	if err := rt.Store.AddGrant(ctx, entry.ID, target); err != nil {
 		slog.Warn("secretvault.agent_grant_failed", "name", entry.Name, "error", err)
 		return fmt.Errorf("secret vault: grant %q failed", name)
 	}

@@ -32,6 +32,7 @@ func (l *Loop) withSecretVault(ctx context.Context, req *RunRequest) context.Con
 	rt.SessionKey = req.SessionKey
 	rt.AllowWrite = l.secretVaultWrite
 	rt.Agents = l.secretVaultAgents
+	rt.TenantRoles = l.secretVaultTenantRoles
 	if err := rt.Preload(ctx); err != nil {
 		// Without a preloaded redactor the run must not resolve secrets.
 		slog.Warn("secretvault.preload_failed", "agent", l.id, "error", err)
@@ -98,17 +99,31 @@ func maskSensitiveToolArgs(ctx context.Context, toolName string, args map[string
 }
 
 // secretVaultAgentLookup resolves an agent key to its id within the context
-// tenant. A cross-tenant store lookup is rejected by comparing tenants.
+// tenant, only for an agent the context user (the one who answers the grant
+// approval) can access. A cross-tenant store lookup is rejected by comparing
+// tenants; an inaccessible agent looks like a missing one.
 func secretVaultAgentLookup(agents store.AgentStore) secretvault.AgentLookup {
 	if agents == nil {
 		return nil
 	}
 	return func(ctx context.Context, agentKey string) (uuid.UUID, error) {
-		tenant := store.TenantIDFromContext(ctx)
+		tenant, user := store.TenantIDFromContext(ctx), store.UserIDFromContext(ctx)
 		ag, err := agents.GetByKey(ctx, agentKey)
-		if err != nil || ag == nil || tenant == uuid.Nil || ag.TenantID != tenant {
+		if err != nil || ag == nil || tenant == uuid.Nil || ag.TenantID != tenant || user == "" {
+			return uuid.Nil, secretvault.ErrAgentNotFound
+		}
+		if ok, _, err := agents.CanAccess(ctx, ag.ID, user); err != nil || !ok {
 			return uuid.Nil, secretvault.ErrAgentNotFound
 		}
 		return ag.ID, nil
 	}
+}
+
+// secretVaultTenantRoles reads a user's tenant role for the vault runtime,
+// which counts a live approval of an agent write only from a tenant admin.
+func secretVaultTenantRoles(tenants store.TenantStore) secretvault.TenantRoleLookup {
+	if tenants == nil {
+		return nil
+	}
+	return tenants.GetUserRole
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/secretvault"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -111,6 +112,38 @@ func resultText(r *Result) string {
 	return s
 }
 
+// Lite has no surface to approve agent-written secrets: the tools are not
+// registered there, and a runtime call is refused anyway.
+func TestVaultWriteTools_NotRegisteredOrUsableInLite(t *testing.T) {
+	std := NewRegistry()
+	RegisterVaultWriteTools(std)
+	for _, name := range []string{"vault_secret_set", "vault_grant"} {
+		if _, ok := std.Get(name); !ok {
+			t.Fatalf("%s must be registered in the standard edition", name)
+		}
+	}
+
+	prev := edition.Current()
+	edition.SetCurrent(edition.Lite)
+	t.Cleanup(func() { edition.SetCurrent(prev) })
+	lite := NewRegistry()
+	RegisterVaultWriteTools(lite)
+	for _, name := range []string{"vault_secret_set", "vault_grant"} {
+		if _, ok := lite.Get(name); ok {
+			t.Fatalf("%s must not be registered in Lite", name)
+		}
+	}
+	st := newVaultWriteStore()
+	ctx, _ := writeCtx(st, true)
+	res := NewVaultSecretSetTool().Execute(ctx, setArgs("vault"))
+	if !res.IsError || !strings.Contains(res.ForLLM, "this edition") || strings.Contains(resultText(res), setSecretValue) {
+		t.Fatalf("Lite write: %+v", res)
+	}
+	if st.entry("app-token") != nil {
+		t.Fatal("nothing may be stored in Lite")
+	}
+}
+
 func TestVaultWriteTools_DisabledAgentIsRefused(t *testing.T) {
 	st := newVaultWriteStore()
 	ctx, _ := writeCtx(st, false)
@@ -154,7 +187,7 @@ func TestVaultSecretSet_VaultScopeCreatesPendingAndReturnsOnlyThePlaceholder(t *
 	}
 
 	again := NewVaultSecretSetTool().Execute(ctx, setArgs("vault"))
-	if !again.IsError || !strings.Contains(again.ForLLM, "already exists") {
+	if !again.IsError || !strings.Contains(again.ForLLM, "cannot be used") {
 		t.Fatalf("existing name must be rejected: %+v", again)
 	}
 }
@@ -199,7 +232,7 @@ func TestVaultSecretSet_RejectsBadInputWithoutEchoingTheValue(t *testing.T) {
 	}
 }
 
-func TestVaultGrant_NeedsALiveApproval(t *testing.T) {
+func TestVaultGrant_NeedsALiveApprovalFromATenantAdmin(t *testing.T) {
 	st := newVaultWriteStore()
 	ctx, rt := writeCtx(st, true)
 	other := uuid.New()
@@ -207,7 +240,13 @@ func TestVaultGrant_NeedsALiveApproval(t *testing.T) {
 	if res := NewVaultSecretSetTool().Execute(ctx, setArgs("vault")); res.IsError {
 		t.Fatal(res.ForLLM)
 	}
+	// Without a way to read the user's tenant role nothing counts.
 	res := NewVaultGrantTool().Execute(ctx, map[string]any{"secret": "app-token", "agent_key": "helper"})
+	if !res.IsError || !strings.Contains(res.ForLLM, "tenant admin") {
+		t.Fatalf("a user who is no tenant admin must be refused: %+v", res)
+	}
+	rt.TenantRoles = func(context.Context, uuid.UUID, string) (string, error) { return store.TenantRoleAdmin, nil }
+	res = NewVaultGrantTool().Execute(ctx, map[string]any{"secret": "app-token", "agent_key": "helper"})
 	if !res.IsError || !strings.Contains(res.ForLLM, "did not approve") {
 		t.Fatalf("no Web UI must refuse the grant: %+v", res)
 	}

@@ -240,9 +240,12 @@ type Loop struct {
 	// Secret vault (nil when no encryption key is configured).
 	secretVault store.SecretVaultStore
 	// secretVaultWrite is the agent's other_config.vault_agent_write opt-in;
-	// secretVaultAgents resolves agent keys for vault_grant.
-	secretVaultWrite  bool
-	secretVaultAgents secretvault.AgentLookup
+	// secretVaultAgents resolves agent keys for vault_grant;
+	// secretVaultTenantRoles lets live approvals of agent writes count only
+	// from tenant admins.
+	secretVaultWrite       bool
+	secretVaultAgents      secretvault.AgentLookup
+	secretVaultTenantRoles secretvault.TenantRoleLookup
 
 	// Vault hook: called when a text file is persisted from user upload.
 	// Enables vault registration without agent package importing vault.
@@ -456,6 +459,9 @@ type LoopConfig struct {
 	SecretVaultWrite bool
 	// SecretVaultAgents resolves agent keys in the tenant for vault_grant.
 	SecretVaultAgents secretvault.AgentLookup
+	// SecretVaultTenantRoles reads tenant roles; a live approval of an agent
+	// write counts only from a tenant admin (nil: none counts).
+	SecretVaultTenantRoles secretvault.TenantRoleLookup
 
 	// Vault hook: called asynchronously when a text file is persisted from user upload.
 	OnTextUploaded func(ctx context.Context, path, content string)
@@ -622,6 +628,7 @@ func NewLoop(cfg LoopConfig) *Loop {
 		secretVault:            cfg.SecretVault,
 		secretVaultWrite:       cfg.SecretVaultWrite,
 		secretVaultAgents:      cfg.SecretVaultAgents,
+		secretVaultTenantRoles: cfg.SecretVaultTenantRoles,
 		onTextUploaded:         cfg.OnTextUploaded,
 		mediaStore:             cfg.MediaStore,
 		modelPricing:           cfg.ModelPricing,

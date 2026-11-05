@@ -88,7 +88,7 @@ func (m *SecretVaultMethods) handleApproval(ctx context.Context, client *gateway
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrInvalidRequest, i18n.T(locale, i18n.MsgRequired, "id")))
 		return
 	}
-	if err := m.forms.Respond(client.TenantID(), client.UserID(), params.ID, params.Approve); err != nil {
+	if err := m.forms.Respond(client.TenantID(), client.UserID(), params.ID, params.Approve, client.Role()); err != nil {
 		client.SendResponse(m.errorResponse(req.ID, locale, err))
 		return
 	}

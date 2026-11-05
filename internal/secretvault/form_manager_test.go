@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -75,6 +77,15 @@ func (f *formStore) SetGrants(_ context.Context, id uuid.UUID, agents []uuid.UUI
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.grants[id] = agents
+	return nil
+}
+
+func (f *formStore) AddGrant(_ context.Context, id, agent uuid.UUID) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !slices.Contains(f.grants[id], agent) {
+		f.grants[id] = append(f.grants[id], agent)
+	}
 	return nil
 }
 
@@ -251,7 +262,7 @@ func TestSecretForm_WrongTenantUserSessionOrKindIsNotFoundAndKeepsRequestOpen(t 
 		"user":     h.fm.Submit(h.ctx, h.tenant, "mallory", id, "sess1", ScopeSave, pay),
 		"session":  h.fm.Submit(h.ctx, h.tenant, h.user, id, "other", ScopeSave, pay),
 		"unknown":  h.fm.Submit(h.ctx, h.tenant, h.user, uuid.NewString(), "sess1", ScopeSave, pay),
-		"approval": h.fm.Respond(h.tenant, h.user, id, true),
+		"approval": h.fm.Respond(h.tenant, h.user, id, true, permissions.RoleOperator),
 		"cancel":   h.fm.Cancel(h.tenant, "mallory", id),
 	}
 	for name, err := range cases {
@@ -391,7 +402,7 @@ func TestSecretApproval_GatesUseAndCachesPerHost(t *testing.T) {
 	if strings.Contains(fmt.Sprint(ev.payload), "ghp_SuperSecretToken") {
 		t.Fatal("approval event leaks the value")
 	}
-	if err := h.fm.Respond(h.tenant, h.user, ev.payload["id"].(string), true); err != nil {
+	if err := h.fm.Respond(h.tenant, h.user, ev.payload["id"].(string), true, permissions.RoleOperator); err != nil {
 		t.Fatal(err)
 	}
 	if o := <-ch; o.err != nil || o.sec == nil {
@@ -425,7 +436,7 @@ func TestSecretApproval_DeniedTimeoutAndNoUIFailClosed(t *testing.T) {
 	ch := make(chan error, 1)
 	go func() { _, err := rt.Use(ctx, "gh", "", "api.github.com"); ch <- err }()
 	ev := <-h.events
-	_ = h.fm.Respond(h.tenant, h.user, ev.payload["id"].(string), false)
+	_ = h.fm.Respond(h.tenant, h.user, ev.payload["id"].(string), false, permissions.RoleOperator)
 	if err := <-ch; !errors.Is(err, ErrApprovalDenied) {
 		t.Fatalf("denied: %v", err)
 	}

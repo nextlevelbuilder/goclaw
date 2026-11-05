@@ -24,8 +24,8 @@ func (t *VaultSecretSetTool) Description() string {
 		"through the placeholder {{secret:name}} instead of the raw value. Last resort: the value you pass here is already in " +
 		"this conversation. Prefer browser act capture_secret (reads a token from the page straight into the vault) or " +
 		"request_secret (the user types it into a secure form); never ask the user to paste a secret into the chat. " +
-		"scope=vault saves it pending until the user approves it and its domains; scope=session keeps it in memory for this " +
-		"chat only. Only works when writing secrets is enabled for this agent. The name must be new."
+		"scope=vault saves it pending until a tenant admin approves it and its domains; scope=session keeps it in memory for this " +
+		"chat only (at most 20 per chat). Only works when writing secrets is enabled for this agent. The name must be new."
 }
 
 func (t *VaultSecretSetTool) Parameters() map[string]any {
@@ -57,7 +57,7 @@ func (t *VaultSecretSetTool) Parameters() map[string]any {
 			"scope": map[string]any{
 				"type":        "string",
 				"enum":        []string{secretvault.ScopeSession, "vault"},
-				"description": "vault: save it (pending until the user approves); session: this chat only, never saved.",
+				"description": "vault: save it (pending until a tenant admin approves); session: this chat only, never saved.",
 			},
 		},
 		"required": []string{"name", "value", "domains", "scope"},
@@ -103,15 +103,29 @@ func (t *VaultSecretSetTool) Execute(ctx context.Context, args map[string]any) *
 // placeholder, never the value.
 func writeStatusText(name, status string) string {
 	if status == secretvault.WriteActive {
-		return fmt.Sprintf("Secret %q saved and approved by the user (status: active). Use the placeholder %s.", name, placeholder(name))
+		return fmt.Sprintf("Secret %q saved and approved by a tenant admin (status: active). Use the placeholder %s.", name, placeholder(name))
 	}
-	return fmt.Sprintf("Secret %q saved (status: pending). It cannot be used until the user approves it in the Secret Vault page; then use the placeholder %s.",
+	return fmt.Sprintf("Secret %q saved (status: pending). It cannot be used until a tenant admin approves it in the Secret Vault page; then use the placeholder %s.",
 		name, placeholder(name))
 }
 
 func writeErrorResult(err error) *Result {
-	if errors.Is(err, secretvault.ErrWriteDisabled) {
+	switch {
+	case errors.Is(err, secretvault.ErrWriteDisabled):
 		return ErrorResult("Writing secrets is not enabled for this agent. Ask the user to enable it in the Secret Vault page, or use request_secret.")
+	case errors.Is(err, secretvault.ErrWriteUnsupported):
+		return ErrorResult("Agents cannot save secrets in this edition. Use request_secret instead.")
 	}
 	return ErrorResult("Secret not stored: " + err.Error())
+}
+
+// RegisterVaultWriteTools registers vault_secret_set and vault_grant, except
+// in an edition without a surface to approve agent-written secrets (Lite),
+// where they would only produce entries nobody can activate.
+func RegisterVaultWriteTools(reg *Registry) {
+	if !secretvault.AgentWriteSupported() {
+		return
+	}
+	reg.Register(NewVaultSecretSetTool())
+	reg.Register(NewVaultGrantTool())
 }

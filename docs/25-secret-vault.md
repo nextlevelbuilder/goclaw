@@ -71,29 +71,45 @@ from tool arguments.
 
 | Tool | What it does |
 |---|---|
-| Browser `act` `capture_secret` | Reads a value from `localStorage`, `sessionStorage` or a cookie of the current page and writes it straight to the vault. The value is read inside the gateway's browser code and never goes through the model, the tool result, `evaluate`, logs or traces. The allowed domain is the page's own host, taken from the page, never from arguments. The result holds only a status and `{{secret:name}}`. Top frame only, 8 KB max, an existing name is rejected. **Use this when the secret is already in the browser.** |
-| `vault_secret_set` | Saves a value the agent passes as an argument, either for the session only or as a pending vault entry. See the limit below. |
-| `vault_grant` | Asks to grant a secret the agent created to another agent in the same tenant. Always needs a live approval from the user; with no UI it is refused (no queue). |
+| Browser `act` `capture_secret` | Reads a value from `localStorage`, `sessionStorage` or a cookie of the current page and writes it straight to the vault. The value is read inside the gateway's browser code and never goes through the model, the tool result, `evaluate`, logs or traces. The allowed domain is the page's own host, taken from the page, never from arguments. The storage read also reports the protocol and host of the document it read from; if the tab navigated to another origin after the address check, the value is dropped and the capture refused. The result holds only a status and `{{secret:name}}`. Top frame only, 8 KB max, an existing name is rejected. **Use this when the secret is already in the browser.** |
+| `vault_secret_set` | Saves a value the agent passes as an argument, either for the session only (at most 20 per chat session) or as a pending vault entry. See the limit below. |
+| `vault_grant` | Asks to grant a secret the agent created to another agent in the same tenant. Always needs a live approval from a tenant admin (see below) who can access the receiving agent; otherwise, or with no UI, it is refused (no queue). The grant is added on its own, so a grant an admin revoked during the wait stays revoked. |
 
 **`vault_secret_set` cannot meet the "never in a transcript" bar.** The value
 is a tool argument, so the model has already produced it and it is already in
 the model context and the session history before the tool runs. Redacting the
-result does not undo that. Stored tool-call arguments are masked after the
-call as a mitigation, but the provider has seen the value. Prefer
-`capture_secret` (value in the browser) or `request_secret` (value from the
-user through the Secure Form).
+result does not undo that. As a mitigation the agent loop registers the
+value with the run redactor as soon as the model response arrives, for every
+`vault_secret_set` call in it at once, before the LLM span, any tool call of
+the batch (including parallel siblings that carry the same value) or the
+stored assistant turn records it. A call dropped as truncated or malformed is
+covered for whatever part of its arguments the provider could parse; the
+providers keep no raw argument text beyond a parse error. The provider has
+still seen the value. Prefer `capture_secret` (value in the browser) or
+`request_secret` (value from the user through the Secure Form).
 
 ### Pending approval
 
 Every entry an agent saves is created with `status = pending`,
 `created_via = agent` and `created_by_agent = <agent UUID>`. A pending entry
 is invisible to every resolution path (placeholders, `fill_secret`, granted
-lists): it behaves as if it did not exist until approved. Agents cannot
-overwrite or delete entries; edits and deletes stay with tenant admins. Each
-agent may hold at most 20 pending entries; further saves are refused.
+lists) and cannot be used until approved. Its name is taken, though: a write
+under that name is refused. Every name an agent cannot use (another agent's,
+a user's, a pending one, one already in the chat session) gets the same
+"this secret name cannot be used" answer, so the reason cannot be probed; the
+audit row records it. Agents cannot overwrite or delete entries; edits and
+deletes stay with tenant admins. Each agent may hold at most 20 pending
+entries; further saves are refused.
 
-When the Web UI is open during the run, the user is asked live and approving
-activates the entry. Otherwise it waits on the Secret Vault page, where it shows
+When the Web UI is open during the run and the run's user is a tenant admin,
+that user is asked live and a yes activates the entry. A live yes counts with
+the rule of the REST approve route: the user is an owner or admin of the
+tenant and answers from a client with at least the admin role (a system owner
+always counts). The tenant role is read from the tenant store when the
+question is raised; without it nothing counts (fail closed). A user who is no
+tenant admin is not asked, and a yes from a client below admin is ignored and
+audited. If an admin approved the entry on the Secret Vault page meanwhile,
+the run reports it active. Otherwise the entry waits on the Secret Vault page, where it shows
 a **Pending approval** badge and can be filtered. **Approve** shows the
 domains the agent proposed and the creating agent; the user confirms or edits
 the domains, and only the confirmed list is stored.
@@ -210,6 +226,10 @@ browser window and presses Done, or declines.
 - The Phase 05 browser path is covered by unit tests, not yet by a run against
   real Chrome.
 - Lite (desktop) edition: the store exists for SQLite, the CLI is PostgreSQL only.
+  Agents cannot save secrets there: `vault_secret_set` and `vault_grant` are not
+  registered and `capture_secret` refuses, because Lite has no surface to
+  approve a pending entry.
+- Surface parity: desktop N/A because the Lite edition has no vault approval surface.
 
 ## File reference
 

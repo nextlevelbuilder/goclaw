@@ -17,6 +17,7 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/secretvault"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -357,6 +358,23 @@ func TestCaptureSecret_RealPageThatNavigatedAwayIsRefused(t *testing.T) {
 	})
 	if err != nil || status != secretvault.WritePending || st.values["app-jwt"].Secret != captureValue {
 		t.Fatalf("same-origin capture: status=%q err=%v", status, err)
+	}
+}
+
+// Lite has no surface to approve agent-written secrets, so capture refuses
+// there before touching the page.
+func TestCaptureSecret_RefusedInTheLiteEdition(t *testing.T) {
+	prev := edition.Current()
+	edition.SetCurrent(edition.Lite)
+	t.Cleanup(func() { edition.SetCurrent(prev) })
+
+	st := newCaptureStore()
+	ctx, _ := captureRuntime(st, true)
+	if _, err := New().CaptureSecret(ctx, "", captureOpts()); !errors.Is(err, secretvault.ErrWriteUnsupported) {
+		t.Fatalf("want ErrWriteUnsupported, got %v", err)
+	}
+	if len(st.entries) != 0 || !strings.Contains(st.outcomes(), "agent_write_unsupported_edition") {
+		t.Fatalf("entries=%d audit=%s", len(st.entries), st.outcomes())
 	}
 }
 
