@@ -90,6 +90,12 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Fixed
 
+- **Anthropic model picker lists every model, not only the first 20** — the
+  models request used the API's default page size and never followed
+  `has_more` / `after_id`. It now asks for 1000 per page and follows the cursor
+  (bounded to 20 pages); a failure on a later page keeps the models already
+  fetched.
+
 - **Queued agent runs no longer inherit the context of the session's first request (#1662)** — a run
   that waited behind an active one started from the context of the first `Enqueue` of that
   session. It got that request's team dispatch tracker, so the team create lock taken by
