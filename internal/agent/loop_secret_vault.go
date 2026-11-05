@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/secretvault"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -63,6 +64,19 @@ func redactToolResult(ctx context.Context, r *tools.Result) *tools.Result {
 // an event, traced or stored, because those sinks see the arguments before the
 // tool itself runs.
 var sensitiveArgTools = map[string]bool{"vault_secret_set": true}
+
+// maskSensitiveToolCalls registers the secret values of every sensitive call
+// in a model response at once, as soon as the response arrives. Parallel
+// sibling calls and later sinks (the LLM span output, the stored assistant
+// turn, a call dropped as truncated or malformed) then all see the mask, not
+// only the call that carries the value. Calls whose arguments failed to
+// parse keep only what the provider could parse; that part is registered too.
+func (l *Loop) maskSensitiveToolCalls(ctx context.Context, calls []providers.ToolCall) {
+	for _, tc := range calls {
+		tc = l.normalizeToolCall(tc)
+		maskSensitiveToolArgs(ctx, l.canonicalToolName(l.resolveToolCallName(tc.Name)), tc.Arguments)
+	}
+}
 
 // maskSensitiveToolArgs registers the secret value carried in the arguments of
 // a sensitive tool with the run's redactor. Call it before the tool.call event

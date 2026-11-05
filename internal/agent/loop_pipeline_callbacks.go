@@ -644,6 +644,13 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 				}())
 		}
 
+		// Register secret values carried in tool-call arguments for the whole
+		// batch before the LLM span, the think stage or any tool call records
+		// this response.
+		if err == nil && resp != nil {
+			l.maskSensitiveToolCalls(ctx, resp.ToolCalls)
+		}
+
 		if stream && err == nil && resp != nil && resp.Thinking != "" && !streamThinkingEmitted {
 			emitRun(AgentEvent{
 				Type:    protocol.ChatEventThinking,

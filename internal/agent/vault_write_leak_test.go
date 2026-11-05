@@ -399,3 +399,63 @@ func TestVaultWriteLeak_VaultSecretSetArgumentIsMaskedBeforeEmit(t *testing.T) {
 		t.Fatalf("tool spans = %d", toolSpans)
 	}
 }
+
+// toolCallsProvider answers every request with the given tool calls.
+type toolCallsProvider struct {
+	calls  []providers.ToolCall
+	finish string
+}
+
+func (p toolCallsProvider) Chat(context.Context, providers.ChatRequest) (*providers.ChatResponse, error) {
+	return &providers.ChatResponse{ToolCalls: p.calls, FinishReason: p.finish}, nil
+}
+
+func (p toolCallsProvider) ChatStream(ctx context.Context, req providers.ChatRequest, _ func(providers.StreamChunk)) (*providers.ChatResponse, error) {
+	return p.Chat(ctx, req)
+}
+func (toolCallsProvider) DefaultModel() string { return "stub-model" }
+func (toolCallsProvider) Name() string         { return "stubprov" }
+
+// The model can emit the value in two calls of one batch: vault_secret_set and
+// a sibling that runs first (in parallel or earlier in order). The value is
+// registered as soon as the response arrives, so the sibling's event and
+// span, and the LLM span of the response, already carry the mask.
+func TestVaultWriteLeak_ValueInASiblingCallIsMaskedBeforeItRuns(t *testing.T) {
+	value := fakeJWT(t, 300)
+	h := newLeakHarness(t, tools.NewVaultSecretSetTool())
+	sibling := providers.ToolCall{ID: "tc-echo", Name: "web_fetch", Arguments: map[string]any{"url": "https://api.example.com/?t=" + value}}
+	set := providers.ToolCall{ID: "tc-set", Name: "vault_secret_set", Arguments: map[string]any{
+		"name": "api-jwt", "value": value, "domains": []any{"api.example.com"}, "scope": "vault",
+	}}
+	state := &pipeline.RunState{RunID: h.req.RunID, Provider: toolCallsProvider{calls: []providers.ToolCall{sibling, set}, finish: "tool_calls"}, Model: "stub-model"}
+	if _, err := h.loop.makeCallLLM(h.req, func(AgentEvent) {})(h.ctx, state, providers.ChatRequest{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The sibling runs before vault_secret_set, through the parallel path.
+	msg, _, err := h.loop.makeExecuteToolRaw(h.req)(h.ctx, sibling)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sinks := h.sinks(t, []providers.Message{msg})
+	assertNoLeak(t, value, sinks)
+	if !strings.Contains(sinks["events"], secretvault.Mask) || !strings.Contains(sinks["trace spans"]+sinks["trace updates"], secretvault.Mask) {
+		t.Fatal("the sibling event and the spans must carry the mask")
+	}
+}
+
+// A vault_secret_set call dropped as truncated never runs; whatever part of
+// its value the provider parsed is still registered.
+func TestVaultWriteLeak_TruncatedCallValueIsRegistered(t *testing.T) {
+	value := fakeJWT(t, 300)
+	h := newLeakHarness(t)
+	set := providers.ToolCall{ID: "tc-set", Name: "vault_secret_set", Arguments: map[string]any{"name": "api-jwt", "value": value}}
+	state := &pipeline.RunState{RunID: h.req.RunID, Provider: toolCallsProvider{calls: []providers.ToolCall{set}, finish: "length"}, Model: "stub-model"}
+	if _, err := h.loop.makeCallLLM(h.req, func(AgentEvent) {})(h.ctx, state, providers.ChatRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := secretvault.RuntimeFrom(h.ctx).Redactor.Redact("x " + value); strings.Contains(got, value) {
+		t.Fatal("the value of a call that will not run must still be registered")
+	}
+	assertNoLeak(t, value, h.sinks(t, nil))
+}
