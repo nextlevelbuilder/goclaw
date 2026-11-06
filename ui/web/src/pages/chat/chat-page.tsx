@@ -259,7 +259,7 @@ export function ChatPage() {
           </div>
         )}
 
-        <DropZone onDrop={handleDropFiles}>
+        <DropZone onDrop={handleDropFiles} disabled={isBusy || !connected || !isOwn || !agentConfirmed}>
           <ChatThread
             messages={messages}
             streamText={streamText}
