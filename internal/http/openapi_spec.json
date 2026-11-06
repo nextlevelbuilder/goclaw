@@ -7202,6 +7202,270 @@
         }
       }
     },
+    "/v1/providers/{id}/health": {
+      "get": {
+        "tags": [
+          "Providers"
+        ],
+        "summary": "Durable health and cooldown state of one provider",
+        "description": "Viewer role may read. POST on the same path (Admin) resets the state or runs an active probe.",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "provider_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "provider": {
+                      "type": "string"
+                    },
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "consecutive_failures": {
+                      "type": "integer"
+                    },
+                    "cooling_down": {
+                      "type": "boolean"
+                    },
+                    "cooldown_until": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "last_error_class": {
+                      "type": "string"
+                    },
+                    "error_counts": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "integer"
+                      }
+                    },
+                    "last_probe_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "max_cooldown_seconds": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Provider not found in the caller's tenant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/providers/{id}/usage-detail": {
+      "get": {
+        "tags": [
+          "Providers"
+        ],
+        "summary": "Latency percentiles and recent failed calls for one provider",
+        "description": "Reads finished LLM call spans of the provider in the caller's tenant. Latency is nearest-rank over duration_ms. recent_errors groups failed calls by failover class (rate_limit, timeout, overloaded, auth, billing, model_not_found, context_overflow, ...) and hour, newest first; raw error text is never returned. Viewer role may read.",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Range start (RFC 3339, inclusive)."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Range end (RFC 3339, exclusive). Must be after from and at most 90 days later."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            },
+            "description": "Max recent_errors items. Values above 100 are clamped to 100."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "provider",
+                    "calls",
+                    "errors",
+                    "latency_ms",
+                    "recent_errors"
+                  ],
+                  "properties": {
+                    "provider": {
+                      "type": "string"
+                    },
+                    "calls": {
+                      "type": "integer",
+                      "description": "Finished LLM calls in range."
+                    },
+                    "errors": {
+                      "type": "integer",
+                      "description": "Failed LLM calls in range."
+                    },
+                    "latency_ms": {
+                      "type": "object",
+                      "properties": {
+                        "p50": {
+                          "type": "number"
+                        },
+                        "p95": {
+                          "type": "number"
+                        }
+                      }
+                    },
+                    "recent_errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "Newest failed call in the group (UTC)."
+                          },
+                          "error_class": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing or invalid from, to or id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Provider not found in the caller's tenant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Tracing store unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/providers/claude-cli/auth-status": {
       "get": {
         "tags": [

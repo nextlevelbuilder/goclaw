@@ -889,7 +889,7 @@ GoClaw v3 Wave 2 adds composable request middleware, error classification, per-m
 | Wire dispatch registry | `internal/providers/wire/` | `Descriptor`/`Register`/`Lookup`/`Build`, the eight `wire_api` values, and the brand table (`brand.go`) that supplies vendor defaults |
 | Model catalogue | `internal/providers/catalog/`, `internal/providers/discovery/` | `llm_models` seeding, fingerprint/TTL cache, refresh and merge; bundled snapshot vs upstream discovery |
 | Compatibility and dialects | `internal/providers/compat/`, `internal/providers/dialect/` | Declared quirks and endpoint families; in-band tool-call converters |
-| Capability DTO and health routes | `internal/http/provider_capabilities.go`, `internal/http/providers.go` | `GET /v1/providers/capabilities`, `GET /v1/providers/quirks`, `/v1/providers/{id}/health` |
+| Capability DTO and health routes | `internal/http/provider_capabilities.go`, `internal/http/providers.go` | `GET /v1/providers/capabilities`, `GET /v1/providers/quirks`, `/v1/providers/{id}/health`, `GET /v1/providers/{id}/usage-detail` (`internal/http/provider_usage.go`) |
 | Provider CLI | `cmd/providers_cmd.go` | `goclaw providers …` subcommands; an HTTP client of the running gateway |
 | Gateway wiring | `cmd/gateway_providers.go` | Config and DB provider registration through `wire.Build` at startup |
 

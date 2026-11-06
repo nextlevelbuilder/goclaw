@@ -448,6 +448,34 @@ LLM provider management. API keys are encrypted with AES-256-GCM in the database
 | `GET` | `/v1/embedding/status` | Check global embedding availability |
 | `GET` | `/v1/providers/claude-cli/auth-status` | Check Claude CLI login status |
 
+### Provider Health & Usage Detail
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/providers/{id}/health` | Durable cooldown and error-class state (Viewer) |
+| `POST` | `/v1/providers/{id}/health` | `{"reset":true}` clears the state, `{"probe":true}` actively probes (Admin) |
+| `GET` | `/v1/providers/{id}/usage-detail` | Call count, error count, p50/p95 latency and recent failed calls for a range (Viewer) |
+
+`usage-detail` query params: `from`, `to` (RFC 3339, required, `to` after `from`, at most 90 days apart), `limit` (recent error groups, default 20, values above 100 are clamped to 100). A provider id outside the caller's tenant returns `404`.
+
+```json
+{
+  "provider": "dashscope",
+  "calls": 1284,
+  "errors": 80,
+  "latency_ms": { "p50": 1400, "p95": 4800 },
+  "recent_errors": [
+    { "at": "2026-11-06T04:38:10Z", "error_class": "rate_limit", "count": 2 }
+  ]
+}
+```
+
+- Source: finished `llm_call` spans of the provider (running spans are left out). Latency is nearest-rank over `duration_ms` in milliseconds, identical on PostgreSQL and SQLite.
+- `recent_errors` groups failed calls by failover class and UTC hour, newest first; `at` is the newest call in the group. Raw error text is never returned.
+- `error_class` values match the runtime failover reasons and `last_error_class` of the health route: `rate_limit`, `overloaded`, `timeout`, `auth`, `auth_permanent`, `billing`, `format`, `model_not_found`, `content_policy`, `server_error`, `context_overflow`, `unknown`. UIs translate each class with the key `usage.errorClass.<class>` and fall back to `unknown`.
+- Health timestamps are UTC; `cooldown_until`, `last_probe_at` and `updated_at` are `null` when unset. Tokens, cost and the daily series for the same provider come from `/v1/usage/summary` and `/v1/usage/timeseries` with `provider=<name>` (§23).
+- UI contract fixtures are generated from the handlers: `go test ./internal/http -run ProviderUsageFixtures -update-provider-usage-fixtures`.
+
 ### Model Pricing
 
 | Method | Path | Description |
