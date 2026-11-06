@@ -256,7 +256,11 @@
     "poolActivityEmpty": "No activity yet",
     "poolActivityEmptyDesc": "Pool activity will appear here once agents start routing requests through this pool.",
     "wireApi": "Wire protocol",
-    "authKind": "Authentication"
+    "authKind": "Authentication",
+    "tabs": {
+      "connection": "Connection",
+      "usage": "Usage"
+    }
   },
   "embedding": {
     "enable": "Enable Embedding",
@@ -406,5 +410,65 @@
     "error": "Could not load models: {{message}}",
     "refresh": "Refresh",
     "refreshing": "Refreshing"
+  },
+  "usage": {
+    "tokensPerDay": "Tokens per day",
+    "range": {
+      "label": "Time range",
+      "last24h": "24h",
+      "last7d": "7 days",
+      "last30d": "30 days"
+    },
+    "banner": {
+      "since": "{{reason}} since {{time}}",
+      "resetIn": "Calls to this provider are paused. It should reset in about {{minutes}} min.",
+      "resetSoon": "Calls to this provider are paused. It should reset any moment now.",
+      "failures": "Consecutive failures: {{count}}"
+    },
+    "metrics": {
+      "tokens": "Tokens",
+      "costEstimated": "{{cost}} estimated",
+      "requests": "Requests",
+      "perDay": "{{value}} per day",
+      "errorRate": "Error rate",
+      "errorRateDetail": "{{errors}} of {{calls}} calls failed",
+      "latency": "Median latency",
+      "p95": "p95 {{value}}"
+    },
+    "recentErrors": {
+      "title": "Recent errors",
+      "empty": "No failed calls in this range.",
+      "count": "Failed calls: {{count}}"
+    },
+    "empty": {
+      "title": "No calls in this range",
+      "description": "This provider has not handled any calls in the selected range. Try a longer range.",
+      "action": "Show last 30 days"
+    },
+    "error": {
+      "title": "Couldn't load usage",
+      "description": "The gateway returned an error while reading usage for this provider. Try again in a moment.",
+      "retry": "Try again"
+    },
+    "stale": {
+      "title": "Can't reach the gateway",
+      "description": "Showing saved data from {{time}}. It may be out of date.",
+      "retry": "Retry now"
+    },
+    "loading": "Loading usage",
+    "errorClass": {
+      "rate_limit": "Rate limit",
+      "overloaded": "Overloaded",
+      "timeout": "Timeout",
+      "auth": "Authentication failed",
+      "auth_permanent": "Invalid credentials",
+      "billing": "Billing issue",
+      "format": "Invalid request format",
+      "model_not_found": "Model not found",
+      "content_policy": "Content policy",
+      "server_error": "Server error",
+      "context_overflow": "Context too long",
+      "unknown": "Unknown error"
+    }
   }
 }
