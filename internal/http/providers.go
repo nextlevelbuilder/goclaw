@@ -209,6 +209,8 @@ func (h *ProvidersHandler) RegisterRoutes(mux *http.ServeMux) {
 	// path: the handler dispatches per method and applies each method's own auth
 	// level (GET → Viewer, POST → Admin).
 	mux.HandleFunc("/v1/providers/{id}/health", h.handleProviderHealthRoute)
+	// Provider usage detail: latency percentiles + recent failed calls (Viewer).
+	mux.HandleFunc("GET /v1/providers/{id}/usage-detail", h.readAuth(h.handleProviderUsageDetail))
 
 	// Embedding system status (read-only)
 	mux.HandleFunc("GET /v1/embedding/status", h.readAuth(h.handleEmbeddingStatus))

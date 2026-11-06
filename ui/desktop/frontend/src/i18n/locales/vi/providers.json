@@ -199,5 +199,99 @@
     "failedCreate": "Không thể tạo provider",
     "failedUpdate": "Không thể cập nhật provider",
     "failedDelete": "Không thể xóa provider"
+  },
+  "providerDetail": {
+    "back": "Provider",
+    "edit": "Sửa",
+    "openDetail": "Mở chi tiết {{name}}",
+    "tabs": {
+      "connection": "Kết nối",
+      "usage": "Sử dụng"
+    },
+    "status": {
+      "running": "Đang chạy",
+      "rateLimited": "Bị giới hạn",
+      "coolingDown": "Đang tạm nghỉ",
+      "disabled": "Đã tắt"
+    },
+    "fields": {
+      "name": "Tên",
+      "type": "Loại",
+      "apiBase": "API base",
+      "apiKey": "API key",
+      "status": "Trạng thái",
+      "defaultModel": "Model mặc định",
+      "models": "Model",
+      "transportAuth": "Giao thức & xác thực"
+    },
+    "apiKeySet": "Đã đặt",
+    "apiKeyNotSet": "Chưa đặt",
+    "notSet": "Chưa đặt"
+  },
+  "usage": {
+    "range": {
+      "label": "Khoảng thời gian",
+      "24h": "24 giờ",
+      "7d": "7 ngày",
+      "30d": "30 ngày"
+    },
+    "banner": {
+      "rateLimitedSince": "Bị giới hạn từ {{time}}",
+      "rateLimited": "Bị giới hạn",
+      "coolingDownSince": "Tạm nghỉ từ {{time}}",
+      "coolingDown": "Đang tạm nghỉ",
+      "reason": "Lỗi gần nhất: {{reason}}",
+      "resetIn": "Dự kiến mở lại sau khoảng {{minutes}} phút.",
+      "failures": "Số lần lỗi liên tiếp: {{count}}"
+    },
+    "metrics": {
+      "tokens": "Token",
+      "estimatedCost": "ước tính {{cost}}",
+      "requests": "Yêu cầu",
+      "perDay": "{{value}} mỗi ngày",
+      "errorRate": "Tỷ lệ lỗi",
+      "errorRateDetail_other": "{{errors}} / {{calls}} lượt gọi",
+      "medianLatency": "Độ trễ trung vị",
+      "p95": "p95 {{value}}",
+      "notAvailable": "—"
+    },
+    "units": {
+      "seconds": "{{value}} giây",
+      "milliseconds": "{{value}} ms"
+    },
+    "chart": {
+      "title": "Token theo ngày",
+      "empty": "Không có token trong khoảng này",
+      "barLabel_other": "{{date}}: {{tokens}} token"
+    },
+    "recentErrors": {
+      "title": "Lỗi gần đây",
+      "empty": "Không có lỗi trong khoảng này",
+      "count_other": "{{count}} lượt gọi"
+    },
+    "errorClass": {
+      "rate_limit": "Vượt giới hạn",
+      "overloaded": "Quá tải",
+      "timeout": "Hết thời gian chờ",
+      "auth": "Xác thực thất bại",
+      "auth_permanent": "Thông tin xác thực bị từ chối",
+      "billing": "Lỗi thanh toán",
+      "format": "Yêu cầu không hợp lệ",
+      "model_not_found": "Không tìm thấy model",
+      "content_policy": "Chính sách nội dung",
+      "server_error": "Lỗi máy chủ",
+      "context_overflow": "Ngữ cảnh quá dài",
+      "unknown": "Lỗi không xác định"
+    },
+    "states": {
+      "loading": "Đang tải dữ liệu sử dụng…",
+      "errorTitle": "Không tải được dữ liệu sử dụng",
+      "errorBody": "Gateway báo lỗi khi đọc dữ liệu sử dụng. Hãy thử lại sau giây lát.",
+      "tracingUnavailable": "Không có thống kê lượt gọi vì tracing đang tắt trên gateway.",
+      "retry": "Thử lại",
+      "emptyTitle": "Không có lượt gọi nào trong khoảng này",
+      "emptyBody": "Hãy chọn khoảng dài hơn, hoặc chat với agent dùng provider này.",
+      "staleNote": "Không làm mới được. Đang hiển thị dữ liệu lúc {{time}}."
+    }
   }
 }

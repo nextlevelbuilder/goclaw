@@ -1,0 +1,16 @@
+{
+  "consecutive_failures": 3,
+  "cooldown_until": "2026-11-06T04:42:00Z",
+  "cooling_down": true,
+  "enabled": true,
+  "error_counts": {
+    "rate_limit": 14,
+    "timeout": 2
+  },
+  "last_error_class": "rate_limit",
+  "last_probe_at": null,
+  "max_cooldown_seconds": 3600,
+  "provider": "dashscope",
+  "provider_id": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+  "updated_at": "2026-11-06T04:40:30Z"
+}

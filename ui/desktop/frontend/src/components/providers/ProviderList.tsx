@@ -4,6 +4,7 @@ import { useProviders } from '../../hooks/use-providers'
 import { useProviderCapabilities } from '../../hooks/use-provider-capabilities'
 import { ProviderRow } from './ProviderRow'
 import { ProviderFormDialog } from './ProviderFormDialog'
+import { ProviderDetail } from './ProviderDetail'
 import { ConfirmDialog } from '../common/ConfirmDialog'
 import type { ProviderCapability, ProviderData, ProviderInput } from '../../types/provider'
 
@@ -14,6 +15,8 @@ export function ProviderList() {
   const [formOpen, setFormOpen] = useState(false)
   const [editingProvider, setEditingProvider] = useState<ProviderData | null>(null)
   const [deletingProvider, setDeletingProvider] = useState<ProviderData | null>(null)
+  // Id only, so the detail view always renders the latest row after an edit.
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   // `/v1/providers` carries the CRUD fields; capabilities add wire_api / auth_kind /
   // model_source / catalogue. Merge by provider_id (uuid) or provider name.
@@ -58,6 +61,7 @@ export function ProviderList() {
   const handleConfirmDelete = async () => {
     if (deletingProvider) {
       await deleteProvider(deletingProvider.id)
+      if (selectedId === deletingProvider.id) setSelectedId(null)
       setDeletingProvider(null)
     }
   }
@@ -66,29 +70,41 @@ export function ProviderList() {
     return <p className="text-xs text-text-muted py-4">{t('common:loading')}</p>
   }
 
+  const selected = selectedId ? rows.find((p) => p.id === selectedId) ?? null : null
+
   return (
     <>
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-text-primary">{t('providers:title')}</h3>
-          <button
-            onClick={handleCreate}
-            className="px-3 py-1.5 text-xs bg-accent text-accent-foreground rounded-lg font-medium hover:bg-accent-hover transition-colors"
-          >
-            + {t('providers:addProvider')}
-          </button>
-        </div>
-
-        {rows.length === 0 ? (
-          <p className="text-xs text-text-muted py-4 text-center">{t('providers:emptyTitle')}</p>
-        ) : (
-          <div className="space-y-1.5">
-            {rows.map((p) => (
-              <ProviderRow key={p.id} provider={p} onEdit={handleEdit} onDelete={setDeletingProvider} />
-            ))}
+      {selected ? (
+        <ProviderDetail key={selected.id} provider={selected} onBack={() => setSelectedId(null)} onEdit={handleEdit} />
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-text-primary">{t('providers:title')}</h3>
+            <button
+              onClick={handleCreate}
+              className="px-3 py-1.5 text-xs bg-accent text-accent-foreground rounded-lg font-medium hover:bg-accent-hover transition-colors"
+            >
+              + {t('providers:addProvider')}
+            </button>
           </div>
-        )}
-      </div>
+
+          {rows.length === 0 ? (
+            <p className="text-xs text-text-muted py-4 text-center">{t('providers:emptyTitle')}</p>
+          ) : (
+            <div className="space-y-1.5">
+              {rows.map((p) => (
+                <ProviderRow
+                  key={p.id}
+                  provider={p}
+                  onOpen={(provider) => setSelectedId(provider.id)}
+                  onEdit={handleEdit}
+                  onDelete={setDeletingProvider}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <ProviderFormDialog
         open={formOpen}

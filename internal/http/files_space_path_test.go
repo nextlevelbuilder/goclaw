@@ -1,6 +1,7 @@
 package http
 
 import (
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -118,7 +119,7 @@ func TestSignedURLBackslashEncodedPathServes(t *testing.T) {
 	h.RegisterRoutes(mux)
 
 	signed := SignFileURLs("[b](http://127.0.0.1:18800/v1/files/"+full+")", FileSigningKey())
-	rel := signed[strings.Index(signed, "/v1/files/") : strings.LastIndex(signed, ")")]
+	rel := signed[strings.Index(signed, "/v1/files/"):strings.LastIndex(signed, ")")]
 	q := strings.Index(rel, "?")
 	decoded, err := url.PathUnescape(strings.TrimPrefix(rel[:q], "/v1/files/"))
 	if err != nil {
@@ -158,5 +159,63 @@ func TestSignMediaPathWithSpacesServes(t *testing.T) {
 	mux.ServeHTTP(rec, httptest.NewRequest("GET", u, nil))
 	if rec.Code != http.StatusOK || rec.Body.String() != "ok" {
 		t.Fatalf("got %d %q (url=%s)", rec.Code, rec.Body.String(), u)
+	}
+}
+
+// Re-signing a media path must be idempotent: a path that already carries
+// percent-encoding (including stacked layers from earlier bugs) must resolve to
+// the same URL and token-signed path as the raw path.
+func TestSignMediaPathIdempotentEncoding(t *testing.T) {
+	secret := "test-secret"
+	raw := `C:\Users\Bruce Le\system\screenshots\shot.png`
+	want := SignMediaPath(raw, secret)
+	if want == "" || strings.Contains(want, "%25") {
+		t.Fatalf("unexpected base URL %q", want)
+	}
+	wantPath, _, _ := strings.Cut(want, "?ft=")
+
+	inputs := []string{
+		wantPath,
+		`C:\Users\Bruce%20Le\system\screenshots\shot.png`,
+		`C:\Users\Bruce%2520Le\system\screenshots\shot.png`,
+		`C:\Users\Bruce%2525252525252520Le\system\screenshots\shot.png`,
+	}
+	for _, in := range inputs {
+		got := SignMediaPath(in, secret)
+		gotPath, ft, _ := strings.Cut(got, "?ft=")
+		if gotPath != wantPath {
+			t.Fatalf("input %q: got %q want %q", in, gotPath, wantPath)
+		}
+		if !VerifyFileToken(ft, "/v1/files/C:/Users/Bruce Le/system/screenshots/shot.png", secret) {
+			t.Fatalf("input %q: token does not verify against decoded path", in)
+		}
+		// Feeding the output back in must not change it.
+		if again, _, _ := strings.Cut(SignMediaPath(gotPath, secret), "?ft="); again != wantPath {
+			t.Fatalf("not idempotent for %q: %q", in, again)
+		}
+	}
+}
+
+// Signing a history message must not write through to the MediaRefs backing
+// array shared with the session cache (store histories are shallow copies).
+func TestSignMessageFileURLsDoesNotMutateSharedRefs(t *testing.T) {
+	secret := "test-secret"
+	rawPath := `C:\Users\Bruce Le\ws\shot.png`
+	cached := []providers.Message{{
+		Role:      "assistant",
+		MediaRefs: []providers.MediaRef{{ID: "a", Kind: "image", Path: rawPath}},
+	}}
+	history := make([]providers.Message, len(cached))
+	copy(history, cached) // what GetHistory returns
+
+	for range 3 {
+		SignMessageFileURLs(&history[0], secret)
+	}
+
+	if got := cached[0].MediaRefs[0].Path; got != rawPath {
+		t.Fatalf("cached ref was mutated: %q", got)
+	}
+	if got := history[0].MediaRefs[0].Path; !strings.HasPrefix(got, "/v1/files/") || !strings.Contains(got, "?ft=") {
+		t.Fatalf("delivered ref not signed: %q", got)
 	}
 }

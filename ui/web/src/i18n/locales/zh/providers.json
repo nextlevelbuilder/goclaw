@@ -128,7 +128,11 @@
     "poolActivityEmpty": "暂无活动",
     "poolActivityEmptyDesc": "当 agent 开始通过此池路由请求时，池活动将在此显示。",
     "wireApi": "传输协议",
-    "authKind": "认证方式"
+    "authKind": "认证方式",
+    "tabs": {
+      "connection": "连接",
+      "usage": "用量"
+    }
   },
   "form": {
     "createTitle": "添加Provider",
@@ -423,5 +427,71 @@
     "error": "无法加载模型：{{message}}",
     "refresh": "刷新",
     "refreshing": "刷新中"
+  },
+  "usage": {
+    "tokensPerDay": "每日 Token",
+    "range": {
+      "label": "时间范围",
+      "last24h": "24 小时",
+      "last7d": "7 天",
+      "last30d": "30 天"
+    },
+    "banner": {
+      "since": "{{reason}}，开始于 {{time}}",
+      "resetIn": "对该提供商的调用已暂停，预计约 {{minutes}} 分钟后恢复。",
+      "resetSoon": "对该提供商的调用已暂停，即将恢复。",
+      "failures": "连续失败次数：{{count}}"
+    },
+    "metrics": {
+      "tokens": "Token",
+      "costEstimated": "预估 {{cost}}",
+      "requests": "请求",
+      "perDay": "每天 {{value}}",
+      "errorRate": "错误率",
+      "errorRateDetail": "{{calls}} 次调用中 {{errors}} 次失败",
+      "latency": "中位延迟",
+      "p95": "p95 {{value}}"
+    },
+    "recentErrors": {
+      "title": "最近错误",
+      "empty": "此范围内没有失败的调用。",
+      "count": "失败调用：{{count}}"
+    },
+    "empty": {
+      "title": "此范围内没有调用",
+      "description": "该提供商在所选范围内没有处理任何调用。请尝试更长的范围。",
+      "action": "查看最近 30 天"
+    },
+    "error": {
+      "title": "无法加载用量",
+      "description": "读取该提供商用量时网关返回错误。请稍后重试。",
+      "retry": "重试",
+      "tracingUnavailable": "网关未配置追踪存储，无法查看每次调用的错误和延迟。启用追踪后将显示用量。"
+    },
+    "stale": {
+      "title": "无法连接网关",
+      "description": "正在显示 {{time}} 保存的数据，可能已过时。",
+      "retry": "立即重试",
+      "refreshFailedTitle": "无法刷新用量"
+    },
+    "offline": {
+      "title": "无法连接网关",
+      "description": "请检查网络连接以及网关是否正在运行，然后重试。"
+    },
+    "loading": "正在加载用量",
+    "errorClass": {
+      "rate_limit": "速率限制",
+      "overloaded": "过载",
+      "timeout": "超时",
+      "auth": "认证失败",
+      "auth_permanent": "凭据无效",
+      "billing": "账单问题",
+      "format": "请求格式无效",
+      "model_not_found": "未找到模型",
+      "content_policy": "内容策略",
+      "server_error": "服务器错误",
+      "context_overflow": "上下文过长",
+      "unknown": "未知错误"
+    }
   }
 }

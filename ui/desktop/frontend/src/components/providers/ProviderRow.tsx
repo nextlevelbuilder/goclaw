@@ -1,27 +1,46 @@
+import { useTranslation } from 'react-i18next'
 import type { ProviderData } from '../../types/provider'
 import { PROVIDER_TYPES } from '../../constants/providers'
 import { ProviderMetaChips } from './ProviderMetaChips'
 
 interface ProviderRowProps {
   provider: ProviderData
+  /** Opens the provider detail view. */
+  onOpen: (provider: ProviderData) => void
   onEdit: (provider: ProviderData) => void
   onDelete: (provider: ProviderData) => void
 }
 
-export function ProviderRow({ provider, onEdit, onDelete }: ProviderRowProps) {
+export function ProviderRow({ provider, onOpen, onEdit, onDelete }: ProviderRowProps) {
+  const { t } = useTranslation('providers')
   const typeInfo = PROVIDER_TYPES.find((t) => t.value === provider.provider_type)
 
+  const name = provider.display_name || provider.name
+
+  // The name button is the keyboard/AT entry point; clicking anywhere else on the row
+  // is a mouse shortcut. The row itself is not interactive, so Edit/Delete are not nested.
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border hover:bg-surface-tertiary/50 transition-colors">
+    <div
+      onClick={() => onOpen(provider)}
+      className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border hover:bg-surface-tertiary/50 transition-colors cursor-pointer"
+    >
       {/* Status dot */}
       <span className={`w-2 h-2 rounded-full shrink-0 ${provider.enabled ? 'bg-success' : 'bg-error'}`} />
 
       {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-text-primary truncate">
-            {provider.display_name || provider.name}
-          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpen(provider)
+            }}
+            aria-label={t('providerDetail.openDetail', { name })}
+            className="min-w-0 text-left text-sm font-medium text-text-primary truncate rounded cursor-pointer hover:underline focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+          >
+            {name}
+          </button>
           <span className="text-2xs px-1.5 py-0.5 rounded bg-surface-tertiary text-text-muted shrink-0">
             {typeInfo?.label ?? provider.provider_type}
           </span>
@@ -33,7 +52,7 @@ export function ProviderRow({ provider, onEdit, onDelete }: ProviderRowProps) {
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={() => onEdit(provider)}
           className="p-1.5 rounded text-text-muted hover:text-text-primary hover:bg-surface-tertiary transition-colors"

@@ -149,7 +149,9 @@ export class HttpClient {
       if (res.status === 401 || code === "TENANT_ACCESS_REVOKED") {
         this.onAuthFailure?.();
       }
-      throw new ApiError(code, message);
+      const apiErr = new ApiError(code, message);
+      apiErr.status = res.status;
+      throw apiErr;
     }
 
     return this.readJson<T>(res);

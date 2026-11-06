@@ -103,10 +103,7 @@ func (m *SessionsMethods) handlePreview(ctx context.Context, client *gateway.Cli
 	// Sign file URLs before delivery — sessions store clean paths.
 	secret := httpapi.FileSigningKey()
 	for i := range history {
-		history[i].Content = httpapi.SignFileURLs(history[i].Content, secret)
-		for j := range history[i].MediaRefs {
-			history[i].MediaRefs[j].Path = httpapi.SignMediaPath(history[i].MediaRefs[j].Path, secret)
-		}
+		httpapi.SignMessageFileURLs(&history[i], secret)
 	}
 	summary = httpapi.SignFileURLs(summary, secret)
 

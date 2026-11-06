@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nextlevelbuilder/goclaw/internal/providers"
 )
 
 // FileTokenTTL is the default TTL for signed file tokens.
@@ -88,10 +90,53 @@ func SignMediaPath(rawPath, secret string) string {
 	for strings.Contains(cleanPath, "/v1/media/") {
 		cleanPath = strings.Replace(cleanPath, "/v1/media/", "/", 1)
 	}
+	// Media refs may already be percent-encoded (re-signed history, links that
+	// round-tripped through the client). Decode to the raw path first so the
+	// escape below is idempotent instead of turning "%20" into "%2520" per pass.
+	cleanPath = decodeMediaPath(cleanPath)
 	cleanPath = path.Clean(cleanPath)
 	urlPath := "/v1/files/" + strings.TrimPrefix(cleanPath, "/")
 	ft := SignFileToken(urlPath, secret, FileTokenTTL)
 	return escapedFileURL(urlPath) + "?ft=" + ft
+}
+
+// SignMessageFileURLs signs file URLs in a history message for delivery to a
+// client. History slices returned by session stores are shallow copies: the
+// MediaRefs backing array is shared with the live session cache. Writing signed
+// URLs into it in place leaked them into the cache and, on the next save, into
+// the database, where every later pass re-encoded them again. The refs are
+// therefore cloned before their paths are replaced.
+func SignMessageFileURLs(m *providers.Message, secret string) {
+	m.Content = SignFileURLs(m.Content, secret)
+	if len(m.MediaRefs) == 0 {
+		return
+	}
+	refs := make([]providers.MediaRef, len(m.MediaRefs))
+	copy(refs, m.MediaRefs)
+	for j := range refs {
+		refs[j].Path = SignMediaPath(refs[j].Path, secret)
+	}
+	m.MediaRefs = refs
+}
+
+// decodeMediaPath reverses percent-encoding on a media path, including layers
+// stacked by earlier re-encoding ("%2520" -> "%20" -> " "). Input that is not
+// valid percent-encoding is returned unchanged.
+func decodeMediaPath(p string) string {
+	for range 16 {
+		if !strings.Contains(p, "%25") {
+			break
+		}
+		decoded, err := url.PathUnescape(p)
+		if err != nil || decoded == p {
+			return p
+		}
+		p = decoded
+	}
+	if decoded, err := url.PathUnescape(p); err == nil {
+		return decoded
+	}
+	return p
 }
 
 func filepathToURLPath(rawPath string) string {

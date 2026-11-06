@@ -199,5 +199,99 @@
     "failedCreate": "创建Provider失败",
     "failedUpdate": "更新Provider失败",
     "failedDelete": "删除Provider失败"
+  },
+  "providerDetail": {
+    "back": "Provider",
+    "edit": "编辑",
+    "openDetail": "打开 {{name}} 的详情",
+    "tabs": {
+      "connection": "连接",
+      "usage": "用量"
+    },
+    "status": {
+      "running": "运行中",
+      "rateLimited": "已限流",
+      "coolingDown": "冷却中",
+      "disabled": "已停用"
+    },
+    "fields": {
+      "name": "名称",
+      "type": "类型",
+      "apiBase": "API 地址",
+      "apiKey": "API 密钥",
+      "status": "状态",
+      "defaultModel": "默认模型",
+      "models": "模型",
+      "transportAuth": "传输与认证"
+    },
+    "apiKeySet": "已设置",
+    "apiKeyNotSet": "未设置",
+    "notSet": "未设置"
+  },
+  "usage": {
+    "range": {
+      "label": "时间范围",
+      "24h": "24 小时",
+      "7d": "7 天",
+      "30d": "30 天"
+    },
+    "banner": {
+      "rateLimitedSince": "自 {{time}} 起被限流",
+      "rateLimited": "已限流",
+      "coolingDownSince": "自 {{time}} 起冷却中",
+      "coolingDown": "冷却中",
+      "reason": "最近错误：{{reason}}",
+      "resetIn": "预计约 {{minutes}} 分钟后恢复。",
+      "failures": "连续失败次数：{{count}}"
+    },
+    "metrics": {
+      "tokens": "Token",
+      "estimatedCost": "预估 {{cost}}",
+      "requests": "请求",
+      "perDay": "每天 {{value}}",
+      "errorRate": "错误率",
+      "errorRateDetail_other": "{{calls}} 次调用中 {{errors}} 次失败",
+      "medianLatency": "延迟中位数",
+      "p95": "p95 {{value}}",
+      "notAvailable": "—"
+    },
+    "units": {
+      "seconds": "{{value}} 秒",
+      "milliseconds": "{{value}} 毫秒"
+    },
+    "chart": {
+      "title": "每日 Token",
+      "empty": "此范围内没有 Token",
+      "barLabel_other": "{{date}}：{{tokens}} 个 Token"
+    },
+    "recentErrors": {
+      "title": "最近错误",
+      "empty": "此范围内没有错误",
+      "count_other": "{{count}} 次调用"
+    },
+    "errorClass": {
+      "rate_limit": "速率限制",
+      "overloaded": "服务过载",
+      "timeout": "超时",
+      "auth": "认证失败",
+      "auth_permanent": "凭据被拒绝",
+      "billing": "账单问题",
+      "format": "请求无效",
+      "model_not_found": "未找到模型",
+      "content_policy": "内容策略",
+      "server_error": "服务器错误",
+      "context_overflow": "上下文过长",
+      "unknown": "未知错误"
+    },
+    "states": {
+      "loading": "正在加载用量…",
+      "errorTitle": "无法加载用量",
+      "errorBody": "网关读取用量时返回错误，请稍后重试。",
+      "tracingUnavailable": "网关未开启追踪，无法提供调用统计。",
+      "retry": "重试",
+      "emptyTitle": "此范围内没有调用",
+      "emptyBody": "请选择更长的时间范围，或与使用此 Provider 的 Agent 聊天。",
+      "staleNote": "刷新失败，显示的是 {{time}} 的数据。"
+    }
   }
 }

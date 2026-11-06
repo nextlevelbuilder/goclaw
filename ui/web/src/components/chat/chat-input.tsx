@@ -1,7 +1,8 @@
-import { useState, useRef, useCallback, useLayoutEffect, type KeyboardEvent } from "react";
+import { useState, useRef, useCallback, useLayoutEffect, type ClipboardEvent, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Send, Square, Paperclip, X, Mic } from "lucide-react";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
+import { extractPastedImages } from "./paste-images";
 
 export interface AttachedFile {
   file: File;
@@ -100,6 +101,20 @@ export function ChatInput({
     e.target.value = "";
   }, [files, onFilesChange]);
 
+  // Same gate as the attach button: no files while the agent is busy or recording.
+  const canAttach = !disabled && !isBusy && !voiceRecorder.isRecording;
+
+  const handlePaste = useCallback(
+    (e: ClipboardEvent<HTMLTextAreaElement>) => {
+      const images = extractPastedImages(e.clipboardData);
+      if (images.length === 0) return; // plain text paste keeps the default behaviour
+      e.preventDefault();
+      if (!canAttach) return;
+      onFilesChange([...files, ...images.map((file) => ({ file }))]);
+    },
+    [canAttach, files, onFilesChange],
+  );
+
   const removeFile = useCallback((index: number) => {
     onFilesChange(files.filter((_, i) => i !== index));
   }, [files, onFilesChange]);
@@ -194,6 +209,7 @@ export function ChatInput({
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             onInput={handleInput}
             placeholder={t("sendMessage")}
             disabled={disabled}

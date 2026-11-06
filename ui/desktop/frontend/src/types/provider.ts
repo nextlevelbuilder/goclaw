@@ -65,3 +65,97 @@ export interface ProviderInput {
   enabled?: boolean
   settings?: Record<string, unknown>
 }
+
+// --- Provider health and usage (GET /v1/providers/{id}/health, /usage-detail, /v1/usage/*) ---
+
+/** Runtime failover classes served by the gateway; anything else maps to `unknown`. */
+export const PROVIDER_ERROR_CLASSES = [
+  'rate_limit',
+  'overloaded',
+  'timeout',
+  'auth',
+  'auth_permanent',
+  'billing',
+  'format',
+  'model_not_found',
+  'content_policy',
+  'server_error',
+  'context_overflow',
+  'unknown',
+] as const
+
+export type ProviderErrorClass = (typeof PROVIDER_ERROR_CLASSES)[number]
+
+/** GET /v1/providers/{id}/health */
+export interface ProviderHealth {
+  provider_id: string
+  /** Provider name (not the UUID). */
+  provider: string
+  enabled: boolean
+  consecutive_failures: number
+  cooling_down: boolean
+  /** RFC3339, or null when no cooldown was ever set. */
+  cooldown_until: string | null
+  /** Empty string when the provider has not failed. */
+  last_error_class: string
+  error_counts: Record<string, number>
+  last_probe_at: string | null
+  updated_at: string | null
+  max_cooldown_seconds: number
+}
+
+export interface ProviderUsageErrorItem {
+  /** RFC3339 time of the newest failed call in the group. */
+  at: string
+  error_class: string
+  count: number
+}
+
+/** GET /v1/providers/{id}/usage-detail */
+export interface ProviderUsageDetail {
+  provider: string
+  calls: number
+  errors: number
+  latency_ms: { p50: number; p95: number }
+  /** Newest first. */
+  recent_errors: ProviderUsageErrorItem[]
+}
+
+/** One period of GET /v1/usage/summary. */
+export interface UsageSummaryPeriod {
+  requests: number
+  input_tokens: number
+  output_tokens: number
+  cost: number
+  unique_users: number
+  errors: number
+  llm_calls: number
+  tool_calls: number
+  avg_duration_ms: number
+}
+
+/** GET /v1/usage/summary */
+export interface UsageSummary {
+  current: UsageSummaryPeriod
+  previous: UsageSummaryPeriod
+}
+
+/** One point of GET /v1/usage/timeseries (only the fields this UI reads). */
+export interface UsageTimeSeriesPoint {
+  /** RFC3339 bucket start (UTC midnight when group_by=day). */
+  bucket_time: string
+  input_tokens: number
+  output_tokens: number
+  total_cost: number
+  request_count: number
+  error_count: number
+}
+
+export type UsageRange = '24h' | '7d' | '30d'
+
+/** Everything the Usage tab renders for one provider and range. */
+export interface ProviderUsageBundle {
+  detail: ProviderUsageDetail
+  summary: UsageSummaryPeriod
+  points: UsageTimeSeriesPoint[]
+}

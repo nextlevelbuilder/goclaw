@@ -4,11 +4,13 @@ import { Upload } from "lucide-react";
 
 interface DropZoneProps {
   onDrop: (files: File[]) => void;
+  /** Swallow drops (so the browser does not open the file) without accepting them or showing the overlay. */
+  disabled?: boolean;
   children: React.ReactNode;
 }
 
 /** Drag-and-drop overlay for file uploads. Uses a counter to handle child boundary events. */
-export function DropZone({ onDrop, children }: DropZoneProps) {
+export function DropZone({ onDrop, disabled, children }: DropZoneProps) {
   const { t } = useTranslation("chat");
   const [isDragging, setIsDragging] = useState(false);
   const dragCounterRef = useRef(0);
@@ -19,10 +21,12 @@ export function DropZone({ onDrop, children }: DropZoneProps) {
       onDragOver={(e) => e.preventDefault()}
       onDragEnter={(e) => {
         e.preventDefault();
+        if (disabled) return;
         dragCounterRef.current++;
         if (dragCounterRef.current === 1) setIsDragging(true);
       }}
       onDragLeave={() => {
+        if (disabled) return;
         dragCounterRef.current--;
         if (dragCounterRef.current === 0) setIsDragging(false);
       }}
@@ -30,13 +34,14 @@ export function DropZone({ onDrop, children }: DropZoneProps) {
         e.preventDefault();
         dragCounterRef.current = 0;
         setIsDragging(false);
+        if (disabled) return;
         const files = Array.from(e.dataTransfer.files);
         if (files.length > 0) onDrop(files);
       }}
     >
       {children}
 
-      {isDragging && (
+      {isDragging && !disabled && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-2 text-muted-foreground">
             <Upload className="h-10 w-10" />

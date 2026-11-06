@@ -199,5 +199,108 @@
     "failedCreate": "Не удалось создать провайдера",
     "failedUpdate": "Не удалось обновить провайдера",
     "failedDelete": "Не удалось удалить провайдера"
+  },
+  "providerDetail": {
+    "back": "Провайдеры",
+    "edit": "Изменить",
+    "openDetail": "Открыть сведения о {{name}}",
+    "tabs": {
+      "connection": "Подключение",
+      "usage": "Использование"
+    },
+    "status": {
+      "running": "Работает",
+      "rateLimited": "Лимит запросов",
+      "coolingDown": "Пауза",
+      "disabled": "Отключён"
+    },
+    "fields": {
+      "name": "Имя",
+      "type": "Тип",
+      "apiBase": "Базовый URL API",
+      "apiKey": "Ключ API",
+      "status": "Статус",
+      "defaultModel": "Модель по умолчанию",
+      "models": "Модели",
+      "transportAuth": "Транспорт и аутентификация"
+    },
+    "apiKeySet": "Задан",
+    "apiKeyNotSet": "Не задан",
+    "notSet": "Не задано"
+  },
+  "usage": {
+    "range": {
+      "label": "Период",
+      "24h": "24 ч",
+      "7d": "7 дней",
+      "30d": "30 дней"
+    },
+    "banner": {
+      "rateLimitedSince": "Лимит запросов с {{time}}",
+      "rateLimited": "Лимит запросов",
+      "coolingDownSince": "Пауза с {{time}}",
+      "coolingDown": "Пауза",
+      "reason": "Последняя ошибка: {{reason}}",
+      "resetIn": "Сброс примерно через {{minutes}} мин.",
+      "failures": "Ошибок подряд: {{count}}"
+    },
+    "metrics": {
+      "tokens": "Токены",
+      "estimatedCost": "около {{cost}}",
+      "requests": "Запросы",
+      "perDay": "{{value}} в день",
+      "errorRate": "Доля ошибок",
+      "errorRateDetail_one": "{{errors}} из {{calls}} вызова",
+      "errorRateDetail_few": "{{errors}} из {{calls}} вызовов",
+      "errorRateDetail_many": "{{errors}} из {{calls}} вызовов",
+      "errorRateDetail_other": "{{errors}} из {{calls}} вызова",
+      "medianLatency": "Медианная задержка",
+      "p95": "p95 {{value}}",
+      "notAvailable": "—"
+    },
+    "units": {
+      "seconds": "{{value}} с",
+      "milliseconds": "{{value}} мс"
+    },
+    "chart": {
+      "title": "Токены по дням",
+      "empty": "Нет токенов за этот период",
+      "barLabel_one": "{{date}}: {{tokens}} токен",
+      "barLabel_few": "{{date}}: {{tokens}} токена",
+      "barLabel_many": "{{date}}: {{tokens}} токенов",
+      "barLabel_other": "{{date}}: {{tokens}} токена"
+    },
+    "recentErrors": {
+      "title": "Последние ошибки",
+      "empty": "Нет ошибок за этот период",
+      "count_one": "{{count}} вызов",
+      "count_few": "{{count}} вызова",
+      "count_many": "{{count}} вызовов",
+      "count_other": "{{count}} вызова"
+    },
+    "errorClass": {
+      "rate_limit": "Лимит запросов",
+      "overloaded": "Перегрузка",
+      "timeout": "Тайм-аут",
+      "auth": "Ошибка аутентификации",
+      "auth_permanent": "Учётные данные отклонены",
+      "billing": "Проблема с оплатой",
+      "format": "Неверный запрос",
+      "model_not_found": "Модель не найдена",
+      "content_policy": "Политика контента",
+      "server_error": "Ошибка сервера",
+      "context_overflow": "Слишком длинный контекст",
+      "unknown": "Неизвестная ошибка"
+    },
+    "states": {
+      "loading": "Загрузка данных об использовании…",
+      "errorTitle": "Не удалось загрузить данные",
+      "errorBody": "Шлюз вернул ошибку при чтении данных об использовании. Повторите попытку чуть позже.",
+      "tracingUnavailable": "Статистика вызовов недоступна, так как трассировка на шлюзе отключена.",
+      "retry": "Повторить",
+      "emptyTitle": "Нет вызовов за этот период",
+      "emptyBody": "Выберите более длинный период или начните чат с агентом, который использует этого провайдера.",
+      "staleNote": "Не удалось обновить. Показаны данные на {{time}}."
+    }
   }
 }
