@@ -126,7 +126,7 @@ func (d ReasoningDecision) HasObservation() bool {
 // NormalizeReasoningEffort returns the canonical lowercase effort level if valid, else "".
 func NormalizeReasoningEffort(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "off", "auto", "none", "minimal", "low", "medium", "high", "xhigh":
+	case "off", "auto", "none", "minimal", "low", "medium", "high", "xhigh", "max":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return ""
@@ -175,6 +175,6 @@ func downgradeReasoningLevel(requested string, supported []string) string {
 
 func reasoningOrder() map[string]int {
 	return map[string]int{
-		"none": 0, "minimal": 1, "low": 2, "medium": 3, "high": 4, "xhigh": 5,
+		"none": 0, "minimal": 1, "low": 2, "medium": 3, "high": 4, "xhigh": 5, "max": 6,
 	}
 }

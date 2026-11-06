@@ -78,7 +78,8 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		// is enabled but reasoning_content is missing in assistant tool call message".
 		// DeepSeek enforces the same rule, but only once the conversation is in
 		// thinking mode (historyHasReasoning).
-		if m.Role == "assistant" && openAIWireAssistantReasoningContent(model) {
+		if m.Role == "assistant" && (openAIWireAssistantReasoningContent(model) ||
+			(p.isMiniMaxEndpoint() && (model == "MiniMax-M3.1-Flash" || model == "MiniMax-M3"))) {
 			switch {
 			case m.Thinking != "":
 				msg["reasoning_content"] = m.Thinking
@@ -286,7 +287,9 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 
 	// reasoning_effort is OpenAI-specific; do not send to third-party OpenAI-compatible APIs.
 	if level, ok := req.Options[OptThinkingLevel].(string); ok && level != "" && level != "off" {
-		if openAIModelSupportsReasoningEffort(model) {
+		// MiniMax Flash is registered for runtime resolution, but its wire field
+		// remains native-endpoint-only and is handled by the guarded block below.
+		if !strings.EqualFold(capabilityModel, "minimax-m3.1-flash") && openAIModelSupportsReasoningEffort(model) {
 			body[OptReasoningEffort] = level
 		}
 	}
@@ -301,6 +304,16 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 			if mapped, forward := mapGeminiReasoningEffort(level); forward {
 				body[OptReasoningEffort] = mapped
 			}
+		}
+	}
+
+	// Flash is always adaptive and accepts only these effort values. Omitting
+	// off/none leaves the API's default effort in place instead of disabling it.
+	if p.isMiniMaxEndpoint() && model == "MiniMax-M3.1-Flash" {
+		level, _ := req.Options[OptThinkingLevel].(string)
+		switch level {
+		case "low", "medium", "high", "xhigh", "max":
+			body[OptReasoningEffort] = level
 		}
 	}
 

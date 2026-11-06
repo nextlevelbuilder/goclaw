@@ -114,7 +114,8 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 		if base == "" {
 			base = store.MiniMaxDefaultAPIBase
 		}
-		registry.Register(providers.NewOpenAIProvider("minimax", cfg.Providers.MiniMax.APIKey, base, store.MiniMaxDefaultModel))
+		registry.Register(providers.NewOpenAIProvider("minimax", cfg.Providers.MiniMax.APIKey, base, store.MiniMaxDefaultModel).
+			WithProviderType(store.ProviderMiniMax))
 		slog.Info("registered provider", "name", "minimax")
 	}
 
