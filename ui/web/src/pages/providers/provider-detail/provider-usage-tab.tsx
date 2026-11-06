@@ -9,7 +9,6 @@ import { TokenAreaChart } from "@/pages/usage/components/token-area-chart";
 import type { ProviderData } from "../hooks/use-providers";
 import { useProviderHealth } from "../hooks/use-provider-health";
 import {
-  httpStatusOf,
   isUsageEmpty,
   parseUsageRange,
   useProviderUsage,
@@ -52,9 +51,7 @@ export function ProviderUsageTab({ provider }: { provider: ProviderData }) {
     void health.refetch();
   };
 
-  // A 503 from either endpoint means the gateway has no tracing store; say so instead of a generic error.
-  const errorKind: UsageErrorKind | null =
-    usage.errorKind === "http" && httpStatusOf(health.error) === 503 ? "tracing" : usage.errorKind;
+  const errorKind: UsageErrorKind | null = usage.errorKind;
 
   let body: ReactNode;
   if (!usage.hasData || !usage.detail) {

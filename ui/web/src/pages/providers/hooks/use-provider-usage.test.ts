@@ -14,7 +14,6 @@ import {
   errorRate,
   formatErrorRate,
   formatLatency,
-  httpStatusOf,
   isUsageEmpty,
   parseProviderUsageDetail,
   parseUsageRange,
@@ -192,14 +191,14 @@ describe("HttpClient errors used by the Usage tab", () => {
     );
     const err = await http.get("/v1/providers/p1/health").catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
-    expect(httpStatusOf(err)).toBe(503);
+    expect((err as ApiError).status).toBe(503);
     expect((err as Error).message).toBe("tracing store unavailable");
   });
 
   it("reports a network failure without a status", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
     const err = await http.get("/v1/providers/p1/health").catch((e: unknown) => e);
-    expect(httpStatusOf(err)).toBeUndefined();
+    expect((err as ApiError).status).toBeUndefined();
     expect(classifyUsageError(err, false)).toBe("offline");
   });
 
@@ -208,7 +207,7 @@ describe("HttpClient errors used by the Usage tab", () => {
     const onAuthFailure = vi.fn();
     http.onAuthFailure = onAuthFailure;
     const err = await http.get("/v1/providers/p1/health").catch((e: unknown) => e);
-    expect(httpStatusOf(err)).toBe(401);
+    expect((err as ApiError).status).toBe(401);
     expect(onAuthFailure).toHaveBeenCalledOnce();
     http.onAuthFailure = null;
   });

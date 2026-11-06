@@ -76,7 +76,8 @@ export function useProviderHealth(providerId: string) {
     const timer = setTimeout(() => {
       // A request already running will re-arm this effect when it settles.
       if (!inFlight.current) void refetch()
-    }, cooldownRecheckDelay(cooldownUntil))
+    // After a failed re-check (gateway unreachable) back off to the 30s cap.
+    }, error ? RECHECK_MAX_MS : cooldownRecheckDelay(cooldownUntil))
     return () => clearTimeout(timer)
   }, [coolingDown, cooldownUntil, health, error, refetch])
 

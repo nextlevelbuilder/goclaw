@@ -25,11 +25,6 @@ export function rangeWindow(range: UsageRange, now: number): { from: string; to:
   };
 }
 
-/** HTTP status of a failed request, or undefined when unknown / unreachable. */
-export function httpStatusOf(error: unknown): number | undefined {
-  return error instanceof ApiError ? error.status : undefined;
-}
-
 export type UsageErrorKind = "offline" | "tracing" | "http";
 
 /**
