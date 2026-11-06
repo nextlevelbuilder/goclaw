@@ -51,6 +51,21 @@ func TestNormalizeAgentID_Long(t *testing.T) {
 
 // --- ExpandHome / ContractHome ---
 
+// A path stored by ContractHome on Windows uses backslashes ("~\.goclaw\..."); it
+// must keep its tail instead of collapsing to the bare home directory.
+func TestExpandHomeBackslashForm(t *testing.T) {
+	home, _ := os.UserHomeDir()
+
+	got := ExpandHome(`~\.goclaw\workspace\little-fox\ws`)
+	want := home + `\.goclaw\workspace\little-fox\ws`
+	if got != want {
+		t.Errorf("ExpandHome backslash form = %q, want %q", got, want)
+	}
+	if ExpandHome("~") != home {
+		t.Errorf("ExpandHome(~) = %q, want %q", ExpandHome("~"), home)
+	}
+}
+
 func TestExpandHome(t *testing.T) {
 	home, _ := os.UserHomeDir()
 
