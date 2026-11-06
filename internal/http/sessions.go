@@ -186,10 +186,7 @@ func (h *SessionsHandler) handleHistoryFollow(w http.ResponseWriter, r *http.Req
 	messages := append([]providers.Message(nil), history[cursor:end]...)
 	secret := FileSigningKey()
 	for i := range messages {
-		messages[i].Content = SignFileURLs(messages[i].Content, secret)
-		for j := range messages[i].MediaRefs {
-			messages[i].MediaRefs[j].Path = SignMediaPath(messages[i].MediaRefs[j].Path, secret)
-		}
+		SignMessageFileURLs(&messages[i], secret)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
