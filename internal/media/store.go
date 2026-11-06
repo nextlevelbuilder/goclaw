@@ -1,94 +1,66 @@
 package media
 
 import (
-	"crypto/sha256"
-	"fmt"
-	"io"
-	"log/slog"
-	"os"
-	"path/filepath"
+	"context"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
-// Store provides persistent media file storage scoped by session.
-// Files are organized as: {baseDir}/{sessionHash}/{uuid}.{ext}
+// Store is a thin façade over a Backend that preserves the pre-refactor
+// public API. External code keeps using *Store with the same method
+// signatures; new code SHOULD depend on Backend directly so tests can
+// substitute fakes.
 type Store struct {
-	baseDir string
+	b Backend
 }
 
-// NewStore creates a media store rooted at baseDir.
-// The directory is created if it doesn't exist.
+// NewStore creates a Store backed by a local filesystem at baseDir.
+// Kept as the no-arg entry point so existing callers don't change.
 func NewStore(baseDir string) (*Store, error) {
-	if err := os.MkdirAll(baseDir, 0755); err != nil {
-		return nil, fmt.Errorf("media: create base dir: %w", err)
-	}
-	return &Store{baseDir: baseDir}, nil
-}
-
-// SaveFile moves or copies a file to persistent storage.
-// Returns the unique media ID and the destination path.
-func (s *Store) SaveFile(sessionKey, srcPath, mime string) (id string, dstPath string, err error) {
-	dir := s.sessionDir(sessionKey)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", "", fmt.Errorf("media: create session dir: %w", err)
-	}
-
-	mediaID := uuid.New().String()
-	ext := ExtFromMime(mime)
-	if ext == "" {
-		ext = filepath.Ext(srcPath)
-	}
-	dstPath = filepath.Join(dir, mediaID+ext)
-
-	// Try rename first (fast, same filesystem).
-	if err := os.Rename(srcPath, dstPath); err == nil {
-		return mediaID, dstPath, nil
-	}
-
-	// Fallback: copy + remove source.
-	if err := copyFile(srcPath, dstPath); err != nil {
-		return "", "", fmt.Errorf("media: copy file: %w", err)
-	}
-	_ = os.Remove(srcPath) // best-effort cleanup of source
-	return mediaID, dstPath, nil
-}
-
-// LoadPath returns the filesystem path for a media ID.
-// Returns an error if the file doesn't exist.
-func (s *Store) LoadPath(id string) (string, error) {
-	// Media files are stored as {sessionHash}/{id}.{ext}.
-	// Since we don't know the session hash, glob for the ID across all session dirs.
-	matches, err := filepath.Glob(filepath.Join(s.baseDir, "*", id+".*"))
+	b, err := NewFSBackend(baseDir)
 	if err != nil {
-		return "", fmt.Errorf("media: glob for %s: %w", id, err)
+		return nil, err
 	}
-	if len(matches) == 0 {
-		return "", fmt.Errorf("media: file not found: %s", id)
-	}
-	return matches[0], nil
+	return &Store{b: b}, nil
 }
 
-// DeleteSession removes all media files for a session.
+// NewStoreWithBackend wraps an explicit Backend (S3, in-memory test fake, …).
+func NewStoreWithBackend(b Backend) *Store { return &Store{b: b} }
+
+// Backend exposes the underlying backend for callers that want to bypass
+// the legacy façade and use the modern API directly (Open, context-aware
+// methods). Keeps the door open for incremental migration without
+// breaking the pre-refactor API.
+func (s *Store) Backend() Backend { return s.b }
+
+// SaveFile mirrors the pre-refactor signature: returns the media ID and
+// the local filesystem path the caller can read immediately.
+func (s *Store) SaveFile(sessionKey, srcPath, mime string) (id string, dstPath string, err error) {
+	ctx := context.Background()
+	id, _, err = s.b.Save(ctx, sessionKey, srcPath, mime)
+	if err != nil {
+		return "", "", err
+	}
+	dstPath, err = s.b.LocalPath(ctx, id)
+	if err != nil {
+		return "", "", err
+	}
+	return id, dstPath, nil
+}
+
+// LoadPath returns a local filesystem path for a saved media ID.
+// Remote backends transparently cache the object before returning.
+func (s *Store) LoadPath(id string) (string, error) {
+	return s.b.LocalPath(context.Background(), id)
+}
+
+// DeleteSession removes every media file for a session key.
 func (s *Store) DeleteSession(sessionKey string) error {
-	dir := s.sessionDir(sessionKey)
-	if err := os.RemoveAll(dir); err != nil {
-		slog.Warn("media: failed to delete session dir", "dir", dir, "error", err)
-		return err
-	}
-	return nil
-}
-
-// sessionDir returns the directory path for a session's media files.
-// Uses first 12 chars of SHA-256 hash of sessionKey for filesystem safety.
-func (s *Store) sessionDir(sessionKey string) string {
-	h := sha256.Sum256([]byte(sessionKey))
-	hash := fmt.Sprintf("%x", h[:6]) // 12 hex chars
-	return filepath.Join(s.baseDir, hash)
+	return s.b.Delete(context.Background(), sessionKey)
 }
 
 // ExtFromMime returns a file extension (with dot) for a MIME type.
+// Lives on Store rather than per-backend so both backends agree on the
+// extension that ends up in the object key.
 func ExtFromMime(mime string) string {
 	switch {
 	case strings.HasPrefix(mime, "image/jpeg"):
@@ -122,24 +94,4 @@ func ExtFromMime(mime string) string {
 	default:
 		return ""
 	}
-}
-
-// copyFile copies src to dst using buffered I/O.
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	return out.Close()
 }
