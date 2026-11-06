@@ -1,0 +1,25 @@
+{
+  "deleteChat": "チャットを削除",
+  "deleteChatConfirm": "この会話とすべてのメッセージが完全に削除されます。",
+  "newChat": "新しいチャット",
+  "openSessions": "セッションを開く",
+  "readOnly": "読み取り専用 — このセッションは別のユーザーのものです",
+  "empty": {
+    "title": "会話を始める",
+    "description": "メッセージを送信してエージェントとチャットを開始してください。"
+  },
+  "media": {
+    "image": "画像",
+    "video": "動画",
+    "audio": "音声",
+    "voice": "ボイスメッセージ",
+    "document": "ドキュメント",
+    "animation": "アニメーション",
+    "attached": "添付済み"
+  },
+  "forwardedFrom": "転送元",
+  "replyingTo": "返信先",
+  "error": {
+    "notConnected": "接続されていません。接続が確立されるまでお待ちください。"
+  }
+}

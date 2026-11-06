@@ -1,0 +1,15 @@
+{
+  "title": "ログ",
+  "description": "ライブログテーリング",
+  "descriptionLive": "{{level}}レベルでライブテーリング中",
+  "live": "ライブ",
+  "start": "開始",
+  "stop": "停止",
+  "clear": "クリア",
+  "filterPlaceholder": "ログをフィルター...",
+  "logLevelTitle": "ログレベル",
+  "emptyWaiting": "ログを待機中...",
+  "emptyFilter": "フィルターに一致するログがありません。",
+  "emptyStart": "「開始」をクリックしてログのストリーミングを開始します。",
+  "count": "{{filtered}}/{{total}}"
+}

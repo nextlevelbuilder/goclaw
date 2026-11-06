@@ -1,0 +1,21 @@
+{
+  "title": "ストレージ",
+  "description": "ワークスペースファイルブラウザ",
+  "descriptionWithPath": "{{path}} — {{size}}",
+  "sizeCacheInfo": "ストレージサイズは60分間キャッシュされます",
+  "unsupportedFile": "このファイルタイプはプレビューに対応していません",
+  "download": "ダウンロード",
+  "delete": {
+    "fileTitle": "ファイルを削除",
+    "folderTitle": "フォルダを削除",
+    "description": "{{name}}を削除しますか？",
+    "folderWarning": " すべての内容が再帰的に削除されます。",
+    "undone": " この操作は取り消せません。",
+    "deleting": "削除中...",
+    "confirmLabel": "削除"
+  },
+  "toast": {
+    "deleted": "ファイルが削除されました",
+    "deleteFailed": "ファイルの削除に失敗しました"
+  }
+}

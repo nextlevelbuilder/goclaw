@@ -6,7 +6,8 @@
   "languages": {
     "en": "English",
     "vi": "Tiếng Việt",
-    "zh": "中文"
+    "zh": "中文",
+    "ja": "日本語"
   },
   "logout": "退出登录",
   "logoutConfirm": "确定要退出登录吗？",

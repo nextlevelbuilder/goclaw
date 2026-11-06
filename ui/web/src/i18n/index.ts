@@ -85,6 +85,41 @@ import viBackup from "./locales/vi/backup.json";
 import viHooks from "./locales/vi/hooks.json";
 import viWorkstations from "./locales/vi/workstations.json";
 
+// --- JA namespaces ---
+import jaCommon from "./locales/ja/common.json";
+import jaSidebar from "./locales/ja/sidebar.json";
+import jaTopbar from "./locales/ja/topbar.json";
+import jaLogin from "./locales/ja/login.json";
+import jaOverview from "./locales/ja/overview.json";
+import jaChat from "./locales/ja/chat.json";
+import jaAgents from "./locales/ja/agents.json";
+import jaTeams from "./locales/ja/teams.json";
+import jaSessions from "./locales/ja/sessions.json";
+import jaSkills from "./locales/ja/skills.json";
+import jaCron from "./locales/ja/cron.json";
+import jaConfig from "./locales/ja/config.json";
+import jaChannels from "./locales/ja/channels.json";
+import jaProviders from "./locales/ja/providers.json";
+import jaTraces from "./locales/ja/traces.json";
+import jaEvents from "./locales/ja/events.json";
+import jaUsage from "./locales/ja/usage.json";
+import jaApprovals from "./locales/ja/approvals.json";
+import jaNodes from "./locales/ja/nodes.json";
+import jaLogs from "./locales/ja/logs.json";
+import jaTools from "./locales/ja/tools.json";
+import jaMcp from "./locales/ja/mcp.json";
+import jaTts from "./locales/ja/tts.json";
+import jaSetup from "./locales/ja/setup.json";
+import jaMemory from "./locales/ja/memory.json";
+import jaStorage from "./locales/ja/storage.json";
+import jaPendingMessages from "./locales/ja/pending-messages.json";
+import jaContacts from "./locales/ja/contacts.json";
+import jaActivity from "./locales/ja/activity.json";
+import jaApiKeys from "./locales/ja/api-keys.json";
+import jaCliCredentials from "./locales/ja/cli-credentials.json";
+import jaPackages from "./locales/ja/packages.json";
+import jaTenants from "./locales/ja/tenants.json";
+
 // --- ZH namespaces ---
 import zhCommon from "./locales/zh/common.json";
 import zhSidebar from "./locales/zh/sidebar.json";
@@ -131,10 +166,11 @@ const STORAGE_KEY = "goclaw:language";
 
 function getInitialLanguage(): string {
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "en" || stored === "vi" || stored === "zh") return stored;
+  if (stored === "en" || stored === "vi" || stored === "zh" || stored === "ja") return stored;
   const lang = navigator.language.toLowerCase();
   if (lang.startsWith("vi")) return "vi";
   if (lang.startsWith("zh")) return "zh";
+  if (lang.startsWith("ja")) return "ja";
   return "en";
 }
 
@@ -212,6 +248,20 @@ i18n.use(initReactI18next).init({
       backup: zhBackup,
       hooks: zhHooks,
       workstations: zhWorkstations,
+    },
+    ja: {
+      common: jaCommon, sidebar: jaSidebar, topbar: jaTopbar, login: jaLogin,
+      overview: jaOverview, chat: jaChat, agents: jaAgents, teams: jaTeams,
+      sessions: jaSessions, skills: jaSkills, cron: jaCron, config: jaConfig,
+      channels: jaChannels, providers: jaProviders, traces: jaTraces,
+      events: jaEvents, usage: jaUsage,
+      approvals: jaApprovals, nodes: jaNodes, logs: jaLogs, tools: jaTools,
+      mcp: jaMcp, tts: jaTts, setup: jaSetup, memory: jaMemory, storage: jaStorage,
+      "pending-messages": jaPendingMessages,
+      contacts: jaContacts, activity: jaActivity, "api-keys": jaApiKeys,
+      "cli-credentials": jaCliCredentials,
+      packages: jaPackages,
+      tenants: jaTenants,
     },
   },
   ns: [...ns],
