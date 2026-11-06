@@ -448,12 +448,18 @@
     "error": {
       "title": "Không thể tải dữ liệu sử dụng",
       "description": "Gateway trả về lỗi khi đọc dữ liệu sử dụng của nhà cung cấp này. Vui lòng thử lại sau.",
-      "retry": "Thử lại"
+      "retry": "Thử lại",
+      "tracingUnavailable": "Gateway chưa có kho tracing nên không xem được lỗi và độ trễ theo từng lượt gọi. Dữ liệu sử dụng sẽ hiển thị khi tracing được bật."
     },
     "stale": {
       "title": "Không kết nối được gateway",
       "description": "Đang hiển thị dữ liệu đã lưu lúc {{time}}. Dữ liệu có thể đã cũ.",
-      "retry": "Thử lại ngay"
+      "retry": "Thử lại ngay",
+      "refreshFailedTitle": "Không thể làm mới dữ liệu sử dụng"
+    },
+    "offline": {
+      "title": "Không kết nối được gateway",
+      "description": "Kiểm tra kết nối mạng và gateway có đang chạy không, rồi thử lại."
     },
     "loading": "Đang tải dữ liệu sử dụng",
     "errorClass": {

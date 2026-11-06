@@ -465,12 +465,18 @@
     "error": {
       "title": "无法加载用量",
       "description": "读取该提供商用量时网关返回错误。请稍后重试。",
-      "retry": "重试"
+      "retry": "重试",
+      "tracingUnavailable": "网关未配置追踪存储，无法查看每次调用的错误和延迟。启用追踪后将显示用量。"
     },
     "stale": {
       "title": "无法连接网关",
       "description": "正在显示 {{time}} 保存的数据，可能已过时。",
-      "retry": "立即重试"
+      "retry": "立即重试",
+      "refreshFailedTitle": "无法刷新用量"
+    },
+    "offline": {
+      "title": "无法连接网关",
+      "description": "请检查网络连接以及网关是否正在运行，然后重试。"
     },
     "loading": "正在加载用量",
     "errorClass": {

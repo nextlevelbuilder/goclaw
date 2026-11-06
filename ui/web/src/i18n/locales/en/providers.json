@@ -448,12 +448,18 @@
     "error": {
       "title": "Couldn't load usage",
       "description": "The gateway returned an error while reading usage for this provider. Try again in a moment.",
-      "retry": "Try again"
+      "retry": "Try again",
+      "tracingUnavailable": "The gateway has no tracing store, so per-call errors and latency are unavailable. Usage will show once tracing is enabled."
     },
     "stale": {
       "title": "Can't reach the gateway",
       "description": "Showing saved data from {{time}}. It may be out of date.",
-      "retry": "Retry now"
+      "retry": "Retry now",
+      "refreshFailedTitle": "Couldn't refresh usage"
+    },
+    "offline": {
+      "title": "Can't reach the gateway",
+      "description": "Check your network connection and that the gateway is running, then try again."
     },
     "loading": "Loading usage",
     "errorClass": {

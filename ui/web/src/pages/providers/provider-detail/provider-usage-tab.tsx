@@ -8,7 +8,14 @@ import { useUiStore } from "@/stores/use-ui-store";
 import { TokenAreaChart } from "@/pages/usage/components/token-area-chart";
 import type { ProviderData } from "../hooks/use-providers";
 import { useProviderHealth } from "../hooks/use-provider-health";
-import { parseUsageRange, useProviderUsage, type UsageRange } from "../hooks/use-provider-usage";
+import {
+  httpStatusOf,
+  isUsageEmpty,
+  parseUsageRange,
+  useProviderUsage,
+  type UsageErrorKind,
+  type UsageRange,
+} from "../hooks/use-provider-usage";
 import { CooldownBanner, RecentErrorsList, UsageMetricCards, UsageRangeControl } from "./provider-usage-sections";
 import { StaleDataNote, UsageErrorCard, UsageSkeleton } from "./provider-usage-states";
 
@@ -45,10 +52,19 @@ export function ProviderUsageTab({ provider }: { provider: ProviderData }) {
     void health.refetch();
   };
 
+  // A 503 from either endpoint means the gateway has no tracing store; say so instead of a generic error.
+  const errorKind: UsageErrorKind | null =
+    usage.errorKind === "http" && httpStatusOf(health.error) === 503 ? "tracing" : usage.errorKind;
+
   let body: ReactNode;
-  if (!usage.hasData) {
-    body = usage.error ? <UsageErrorCard onRetry={retry} retrying={usage.isFetching} /> : <UsageSkeleton />;
-  } else if (!usage.detail || usage.detail.calls === 0) {
+  if (!usage.hasData || !usage.detail) {
+    body =
+      errorKind && !usage.isLoading ? (
+        <UsageErrorCard kind={errorKind} onRetry={retry} retrying={usage.isFetching} />
+      ) : (
+        <UsageSkeleton />
+      );
+  } else if (isUsageEmpty(usage.detail, usage.summary)) {
     body = (
       <EmptyState
         icon={Inbox}
@@ -78,8 +94,14 @@ export function ProviderUsageTab({ provider }: { provider: ProviderData }) {
     <div className="space-y-4">
       <UsageRangeControl value={range} onChange={setRange} />
       {health.data?.cooling_down && <CooldownBanner health={health.data} now={now} tz={timezone} />}
-      {usage.isStale && (
-        <StaleDataNote updatedAt={usage.dataUpdatedAt} tz={timezone} onRetry={retry} retrying={usage.isFetching} />
+      {usage.isStale && errorKind && (
+        <StaleDataNote
+          kind={errorKind}
+          updatedAt={usage.dataUpdatedAt}
+          tz={timezone}
+          onRetry={retry}
+          retrying={usage.isFetching}
+        />
       )}
       {body}
     </div>

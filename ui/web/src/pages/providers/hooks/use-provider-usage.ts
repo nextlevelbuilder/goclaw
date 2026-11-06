@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { ApiError } from "@/api/errors";
 import { useHttp } from "@/hooks/use-ws";
 import type { SnapshotTimeSeries, SummaryData } from "@/pages/usage/hooks/use-usage-analytics";
 
@@ -22,6 +23,35 @@ export function rangeWindow(range: UsageRange, now: number): { from: string; to:
     from: new Date(now - RANGE_DAYS[range] * 86_400_000).toISOString(),
     to: new Date(now).toISOString(),
   };
+}
+
+/** HTTP status of a failed request, or undefined when unknown / unreachable. */
+export function httpStatusOf(error: unknown): number | undefined {
+  return error instanceof ApiError ? error.status : undefined;
+}
+
+export type UsageErrorKind = "offline" | "tracing" | "http";
+
+/**
+ * Classifies why usage could not be (re)loaded. Paused queries (browser
+ * offline) and requests that never reached the gateway count as offline.
+ */
+export function classifyUsageError(error: unknown, paused: boolean): UsageErrorKind | null {
+  if (paused) return "offline";
+  if (error == null) return null;
+  if (error instanceof ApiError) {
+    if (error.code === "NETWORK_ERROR") return "offline";
+    if (error.status === 503) return "tracing";
+  }
+  return "http";
+}
+
+/**
+ * True when the range has nothing to show. Call spans can be pruned by trace
+ * retention while usage snapshots remain, so zero calls alone is not empty.
+ */
+export function isUsageEmpty(detail: Pick<ProviderUsageDetail, "calls"> | undefined, summary: { requests?: number } | null): boolean {
+  return (detail?.calls ?? 0) === 0 && (summary?.requests ?? 0) === 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -191,6 +221,9 @@ export function useProviderUsage(providerId: string, providerName: string, range
   const queries = [detailQuery, summaryQuery, seriesQuery];
   const hasData = detailQuery.data !== undefined && summaryQuery.data !== undefined && seriesQuery.data !== undefined;
   const error = queries.find((q) => q.isError)?.error ?? null;
+  // networkMode "online": an offline browser pauses fetches instead of failing them.
+  const isPaused = queries.some((q) => q.fetchStatus === "paused");
+  const errorKind = classifyUsageError(error, isPaused);
   const updatedAts = queries.map((q) => q.dataUpdatedAt).filter((t) => t > 0);
 
   return {
@@ -198,11 +231,15 @@ export function useProviderUsage(providerId: string, providerName: string, range
     summary: summaryQuery.data ?? null,
     series: seriesQuery.data ?? [],
     hasData,
+    /** First load in flight (not paused, nothing cached yet). */
     isLoading: !hasData && queries.some((q) => q.isPending && q.fetchStatus === "fetching"),
     isFetching: queries.some((q) => q.isFetching),
+    isPaused,
     error,
-    /** A refetch failed but cached data is still shown. */
-    isStale: hasData && error != null,
+    /** Why the last load/refresh did not succeed; null when it did. */
+    errorKind,
+    /** A refetch failed or is paused offline, but cached data is still shown. */
+    isStale: hasData && errorKind != null,
     /** Oldest successful fetch time among the three data sets (ms epoch), 0 if none. */
     dataUpdatedAt: updatedAts.length ? Math.min(...updatedAts) : 0,
     refetch: () => Promise.all(queries.map((q) => q.refetch())),

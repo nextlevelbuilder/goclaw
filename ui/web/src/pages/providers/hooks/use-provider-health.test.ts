@@ -69,8 +69,14 @@ describe("cooldown timing", () => {
   it("schedules a refetch right after cooldown_until, capped by the poll interval", () => {
     expect(healthRefetchDelay(health, until - 10_000)).toBe(11_500);
     expect(healthRefetchDelay(health, until - 10 * 60_000)).toBe(30_000);
-    expect(healthRefetchDelay(health, until + 60_000)).toBe(1_500);
     expect(healthRefetchDelay({ ...health, cooling_down: false }, until)).toBe(30_000);
     expect(healthRefetchDelay(undefined, until)).toBe(30_000);
+  });
+
+  it("floors the delay at 5s once cooldown_until has passed but the gateway still reports cooling_down", () => {
+    expect(healthRefetchDelay(health, until)).toBe(5_000);
+    expect(healthRefetchDelay(health, until + 60_000)).toBe(5_000);
+    // A few ms left still waits for the grace period, not the floor.
+    expect(healthRefetchDelay(health, until - 1)).toBe(1_501);
   });
 });

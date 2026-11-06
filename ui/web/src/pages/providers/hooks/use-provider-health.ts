@@ -76,14 +76,19 @@ export function cooldownRemainingMinutes(health: ProviderHealth | undefined, now
 const HEALTH_POLL_MS = 30_000;
 // Small grace after cooldown_until so the gateway has cleared the state when we re-read it.
 const COOLDOWN_GRACE_MS = 1_500;
+// cooldown_until already passed but the gateway still reports cooling_down (clock skew
+// or a slow clear): back off instead of re-reading every grace period.
+const COOLDOWN_EXPIRED_POLL_MS = 5_000;
 
 /**
  * Next refetch delay: when cooling down, re-read shortly after cooldown_until
  * passes (capped by the normal poll interval), otherwise poll at the normal rate.
+ * Once the remaining time is clamped to 0 the delay is floored at 5s.
  */
 export function healthRefetchDelay(health: ProviderHealth | undefined, now: number): number {
   const remaining = cooldownRemainingMs(health, now);
   if (remaining == null) return HEALTH_POLL_MS;
+  if (remaining === 0) return COOLDOWN_EXPIRED_POLL_MS;
   return Math.min(HEALTH_POLL_MS, remaining + COOLDOWN_GRACE_MS);
 }
 

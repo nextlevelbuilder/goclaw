@@ -131,7 +131,12 @@ export function UsageMetricCards({
       <MetricCard
         label={t("usage.metrics.errorRate")}
         value={formatErrorRate(errorRate(detail.errors, detail.calls))}
-        detail={t("usage.metrics.errorRateDetail", { errors: num.format(detail.errors), calls: num.format(detail.calls) })}
+        detail={
+          // No call spans (e.g. pruned by trace retention): the rate reads "—" without a "0 of 0" line.
+          detail.calls > 0
+            ? t("usage.metrics.errorRateDetail", { errors: num.format(detail.errors), calls: num.format(detail.calls) })
+            : undefined
+        }
       />
       <MetricCard
         label={t("usage.metrics.latency")}

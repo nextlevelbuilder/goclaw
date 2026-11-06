@@ -1,16 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "@/api/errors";
+import { HttpClient } from "@/api/http-client";
 import fixture from "./__fixtures__/provider-usage-detail.json";
 import en from "@/i18n/locales/en/providers.json";
 import ko from "@/i18n/locales/ko/providers.json";
 import ru from "@/i18n/locales/ru/providers.json";
-import vi from "@/i18n/locales/vi/providers.json";
+import viLocale from "@/i18n/locales/vi/providers.json";
 import zh from "@/i18n/locales/zh/providers.json";
 import {
   KNOWN_ERROR_CLASSES,
+  classifyUsageError,
   errorClassKey,
   errorRate,
   formatErrorRate,
   formatLatency,
+  httpStatusOf,
+  isUsageEmpty,
   parseProviderUsageDetail,
   parseUsageRange,
   rangeDays,
@@ -91,7 +96,7 @@ describe("ranges", () => {
 });
 
 describe("error class labels", () => {
-  const locales = { en, ko, ru, vi, zh } as Record<string, Record<string, unknown>>;
+  const locales = { en, ko, ru, vi: viLocale, zh } as Record<string, Record<string, unknown>>;
 
   function lookup(obj: Record<string, unknown>, key: string): unknown {
     return key.split(".").reduce<unknown>((acc, part) => (acc as Record<string, unknown> | undefined)?.[part], obj);
@@ -130,3 +135,86 @@ describe("error class labels", () => {
     }
   });
 });
+
+describe("isUsageEmpty", () => {
+  it("is empty only when there are no call spans and no usage requests", () => {
+    expect(isUsageEmpty({ calls: 0 }, { requests: 0 })).toBe(true);
+    expect(isUsageEmpty({ calls: 0 }, null)).toBe(true);
+    expect(isUsageEmpty(undefined, null)).toBe(true);
+  });
+
+  it("keeps cards when spans were pruned but usage snapshots remain", () => {
+    expect(isUsageEmpty({ calls: 0 }, { requests: 42 })).toBe(false);
+  });
+
+  it("keeps cards when spans exist", () => {
+    expect(isUsageEmpty({ calls: 3 }, { requests: 0 })).toBe(false);
+    expect(isUsageEmpty(parseProviderUsageDetail(fixture), null)).toBe(false);
+  });
+});
+
+describe("classifyUsageError", () => {
+  it("treats paused (offline) queries as offline, even with an older error", () => {
+    expect(classifyUsageError(null, true)).toBe("offline");
+    expect(classifyUsageError(withStatus(new ApiError("HTTP_ERROR", "boom"), 500), true)).toBe("offline");
+  });
+
+  it("separates unreachable gateway, tracing unavailable and other HTTP errors", () => {
+    expect(classifyUsageError(null, false)).toBeNull();
+    expect(classifyUsageError(new ApiError("NETWORK_ERROR", "down"), false)).toBe("offline");
+    expect(classifyUsageError(withStatus(new ApiError("HTTP_ERROR", "tracing store unavailable"), 503), false)).toBe("tracing");
+    expect(classifyUsageError(withStatus(new ApiError("HTTP_ERROR", "internal"), 500), false)).toBe("http");
+    expect(classifyUsageError(new ApiError("HTTP_ERROR", "internal"), false)).toBe("http");
+    expect(classifyUsageError(new Error("bad json"), false)).toBe("http");
+  });
+});
+
+describe("HttpClient errors used by the Usage tab", () => {
+  const http = new HttpClient("http://gw.test", () => "tok", () => "");
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("returns the JSON body with auth headers on success", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ calls: 1 }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(http.get("/v1/providers/p1/usage-detail", { limit: "20" })).resolves.toEqual({ calls: 1 });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("http://gw.test/v1/providers/p1/usage-detail?limit=20");
+    expect((init as RequestInit).headers).toMatchObject({ Authorization: "Bearer tok" });
+  });
+
+  it("keeps the HTTP status of a 503 so the UI can explain tracing is unavailable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: "tracing store unavailable" }), { status: 503 })),
+    );
+    const err = await http.get("/v1/providers/p1/health").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(httpStatusOf(err)).toBe(503);
+    expect((err as Error).message).toBe("tracing store unavailable");
+  });
+
+  it("reports a network failure without a status", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    const err = await http.get("/v1/providers/p1/health").catch((e: unknown) => e);
+    expect(httpStatusOf(err)).toBeUndefined();
+    expect(classifyUsageError(err, false)).toBe("offline");
+  });
+
+  it("signals auth failure on 401", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
+    const onAuthFailure = vi.fn();
+    http.onAuthFailure = onAuthFailure;
+    const err = await http.get("/v1/providers/p1/health").catch((e: unknown) => e);
+    expect(httpStatusOf(err)).toBe(401);
+    expect(onAuthFailure).toHaveBeenCalledOnce();
+    http.onAuthFailure = null;
+  });
+});
+
+function withStatus(err: ApiError, status: number): ApiError {
+  err.status = status;
+  return err;
+}
