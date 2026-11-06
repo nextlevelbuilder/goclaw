@@ -194,6 +194,10 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 	if len(req.Tools) > 0 {
 		var tools []map[string]any
 		for _, t := range req.Tools {
+			// Native tools of other providers can arrive through model fallback.
+			if t.Type != "function" || t.Function == nil {
+				continue
+			}
 			cleanedParams := CleanSchemaForProvider("anthropic", t.Function.Parameters)
 			tool := map[string]any{
 				"name":         t.Function.Name,
@@ -205,8 +209,8 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 		// Add cache_control breakpoint to the last tool (caches tool definitions prefix).
 		if len(tools) > 0 {
 			tools[len(tools)-1]["cache_control"] = map[string]any{"type": "ephemeral"}
+			body["tools"] = tools
 		}
-		body["tools"] = tools
 	}
 
 	// Merge options

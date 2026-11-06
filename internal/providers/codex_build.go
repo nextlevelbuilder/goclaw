@@ -112,7 +112,8 @@ func (p *CodexProvider) buildRequestBody(req ChatRequest, stream bool) map[strin
 	if len(req.Tools) > 0 {
 		var tools []map[string]any
 		for _, t := range req.Tools {
-			if t.Type == "image_generation" {
+			switch t.Type {
+			case "image_generation":
 				// Pass native image_generation tool object as-is — Responses API first-class tool.
 				// Defaults chosen for Phase 1b; per-agent overrides are Phase 4.
 				tools = append(tools, map[string]any{
@@ -122,9 +123,10 @@ func (p *CodexProvider) buildRequestBody(req ChatRequest, stream bool) map[strin
 					"output_format":  "png",
 					"partial_images": 1,
 				})
-			} else {
-				// Function tool path (default). Works with both value-type and pointer Function
-				// fields — we only access t.Function when type is not "image_generation".
+			case "function":
+				if t.Function == nil {
+					continue
+				}
 				tools = append(tools, map[string]any{
 					"type":        "function",
 					"name":        t.Function.Name,
@@ -133,7 +135,9 @@ func (p *CodexProvider) buildRequestBody(req ChatRequest, stream bool) map[strin
 				})
 			}
 		}
-		body["tools"] = tools
+		if len(tools) > 0 {
+			body["tools"] = tools
+		}
 	}
 
 	if level, ok := req.Options[OptThinkingLevel].(string); ok && level != "" && level != "off" {
