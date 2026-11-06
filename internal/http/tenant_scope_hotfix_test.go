@@ -304,6 +304,9 @@ func (s *recordingBuiltinToolStore) Get(_ context.Context, _ string) (*store.Bui
 func (s *recordingBuiltinToolStore) Seed(_ context.Context, _ []store.BuiltinToolDef) error {
 	return nil
 }
+func (s *recordingBuiltinToolStore) Upsert(_ context.Context, _ []store.BuiltinToolDef) error {
+	return nil
+}
 func (s *recordingBuiltinToolStore) ListEnabled(_ context.Context) ([]store.BuiltinToolDef, error) {
 	return nil, nil
 }
