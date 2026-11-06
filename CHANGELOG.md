@@ -102,6 +102,16 @@ All notable changes to GoClaw are documented here. For full documentation, see [
   `team_tasks` `list`/`search` was never released (all later calls for that team and chat
   blocked forever) and tasks it created were never dispatched; if that context was cancelled,
   the run was cancelled too. Each run now derives from the context of its own `Enqueue`.
+
+- **Media tools work again for `claude_cli` agents and `/v1/tools/invoke` (#1649)** —
+  `read_image`, `read_audio` and `read_video` failed with `agent budget wiring
+  error: missing agent_context_window,agent_max_tokens` because the MCP bridge
+  middleware and the `/v1/tools/invoke` handler never put the agent's context
+  window and max tokens into the tool context. Both now start from the default
+  budget and overwrite it from the agent row, and log a warning when the agent
+  lookup returns an error. Subagents spawned through the bridge now inherit the calling
+  agent's context window instead of the default.
+
 - **Channel reload no longer hangs after a failed channel start (#1627)** —
   `PendingHistory.StopFlusher` waited on the flush goroutine's `stopped`
   channel even when `StartFlusher` had never run. Telegram starts its flusher
