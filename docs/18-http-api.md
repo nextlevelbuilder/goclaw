@@ -471,7 +471,7 @@ LLM provider management. API keys are encrypted with AES-256-GCM in the database
 ```
 
 - Source: finished `llm_call` spans of the provider (running spans are left out). Latency is nearest-rank over `duration_ms` in milliseconds, identical on PostgreSQL and SQLite.
-- `recent_errors` groups failed calls by failover class and UTC hour, newest first; `at` is the newest call in the group. Raw error text is never returned.
+- `recent_errors` groups failed calls by failover class and UTC hour, newest first; `at` is the newest call in the group. Raw error text is never returned. Groups are built from the newest 500 failed calls in the range, so when there are more errors than that the oldest group can be partial and the counts need not add up to `errors`.
 - `error_class` values match the runtime failover reasons and `last_error_class` of the health route: `rate_limit`, `overloaded`, `timeout`, `auth`, `auth_permanent`, `billing`, `format`, `model_not_found`, `content_policy`, `server_error`, `context_overflow`, `unknown`. UIs translate each class with the key `usage.errorClass.<class>` and fall back to `unknown`.
 - Health timestamps are UTC; `cooldown_until`, `last_probe_at` and `updated_at` are `null` when unset. Tokens, cost and the daily series for the same provider come from `/v1/usage/summary` and `/v1/usage/timeseries` with `provider=<name>` (§23).
 - UI contract fixtures are generated from the handlers: `go test ./internal/http -run ProviderUsageFixtures -update-provider-usage-fixtures`.

@@ -52,7 +52,7 @@ func (h *ProvidersHandler) handleProviderUsageDetail(w http.ResponseWriter, r *h
 	statsStore, ok := h.tracingStore.(store.ProviderCallStatsStore)
 	if !ok || statsStore == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
-			"error": i18n.T(locale, i18n.MsgInvalidRequest, "tracing store unavailable"),
+			"error": i18n.T(locale, i18n.MsgInternalError, "tracing store unavailable"),
 		})
 		return
 	}

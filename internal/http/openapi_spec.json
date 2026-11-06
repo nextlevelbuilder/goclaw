@@ -7317,7 +7317,7 @@
           "Providers"
         ],
         "summary": "Latency percentiles and recent failed calls for one provider",
-        "description": "Reads finished LLM call spans of the provider in the caller's tenant. Latency is nearest-rank over duration_ms. recent_errors groups failed calls by failover class (rate_limit, timeout, overloaded, auth, billing, model_not_found, context_overflow, ...) and hour, newest first; raw error text is never returned. Viewer role may read.",
+        "description": "Reads finished LLM call spans of the provider in the caller's tenant. Latency is nearest-rank over duration_ms. recent_errors groups failed calls by failover class (rate_limit, timeout, overloaded, auth, billing, model_not_found, context_overflow, ...) and hour, newest first; raw error text is never returned. recent_errors is built from the newest 500 failed calls in range, so with more errors than that the oldest group can be partial and the counts need not add up to errors. Viewer role may read.",
         "parameters": [
           {
             "name": "X-GoClaw-User-Id",
