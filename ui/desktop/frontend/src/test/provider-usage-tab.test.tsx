@@ -119,15 +119,17 @@ describe('ProviderDetail usage tab', () => {
 
     render(<ProviderDetail provider={PROVIDER} onBack={() => {}} onEdit={() => {}} />)
     fireEvent.click(screen.getByRole('tab', { name: 'Usage' }))
-    await screen.findByText('1,284')
+    // Defaults to the 7-day range.
+    expect(screen.getByRole('radio', { name: '7 days' })).toHaveAttribute('aria-checked', 'true')
+    await screen.findByText('183 per day')
     expect(usageDetailCalls()).toBe(1)
 
-    fireEvent.click(screen.getByRole('radio', { name: '7 days' }))
-    await waitFor(() => expect(usageDetailCalls()).toBe(2))
-    await screen.findByText('183 per day')
-
     fireEvent.click(screen.getByRole('radio', { name: '24h' }))
-    expect(screen.getByText('1,284 per day')).toBeInTheDocument()
+    await waitFor(() => expect(usageDetailCalls()).toBe(2))
+    await screen.findByText('1,284 per day')
+
+    fireEvent.click(screen.getByRole('radio', { name: '7 days' }))
+    expect(screen.getByText('183 per day')).toBeInTheDocument()
     expect(usageDetailCalls()).toBe(2)
   })
 })

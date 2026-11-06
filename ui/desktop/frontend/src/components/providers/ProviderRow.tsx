@@ -1,4 +1,3 @@
-import type { KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ProviderData } from '../../types/provider'
 import { PROVIDER_TYPES } from '../../constants/providers'
@@ -17,22 +16,13 @@ export function ProviderRow({ provider, onOpen, onEdit, onDelete }: ProviderRowP
   const typeInfo = PROVIDER_TYPES.find((t) => t.value === provider.provider_type)
 
   const name = provider.display_name || provider.name
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.target !== e.currentTarget) return
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault()
-      onOpen(provider)
-    }
-  }
 
+  // The name button is the keyboard/AT entry point; clicking anywhere else on the row
+  // is a mouse shortcut. The row itself is not interactive, so Edit/Delete are not nested.
   return (
     <div
-      role="button"
-      tabIndex={0}
-      aria-label={t('providerDetail.openDetail', { name })}
       onClick={() => onOpen(provider)}
-      onKeyDown={onKeyDown}
-      className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border hover:bg-surface-tertiary/50 transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+      className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border hover:bg-surface-tertiary/50 transition-colors cursor-pointer"
     >
       {/* Status dot */}
       <span className={`w-2 h-2 rounded-full shrink-0 ${provider.enabled ? 'bg-success' : 'bg-error'}`} />
@@ -40,9 +30,17 @@ export function ProviderRow({ provider, onOpen, onEdit, onDelete }: ProviderRowP
       {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-text-primary truncate">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpen(provider)
+            }}
+            aria-label={t('providerDetail.openDetail', { name })}
+            className="min-w-0 text-left text-sm font-medium text-text-primary truncate rounded cursor-pointer hover:underline focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+          >
             {name}
-          </span>
+          </button>
           <span className="text-2xs px-1.5 py-0.5 rounded bg-surface-tertiary text-text-muted shrink-0">
             {typeInfo?.label ?? provider.provider_type}
           </span>

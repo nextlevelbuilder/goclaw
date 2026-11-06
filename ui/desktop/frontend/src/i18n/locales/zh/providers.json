@@ -250,7 +250,7 @@
       "requests": "请求",
       "perDay": "每天 {{value}}",
       "errorRate": "错误率",
-      "errorRateDetail": "{{calls}} 次调用中 {{errors}} 次失败",
+      "errorRateDetail_other": "{{calls}} 次调用中 {{errors}} 次失败",
       "medianLatency": "延迟中位数",
       "p95": "p95 {{value}}",
       "notAvailable": "—"
@@ -262,12 +262,12 @@
     "chart": {
       "title": "每日 Token",
       "empty": "此范围内没有 Token",
-      "barLabel": "{{date}}：{{tokens}} 个 Token"
+      "barLabel_other": "{{date}}：{{tokens}} 个 Token"
     },
     "recentErrors": {
       "title": "最近错误",
       "empty": "此范围内没有错误",
-      "count": "{{count}} 次调用"
+      "count_other": "{{count}} 次调用"
     },
     "errorClass": {
       "rate_limit": "速率限制",

@@ -1,4 +1,5 @@
 // Presentational pieces of the provider Usage tab. Status is always icon + word, never color alone.
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ProviderHealth, ProviderUsageErrorItem, UsageRange, UsageTimeSeriesPoint } from '../../types/provider'
 import {
@@ -58,16 +59,32 @@ export function ProviderStatusChip({ status }: { status: ProviderStatus }) {
   )
 }
 
+/** Re-render interval for the "resets in N min" countdown. */
+const COUNTDOWN_TICK_MS = 20_000
+
+/** Current time, refreshed every COUNTDOWN_TICK_MS while `active`. */
+function useNow(active: boolean): Date {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    if (!active) return
+    setNow(new Date())
+    const timer = setInterval(() => setNow(new Date()), COUNTDOWN_TICK_MS)
+    return () => clearInterval(timer)
+  }, [active])
+  return now
+}
+
 /** Shown only while the provider is cooling down. */
 export function CooldownBanner({ health, locale }: { health: ProviderHealth; locale: string }) {
   const { t } = useTranslation('providers')
+  const now = useNow(health.cooling_down)
   if (!health.cooling_down) return null
   const rateLimited = health.last_error_class === 'rate_limit'
   const since = health.updated_at ? formatClock(health.updated_at, locale) : null
   const title = since
     ? t(rateLimited ? 'usage.banner.rateLimitedSince' : 'usage.banner.coolingDownSince', { time: since })
     : t(rateLimited ? 'usage.banner.rateLimited' : 'usage.banner.coolingDown')
-  const minutes = cooldownMinutesLeft(health.cooldown_until)
+  const minutes = cooldownMinutesLeft(health.cooldown_until, now)
   const details = [
     !rateLimited && health.last_error_class
       ? t('usage.banner.reason', { reason: t(errorClassKey(health.last_error_class)) })
@@ -110,7 +127,11 @@ export function TokensPerDayChart({ points, range, locale }: { points: UsageTime
       ) : (
         <ul className="flex items-end gap-1 h-28" aria-label={t('usage.chart.title')}>
           {bars.map((b, i) => {
-            const label = t('usage.chart.barLabel', { date: formatDayLong(b.day, locale), tokens: formatInteger(b.tokens, locale) })
+            const label = t('usage.chart.barLabel', {
+              count: b.tokens,
+              date: formatDayLong(b.day, locale),
+              tokens: formatInteger(b.tokens, locale),
+            })
             return (
               <li key={b.day} className="flex-1 min-w-0 h-full flex flex-col items-center justify-end gap-1" title={label}>
                 <span className="sr-only">{label}</span>

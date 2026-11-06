@@ -250,7 +250,8 @@
       "requests": "Requests",
       "perDay": "{{value}} per day",
       "errorRate": "Error rate",
-      "errorRateDetail": "{{errors}} of {{calls}} calls",
+      "errorRateDetail_one": "{{errors}} of {{calls}} call",
+      "errorRateDetail_other": "{{errors}} of {{calls}} calls",
       "medianLatency": "Median latency",
       "p95": "p95 {{value}}",
       "notAvailable": "—"
@@ -262,12 +263,14 @@
     "chart": {
       "title": "Tokens per day",
       "empty": "No tokens in this range",
-      "barLabel": "{{date}}: {{tokens}} tokens"
+      "barLabel_one": "{{date}}: {{tokens}} token",
+      "barLabel_other": "{{date}}: {{tokens}} tokens"
     },
     "recentErrors": {
       "title": "Recent errors",
       "empty": "No errors in this range",
-      "count": "{{count}} calls"
+      "count_one": "{{count}} call",
+      "count_other": "{{count}} calls"
     },
     "errorClass": {
       "rate_limit": "Rate limit",

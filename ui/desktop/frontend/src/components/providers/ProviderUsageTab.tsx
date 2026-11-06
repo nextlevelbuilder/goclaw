@@ -77,7 +77,11 @@ export function ProviderUsageTab({ range, usage, health, onRetry }: ProviderUsag
             label={t('usage.metrics.errorRate')}
             value={rate === null ? na : formatPercent(rate, locale)}
             sub={detail.calls > 0
-              ? t('usage.metrics.errorRateDetail', { errors: formatInteger(detail.errors, locale), calls: formatInteger(detail.calls, locale) })
+              ? t('usage.metrics.errorRateDetail', {
+                  count: detail.calls,
+                  errors: formatInteger(detail.errors, locale),
+                  calls: formatInteger(detail.calls, locale),
+                })
               : undefined}
           />
           <MetricCard

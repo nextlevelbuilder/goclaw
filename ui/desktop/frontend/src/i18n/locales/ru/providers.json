@@ -250,7 +250,10 @@
       "requests": "Запросы",
       "perDay": "{{value}} в день",
       "errorRate": "Доля ошибок",
-      "errorRateDetail": "{{errors}} из {{calls}} вызовов",
+      "errorRateDetail_one": "{{errors}} из {{calls}} вызова",
+      "errorRateDetail_few": "{{errors}} из {{calls}} вызовов",
+      "errorRateDetail_many": "{{errors}} из {{calls}} вызовов",
+      "errorRateDetail_other": "{{errors}} из {{calls}} вызова",
       "medianLatency": "Медианная задержка",
       "p95": "p95 {{value}}",
       "notAvailable": "—"
@@ -262,12 +265,18 @@
     "chart": {
       "title": "Токены по дням",
       "empty": "Нет токенов за этот период",
-      "barLabel": "{{date}}: токенов {{tokens}}"
+      "barLabel_one": "{{date}}: {{tokens}} токен",
+      "barLabel_few": "{{date}}: {{tokens}} токена",
+      "barLabel_many": "{{date}}: {{tokens}} токенов",
+      "barLabel_other": "{{date}}: {{tokens}} токена"
     },
     "recentErrors": {
       "title": "Последние ошибки",
       "empty": "Нет ошибок за этот период",
-      "count": "Вызовов: {{count}}"
+      "count_one": "{{count}} вызов",
+      "count_few": "{{count}} вызова",
+      "count_many": "{{count}} вызовов",
+      "count_other": "{{count}} вызова"
     },
     "errorClass": {
       "rate_limit": "Лимит запросов",

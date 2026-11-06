@@ -27,7 +27,7 @@ interface ProviderDetailProps {
 export function ProviderDetail({ provider, onBack, onEdit }: ProviderDetailProps) {
   const { t } = useTranslation('providers')
   const [activeTab, setActiveTab] = useState<TabKey>('connection')
-  const [range, setRange] = useState<UsageRange>('24h')
+  const [range, setRange] = useState<UsageRange>('7d')
   const health = useProviderHealth(provider.id)
   const usage = useProviderUsage(provider.id, provider.name, range, activeTab === 'usage')
   const typeLabel = PROVIDER_TYPES.find((p) => p.value === provider.provider_type)?.label ?? provider.provider_type

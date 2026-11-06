@@ -250,7 +250,7 @@
       "requests": "Yêu cầu",
       "perDay": "{{value}} mỗi ngày",
       "errorRate": "Tỷ lệ lỗi",
-      "errorRateDetail": "{{errors}} / {{calls}} lượt gọi",
+      "errorRateDetail_other": "{{errors}} / {{calls}} lượt gọi",
       "medianLatency": "Độ trễ trung vị",
       "p95": "p95 {{value}}",
       "notAvailable": "—"
@@ -262,12 +262,12 @@
     "chart": {
       "title": "Token theo ngày",
       "empty": "Không có token trong khoảng này",
-      "barLabel": "{{date}}: {{tokens}} token"
+      "barLabel_other": "{{date}}: {{tokens}} token"
     },
     "recentErrors": {
       "title": "Lỗi gần đây",
       "empty": "Không có lỗi trong khoảng này",
-      "count": "{{count}} lượt gọi"
+      "count_other": "{{count}} lượt gọi"
     },
     "errorClass": {
       "rate_limit": "Vượt giới hạn",
