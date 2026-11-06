@@ -1,0 +1,26 @@
+{
+  "provider": "dashscope",
+  "calls": 1284,
+  "errors": 80,
+  "latency_ms": {
+    "p50": 1400,
+    "p95": 4800
+  },
+  "recent_errors": [
+    {
+      "at": "2026-11-06T04:38:10Z",
+      "error_class": "rate_limit",
+      "count": 2
+    },
+    {
+      "at": "2026-11-06T04:18:10Z",
+      "error_class": "timeout",
+      "count": 1
+    },
+    {
+      "at": "2026-11-06T02:38:10Z",
+      "error_class": "auth",
+      "count": 1
+    }
+  ]
+}
