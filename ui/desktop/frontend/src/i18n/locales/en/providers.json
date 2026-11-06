@@ -199,5 +199,99 @@
     "failedCreate": "Failed to create provider",
     "failedUpdate": "Failed to update provider",
     "failedDelete": "Failed to delete provider"
+  },
+  "providerDetail": {
+    "back": "Providers",
+    "edit": "Edit",
+    "openDetail": "Open details for {{name}}",
+    "tabs": {
+      "connection": "Connection",
+      "usage": "Usage"
+    },
+    "status": {
+      "running": "Running",
+      "rateLimited": "Rate limited",
+      "coolingDown": "Cooling down",
+      "disabled": "Disabled"
+    },
+    "fields": {
+      "name": "Name",
+      "type": "Type",
+      "apiBase": "API base",
+      "apiKey": "API key",
+      "status": "Status",
+      "defaultModel": "Default model",
+      "models": "Models",
+      "transportAuth": "Transport & authentication"
+    },
+    "apiKeySet": "Set",
+    "apiKeyNotSet": "Not set",
+    "notSet": "Not set"
+  },
+  "usage": {
+    "range": {
+      "label": "Time range",
+      "24h": "24h",
+      "7d": "7 days",
+      "30d": "30 days"
+    },
+    "banner": {
+      "rateLimitedSince": "Rate limited since {{time}}",
+      "rateLimited": "Rate limited",
+      "coolingDownSince": "Cooling down since {{time}}",
+      "coolingDown": "Cooling down",
+      "reason": "Last error: {{reason}}",
+      "resetIn": "Should reset in about {{minutes}} min.",
+      "failures": "Consecutive failures: {{count}}"
+    },
+    "metrics": {
+      "tokens": "Tokens",
+      "estimatedCost": "{{cost}} estimated",
+      "requests": "Requests",
+      "perDay": "{{value}} per day",
+      "errorRate": "Error rate",
+      "errorRateDetail": "{{errors}} of {{calls}} calls",
+      "medianLatency": "Median latency",
+      "p95": "p95 {{value}}",
+      "notAvailable": "—"
+    },
+    "units": {
+      "seconds": "{{value}} s",
+      "milliseconds": "{{value}} ms"
+    },
+    "chart": {
+      "title": "Tokens per day",
+      "empty": "No tokens in this range",
+      "barLabel": "{{date}}: {{tokens}} tokens"
+    },
+    "recentErrors": {
+      "title": "Recent errors",
+      "empty": "No errors in this range",
+      "count": "{{count}} calls"
+    },
+    "errorClass": {
+      "rate_limit": "Rate limit",
+      "overloaded": "Overloaded",
+      "timeout": "Timeout",
+      "auth": "Authentication failed",
+      "auth_permanent": "Credentials rejected",
+      "billing": "Billing problem",
+      "format": "Invalid request",
+      "model_not_found": "Model not found",
+      "content_policy": "Content policy",
+      "server_error": "Server error",
+      "context_overflow": "Context too long",
+      "unknown": "Unknown error"
+    },
+    "states": {
+      "loading": "Loading usage…",
+      "errorTitle": "Couldn't load usage",
+      "errorBody": "The gateway returned an error while reading usage. Try again in a moment.",
+      "tracingUnavailable": "Call statistics are unavailable because tracing is turned off on the gateway.",
+      "retry": "Try again",
+      "emptyTitle": "No calls in this range",
+      "emptyBody": "Try a longer range, or chat with an agent that uses this provider.",
+      "staleNote": "Couldn't refresh. Showing data from {{time}}."
+    }
   }
 }
