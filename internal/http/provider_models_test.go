@@ -465,6 +465,67 @@ func TestOpenAIModelsAPIBaseDefaultsRequesty(t *testing.T) {
 	}
 }
 
+func TestProvidersHandlerListProviderModelsLLMTRKeepsCatalogIDs(t *testing.T) {
+	token := setupProvidersAdminToken(t)
+	var capturedAuth, capturedPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedAuth = r.Header.Get("Authorization")
+		capturedPath = r.URL.Path
+		if r.URL.Path != "/models" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"object": "list",
+			"data": []map[string]string{
+				{"id": "qwen/qwen3.8-27b-free"},
+				{"id": "llmtr/qwen3-8-27b"},
+			},
+		})
+	}))
+	t.Cleanup(upstream.Close)
+
+	providerStore := newMockProviderStore()
+	provider := &store.LLMProviderData{
+		BaseModel:    store.BaseModel{ID: uuid.New()},
+		Name:         "llmtr",
+		ProviderType: store.ProviderLLMTR,
+		APIBase:      upstream.URL,
+		APIKey:       "llmtr-key",
+		Enabled:      true,
+	}
+	if err := providerStore.CreateProvider(t.Context(), provider); err != nil {
+		t.Fatalf("CreateProvider() error = %v", err)
+	}
+
+	handler := NewProvidersHandler(providerStore, newMockSecretsStore(), nil, "")
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	result := providerModelsRequest(t, mux, provider.ID, token)
+	if capturedPath != "/models" {
+		t.Fatalf("request path = %q, want /models", capturedPath)
+	}
+	if capturedAuth != "Bearer llmtr-key" {
+		t.Fatalf("Authorization = %q, want Bearer llmtr-key", capturedAuth)
+	}
+	want := []string{"qwen/qwen3.8-27b-free", "llmtr/qwen3-8-27b"}
+	if len(result.Models) != len(want) {
+		t.Fatalf("models = %#v, want %v", result.Models, want)
+	}
+	for index, model := range result.Models {
+		if model.ID != want[index] {
+			t.Errorf("models[%d].ID = %q, want %q", index, model.ID, want[index])
+		}
+	}
+}
+
+func TestOpenAIModelsAPIBaseDefaultsLLMTR(t *testing.T) {
+	if got := openAIModelsAPIBase(store.ProviderLLMTR, ""); got != store.LLMTRDefaultAPIBase {
+		t.Fatalf("LLMTR default api base = %q, want %q", got, store.LLMTRDefaultAPIBase)
+	}
+}
+
 func TestProvidersHandlerListProviderModelsAIMLAPIUsesCuratedCatalog(t *testing.T) {
 	token := setupProvidersAdminToken(t)
 	providerStore := newMockProviderStore()

@@ -77,6 +77,17 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 		slog.Info("registered provider", "name", "requesty")
 	}
 
+	if cfg.Providers.LLMTR.APIKey != "" {
+		base := cfg.Providers.LLMTR.APIBase
+		if base == "" {
+			base = store.LLMTRDefaultAPIBase
+		}
+		prov := providers.NewOpenAIProvider("llmtr", cfg.Providers.LLMTR.APIKey, base, store.LLMTRDefaultModel)
+		prov.WithProviderType(store.ProviderLLMTR)
+		registry.Register(prov)
+		slog.Info("registered provider", "name", "llmtr")
+	}
+
 	if cfg.Providers.OpenRouter.APIKey != "" {
 		orProv := providers.NewOpenAIProvider("openrouter", cfg.Providers.OpenRouter.APIKey, "https://openrouter.ai/api/v1", "anthropic/claude-sonnet-4-5-20250929")
 		orProv.WithSiteInfo("https://goclaw.sh", "GoClaw")
@@ -513,6 +524,11 @@ func openAIProviderDefaults(providerType, apiBase string) (string, string) {
 			apiBase = store.RequestyDefaultAPIBase
 		}
 		return apiBase, store.RequestyDefaultModel
+	case store.ProviderLLMTR:
+		if apiBase == "" {
+			apiBase = store.LLMTRDefaultAPIBase
+		}
+		return apiBase, store.LLMTRDefaultModel
 	default:
 		return apiBase, ""
 	}
