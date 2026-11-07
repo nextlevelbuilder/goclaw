@@ -1,32 +1,11 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ToolCall } from '../../stores/chat-store'
-
-// Inline SVG icons (no lucide-react dependency)
-function WrenchIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-    </svg>
-  )
-}
-
-function ZapIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-    </svg>
-  )
-}
-
-function AlertIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-      <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-    </svg>
-  )
-}
+import { isToolDenied } from '../../utils/chat-error'
+import { cn } from '../../lib/cn'
+import { IconActivity, IconWrench } from '../common/Icons'
+import { StatusChip, type StatusTone } from '../ui'
+import { IconChevronRight } from './chat-icons'
 
 const isSkillTool = (name: string) => name === 'use_skill'
 
@@ -37,81 +16,67 @@ function buildToolSummary(args: Record<string, unknown>): string | null {
   return null
 }
 
-function ToolIcon({ state, isSkill }: { state: ToolCall['state']; isSkill: boolean }) {
-  const cls = 'h-3.5 w-3.5 shrink-0'
-  if (isSkill) {
-    if (state === 'calling') return <ZapIcon className={`${cls} animate-pulse text-amber-500`} />
-    if (state === 'error') return <AlertIcon className={`${cls} text-error`} />
-    return <ZapIcon className={`${cls} text-amber-500`} />
-  }
-  if (state === 'calling') return <WrenchIcon className={`${cls} animate-wobble text-blue-500`} />
-  if (state === 'error') return <AlertIcon className={`${cls} text-error`} />
-  return <WrenchIcon className={`${cls} text-blue-500`} />
-}
-
-function PhaseLabel({ state, isSkill }: { state: ToolCall['state']; isSkill: boolean }) {
-  const { t } = useTranslation('common')
-  const label = isSkill
-    ? { calling: t('skillActivating'), completed: t('skillActivated'), error: t('toolFailed') }[state]
-    : { calling: t('toolRunning'), completed: t('toolDone'), error: t('toolFailed') }[state]
-  const color = state === 'error' ? 'text-error' : state === 'completed' ? 'text-text-secondary' : 'text-blue-500'
-  return <span className={`text-2xs ${color}`}>{label}</span>
-}
-
 interface ToolCallBlockProps {
   toolCall: ToolCall
-  /** Compact mode — less padding, used inside grouped containers */
-  compact?: boolean
 }
 
-export function ToolCallBlock({ toolCall, compact }: ToolCallBlockProps) {
-  const { t } = useTranslation('common')
+/** One tool call as a single `text-code` row; click to expand arguments and result in place. */
+export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
+  const { t } = useTranslation('chat')
   const [expanded, setExpanded] = useState(false)
   const skill = isSkillTool(toolCall.toolName)
   const displayName = skill
-    ? `skill: ${(toolCall.arguments?.name as string) || 'unknown'}`
+    ? t('thread.skill', { name: (toolCall.arguments?.name as string) || 'unknown' })
     : toolCall.toolName
   const summary = buildToolSummary(toolCall.arguments)
-  const canExpand = Object.keys(toolCall.arguments).length > 0 || toolCall.result || toolCall.error
+  const hasArgs = Object.keys(toolCall.arguments).length > 0
+  const canExpand = hasArgs || !!toolCall.result || !!toolCall.error
+
+  let tone: StatusTone = 'info'
+  let label = t('thread.toolRunning')
+  if (toolCall.state === 'completed') {
+    tone = 'success'
+    label = t('thread.toolDone')
+  }
+  if (toolCall.state === 'error') {
+    tone = 'danger'
+    label = isToolDenied(toolCall.error) ? t('thread.toolDenied') : t('thread.toolFailed')
+  }
+  const Icon = skill ? IconActivity : IconWrench
 
   return (
-    <div className={compact ? '' : 'rounded-md border border-border bg-surface-tertiary/30'}>
+    <div className="min-w-0 rounded-sm border border-border-subtle bg-surface-raised">
       <button
         type="button"
-        onClick={() => canExpand && setExpanded(!expanded)}
+        onClick={() => canExpand && setExpanded((v) => !v)}
         disabled={!canExpand}
-        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-surface-tertiary/50 transition-colors"
+        aria-expanded={canExpand ? expanded : undefined}
+        className="flex h-8 w-full items-center gap-2 rounded-sm px-2.5 text-left text-code text-ink-secondary transition-colors enabled:hover:bg-surface-hover"
       >
-        <ToolIcon state={toolCall.state} isSkill={skill} />
-        <span className="font-medium text-text-primary shrink-0">{displayName}</span>
-        {summary && <span className="truncate text-text-secondary ml-1">{summary}</span>}
-        <span className="ml-auto flex items-center gap-1 shrink-0">
-          <PhaseLabel state={toolCall.state} isSkill={skill} />
-          {canExpand && (
-            <svg className={`w-3 h-3 text-text-muted transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          )}
+        <Icon size={14} className="shrink-0 text-ink-muted" />
+        <span className="shrink-0 text-ink">{displayName}</span>
+        {summary && <span className="min-w-0 flex-1 truncate text-ink-muted">{summary}</span>}
+        <span className={cn('flex shrink-0 items-center gap-2', !summary && 'ml-auto')}>
+          <StatusChip tone={tone} label={label} />
+          {canExpand && <IconChevronRight size={12} className={cn('text-ink-muted transition-transform', expanded && 'rotate-90')} />}
         </span>
       </button>
 
       {expanded && canExpand && (
-        <div className="border-t border-border px-3 py-2 space-y-2">
-          {toolCall.error && (
-            <pre className="text-xs text-error whitespace-pre-wrap">{toolCall.error}</pre>
-          )}
-          {Object.keys(toolCall.arguments).length > 0 && (
+        <div className="flex flex-col gap-2 border-t border-border-subtle px-2.5 py-2">
+          {toolCall.error && <pre className="whitespace-pre-wrap break-words text-code text-danger">{toolCall.error}</pre>}
+          {hasArgs && (
             <div>
-              <div className="text-2xs font-semibold uppercase text-text-muted mb-0.5">{t('toolArguments')}</div>
-              <pre className="whitespace-pre-wrap text-2xs font-mono text-text-secondary bg-surface-primary rounded p-1.5 max-h-40 overflow-y-auto">
+              <div className="mb-1 text-overline text-ink-muted">{t('thread.arguments')}</div>
+              <pre className="max-h-40 overflow-y-auto overscroll-contain whitespace-pre-wrap break-words rounded-sm bg-surface-window p-2 text-code text-ink-secondary">
                 {JSON.stringify(toolCall.arguments, null, 2)}
               </pre>
             </div>
           )}
           {toolCall.result && (
             <div>
-              <div className="text-2xs font-semibold uppercase text-text-muted mb-0.5">{t('toolResult')}</div>
-              <pre className="whitespace-pre-wrap text-2xs font-mono text-text-secondary bg-surface-primary rounded p-1.5 max-h-40 overflow-y-auto">
+              <div className="mb-1 text-overline text-ink-muted">{t('thread.result')}</div>
+              <pre className="max-h-40 overflow-y-auto overscroll-contain whitespace-pre-wrap break-words rounded-sm bg-surface-window p-2 text-code text-ink-secondary">
                 {toolCall.result}
               </pre>
             </div>

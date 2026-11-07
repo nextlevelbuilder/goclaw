@@ -41,5 +41,37 @@
     "resetFailed": "重置Session失败",
     "updated": "Session已更新",
     "updateFailed": "更新Session失败"
-  }
+  },
+  "count_other": "{{count}} 个对话",
+  "countNone": "还没有对话",
+  "filterAgent": "智能体",
+  "newChat": "新对话",
+  "search": "搜索会话",
+  "group": {
+    "today": "今天",
+    "yesterday": "昨天",
+    "earlier": "更早"
+  },
+  "messages_other": "{{count}} 条消息",
+  "untitled": "未命名",
+  "continueChat": "继续对话",
+  "rename": "重命名",
+  "renameTitle": "重命名对话",
+  "nameLabel": "名称",
+  "nameRequired": "请为此对话输入名称。",
+  "save": "保存",
+  "cancel": "取消",
+  "delete": "删除",
+  "openMenu": "会话操作",
+  "deleteConfirmTitle": "删除“{{title}}”？",
+  "deleteConfirmBody": "这将永久删除该对话及其所有消息，且无法撤销。",
+  "firstTitle": "开始你的第一次对话",
+  "firstBody": "与智能体的每次对话都会保存在这里，方便日后搜索或继续。",
+  "chooseAgent": "选择智能体",
+  "localHint": "会话保存在此设备上。",
+  "loadErrorTitle": "无法加载会话",
+  "loadErrorHint": "请确认网关正在运行，然后重试。",
+  "previewEmpty": "选择一个对话以预览。",
+  "previewError": "无法加载此对话。",
+  "previewNoMessages": "此对话还没有消息。"
 }

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import type { ChatMessage as Message } from '../../stores/chat-store'
 import { formatTimestamp } from '../../lib/format'
 import { ThinkingBlock } from './ThinkingBlock'
@@ -11,68 +12,58 @@ interface MessageBubbleProps {
   isStreaming?: boolean
 }
 
+/** User messages are a right-aligned pill; agent replies are flat text with tool rows above. */
 export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
+  const { t } = useTranslation('chat')
+
   if (message.role === 'user') {
     return (
-      <div className="flex justify-end mb-4">
-        <div className="max-w-[85%] bg-surface-secondary border border-border shadow-sm border-r-2 border-r-accent rounded-xl px-4 py-3">
-          <p className="text-sm text-text-primary whitespace-pre-wrap break-words">{message.content}</p>
-          <time className="text-2xs text-text-muted mt-1 block text-right">
-            {formatTimestamp(message.timestamp)}
-          </time>
-        </div>
+      <div className="flex justify-end">
+        <p
+          title={formatTimestamp(message.timestamp)}
+          className="max-w-[70%] whitespace-pre-wrap break-words rounded-lg bg-bubble-user px-3.5 py-2 text-body text-ink"
+        >
+          {message.content}
+        </p>
       </div>
     )
   }
 
-  // Assistant message
   const outputTokens = message.usage?.outputTokens ?? 0
   const toolCalls = message.toolCalls ?? []
-  const hasTools = toolCalls.length > 0
+  const waiting = isStreaming && !message.content && !message.thinkingText && toolCalls.length === 0
+
+  // A run that has not produced anything yet is shown by the activity line, not an empty block.
+  if (waiting) return null
 
   return (
-    <div className="mb-6 min-w-0">
-      {message.thinkingText && (
-        <ThinkingBlock text={message.thinkingText} isStreaming={isStreaming && !message.content} />
-      )}
+    <div className="flex min-w-0 flex-col gap-2">
+      {message.thinkingText && <ThinkingBlock text={message.thinkingText} isStreaming={isStreaming && !message.content} />}
 
-      {/* Group tool calls in a single bordered container */}
-      {hasTools && (
-        <div className="mb-2 rounded-md border border-border bg-surface-tertiary/30 divide-y divide-border overflow-hidden">
-          {toolCalls.map((tc) => (
-            <ToolCallBlock key={tc.toolId} toolCall={tc} compact />
-          ))}
+      {toolCalls.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          {toolCalls.map((tc) => <ToolCallBlock key={tc.toolId} toolCall={tc} />)}
         </div>
       )}
 
       {message.content && (
-        <div className="min-w-0 overflow-hidden">
+        <div className="min-w-0 overflow-hidden text-body text-ink-secondary">
           <MarkdownRenderer content={message.content} />
-          {/* Streaming cursor on last streaming message */}
-          {isStreaming && (
-            <span className="inline-block w-0.5 h-4 bg-accent animate-pulse rounded-sm ml-0.5 align-text-bottom" />
-          )}
+          {isStreaming && <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse rounded-sm bg-accent align-text-bottom" />}
         </div>
-      )}
-
-      {/* Streaming cursor when no content yet but run is active */}
-      {isStreaming && !message.content && !message.thinkingText && toolCalls.length === 0 && (
-        <span className="inline-block w-0.5 h-4 bg-accent animate-pulse rounded-sm" />
       )}
 
       {message.media?.length ? <MediaBlock items={message.media} /> : null}
 
-      <div className="flex items-center gap-2 mt-1.5 text-2xs text-text-muted">
-        <time>{formatTimestamp(message.timestamp)}</time>
-        {outputTokens > 0 && (
-          <span>· {outputTokens.toLocaleString()} tokens</span>
-        )}
-        {(message.model || message.provider) && (
-          <span className="font-mono truncate" title={message.provider}>
-            · {message.model ?? message.provider}
-          </span>
-        )}
-      </div>
+      {!isStreaming && (outputTokens > 0 || message.model || message.provider) && (
+        <div className="flex items-center gap-2 text-caption text-ink-muted">
+          <time>{formatTimestamp(message.timestamp)}</time>
+          {outputTokens > 0 && <span>· {t('thread.tokens', { count: outputTokens })}</span>}
+          {(message.model || message.provider) && (
+            <span className="truncate font-mono" title={message.provider}>· {message.model ?? message.provider}</span>
+          )}
+        </div>
+      )}
     </div>
   )
 }

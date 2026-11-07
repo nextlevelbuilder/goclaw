@@ -35,7 +35,6 @@ interface ChatMessageState {
   addToolCall: (toolCall: Omit<ToolCall, 'state'>) => void
   updateToolResult: (toolId: string, result: string, error?: string) => void
   finalizeMessage: (content: string, usage?: ChatMessage['usage'], media?: ChatMessage['media']) => void
-  appendErrorToLastMessage: (error: string) => void
   setMessages: (messages: ChatMessage[]) => void
   clear: () => void
 }
@@ -129,18 +128,6 @@ export const useChatMessageStore = create<ChatMessageState>((set) => ({
           usage,
           media,
         }
-      }
-      return { messages: msgs }
-    })
-  },
-
-  // Called when a run fails — appends error text if assistant message is empty.
-  appendErrorToLastMessage: (error) => {
-    set((s) => {
-      const msgs = [...s.messages]
-      const last = msgs[msgs.length - 1]
-      if (last?.role === 'assistant') {
-        msgs[msgs.length - 1] = { ...last, content: last.content || `Error: ${error}` }
       }
       return { messages: msgs }
     })

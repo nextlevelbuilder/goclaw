@@ -71,11 +71,11 @@ export function FilePreviewRenderer({
   if (needsTextFetch) {
     if (loadError) {
       return (
-        <div className="p-6 flex flex-col items-center gap-3 text-text-secondary">
-          <p className="text-sm">{t('errors.serverError', 'Failed to load file preview')}</p>
+        <div className="p-6 flex flex-col items-center gap-3 text-ink-secondary">
+          <p className="text-ui">{t('errors.serverError', 'Failed to load file preview')}</p>
           <button
             onClick={() => downloadFile(url, displayName)}
-            className="inline-flex items-center gap-2 rounded-lg bg-accent/10 px-4 py-2 text-sm text-accent hover:bg-accent/20 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 rounded-md bg-accent-subtle px-4 py-2 text-ui text-accent-subtle-ink transition-colors hover:bg-surface-hover cursor-pointer"
           >
             {t('download', 'Download')}
           </button>
@@ -83,7 +83,7 @@ export function FilePreviewRenderer({
       )
     }
     if (textContent === null) {
-      return <p className="text-text-muted text-sm p-4">{t('loading')}</p>
+      return <p className="text-ink-muted text-ui p-4">{t('loading')}</p>
     }
     if (isMarkdown(filename)) {
       const baseDir = url.substring(0, url.lastIndexOf('/') + 1)
@@ -111,17 +111,17 @@ export function FilePreviewRenderer({
       )
     }
     return (
-      <pre className="p-4 text-xs font-mono text-text-primary overflow-auto max-h-[70vh] whitespace-pre-wrap break-words">
+      <pre className="p-4 text-code text-ink overflow-auto max-h-[70vh] whitespace-pre-wrap break-words">
         {textContent}
       </pre>
     )
   }
   return (
-    <div className="p-6 flex flex-col items-center gap-3 text-text-secondary">
-      <p className="text-sm">{t('selectFileToView')}</p>
+    <div className="p-6 flex flex-col items-center gap-3 text-ink-secondary">
+      <p className="text-ui">{t('selectFileToView')}</p>
       <button
         onClick={() => downloadFile(url, displayName)}
-        className="inline-flex items-center gap-2 rounded-lg bg-accent/10 px-4 py-2 text-sm text-accent hover:bg-accent/20 transition-colors"
+        className="inline-flex items-center gap-2 rounded-md bg-accent-subtle px-4 py-2 text-ui text-accent-subtle-ink transition-colors hover:bg-surface-hover"
       >
         {t('download')}
       </button>

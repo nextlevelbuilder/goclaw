@@ -41,5 +41,37 @@
     "resetFailed": "Không thể đặt lại session",
     "updated": "Đã cập nhật session",
     "updateFailed": "Không thể cập nhật session"
-  }
+  },
+  "count_other": "{{count}} cuộc trò chuyện",
+  "countNone": "Chưa có cuộc trò chuyện nào",
+  "filterAgent": "Agent",
+  "newChat": "Cuộc trò chuyện mới",
+  "search": "Tìm phiên",
+  "group": {
+    "today": "Hôm nay",
+    "yesterday": "Hôm qua",
+    "earlier": "Trước đó"
+  },
+  "messages_other": "{{count}} tin nhắn",
+  "untitled": "Chưa đặt tên",
+  "continueChat": "Tiếp tục trò chuyện",
+  "rename": "Đổi tên",
+  "renameTitle": "Đổi tên cuộc trò chuyện",
+  "nameLabel": "Tên",
+  "nameRequired": "Hãy nhập tên cho cuộc trò chuyện này.",
+  "save": "Lưu",
+  "cancel": "Hủy",
+  "delete": "Xóa",
+  "openMenu": "Thao tác với phiên",
+  "deleteConfirmTitle": "Xóa \"{{title}}\"?",
+  "deleteConfirmBody": "Thao tác này xóa vĩnh viễn cuộc trò chuyện và mọi tin nhắn trong đó. Không thể hoàn tác.",
+  "firstTitle": "Bắt đầu cuộc trò chuyện đầu tiên",
+  "firstBody": "Mọi cuộc trò chuyện với agent đều được lưu tại đây để bạn tìm lại hoặc tiếp tục sau.",
+  "chooseAgent": "Chọn agent",
+  "localHint": "Các phiên được lưu ngay trên thiết bị này.",
+  "loadErrorTitle": "Không tải được danh sách phiên",
+  "loadErrorHint": "Hãy kiểm tra gateway đang chạy rồi thử lại.",
+  "previewEmpty": "Chọn một cuộc trò chuyện để xem trước.",
+  "previewError": "Không tải được cuộc trò chuyện này.",
+  "previewNoMessages": "Cuộc trò chuyện này chưa có tin nhắn."
 }
