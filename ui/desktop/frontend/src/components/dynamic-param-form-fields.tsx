@@ -35,7 +35,7 @@ function NumberField({ schema, value, onChange, readonly }: FieldProps) {
   return (
     <input
       type="number"
-      className="border border-surface-secondary rounded px-2 py-1 text-sm w-full bg-surface"
+      className="border border-surface-base rounded px-2 py-1 text-sm w-full bg-surface-base"
       min={schema.min}
       max={schema.max}
       step={schema.step ?? 1}
@@ -51,7 +51,7 @@ function IntegerField({ schema, value, onChange, readonly }: FieldProps) {
   return (
     <input
       type="number"
-      className="border border-surface-secondary rounded px-2 py-1 text-sm w-full bg-surface"
+      className="border border-surface-base rounded px-2 py-1 text-sm w-full bg-surface-base"
       min={schema.min}
       max={schema.max}
       step={1}
@@ -66,7 +66,7 @@ function IntegerField({ schema, value, onChange, readonly }: FieldProps) {
 function EnumField({ schema, value, onChange, readonly }: FieldProps) {
   return (
     <select
-      className="border border-surface-secondary rounded px-2 py-1 text-sm w-full bg-surface"
+      className="border border-surface-base rounded px-2 py-1 text-sm w-full bg-surface-base"
       value={value as string}
       disabled={readonly}
       onChange={readonly ? undefined : (e) => onChange(e.target.value)}
@@ -98,7 +98,7 @@ function StringField({ schema, value, onChange, readonly }: FieldProps) {
   return (
     <input
       type="text"
-      className="border border-surface-secondary rounded px-2 py-1 text-sm w-full bg-surface"
+      className="border border-surface-base rounded px-2 py-1 text-sm w-full bg-surface-base"
       value={value as string}
       readOnly={readonly}
       onChange={readonly ? undefined : (e) => onChange(e.target.value)}
@@ -110,7 +110,7 @@ function StringField({ schema, value, onChange, readonly }: FieldProps) {
 function TextField({ schema, value, onChange, readonly }: FieldProps) {
   return (
     <textarea
-      className="border border-surface-secondary rounded px-2 py-1 text-sm w-full bg-surface resize-y min-h-[4rem]"
+      className="border border-surface-base rounded px-2 py-1 text-sm w-full bg-surface-base resize-y min-h-[4rem]"
       value={value as string}
       readOnly={readonly}
       onChange={readonly ? undefined : (e) => onChange(e.target.value)}

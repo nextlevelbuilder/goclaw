@@ -41,7 +41,7 @@ export function KanbanCard({ task, ownerName, ownerEmoji, onClick }: KanbanCardP
           <span className={cn('rounded-sm px-1.5 font-mono text-caption', prio.cls)}>{prio.label}</span>
         </div>
         {locked && (
-          <span className="flex items-center gap-1 text-caption text-success-text">
+          <span className="flex items-center gap-1 text-caption text-success">
             <span aria-hidden="true" className="size-1.5 animate-pulse rounded-pill bg-success" />
             {t('board.running')}
           </span>
@@ -51,7 +51,7 @@ export function KanbanCard({ task, ownerName, ownerEmoji, onClick }: KanbanCardP
       <p className="line-clamp-2 text-ui font-medium text-ink">{task.subject}</p>
 
       {hasBlockers && (
-        <p className="mt-1 flex items-center gap-1 text-caption text-warning-text">
+        <p className="mt-1 flex items-center gap-1 text-caption text-warning">
           <IconBlocked size={12} className="shrink-0" />
           <span className="truncate">{task.blocked_by!.map((id) => id.slice(0, 8)).join(', ')}</span>
         </p>
@@ -78,7 +78,7 @@ export function KanbanCard({ task, ownerName, ownerEmoji, onClick }: KanbanCardP
 
       {task.progress_percent != null && task.progress_percent > 0 && !isTerminal && (
         <div className="mt-2 flex items-center gap-2">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-pill bg-surface-tertiary">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-pill bg-surface-hover">
             <div className="h-full rounded-pill bg-accent transition-all duration-500" style={{ width: `${Math.min(task.progress_percent, 100)}%` }} />
           </div>
           <span className="text-caption text-ink-muted">{task.progress_percent}%</span>

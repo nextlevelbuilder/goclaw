@@ -49,7 +49,7 @@ export function SkillTable({ skills, readOnly = false, onToggle, onEdit, onDelet
           <div className="flex flex-col items-start gap-0.5">
             <StatusChip tone={archived ? 'warning' : 'success'} label={archived ? t('deps.statusArchived') : t('deps.statusActive')} />
             {missing.length > 0 && (
-              <span className="max-w-40 truncate text-caption text-warning-text">
+              <span className="max-w-40 truncate text-caption text-warning">
                 {missing.slice(0, 3).join(', ')}{missing.length > 3 ? ` +${missing.length - 3}` : ''}
               </span>
             )}

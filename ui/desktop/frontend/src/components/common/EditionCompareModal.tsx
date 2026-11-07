@@ -73,9 +73,9 @@ function FeatureCell({ value }: { value: FeatureVal }) {
     )
   }
   if (value === false) {
-    return <span className="text-text-muted">—</span>
+    return <span className="text-ink-muted">—</span>
   }
-  return <span className="text-text-secondary">{value}</span>
+  return <span className="text-ink-secondary">{value}</span>
 }
 
 export function EditionCompareModal({ open, onClose }: EditionCompareModalProps) {
@@ -87,19 +87,19 @@ export function EditionCompareModal({ open, onClose }: EditionCompareModalProps)
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-surface-primary border border-border rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col"
+        className="bg-surface-window border border-border-subtle rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border shrink-0">
+        <div className="flex items-center justify-between p-4 border-b border-border-subtle shrink-0">
           <div>
-            <h3 className="text-sm font-semibold text-text-primary">
+            <h3 className="text-sm font-semibold text-ink">
               {t('editionCompare', 'GoClaw Lite vs Standard')}
             </h3>
-            <p className="text-2xs text-text-muted mt-0.5">
+            <p className="text-2xs text-ink-muted mt-0.5">
               {t('editionUpgrade', 'Upgrade to Standard with PostgreSQL for full features')}
             </p>
           </div>
-          <button aria-label={t('common:close')} onClick={onClose} className="text-text-muted hover:text-text-primary cursor-pointer p-2">
+          <button aria-label={t('common:close')} onClick={onClose} className="text-ink-muted hover:text-ink cursor-pointer p-2">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -110,19 +110,19 @@ export function EditionCompareModal({ open, onClose }: EditionCompareModalProps)
         <div className="overflow-y-auto overscroll-contain flex-1 px-4 py-3">
           {/* Column headers */}
           <div className="grid grid-cols-[1fr_90px_90px] gap-2 mb-2 px-1">
-            <span className="text-2xs text-text-muted font-medium">{t('feature', 'Feature')}</span>
+            <span className="text-2xs text-ink-muted font-medium">{t('feature', 'Feature')}</span>
             <span className="text-2xs text-accent font-semibold text-center">Lite</span>
-            <span className="text-2xs text-text-muted font-medium text-center">Standard</span>
+            <span className="text-2xs text-ink-muted font-medium text-center">Standard</span>
           </div>
 
           {FEATURES.map((group) => (
             <div key={group.group} className="mb-3">
-              <div className="text-2xs uppercase tracking-wider text-text-muted font-semibold px-1 py-1.5 bg-surface-tertiary/50 rounded mb-1">
+              <div className="text-2xs uppercase tracking-wider text-ink-muted font-semibold px-1 py-1.5 bg-surface-hover/50 rounded mb-1">
                 {t(`edition.group.${group.group}`, group.group)}
               </div>
               {group.rows.map((row) => (
-                <div key={row.key} className="grid grid-cols-[1fr_90px_90px] gap-2 px-1 py-1.5 border-b border-border/30">
-                  <span className="text-xs text-text-primary">{t(`edition.${row.key}`, row.key)}</span>
+                <div key={row.key} className="grid grid-cols-[1fr_90px_90px] gap-2 px-1 py-1.5 border-b border-border-subtle/30">
+                  <span className="text-xs text-ink">{t(`edition.${row.key}`, row.key)}</span>
                   <div className="text-2xs text-center"><FeatureCell value={row.lite} /></div>
                   <div className="text-2xs text-center"><FeatureCell value={row.standard} /></div>
                 </div>

@@ -133,7 +133,7 @@ export function SkillList() {
         {atLimit && <p className="mb-3 text-caption text-ink-muted">{t('screen.limit', { max: MAX_SKILLS_LITE })}</p>}
         {missingRuntimes && (
           <div role="alert" className="mb-3 rounded-md border border-warning bg-warning-subtle p-3">
-            <p className="text-ui font-medium text-warning-text">{t('deps.runtimeMissing')}</p>
+            <p className="text-ui font-medium text-warning">{t('deps.runtimeMissing')}</p>
             <p className="mt-0.5 text-caption text-ink-secondary">{t('deps.runtimeMissingDesc')} {missingRuntimes}</p>
           </div>
         )}

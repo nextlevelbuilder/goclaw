@@ -134,7 +134,7 @@ export function SttProviderForm({ initialSettings, onSave, onCancel }: Props) {
       <section className="flex flex-col gap-2">
         <div
           role="note"
-          className="flex items-start gap-2 rounded-md border border-warning bg-warning-subtle px-3 py-2 text-caption text-warning-text"
+          className="flex items-start gap-2 rounded-md border border-warning bg-warning-subtle px-3 py-2 text-caption text-warning"
           data-testid="whatsapp-privacy-banner"
         >
           <IconAlertTriangle size={14} className="mt-0.5 shrink-0" />

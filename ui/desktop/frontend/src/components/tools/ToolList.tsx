@@ -128,9 +128,9 @@ export function ToolList() {
           <div className="overflow-hidden rounded-card border border-border-subtle">
             {grouped.map(([category, items]) => (
               <section key={category} aria-label={t(`builtin.categories.${category}`, category)}>
-                <div className="flex items-center gap-2 border-b border-border-subtle bg-surface-secondary px-4 py-2">
+                <div className="flex items-center gap-2 border-b border-border-subtle bg-surface-base px-4 py-2">
                   <h2 className="text-caption font-medium uppercase text-ink-secondary">{t(`builtin.categories.${category}`, category)}</h2>
-                  <span className="rounded-pill bg-surface-tertiary px-1.5 text-caption text-ink-secondary">{items.length}</span>
+                  <span className="rounded-pill bg-surface-hover px-1.5 text-caption text-ink-secondary">{items.length}</span>
                 </div>
                 <ul className="divide-y divide-border-subtle">
                   {items.map((tool) => (
@@ -185,7 +185,7 @@ function ToolRow({ tool, readOnly, onToggle, onOpenSettings }: {
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span id={`tool-${tool.name}`} className="text-ui font-medium text-ink">{tool.display_name}</span>
-          <span className="rounded-sm bg-surface-tertiary px-1.5 font-mono text-caption text-ink-muted">{tool.name}</span>
+          <span className="rounded-sm bg-surface-hover px-1.5 font-mono text-caption text-ink-muted">{tool.name}</span>
           {needsSetup && <Badge tone="warning">{t('builtin.notConfigured')}</Badge>}
           {visibleRequires.length > 0 && !deprecated && (
             <Badge tone="neutral">{t('builtin.requiresTooltip', { list: visibleRequires.join(', ') })}</Badge>

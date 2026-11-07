@@ -60,30 +60,6 @@
   --color-info: oklch(0.45 0.14 250);
   --color-info-subtle: oklch(0.94 0.03 250);
 
-  /* ── Legacy aliases ────────────────────────────────────────────────────
-   * Older screens still use these names. Each points at the closest new token
-   * so every screen adopts the new palette in both themes. Remove once no
-   * component references them.
-   */
-  --color-surface-primary: var(--color-surface-window);
-  --color-surface-secondary: var(--color-surface-base);
-  --color-surface-tertiary: var(--color-surface-hover);
-  --color-text-primary: var(--color-ink);
-  --color-text-secondary: var(--color-ink-secondary);
-  --color-text-muted: var(--color-ink-muted);
-  --color-border: var(--color-border-subtle);
-  --color-accent-foreground: var(--color-on-accent);
-  --color-error: var(--color-danger);
-  --color-error-text: var(--color-danger);
-  --color-error-subtle: var(--color-danger-subtle);
-  --color-error-foreground: var(--color-on-accent);
-  --color-success-text: var(--color-success);
-  --color-warning-text: var(--color-warning);
-  --color-info-text: var(--color-info);
-  --color-user-bubble: var(--color-bubble-user);
-  --color-agent-bubble: var(--color-surface-raised);
-  --color-idle: var(--color-ink-muted);
-  /* ── End legacy aliases ─────────────────────────────────────────────── */
 
   /* ── Typography ────────────────────────────────────────────────────── */
   --font-sans: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;

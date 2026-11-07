@@ -78,7 +78,7 @@ export function TaskDetailBody({ task, members, attachments }: TaskDetailBodyPro
               aria-valuemin={0}
               aria-valuemax={100}
               aria-label={t('progress')}
-              className="h-2 w-full overflow-hidden rounded-pill bg-surface-tertiary"
+              className="h-2 w-full overflow-hidden rounded-pill bg-surface-hover"
             >
               <div className="h-2 rounded-pill bg-accent transition-all duration-500" style={{ width: `${pct}%` }} />
             </div>
@@ -93,7 +93,7 @@ export function TaskDetailBody({ task, members, attachments }: TaskDetailBodyPro
         {locked && <StatusChip tone="success" label={t('board.running')} />}
       </div>
 
-      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-md bg-surface-secondary p-4 sm:grid-cols-3">
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-md bg-surface-base p-4 sm:grid-cols-3">
         <MetaItem label={t('priority')}>
           <span className={cn('rounded-sm px-1.5 py-0.5 text-caption font-medium', prio.cls)}>{prio.label}</span>
         </MetaItem>
@@ -117,7 +117,7 @@ export function TaskDetailBody({ task, members, attachments }: TaskDetailBodyPro
           <span className="text-caption text-ink-muted">{t('blockedBy')}</span>
           <div className="mt-1 flex flex-wrap gap-1.5">
             {task.blocked_by.map((id) => (
-              <span key={id} className="rounded-sm bg-warning-subtle px-2 py-0.5 font-mono text-caption text-warning-text">
+              <span key={id} className="rounded-sm bg-warning-subtle px-2 py-0.5 font-mono text-caption text-warning">
                 {id.slice(0, 8)}
               </span>
             ))}
@@ -149,7 +149,7 @@ export function TaskDetailBody({ task, members, attachments }: TaskDetailBodyPro
               const baseUrl = getApiClient()?.getBaseUrl() || ''
               const fullUrl = a.download_url?.startsWith('http') ? a.download_url : `${baseUrl}${a.download_url}`
               return (
-                <li key={a.id} className="flex items-center gap-3 rounded-md border border-border-subtle bg-surface-secondary p-3">
+                <li key={a.id} className="flex items-center gap-3 rounded-md border border-border-subtle bg-surface-base p-3">
                   <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent-subtle">
                     <IconDocument className="text-accent-subtle-ink" />
                   </div>

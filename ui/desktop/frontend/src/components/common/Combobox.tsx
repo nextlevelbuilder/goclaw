@@ -111,10 +111,10 @@ export function Combobox({ value, onChange, options, placeholder, loading, allow
         onKeyDown={handleKeyDown}
         placeholder={loading ? 'Loading...' : placeholder}
         disabled={disabled || loading}
-        className="w-full bg-surface-tertiary border border-border rounded-lg px-2.5 py-1.5 pr-7 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+        className="w-full bg-surface-hover border border-border-subtle rounded-lg px-2.5 py-1.5 pr-7 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus:ring-1 focus:ring-accent"
       />
       {/* Dropdown chevron */}
-      <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted">
+      <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-ink-muted">
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
       </div>
 
@@ -122,7 +122,7 @@ export function Combobox({ value, onChange, options, placeholder, loading, allow
       {open && filtered.length > 0 && createPortal(
         <div
           ref={dropdownRef}
-          className="fixed z-[80] max-h-48 overflow-y-auto bg-surface-secondary border border-border rounded-lg shadow-lg py-1 pointer-events-auto"
+          className="fixed z-[80] max-h-48 overflow-y-auto bg-surface-base border border-border-subtle rounded-lg shadow-lg py-1 pointer-events-auto"
           style={{ top: pos.top, left: pos.left, width: pos.width }}
         >
           {filtered.map((o, idx) => (
@@ -132,9 +132,9 @@ export function Combobox({ value, onChange, options, placeholder, loading, allow
               onClick={() => handleSelect(o.value)}
               className={[
                 'w-full text-left px-3 py-1.5 text-sm transition-colors',
-                idx === highlightIdx ? 'bg-surface-tertiary' : '',
-                o.value === value ? 'text-accent font-medium' : 'text-text-primary',
-                idx !== highlightIdx ? 'hover:bg-surface-tertiary' : '',
+                idx === highlightIdx ? 'bg-surface-hover' : '',
+                o.value === value ? 'text-accent font-medium' : 'text-ink',
+                idx !== highlightIdx ? 'hover:bg-surface-hover' : '',
               ].filter(Boolean).join(' ')}
             >
               {o.label}

@@ -24,7 +24,7 @@ export function RefreshButton({ onRefresh, className }: RefreshButtonProps) {
   return (
     <button
       onClick={handleClick}
-      className={`p-1.5 text-text-muted hover:text-text-primary transition-colors ${className ?? ''}`}
+      className={`p-1.5 text-ink-muted hover:text-ink transition-colors ${className ?? ''}`}
       title="Refresh"
     >
       <svg
