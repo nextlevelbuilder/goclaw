@@ -384,5 +384,8 @@
     "failedCreate": "Failed to create provider",
     "failedUpdate": "Failed to update provider",
     "failedDelete": "Failed to delete provider"
+  },
+  "providerTypes": {
+    "custom": "Custom Provider (OpenAI-compatible)"
   }
 }
