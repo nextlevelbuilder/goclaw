@@ -66,7 +66,14 @@
     "notifyMode_leader_desc": "Leader rephrases updates before sending",
     "notifyModeLeaderWarn": "Leader mode uses AI to rephrase (costs tokens, may be slower).",
     "save": "Save",
-    "ok": "OK"
+    "ok": "OK",
+    "routing": "Routing Rules",
+    "routingEnabled": "Enable member routing",
+    "routingFallbackToSelf": "Fallback to self",
+    "routingConfidence": "Confidence threshold",
+    "routingKeywordsHint": "Keywords (e.g. golang, deploy)…",
+    "routingFilePatternsHint": "File patterns (e.g. .go, dockerfile)…",
+    "routingCriteriaHint": "Decision criteria (optional)…"
   },
   "taskCreateInfo": {
     "title": "How tasks are created",

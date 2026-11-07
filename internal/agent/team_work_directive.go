@@ -14,6 +14,7 @@ type TeamWorkDirective struct {
 	OriginalMessage string
 	RequiredTool    string
 	WorkflowHint    string
+	Assignee        string
 }
 
 func (d *TeamWorkDirective) normalizedRequiredTool() string {
@@ -60,6 +61,11 @@ func buildTeamWorkDirectivePrompt(d *TeamWorkDirective) string {
 		b.WriteString(d.WorkflowHint)
 		b.WriteString("\n")
 	}
+	if d.Assignee != "" {
+		b.WriteString("Assignee for this task: `")
+		b.WriteString(d.Assignee)
+		b.WriteString("`.\n")
+	}
 	b.WriteString("If the required workflow tool is unavailable or cannot be used, explain that blocker instead of presenting the work as complete.")
 	return b.String()
 }
@@ -84,9 +90,13 @@ func buildTeamWorkDirectiveRetryRequest(req providers.ChatRequest, d *TeamWorkDi
 		retry.Options[k] = v
 	}
 	retry.Options[providers.OptToolChoice] = "required"
+	assigneeNote := ""
+	if d.Assignee != "" {
+		assigneeNote = fmt.Sprintf(" Assign the task to `%s`.", d.Assignee)
+	}
 	retry.Messages = append(append([]providers.Message{}, req.Messages...), providers.Message{
 		Role:    "system",
-		Content: fmt.Sprintf("The system routing lock requires the `%s` workflow tool in this turn. Call that tool now before giving any final answer. If it is impossible, explain the blocker.", d.normalizedRequiredTool()),
+		Content: fmt.Sprintf("The system routing lock requires the `%s` workflow tool in this turn.%s Call that tool now before giving any final answer. If it is impossible, explain the blocker.", d.normalizedRequiredTool(), assigneeNote),
 	})
 	return retry
 }

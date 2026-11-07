@@ -15,8 +15,9 @@ func TestTeamWorkDirectivePromptRequiresWorkflowTool(t *testing.T) {
 		OriginalMessage: "lập kế hoạch chiến dịch",
 		RequiredTool:    "team_tasks",
 		WorkflowHint:    `Use team_tasks(action="create", task_type="request") because this agent is a member requesting help.`,
+		Assignee:        "strategy-agent",
 	})
-	for _, want := range []string{"TEAM WORK ROUTING LOCK", "team_tasks", "must not complete", "requires strategy and content members", `task_type="request"`} {
+	for _, want := range []string{"TEAM WORK ROUTING LOCK", "team_tasks", "must not complete", "requires strategy and content members", `task_type="request"`, "Assignee for this task: `strategy-agent`"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt missing %q:\n%s", want, prompt)
 		}
@@ -37,7 +38,7 @@ func TestTeamWorkDirectiveRetriesWhenRequiredToolMissing(t *testing.T) {
 }
 
 func TestTeamWorkDirectiveRetryRequestRequiresToolChoice(t *testing.T) {
-	directive := &TeamWorkDirective{Mode: "delegate", RequiredTool: "delegate"}
+	directive := &TeamWorkDirective{Mode: "delegate", RequiredTool: "delegate", Assignee: "coder-agent"}
 	req := providers.ChatRequest{
 		Messages: []providers.Message{{Role: "user", Content: "làm việc này theo link"}},
 		Options:  map[string]any{"existing": true},
@@ -49,7 +50,7 @@ func TestTeamWorkDirectiveRetryRequestRequiresToolChoice(t *testing.T) {
 	if retry.Options["existing"] != true {
 		t.Fatalf("existing option was not preserved: %+v", retry.Options)
 	}
-	if len(retry.Messages) != 2 || !strings.Contains(retry.Messages[1].Content, "delegate") {
+	if len(retry.Messages) != 2 || !strings.Contains(retry.Messages[1].Content, "delegate") || !strings.Contains(retry.Messages[1].Content, "coder-agent") {
 		t.Fatalf("retry messages not reinforced: %+v", retry.Messages)
 	}
 }

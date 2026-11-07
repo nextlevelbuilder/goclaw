@@ -7,7 +7,7 @@ import { useAgents } from '../../hooks/use-agents'
 import { useTeamManage } from '../../hooks/use-team-manage'
 import { TeamMemberList } from './team-member-list'
 import { teamSettingsSchema, type TeamSettingsFormData } from '../../schemas/team-settings.schema'
-import type { TeamData, TeamMemberData, TeamNotifyConfig } from '../../types/team'
+import type { TeamData, TeamMemberData, TeamNotifyConfig, TeamAccessSettings, RoutingRule } from '../../types/team'
 
 interface TeamSettingsModalProps {
   teamId: string
@@ -35,7 +35,8 @@ export function TeamSettingsModal({ teamId, onClose, onSaved }: TeamSettingsModa
   const { watch, setValue, reset, handleSubmit, formState: { isSubmitting } } = useForm<TeamSettingsFormData>({
     resolver: zodResolver(teamSettingsSchema),
     mode: 'onChange',
-    defaultValues: { name: '', description: '', notify: { dispatched: true, progress: true, failed: true, completed: true, new_task: true }, notifyMode: 'direct' },
+    defaultValues: { name: '', description: '', notify: { dispatched: true, progress: true, failed: true, completed: true, new_task: true }, notifyMode: 'direct',
+      routingEnabled: false, routingFallbackToSelf: true, routingConfidenceThreshold: 0.65, routingRules: [] },
   })
 
   useEffect(() => {
@@ -44,8 +45,9 @@ export function TeamSettingsModal({ teamId, onClose, onSaved }: TeamSettingsModa
       if (!res) return
       setTeam(res.team)
       setMembers(res.members ?? [])
-      const settings = (res.team.settings ?? {}) as Record<string, unknown>
+      const settings = (res.team.settings ?? {}) as TeamAccessSettings
       const n = (settings.notifications ?? {}) as Record<string, unknown>
+      const sr = settings.routing ?? {}
       reset({
         name: res.team.name,
         description: res.team.description ?? '',
@@ -57,6 +59,16 @@ export function TeamSettingsModal({ teamId, onClose, onSaved }: TeamSettingsModa
           new_task: n.new_task !== false,
         },
         notifyMode: (n.mode as 'direct' | 'leader') || 'direct',
+        routingEnabled: settings.routing !== undefined && sr.enabled !== false,
+        routingFallbackToSelf: sr.fallback_to_self !== false,
+        routingConfidenceThreshold: sr.confidence_threshold ?? 0.65,
+        routingRules: (sr.rules ?? []).filter((r) => r.agent_key).map((r) => ({
+          agent_key: r.agent_key,
+          keywords: r.keywords ?? [],
+          file_patterns: r.file_patterns ?? [],
+          criteria: r.criteria ?? '',
+          enabled: r.enabled !== false,
+        })),
       })
       setLoading(false)
     })
@@ -99,7 +111,18 @@ export function TeamSettingsModal({ teamId, onClose, onSaved }: TeamSettingsModa
 
   const onValid = async (data: TeamSettingsFormData) => {
     const notifications: TeamNotifyConfig = { ...data.notify, mode: data.notifyMode }
-    const settings = { ...(team?.settings ?? {}), notifications } as Record<string, unknown>
+    const existing = (team?.settings ?? {}) as TeamAccessSettings
+    // Backend rejects rules whose agent_key is not a current member; drop stale ones.
+    const memberKeys = new Set(members.map((m) => m.agent_key))
+    const routing = data.routingEnabled || data.routingRules.length > 0
+      ? {
+          enabled: data.routingEnabled,
+          fallback_to_self: data.routingFallbackToSelf,
+          confidence_threshold: data.routingConfidenceThreshold,
+          rules: data.routingRules.filter((r) => memberKeys.has(r.agent_key)),
+        }
+      : existing.routing
+    const settings = { ...existing, notifications, routing } as Record<string, unknown>
     await updateTeam(teamId, {
       name: data.name !== team?.name ? data.name : undefined,
       description: data.description !== (team?.description ?? '') ? data.description : undefined,
@@ -120,6 +143,15 @@ export function TeamSettingsModal({ teamId, onClose, onSaved }: TeamSettingsModa
 
   const notifyMode = watch('notifyMode')
   const notify = watch('notify')
+  const routingEnabled = watch('routingEnabled')
+  const routingRules = watch('routingRules')
+
+  const updateRule = (agentKey: string, patch: Partial<RoutingRule>) => {
+    const next = routingRules.some((r) => r.agent_key === agentKey)
+      ? routingRules.map((r) => (r.agent_key === agentKey ? { ...r, ...patch } : r))
+      : [...routingRules, { agent_key: agentKey, keywords: [], file_patterns: [], criteria: '', enabled: true, ...patch }]
+    setValue('routingRules', next)
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
@@ -190,6 +222,37 @@ export function TeamSettingsModal({ teamId, onClose, onSaved }: TeamSettingsModa
               </div>
               {notifyMode === 'leader' && <p className="text-xs text-amber-500">{t('settings.notifyModeLeaderWarn', 'Only the lead agent will receive notifications.')}</p>}
             </div>
+          </section>
+
+          {/* Routing */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-text-primary">{t('settings.routing', 'Routing Rules')}</h3>
+              <button type="button" onClick={() => setValue('routingEnabled', !routingEnabled)} className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${routingEnabled ? 'bg-accent' : 'bg-surface-tertiary border border-border'}`}>
+                <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${routingEnabled ? 'translate-x-4' : ''}`} />
+              </button>
+            </div>
+            {routingEnabled && (
+              <>
+                {members.map((m) => {
+                  if (!m.agent_key) return null
+                  const r = routingRules.find((x) => x.agent_key === m.agent_key) ?? { agent_key: m.agent_key, keywords: [], file_patterns: [], criteria: '', enabled: true }
+                  return (
+                    <div key={m.agent_id} className="rounded-lg border border-border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-text-primary">{m.emoji} {m.display_name || m.agent_key}</span>
+                        <button type="button" onClick={() => updateRule(m.agent_key!, { enabled: r.enabled === false })} className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${r.enabled !== false ? 'bg-accent' : 'bg-surface-tertiary border border-border'}`}>
+                          <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${r.enabled !== false ? 'translate-x-4' : ''}`} />
+                        </button>
+                      </div>
+                      <input value={(r.keywords ?? []).join(', ')} onChange={(e) => updateRule(m.agent_key!, { keywords: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })} placeholder={t('settings.routingKeywordsHint', 'Keywords (e.g. golang, deploy)…')} className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary" />
+                      <input value={(r.file_patterns ?? []).join(', ')} onChange={(e) => updateRule(m.agent_key!, { file_patterns: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })} placeholder={t('settings.routingFilePatternsHint', 'File patterns (e.g. .go, dockerfile)…')} className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary" />
+                      <textarea value={r.criteria ?? ''} onChange={(e) => updateRule(m.agent_key!, { criteria: e.target.value })} rows={2} placeholder={t('settings.routingCriteriaHint', 'Decision criteria (optional)…')} className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary resize-none" />
+                    </div>
+                  )
+                })}
+              </>
+            )}
           </section>
         </div>
 
