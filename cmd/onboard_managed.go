@@ -31,6 +31,7 @@ var defaultPlaceholderProviders = []store.LLMProviderData{
 	{Name: "aimlapi", DisplayName: "AI/ML API", ProviderType: store.ProviderAIMLAPI, APIBase: providers.AIMLAPIDefaultAPIBase, Enabled: false},
 	{Name: "api_route", DisplayName: "API Route", ProviderType: store.ProviderAPIRoute, APIBase: store.APIRouteDefaultAPIBase, Enabled: false},
 	{Name: "requesty", DisplayName: "Requesty", ProviderType: store.ProviderRequesty, APIBase: store.RequestyDefaultAPIBase, Enabled: false},
+	{Name: "cheaperinference", DisplayName: "Cheaper Inference", ProviderType: store.ProviderCheaperInference, APIBase: store.CheaperInferenceDefaultAPIBase, Enabled: false},
 	{Name: "openrouter", DisplayName: "OpenRouter", ProviderType: store.ProviderOpenRouter, APIBase: "https://openrouter.ai/api/v1", Enabled: false},
 	{Name: "synthetic", DisplayName: "Synthetic", ProviderType: store.ProviderOpenAICompat, APIBase: "https://api.synthetic.new/openai/v1", Enabled: false},
 	{Name: "alicloud-api", DisplayName: "AliCloud API", ProviderType: store.ProviderDashScope, APIBase: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", Enabled: false},

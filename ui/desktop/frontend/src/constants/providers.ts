@@ -14,6 +14,7 @@ export const PROVIDER_TYPES: ProviderTypeInfo[] = [
   { value: 'vertex', label: 'Google Vertex AI', apiBase: '', needsKey: false },
   { value: 'openrouter', label: 'OpenRouter', apiBase: 'https://openrouter.ai/api/v1', needsKey: true },
   { value: 'requesty', label: 'Requesty', apiBase: 'https://router.requesty.ai/v1', needsKey: true },
+  { value: 'cheaperinference', label: 'Cheaper Inference', apiBase: 'https://api.cheaperinference.com/v1', needsKey: true },
   { value: 'groq', label: 'Groq', apiBase: 'https://api.groq.com/openai/v1', needsKey: true },
   { value: 'deepseek', label: 'DeepSeek', apiBase: 'https://api.deepseek.com/v1', needsKey: true },
   { value: 'mistral', label: 'Mistral AI', apiBase: 'https://api.mistral.ai/v1', needsKey: true },

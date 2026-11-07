@@ -253,32 +253,33 @@ type FeishuConfig struct {
 
 // ProvidersConfig maps provider name to its config.
 type ProvidersConfig struct {
-	Anthropic      ProviderConfig  `json:"anthropic"`
-	OpenAI         ProviderConfig  `json:"openai"`
-	AtlasCloud     ProviderConfig  `json:"atlascloud"` // Atlas Cloud (OpenAI-compatible endpoint)
-	APIRoute       ProviderConfig  `json:"api_route"`  // API Route (OpenAI-compatible endpoint)
-	Requesty       ProviderConfig  `json:"requesty"`   // Requesty (OpenAI-compatible router)
-	OpenRouter     ProviderConfig  `json:"openrouter"`
-	Groq           ProviderConfig  `json:"groq"`
-	Gemini         ProviderConfig  `json:"gemini"`
-	DeepSeek       ProviderConfig  `json:"deepseek"`
-	Mistral        ProviderConfig  `json:"mistral"`
-	XAI            ProviderConfig  `json:"xai"`
-	MiniMax        ProviderConfig  `json:"minimax"`
-	Cohere         ProviderConfig  `json:"cohere"`
-	Perplexity     ProviderConfig  `json:"perplexity"`
-	DashScope      ProviderConfig  `json:"dashscope"`
-	Bailian        ProviderConfig  `json:"bailian"`
-	Zai            ProviderConfig  `json:"zai"`
-	ZaiCoding      ProviderConfig  `json:"zai_coding"`
-	Ollama         OllamaConfig    `json:"ollama"`       // local Ollama instance (no API key needed)
-	OllamaCloud    ProviderConfig  `json:"ollama_cloud"` // Ollama Cloud (API key required)
-	ClaudeCLI      ClaudeCLIConfig `json:"claude_cli"`
-	ACP            ACPConfig       `json:"acp"`
-	Novita         ProviderConfig  `json:"novita"`          // Novita AI (OpenAI-compatible endpoint)
-	BytePlus       ProviderConfig  `json:"byteplus"`        // BytePlus ModelArk (Seed 2.0)
-	BytePlusCoding ProviderConfig  `json:"byteplus_coding"` // BytePlus ModelArk Coding Plan
-	Vertex         VertexConfig    `json:"vertex"`          // Google Cloud Vertex AI (OAuth2 service account + ADC)
+	Anthropic        ProviderConfig  `json:"anthropic"`
+	OpenAI           ProviderConfig  `json:"openai"`
+	AtlasCloud       ProviderConfig  `json:"atlascloud"`       // Atlas Cloud (OpenAI-compatible endpoint)
+	APIRoute         ProviderConfig  `json:"api_route"`        // API Route (OpenAI-compatible endpoint)
+	Requesty         ProviderConfig  `json:"requesty"`         // Requesty (OpenAI-compatible router)
+	CheaperInference ProviderConfig  `json:"cheaperinference"` // Cheaper Inference (OpenAI-compatible gateway)
+	OpenRouter       ProviderConfig  `json:"openrouter"`
+	Groq             ProviderConfig  `json:"groq"`
+	Gemini           ProviderConfig  `json:"gemini"`
+	DeepSeek         ProviderConfig  `json:"deepseek"`
+	Mistral          ProviderConfig  `json:"mistral"`
+	XAI              ProviderConfig  `json:"xai"`
+	MiniMax          ProviderConfig  `json:"minimax"`
+	Cohere           ProviderConfig  `json:"cohere"`
+	Perplexity       ProviderConfig  `json:"perplexity"`
+	DashScope        ProviderConfig  `json:"dashscope"`
+	Bailian          ProviderConfig  `json:"bailian"`
+	Zai              ProviderConfig  `json:"zai"`
+	ZaiCoding        ProviderConfig  `json:"zai_coding"`
+	Ollama           OllamaConfig    `json:"ollama"`       // local Ollama instance (no API key needed)
+	OllamaCloud      ProviderConfig  `json:"ollama_cloud"` // Ollama Cloud (API key required)
+	ClaudeCLI        ClaudeCLIConfig `json:"claude_cli"`
+	ACP              ACPConfig       `json:"acp"`
+	Novita           ProviderConfig  `json:"novita"`          // Novita AI (OpenAI-compatible endpoint)
+	BytePlus         ProviderConfig  `json:"byteplus"`        // BytePlus ModelArk (Seed 2.0)
+	BytePlusCoding   ProviderConfig  `json:"byteplus_coding"` // BytePlus ModelArk Coding Plan
+	Vertex           VertexConfig    `json:"vertex"`          // Google Cloud Vertex AI (OAuth2 service account + ADC)
 
 	// RequestTimeoutSec bounds provider verify and models-list HTTP calls.
 	// Tenant-scoped, overridable via the "providers.request_timeout_sec" system config.
@@ -340,6 +341,8 @@ func (p *ProvidersConfig) APIBaseForType(providerType string) string {
 		return p.APIRoute.APIBase
 	case "requesty":
 		return p.Requesty.APIBase
+	case "cheaperinference":
+		return p.CheaperInference.APIBase
 	case "openrouter":
 		return p.OpenRouter.APIBase
 	case "groq":
@@ -390,6 +393,7 @@ func (c *Config) HasAnyProvider() bool {
 		p.AtlasCloud.APIKey != "" ||
 		p.APIRoute.APIKey != "" ||
 		p.Requesty.APIKey != "" ||
+		p.CheaperInference.APIKey != "" ||
 		p.OpenRouter.APIKey != "" ||
 		p.Groq.APIKey != "" ||
 		p.Gemini.APIKey != "" ||

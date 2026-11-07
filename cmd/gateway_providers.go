@@ -77,6 +77,18 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 		slog.Info("registered provider", "name", "requesty")
 	}
 
+	if cfg.Providers.CheaperInference.APIKey != "" {
+		base := cfg.Providers.CheaperInference.APIBase
+		if base == "" {
+			base = store.CheaperInferenceDefaultAPIBase
+		}
+		prov := providers.NewOpenAIProvider("cheaperinference", cfg.Providers.CheaperInference.APIKey, base, store.CheaperInferenceDefaultModel)
+		prov.WithProviderType(store.ProviderCheaperInference)
+		prov.WithSiteInfo("https://goclaw.sh", "GoClaw")
+		registry.Register(prov)
+		slog.Info("registered provider", "name", "cheaperinference")
+	}
+
 	if cfg.Providers.OpenRouter.APIKey != "" {
 		orProv := providers.NewOpenAIProvider("openrouter", cfg.Providers.OpenRouter.APIKey, "https://openrouter.ai/api/v1", "anthropic/claude-sonnet-4-5-20250929")
 		orProv.WithSiteInfo("https://goclaw.sh", "GoClaw")
@@ -487,7 +499,7 @@ func registerProvidersFromDB(registry *providers.Registry, provStore store.Provi
 			prov := providers.NewOpenAIProvider(p.Name, p.APIKey, base, model)
 			prov.WithProviderType(p.ProviderType)
 			prov.WithThinkingEnabled(store.ParseThinkingEnabled(p.Settings))
-			if p.ProviderType == store.ProviderOpenRouter || p.ProviderType == store.ProviderRequesty {
+			if p.ProviderType == store.ProviderOpenRouter || p.ProviderType == store.ProviderRequesty || p.ProviderType == store.ProviderCheaperInference {
 				prov.WithSiteInfo("https://goclaw.sh", "GoClaw")
 			}
 			registry.RegisterForTenant(p.TenantID, prov)
@@ -513,6 +525,11 @@ func openAIProviderDefaults(providerType, apiBase string) (string, string) {
 			apiBase = store.RequestyDefaultAPIBase
 		}
 		return apiBase, store.RequestyDefaultModel
+	case store.ProviderCheaperInference:
+		if apiBase == "" {
+			apiBase = store.CheaperInferenceDefaultAPIBase
+		}
+		return apiBase, store.CheaperInferenceDefaultModel
 	default:
 		return apiBase, ""
 	}
