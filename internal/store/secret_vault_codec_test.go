@@ -169,3 +169,67 @@ func TestSecretPayloadNeverFormatsValue(t *testing.T) {
 		}
 	}
 }
+
+// With a keyring, new writes name their key; rewrap moves a value written under
+// another key to the active one and leaves a current value alone.
+func TestSecretRewrapFollowsActiveKey(t *testing.T) {
+	const keyB = "fedcba9876543210fedcba9876543210"
+	e := aadTestEntry()
+	in := SecretVaultPayload{Secret: "s3cr3t-value"}
+
+	v2, err := EncodeSecretPayloadAAD(in, testVaultKey, e) // no keyring: v2
+	if err != nil || !strings.HasPrefix(v2, "v2:aes-gcm:") {
+		t.Fatalf("v2 = %q, %v", v2, err)
+	}
+
+	kr, err := crypto.NewKeyring([]string{testVaultKey, keyB}, mustKID(t, testVaultKey))
+	if err != nil {
+		t.Fatal(err)
+	}
+	crypto.SetKeyring(kr)
+	t.Cleanup(func() { crypto.SetKeyring(nil) })
+
+	// v2 under a keyring -> upgraded to v3 under the active key.
+	v3a, outcome := RewrapSecretCiphertext(v2, testVaultKey, e)
+	if outcome != SecretRewrapUpgrade || !crypto.IsEncryptedV3(v3a) {
+		t.Fatalf("v2 rewrap = %q, %v", v3a, outcome)
+	}
+	if _, outcome := RewrapSecretCiphertext(v3a, testVaultKey, e); outcome != SecretRewrapCurrent {
+		t.Fatalf("current v3 outcome = %v", outcome)
+	}
+
+	// Active key changes: the v3 value under the old key is upgraded.
+	kr2, _ := crypto.NewKeyring([]string{testVaultKey, keyB}, mustKID(t, keyB))
+	crypto.SetKeyring(kr2)
+	v3b, outcome := RewrapSecretCiphertext(v3a, keyB, e)
+	if outcome != SecretRewrapUpgrade {
+		t.Fatalf("rotation outcome = %v", outcome)
+	}
+	if kid, _ := crypto.EnvelopeKeyID(v3b); kid != mustKID(t, keyB) {
+		t.Fatalf("rewrapped under %q", kid)
+	}
+	out, err := DecodeSecretPayload(v3b, keyB, e)
+	if err != nil || out != in {
+		t.Fatalf("decode after rotation = %+v, %v", out, err)
+	}
+
+	// Dropping the old key leaves the rewrapped value readable.
+	only, _ := crypto.NewKeyring([]string{keyB}, mustKID(t, keyB))
+	crypto.SetKeyring(only)
+	if out, err := DecodeSecretPayload(v3b, keyB, e); err != nil || out != in {
+		t.Fatalf("decode without old key = %+v, %v", out, err)
+	}
+	// ...but a value still under the old key reports the missing key id.
+	if _, err := DecodeSecretPayload(v3a, keyB, e); !errors.Is(err, crypto.ErrUnknownKeyID) {
+		t.Fatalf("old value err = %v", err)
+	}
+}
+
+func mustKID(t *testing.T, key string) string {
+	t.Helper()
+	kid, err := crypto.KeyID(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return kid
+}

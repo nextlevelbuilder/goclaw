@@ -140,7 +140,7 @@ func DecodeSecretPayload(stored, key string, e *SecretVaultEntry) (SecretVaultPa
 	var plain string
 	var err error
 	switch {
-	case crypto.IsEncryptedAAD(stored):
+	case crypto.IsEncryptedAAD(stored) || crypto.IsEncryptedV3(stored):
 		plain, err = crypto.DecryptWithAAD(stored, key, SecretPayloadAAD(e))
 	case crypto.IsEncrypted(stored):
 		slog.Warn("security.secret_vault.legacy_ciphertext", "entry_id", e.ID)
@@ -181,15 +181,24 @@ type SecretRewrapReport struct {
 
 // RewrapSecretCiphertext decides what to do with one stored payload. A legacy
 // value is decrypted and sealed again bound to entry e at its current
-// revision. A bound value is only verified. Anything else, or a value the key
+// revision. A bound value is verified, and sealed again only when it was
+// written under a key other than the active one. Anything else, or a value the key
 // cannot open, is reported unreadable and left untouched.
 func RewrapSecretCiphertext(stored, key string, e *SecretVaultEntry) (string, SecretRewrapOutcome) {
 	switch {
-	case crypto.IsEncryptedAAD(stored):
-		if _, err := DecodeSecretPayload(stored, key, e); err != nil {
+	case crypto.IsEncryptedAAD(stored) || crypto.IsEncryptedV3(stored):
+		p, err := DecodeSecretPayload(stored, key, e)
+		if err != nil {
 			return "", SecretRewrapUnreadable
 		}
-		return "", SecretRewrapCurrent
+		if !secretNeedsKeyUpgrade(stored, key) {
+			return "", SecretRewrapCurrent
+		}
+		enc, err := EncodeSecretPayloadAAD(p, key, e)
+		if err != nil {
+			return "", SecretRewrapUnreadable
+		}
+		return enc, SecretRewrapUpgrade
 	case crypto.IsEncrypted(stored):
 		p, err := DecodeSecretPayload(stored, key, e)
 		if err != nil {
@@ -203,4 +212,16 @@ func RewrapSecretCiphertext(stored, key string, e *SecretVaultEntry) (string, Se
 	default:
 		return "", SecretRewrapUnreadable
 	}
+}
+
+// secretNeedsKeyUpgrade reports whether a bound value should be sealed again
+// under the active key: a v2 value once a keyring is installed, or a v3 value
+// that names a different key than the active one.
+func secretNeedsKeyUpgrade(stored, activeKey string) bool {
+	activeKID, ok := crypto.ActiveKeyID(activeKey)
+	if !ok {
+		return false // no keyring holds the active key: v2 is what we would write
+	}
+	kid, isV3 := crypto.EnvelopeKeyID(stored)
+	return !isV3 || kid != activeKID
 }
