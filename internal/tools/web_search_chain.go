@@ -2,7 +2,9 @@ package tools
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -24,6 +26,8 @@ import (
 //  3. DDG is always appended last — force-enabled, no API key required.
 //  4. For other providers: skip if tenant explicitly disabled, or if no API
 //     key found in config_secrets for the current tenant.
+//  5. Keyless providers (keylessSearchProviders) need no key and appear only
+//     when the tenant names them in provider_order.
 //
 // Tenant settings schema (stored in builtin_tool_tenant_configs.settings):
 //
@@ -174,31 +178,38 @@ func BuildChainFromStorage(ctx context.Context, secrets store.ConfigSecretsStore
 		return false
 	}
 
+	// maxResultsFor applies the tenant's per-provider max_results override.
+	maxResultsFor := func(name string) int {
+		if po, ok := override.Providers[name]; ok && po.MaxResults > 0 {
+			return po.MaxResults
+		}
+		return defaultSearchCount
+	}
+
 	order := NormalizeWebSearchProviderOrder(override.ProviderOrder)
 
 	var chain []SearchProvider
 	for _, name := range order {
 		if name == searchProviderDuckDuckGo {
 			// DDG is force-enabled — always last, no API key needed.
-			maxResults := defaultSearchCount
-			if po, ok := override.Providers[name]; ok && po.MaxResults > 0 {
-				maxResults = po.MaxResults
-			}
-			chain = append(chain, buildProviderByName(name, "", maxResults))
+			chain = append(chain, buildProviderByName(name, "", maxResultsFor(name)))
 			continue
 		}
 
 		if isDisabled(name) {
 			continue
 		}
-		if name == searchProviderParallel {
-			// Parallel is keyless and intentionally absent from the default
-			// order. Reaching this branch means the tenant explicitly named it.
-			maxResults := defaultSearchCount
-			if po, ok := override.Providers[name]; ok && po.MaxResults > 0 {
-				maxResults = po.MaxResults
+		if spec, ok := keylessSearchProviders[name]; ok {
+			// Keyless providers are absent from the default order, so reaching
+			// this branch means the tenant named this one in provider_order.
+			key := ""
+			if spec.optionalKey {
+				var usable bool
+				if key, usable = optionalSearchKey(ctx, secrets, name); !usable {
+					continue
+				}
 			}
-			chain = append(chain, buildProviderByName(name, "", maxResults))
+			chain = append(chain, buildProviderByName(name, key, maxResultsFor(name)))
 			continue
 		}
 
@@ -208,12 +219,7 @@ func BuildChainFromStorage(ctx context.Context, secrets store.ConfigSecretsStore
 			continue
 		}
 
-		maxResults := defaultSearchCount
-		if po, ok := override.Providers[name]; ok && po.MaxResults > 0 {
-			maxResults = po.MaxResults
-		}
-
-		p := buildProviderByName(name, key, maxResults)
+		p := buildProviderByName(name, key, maxResultsFor(name))
 		if p == nil {
 			slog.Warn("web_search: unknown provider name in chain", "name", name)
 			continue
@@ -222,4 +228,22 @@ func BuildChainFromStorage(ctx context.Context, secrets store.ConfigSecretsStore
 	}
 
 	return chain
+}
+
+// optionalSearchKey reads the optional API key of a keyless provider. A
+// missing row means no key, and the provider stays on its keyless endpoint.
+// Any other error (database unavailable, decrypt failure after an encryption
+// key rotation) skips the provider with a warning: the tenant may have stored
+// a key, and quietly moving it onto the shared keyless quota would hide that.
+func optionalSearchKey(ctx context.Context, secrets store.ConfigSecretsStore, name string) (key string, usable bool) {
+	key, err := secrets.Get(ctx, "tools.web."+name+".api_key")
+	switch {
+	case err == nil:
+		return key, true
+	case errors.Is(err, sql.ErrNoRows):
+		return "", true
+	default:
+		slog.Warn("web_search: skipping provider, its stored API key could not be read", "provider", name, "error", err)
+		return "", false
+	}
 }
