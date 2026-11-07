@@ -22,10 +22,10 @@ function CodeViewer({ content, language }: { content: string; language: string }
   }
 
   return (
-    <div className="rounded-lg overflow-hidden border border-border">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-surface-tertiary text-2xs">
-        <span className="text-text-muted font-mono uppercase tracking-wide">{language || 'text'}</span>
-        <button onClick={handleCopy} className="text-text-muted hover:text-text-primary transition-colors cursor-pointer">
+    <div className="rounded-lg overflow-hidden border border-border-subtle">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-surface-hover text-caption">
+        <span className="text-ink-muted font-mono uppercase tracking-wide">{language || 'text'}</span>
+        <button onClick={handleCopy} className="text-ink-muted hover:text-ink transition-colors cursor-pointer">
           {copied ? `${t('copy')}!` : t('copy')}
         </button>
       </div>
@@ -36,7 +36,7 @@ function CodeViewer({ content, language }: { content: string; language: string }
           margin: 0,
           padding: '12px 16px',
           fontSize: '13px',
-          background: 'var(--color-surface-primary)',
+          background: 'var(--color-surface-base)',
           borderRadius: 0,
         }}
       >
@@ -73,23 +73,23 @@ function CsvViewer({ content }: { content: string }) {
   }, [content])
 
   const header = rows[0]
-  if (!header || rows.length === 0) return <pre className="text-xs p-4 text-text-primary">{content}</pre>
+  if (!header || rows.length === 0) return <pre className="text-caption p-4 text-ink">{content}</pre>
   const body = rows.slice(1)
 
   return (
-    <div className="rounded-lg border border-border flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-surface-tertiary text-2xs shrink-0">
-        <span className="text-text-muted font-mono uppercase tracking-wide">{body.length} rows</span>
-        <button onClick={handleCopy} className="text-text-muted hover:text-text-primary transition-colors cursor-pointer">
+    <div className="rounded-lg border border-border-subtle flex flex-col overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-surface-hover text-caption shrink-0">
+        <span className="text-ink-muted font-mono uppercase tracking-wide">{body.length} rows</span>
+        <button onClick={handleCopy} className="text-ink-muted hover:text-ink transition-colors cursor-pointer">
           {copied ? `${t('copy')}!` : t('copy')}
         </button>
       </div>
       <div className="overflow-auto flex-1 min-h-0">
-        <table className="w-full text-xs border-collapse">
+        <table className="w-full text-caption border-collapse">
           <thead className="sticky top-0 z-10">
-            <tr className="bg-surface-tertiary">
+            <tr className="bg-surface-hover">
               {header.map((col, i) => (
-                <th key={i} className="px-3 py-2 text-left text-2xs font-semibold tracking-wide border-b border-border whitespace-nowrap text-text-primary">
+                <th key={i} className="px-3 py-2 text-left text-caption font-semibold tracking-wide border-b border-border-subtle whitespace-nowrap text-ink">
                   {col}
                 </th>
               ))}
@@ -97,9 +97,9 @@ function CsvViewer({ content }: { content: string }) {
           </thead>
           <tbody>
             {body.map((row, i) => (
-              <tr key={i} className="border-b border-border/40 last:border-0 even:bg-surface-tertiary/30 hover:bg-surface-tertiary/50">
+              <tr key={i} className="border-b border-border-subtle/40 last:border-0 even:bg-surface-hover/30 hover:bg-surface-hover/50">
                 {header.map((_, j) => (
-                  <td key={j} className="px-3 py-1.5 border-r border-border/30 last:border-r-0 text-text-primary">
+                  <td key={j} className="px-3 py-1.5 border-r border-border-subtle/30 last:border-r-0 text-ink">
                     {row[j] ?? ''}
                   </td>
                 ))}
@@ -138,7 +138,7 @@ function ImageViewer({ path, fetchBlob }: { path: string; fetchBlob: (path: stri
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <svg className="h-5 w-5 animate-spin text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+        <svg className="h-5 w-5 animate-spin text-ink-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
           <path d="M21 12a9 9 0 1 1-6.219-8.56" />
         </svg>
       </div>
@@ -147,7 +147,7 @@ function ImageViewer({ path, fetchBlob }: { path: string; fetchBlob: (path: stri
 
   if (error || !src) {
     return (
-      <div className="flex items-center justify-center py-12 text-xs text-text-muted">
+      <div className="flex items-center justify-center py-12 text-caption text-ink-muted">
         Failed to load image
       </div>
     )
@@ -158,7 +158,7 @@ function ImageViewer({ path, fetchBlob }: { path: string; fetchBlob: (path: stri
       <img
         src={src}
         alt={path.split('/').pop() ?? ''}
-        className="max-w-full max-h-[50vh] object-contain rounded-lg border border-border"
+        className="max-w-full max-h-[50vh] object-contain rounded-lg border border-border-subtle"
       />
     </div>
   )
@@ -170,20 +170,20 @@ function UnsupportedViewer({ path, size, onDownload }: { path: string; size: num
 
   return (
     <div className="flex flex-col items-center justify-center py-16 gap-4">
-      <svg className="h-12 w-12 text-text-muted/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <svg className="h-12 w-12 text-ink-muted/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" />
       </svg>
-      <p className="text-xs text-text-muted">{t('unsupportedFile')}</p>
+      <p className="text-caption text-ink-muted">{t('unsupportedFile')}</p>
       {onDownload && (
         <button
           onClick={onDownload}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-text-secondary hover:bg-surface-tertiary transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-caption border border-border-subtle rounded-lg text-ink-secondary hover:bg-surface-hover transition-colors"
         >
           <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
           </svg>
           {fileName}
-          <span className="text-2xs text-text-muted">({formatSize(size)})</span>
+          <span className="text-caption text-ink-muted">({formatSize(size)})</span>
         </button>
       )}
     </div>
@@ -208,7 +208,7 @@ export function FileContentBody({
     if (ext === 'csv') return <CsvViewer content={displayContent} />
     if (CODE_EXTENSIONS.has(ext)) return <CodeViewer content={displayContent} language={langFor(ext)} />
     return (
-      <pre className="whitespace-pre-wrap rounded-lg border border-border bg-surface-tertiary/30 p-4 text-xs text-text-primary font-mono">
+      <pre className="whitespace-pre-wrap rounded-lg border border-border-subtle bg-surface-hover/30 p-4 text-caption text-ink font-mono">
         {displayContent}
       </pre>
     )

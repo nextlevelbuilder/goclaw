@@ -11,6 +11,7 @@ export function useStorage() {
   const [files, setFiles] = useState<StorageFile[]>([])
   const [baseDir, setBaseDir] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<Error | null>(null)
 
   const listFiles = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setLoading(true)
@@ -18,6 +19,9 @@ export function useStorage() {
       const res = await storageService.listFiles()
       setFiles(res.files ?? [])
       setBaseDir(res.baseDir ?? '')
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)))
     } finally {
       if (!opts?.silent) setLoading(false)
     }
@@ -50,7 +54,7 @@ export function useStorage() {
     return storageService.fetchBlob(path, params)
   }, [])
 
-  return { files, baseDir, loading, listFiles, loadSubtree, readFile, deleteFile, uploadFile, moveFile, fetchRawBlob }
+  return { files, baseDir, loading, error, listFiles, loadSubtree, readFile, deleteFile, uploadFile, moveFile, fetchRawBlob }
 }
 
 interface SizeState {

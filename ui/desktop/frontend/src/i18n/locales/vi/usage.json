@@ -1,1 +1,40 @@
-{}
+{
+  "title": "Mức sử dụng",
+  "description": "Yêu cầu, token và chi phí trên mọi nhà cung cấp",
+  "range": {
+    "label": "Khoảng thời gian",
+    "24h": "24 giờ",
+    "7d": "7 ngày",
+    "30d": "30 ngày"
+  },
+  "units": {
+    "seconds": "s",
+    "milliseconds": "ms"
+  },
+  "kpi": {
+    "requests": "Yêu cầu",
+    "tokens": "Token",
+    "cost": "Chi phí ước tính",
+    "users": "Người dùng hoạt động"
+  },
+  "vsPrevious": "{{change}} so với kỳ trước",
+  "chart": {
+    "title": "Token mỗi ngày",
+    "input": "Đầu vào",
+    "output": "Đầu ra",
+    "barLabel": "{{date}}: {{input}} đầu vào, {{output}} đầu ra"
+  },
+  "detail": {
+    "llmCalls": "Lượt gọi LLM",
+    "toolCalls": "Lượt gọi công cụ",
+    "errorRate": "Tỷ lệ lỗi",
+    "avgDuration": "Thời lượng trung bình"
+  },
+  "emptyTitle": "Chưa có mức sử dụng trong khoảng này",
+  "emptyDescription": "Mức sử dụng sẽ hiện ở đây khi các agent bắt đầu xử lý yêu cầu.",
+  "startChat": "Bắt đầu trò chuyện",
+  "states": {
+    "errorTitle": "Không tải được mức sử dụng",
+    "errorBody": "Gateway không trả về dữ liệu sử dụng. Kiểm tra kết nối rồi thử lại."
+  }
+}

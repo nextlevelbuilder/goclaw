@@ -10,7 +10,9 @@
     "schedule": "Расписание",
     "message": "Сообщение",
     "agent": "Агент",
-    "actions": "Действия"
+    "actions": "Действия",
+    "nextRun": "Следующий запуск",
+    "lastRun": "Последний запуск"
   },
   "runNow": "Запустить сейчас",
   "running": "Выполняется...",
@@ -63,7 +65,15 @@
   "runLog": {
     "title": "Журнал запусков: {{name}}",
     "noHistory": "Пока нет истории запусков.",
-    "loading": "Загрузка..."
+    "loading": "Загрузка...",
+    "time": "Время",
+    "status": "Статус",
+    "duration": "Длительность",
+    "tokens": "Токены",
+    "summary": "Сводка",
+    "errorTitle": "Не удалось загрузить историю запусков",
+    "errorBody": "Шлюз не вернул журнал запусков. Повторите попытку.",
+    "noHistoryDescription": "Запуски появятся здесь после срабатывания задания."
   },
   "detail": {
     "runNow": "Запустить сейчас",
@@ -145,5 +155,66 @@
     "failedRun": "Не удалось запустить задание cron",
     "updated": "Задание обновлено",
     "failedUpdate": "Не удалось обновить задание"
+  },
+  "enableToggle": "Включить {{name}}",
+  "rowMenu": "Действия для {{name}}",
+  "paused": "Приостановлено",
+  "summary_one": "{{count}} задание · включено: {{active}}",
+  "summary_few": "{{count}} задания · включено: {{active}}",
+  "summary_many": "{{count}} заданий · включено: {{active}}",
+  "summary_other": "{{count}} задания · включено: {{active}}",
+  "states": {
+    "errorTitle": "Не удалось загрузить cron-задания",
+    "errorBody": "Шлюз не вернул список заданий. Проверьте подключение и повторите попытку."
+  },
+  "status": {
+    "succeeded": "Успешно",
+    "failed": "Ошибка",
+    "running": "Выполняется",
+    "other": "Неизвестно",
+    "paused": "Приостановлено"
+  },
+  "schedule": {
+    "everySeconds_one": "Каждую {{count}} секунду",
+    "everySeconds_few": "Каждые {{count}} секунды",
+    "everySeconds_many": "Каждые {{count}} секунд",
+    "everySeconds_other": "Каждые {{count}} секунды",
+    "everyMinutes_one": "Каждую {{count}} минуту",
+    "everyMinutes_few": "Каждые {{count}} минуты",
+    "everyMinutes_many": "Каждые {{count}} минут",
+    "everyMinutes_other": "Каждые {{count}} минуты",
+    "everyHours_one": "Каждый {{count}} час",
+    "everyHours_few": "Каждые {{count}} часа",
+    "everyHours_many": "Каждые {{count}} часов",
+    "everyHours_other": "Каждые {{count}} часа",
+    "onceAt": "Однократно, {{time}}"
+  },
+  "edit": {
+    "menu": "Изменить",
+    "title": "Изменить cron-задание",
+    "save": "Сохранить изменения",
+    "delete": "Удалить задание"
+  },
+  "form": {
+    "interval": "Интервал",
+    "unit": "Единица",
+    "units": {
+      "seconds": "Секунды",
+      "minutes": "Минуты",
+      "hours": "Часы"
+    },
+    "timezone": "Часовой пояс: {{tz}}",
+    "nextRun": "Следующий запуск: {{time}}",
+    "onceAt": "Запустится один раз: {{time}}.",
+    "lastFailed": "Последний запуск завершился ошибкой. {{error}}",
+    "viewLog": "Открыть журнал",
+    "errors": {
+      "saveFailed": "Не удалось сохранить задание",
+      "nameRequired": "Введите имя.",
+      "nameFormat": "Используйте только строчные буквы, цифры и дефисы.",
+      "everyMin": "Введите число от 1.",
+      "messageRequired": "Опишите, что должен сделать агент.",
+      "cronFields": "В cron-выражении должно быть 5 полей."
+    }
   }
 }

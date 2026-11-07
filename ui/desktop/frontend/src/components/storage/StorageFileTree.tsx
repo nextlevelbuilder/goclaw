@@ -39,7 +39,7 @@ export function FileTreePanel({
   }
 
   if (tree.length === 0) {
-    return <p className="px-3 py-4 text-xs text-text-muted">{t('noFiles')}</p>
+    return <p className="px-3 py-4 text-caption text-ink-muted">{t('noFiles')}</p>
   }
 
   const treeContent = (

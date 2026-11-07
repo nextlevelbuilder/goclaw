@@ -1,7 +1,7 @@
 {
   "title": "Cron",
   "description": "Schedule recurring agent tasks",
-  "newJob": "New Job",
+  "newJob": "New job",
   "emptyTitle": "No cron jobs",
   "emptyDescription": "Create a cron job to schedule recurring agent tasks.",
   "columns": {
@@ -10,7 +10,9 @@
     "schedule": "Schedule",
     "message": "Message",
     "agent": "Agent",
-    "actions": "Actions"
+    "actions": "Actions",
+    "nextRun": "Next run",
+    "lastRun": "Last run"
   },
   "runNow": "Run now",
   "running": "Running...",
@@ -63,7 +65,15 @@
   "runLog": {
     "title": "Run Log: {{name}}",
     "noHistory": "No run history yet.",
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "time": "Time",
+    "status": "Status",
+    "duration": "Duration",
+    "tokens": "Tokens",
+    "summary": "Summary",
+    "errorTitle": "Couldn't load run history",
+    "errorBody": "The gateway did not return the run log. Try again.",
+    "noHistoryDescription": "Runs appear here after the job fires."
   },
   "detail": {
     "runNow": "Run Now",
@@ -145,5 +155,58 @@
     "failedRun": "Failed to run cron job",
     "updated": "Job updated",
     "failedUpdate": "Failed to update job"
+  },
+  "enableToggle": "Enable {{name}}",
+  "rowMenu": "Actions for {{name}}",
+  "paused": "Paused",
+  "summary_one": "{{count}} job · {{active}} enabled",
+  "summary_other": "{{count}} jobs · {{active}} enabled",
+  "states": {
+    "errorTitle": "Couldn't load cron jobs",
+    "errorBody": "The gateway did not return the job list. Check the connection and try again."
+  },
+  "status": {
+    "succeeded": "Succeeded",
+    "failed": "Failed",
+    "running": "Running",
+    "other": "Unknown",
+    "paused": "Paused"
+  },
+  "schedule": {
+    "everySeconds_one": "Every {{count}} second",
+    "everySeconds_other": "Every {{count}} seconds",
+    "everyMinutes_one": "Every {{count}} minute",
+    "everyMinutes_other": "Every {{count}} minutes",
+    "everyHours_one": "Every {{count}} hour",
+    "everyHours_other": "Every {{count}} hours",
+    "onceAt": "Once at {{time}}"
+  },
+  "edit": {
+    "menu": "Edit",
+    "title": "Edit cron job",
+    "save": "Save changes",
+    "delete": "Delete job"
+  },
+  "form": {
+    "interval": "Interval",
+    "unit": "Unit",
+    "units": {
+      "seconds": "Seconds",
+      "minutes": "Minutes",
+      "hours": "Hours"
+    },
+    "timezone": "Timezone: {{tz}}",
+    "nextRun": "Next run: {{time}}",
+    "onceAt": "Runs once at {{time}}.",
+    "lastFailed": "Last run failed. {{error}}",
+    "viewLog": "View log",
+    "errors": {
+      "saveFailed": "Couldn't save the job",
+      "nameRequired": "Enter a name.",
+      "nameFormat": "Use lowercase letters, numbers and hyphens only.",
+      "everyMin": "Enter 1 or more.",
+      "messageRequired": "Tell the agent what to do.",
+      "cronFields": "A cron expression needs 5 fields."
+    }
   }
 }

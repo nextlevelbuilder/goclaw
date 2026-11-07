@@ -21,5 +21,9 @@
   "toast": {
     "deleted": "Đã xóa file",
     "deleteFailed": "Không thể xóa file"
+  },
+  "states": {
+    "errorTitle": "Không tải được tệp",
+    "errorBody": "Gateway không trả về danh sách tệp. Kiểm tra kết nối rồi thử lại."
   }
 }
