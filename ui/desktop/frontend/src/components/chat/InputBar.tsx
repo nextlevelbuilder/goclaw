@@ -1,7 +1,11 @@
-import { useState, useRef, useCallback, type KeyboardEvent, type DragEvent } from 'react'
+import { useState, useRef, useCallback, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { cn } from '../../lib/cn'
+import { IconPlus } from '../common/Icons'
+import { IconButton } from '../ui'
 import { useFileAttachments, extractFilePaths } from './use-file-attachments'
 import { AttachmentPreviewStrip } from './attachment-preview-strip'
+import { IconArrowUp, IconStop } from './chat-icons'
 import type { AttachedFile } from './use-file-attachments'
 
 export type { AttachedFile }
@@ -12,10 +16,14 @@ interface InputBarProps {
   disabled?: boolean
   isRunning?: boolean
   placeholder?: string
+  /** Pills shown between the attach button and the send button (agent, model). */
+  pills?: ReactNode
+  autoFocus?: boolean
 }
 
-export function InputBar({ onSend, onStop, disabled, isRunning, placeholder }: InputBarProps) {
-  const { t } = useTranslation('common')
+/** The composer: raised surface, textarea, attach, pills, and a square send button that becomes Stop. */
+export function InputBar({ onSend, onStop, disabled, isRunning, placeholder, pills, autoFocus }: InputBarProps) {
+  const { t } = useTranslation('chat')
   const [text, setText] = useState('')
   const [dragging, setDragging] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -24,19 +32,18 @@ export function InputBar({ onSend, onStop, disabled, isRunning, placeholder }: I
 
   const { files, addFiles, addLocalPaths, removeFile, clearFiles } = useFileAttachments()
 
+  const hasContent = text.trim().length > 0 || files.length > 0
+
   const handleSend = useCallback(() => {
-    const hasContent = text.trim().length > 0 || files.length > 0
     if (!hasContent || disabled) return
     onSend(text.trim(), files.length > 0 ? files : undefined)
     setText('')
     clearFiles()
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-    }
-  }, [text, files, disabled, onSend, clearFiles])
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
+  }, [hasContent, text, files, disabled, onSend, clearFiles])
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       handleSend()
     }
@@ -63,8 +70,7 @@ export function InputBar({ onSend, onStop, disabled, isRunning, placeholder }: I
       addFiles(pastedFiles)
       return
     }
-    const pasted = e.clipboardData.getData('text/plain')
-    const paths = extractFilePaths(pasted)
+    const paths = extractFilePaths(e.clipboardData.getData('text/plain'))
     if (paths.length > 0) {
       e.preventDefault()
       addLocalPaths(paths)
@@ -97,85 +103,68 @@ export function InputBar({ onSend, onStop, disabled, isRunning, placeholder }: I
     }
   }
 
-  const hasContent = text.trim().length > 0 || files.length > 0
-
   return (
     <div
-      className="px-4 pb-4 pt-1 shrink-0"
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
+      className={cn(
+        'rounded-lg border bg-surface-raised px-3 pb-2 pt-3 shadow-panel transition-colors',
+        'focus-within:border-border-control has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus-ring',
+        dragging ? 'border-accent' : 'border-border-subtle',
+      )}
     >
-      <div className="max-w-3xl mx-auto">
-        <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
+      <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
 
-        {dragging && (
-          <div className="mb-2 rounded-xl border-2 border-dashed border-accent/50 bg-accent/5 py-4 text-center text-xs text-accent">
-            {t('dropFilesHere', 'Drop files here')}
-          </div>
-        )}
+      {dragging && (
+        <p className="mb-2 rounded-sm border border-dashed border-accent py-3 text-center text-caption text-accent">
+          {t('composer.dropFiles')}
+        </p>
+      )}
 
-        <AttachmentPreviewStrip files={files} onRemove={removeFile} />
+      <AttachmentPreviewStrip files={files} onRemove={removeFile} />
 
-        <div className={[
-          'flex items-end gap-0 bg-surface-secondary rounded-2xl border transition-colors',
-          dragging ? 'border-accent/50' : 'border-border focus-within:border-accent/40',
-        ].join(' ')}>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="p-3 text-text-muted hover:text-text-secondary transition-colors shrink-0 cursor-pointer"
-            title={t('attachFile')}
-            disabled={disabled}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
-            </svg>
-          </button>
+      <textarea
+        ref={textareaRef}
+        value={text}
+        autoFocus={autoFocus}
+        onChange={(e) => { setText(e.target.value); handleInput() }}
+        onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        disabled={disabled}
+        rows={1}
+        className="block max-h-40 min-h-[22px] w-full resize-none overflow-y-auto bg-transparent px-0.5 pb-2.5 text-base text-ink outline-none placeholder:text-ink-muted disabled:opacity-50 md:text-body"
+      />
 
-          <textarea
-            ref={textareaRef}
-            value={text}
-            onChange={(e) => { setText(e.target.value); handleInput() }}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            placeholder={placeholder ?? t('sendMessage')}
-            disabled={disabled}
-            rows={1}
-            className="flex-1 bg-transparent text-text-primary text-base md:text-sm py-3 px-0 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent focus-visible:ring-inset rounded-lg placeholder:text-text-muted resize-none overflow-y-auto"
-            style={{ maxHeight: 160 }}
+      <div className="flex items-center gap-2">
+        <IconButton
+          aria-label={t('composer.attach')}
+          icon={<IconPlus size={16} />}
+          onClick={() => fileInputRef.current?.click()}
+          disabled={disabled}
+        />
+        {pills}
+        {isRunning ? (
+          <IconButton
+            variant="primary"
+            aria-label={t('composer.stop')}
+            icon={<IconStop size={16} />}
+            onClick={onStop}
+            className="ml-auto"
           />
-
-          <div className="p-2 shrink-0">
-            {isRunning ? (
-              <button
-                onClick={onStop}
-                className="w-10 h-10 flex items-center justify-center hover:opacity-90 transition-opacity"
-                title={t('stopGeneration')}
-              >
-                <svg className="absolute w-8 h-8 animate-spin" viewBox="0 0 32 32" fill="none" style={{ animationDuration: '1.5s' }}>
-                  <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="2" className="text-error/20" />
-                  <path d="M16 2 A14 14 0 0 1 30 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-error" />
-                </svg>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="relative text-error">
-                  <rect x="4" y="4" width="16" height="16" rx="3" />
-                </svg>
-              </button>
-            ) : (
-              <button
-                onClick={handleSend}
-                disabled={!hasContent || disabled}
-                className="w-8 h-8 flex items-center justify-center rounded-xl bg-accent text-accent-foreground hover:bg-accent-hover transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                title={t('sendMessageTitle')}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="22" y1="2" x2="11" y2="13" />
-                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                </svg>
-              </button>
-            )}
-          </div>
-        </div>
+        ) : (
+          <IconButton
+            variant="primary"
+            aria-label={t('composer.send')}
+            icon={<IconArrowUp size={16} />}
+            onClick={handleSend}
+            disabled={!hasContent || disabled}
+            className="ml-auto"
+          />
+        )}
       </div>
     </div>
   )

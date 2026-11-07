@@ -4,44 +4,63 @@ import { useChat } from '../../hooks/use-chat'
 import { useAgents } from '../../hooks/use-agents'
 import { useTeamTasks } from '../../hooks/use-team-tasks'
 import { useSessionStore } from '../../stores/session-store'
-import { ChatTopBar } from './ChatTopBar'
+import { useChatActivityStore } from '../../stores/chat-activity-store'
+import { useUiStore } from '../../stores/ui-store'
+import { isToolDenied } from '../../utils/chat-error'
+import { cn } from '../../lib/cn'
+import { useGatewayStatus } from '../layout/use-gateway-status'
+import { Button, PageHeader, StatusChip } from '../ui'
+import { TaskDetailModal } from '../teams/TaskDetailModal'
+import type { TeamTaskData } from '../../types/team'
+import { ChatHome } from './ChatHome'
+import { ChatNotice } from './ChatNotice'
 import { MessageBubble } from './MessageBubble'
 import { ActivityIndicator } from './ActivityIndicator'
 import { InputBar, type AttachedFile } from './InputBar'
+import { ModelPicker } from './ModelPicker'
 import { TaskPanel } from './TaskPanel'
-import { TaskDetailModal } from '../teams/TaskDetailModal'
-import type { TeamTaskData } from '../../types/team'
 
 export function ChatCanvas() {
-  const { t } = useTranslation('common')
-  const { messages, isRunning, activity, sendMessage, abort } = useChat()
+  const { t } = useTranslation('chat')
+  const { messages, isRunning, activity, error, sendMessage, abort, retry, continueReply, dismissError } = useChat()
   const { selectedAgent } = useAgents()
   const { members, fetchTaskDetail } = useTeamTasks()
+  const { disconnected } = useGatewayStatus()
+  const setActiveView = useUiStore((s) => s.setActiveView)
   const activeSessionKey = useSessionStore((s) => s.activeSessionKey)
+  const sessionTitle = useSessionStore((s) => s.sessions.find((x) => x.key === s.activeSessionKey)?.title)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const userScrolledUp = useRef(false)
   const [selectedTask, setSelectedTask] = useState<TeamTaskData | null>(null)
 
-  // Find last assistant message ID for streaming cursor
-  const lastAssistantId = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'assistant') return messages[i].id
-    }
-    return null
-  }, [messages])
+  // Last assistant message gets the streaming cursor.
+  const lastAssistant = useMemo(() => [...messages].reverse().find((m) => m.role === 'assistant') ?? null, [messages])
+  const lastAssistantId = lastAssistant?.id ?? null
+
+  // A tool the settings refused, from the latest reply only.
+  const deniedTool = useMemo(
+    () => [...(lastAssistant?.toolCalls ?? [])].reverse().find((tc) => tc.state === 'error' && isToolDenied(tc.error)),
+    [lastAssistant],
+  )
 
   useEffect(() => {
     if (!userScrolledUp.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: isRunning ? 'smooth' : 'instant' })
     }
-  }, [messages, isRunning])
+  }, [messages, isRunning, error])
+
+  // The connection dropped mid-reply: the answer is cut short, so say so.
+  useEffect(() => {
+    if (disconnected && useChatActivityStore.getState().isRunning) {
+      useChatActivityStore.getState().setError({ kind: 'interrupted', message: '' })
+    }
+  }, [disconnected])
 
   const handleScroll = useCallback(() => {
     const el = scrollAreaRef.current
     if (!el) return
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50
-    userScrolledUp.current = !atBottom
+    userScrolledUp.current = el.scrollHeight - el.scrollTop - el.clientHeight >= 50
   }, [])
 
   const handleSend = useCallback((text: string, files?: AttachedFile[]) => {
@@ -50,63 +69,103 @@ export function ChatCanvas() {
     sendMessage(text, selectedAgent.id, files)
   }, [selectedAgent, sendMessage])
 
-  const handleStop = useCallback(() => {
-    abort()
-  }, [abort])
+  const showHome = !activeSessionKey && messages.length === 0 && !isRunning
 
-  const hasMessages = messages.length > 0
+  const agentId = selectedAgent?.id
+  const noticeActions = useMemo(() => {
+    if (!agentId || !error) return null
+    switch (error.kind) {
+      case 'provider':
+        return (
+          <>
+            <Button size="sm" onClick={() => retry(agentId)}>{t('notice.retry')}</Button>
+            <Button size="sm" variant="ghost" onClick={() => setActiveView('providers')}>{t('notice.provider.action')}</Button>
+          </>
+        )
+      case 'interrupted':
+        return (
+          <>
+            <Button size="sm" onClick={() => continueReply(agentId)}>{t('notice.interrupted.continue')}</Button>
+            <Button size="sm" onClick={() => retry(agentId)}>{t('notice.retry')}</Button>
+          </>
+        )
+      default:
+        return <Button size="sm" onClick={() => retry(agentId)}>{t('notice.retry')}</Button>
+    }
+  }, [agentId, error, retry, continueReply, setActiveView, t])
+
+  if (showHome) {
+    return (
+      <div className={cn('flex min-h-0 flex-1 flex-col', disconnected && 'opacity-60')}>
+        <ChatHome onSend={handleSend} disabled={disconnected} />
+      </div>
+    )
+  }
+
+  const title = sessionTitle || messages.find((m) => m.role === 'user')?.content.slice(0, 60) || t('header.newChat')
+  const description = selectedAgent
+    ? t('header.agentModel', { agent: selectedAgent.name, model: selectedAgent.model })
+    : t('header.selectAgent')
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <ChatTopBar />
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PageHeader
+        title={title}
+        description={description}
+        actions={isRunning ? <StatusChip tone="success" label={t('header.running')} /> : undefined}
+      />
 
-      {/* Chat body — dots background covers messages + input */}
-      <div className="flex-1 flex flex-col min-h-0 canvas-dots">
-        {/* Messages area */}
-        <div
-          ref={scrollAreaRef}
-          onScroll={handleScroll}
-          className="flex-1 overflow-y-auto overscroll-contain px-4 py-2"
-        >
-          <div className="max-w-3xl mx-auto">
-            {!selectedAgent && (
-              <div className="flex flex-col items-center justify-center py-20">
-                <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin mb-3" />
-                <p className="text-sm text-text-muted">{t('loading')}</p>
-              </div>
-            )}
-            {selectedAgent && !hasMessages && <EmptyState agentName={selectedAgent.name} onSuggestion={handleSend} />}
+      <div
+        ref={scrollAreaRef}
+        onScroll={handleScroll}
+        className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-6', disconnected && 'opacity-60')}
+      >
+        <div className="mx-auto flex w-full max-w-reading flex-col gap-4">
+          {messages.map((msg) => (
+            <MessageBubble key={msg.id} message={msg} isStreaming={isRunning && msg.id === lastAssistantId} />
+          ))}
 
-            {messages.map((msg) => (
-              <MessageBubble
-                key={msg.id}
-                message={msg}
-                isStreaming={isRunning && msg.id === lastAssistantId}
-              />
-            ))}
+          {isRunning && activity && (
+            <ActivityIndicator phase={activity.phase} tool={activity.tool} iteration={activity.iteration} />
+          )}
 
-            {isRunning && activity && (
-              <ActivityIndicator phase={activity.phase} tool={activity.tool} iteration={activity.iteration} />
-            )}
+          {deniedTool && (
+            <ChatNotice
+              tone="warning"
+              title={t('notice.toolDenied.title')}
+              body={t('notice.toolDenied.body', { tool: deniedTool.toolName })}
+              actions={<Button size="sm" onClick={() => setActiveView('tools')}>{t('notice.toolDenied.action')}</Button>}
+            />
+          )}
 
-            <div ref={messagesEndRef} />
-          </div>
+          {error && (
+            <ChatNotice
+              tone={error.kind === 'provider' ? 'warning' : 'danger'}
+              title={t(`notice.${error.kind}.title`)}
+              body={error.kind === 'failed' ? error.message : t(`notice.${error.kind}.body`)}
+              actions={noticeActions}
+            />
+          )}
+
+          <div ref={messagesEndRef} />
         </div>
-
-        {/* Team task panel */}
-        <TaskPanel sessionKey={activeSessionKey} onTaskClick={setSelectedTask} />
-
-        {/* Input bar */}
-        <InputBar
-          onSend={handleSend}
-          onStop={handleStop}
-          disabled={!selectedAgent}
-          isRunning={isRunning}
-          placeholder={selectedAgent ? t('sendMessage') : t('selectAgent')}
-        />
       </div>
 
-      {/* Task detail modal (from TaskPanel click) */}
+      <TaskPanel sessionKey={activeSessionKey} onTaskClick={setSelectedTask} />
+
+      <div className="shrink-0 px-6 pb-5">
+        <div className="mx-auto w-full max-w-reading">
+          <InputBar
+            onSend={(text, files) => { dismissError(); handleSend(text, files) }}
+            onStop={abort}
+            disabled={!selectedAgent || disconnected}
+            isRunning={isRunning}
+            placeholder={selectedAgent ? t('composer.placeholder', { agent: selectedAgent.name }) : t('composer.placeholderNoAgent')}
+            pills={<ModelPicker agentModel={selectedAgent?.model} disabled={!selectedAgent || disconnected} />}
+          />
+        </div>
+      </div>
+
       {selectedTask && (
         <TaskDetailModal
           task={selectedTask}
@@ -117,41 +176,6 @@ export function ChatCanvas() {
           onFetchDetail={fetchTaskDetail}
         />
       )}
-    </div>
-  )
-}
-
-/** Empty state with logo and clickable suggested prompts */
-function EmptyState({ agentName, onSuggestion }: { agentName?: string; onSuggestion?: (text: string) => void }) {
-  const { t } = useTranslation('desktop')
-  const suggestions = t('chat.suggestions', { returnObjects: true }) as string[]
-  return (
-    <div className="flex flex-col items-center justify-center text-center py-20">
-      <img src="/goclaw-icon.svg" alt="GoClaw" className="h-14 w-14 mb-5 opacity-30" />
-      <h2 className="text-lg font-medium text-text-primary mb-1">
-        {agentName
-          ? t('chat.emptyTitle', { name: agentName })
-          : t('chat.emptyTitleDefault')}
-      </h2>
-      <p className="text-sm text-text-muted max-w-sm mb-6">
-        {agentName ? t('chat.emptyDescAgent') : t('chat.emptyDescNoAgent')}
-      </p>
-      {agentName && (
-        <div className="flex flex-wrap justify-center gap-2">
-          {suggestions.map((prompt) => (
-            <button
-              key={prompt}
-              onClick={() => onSuggestion?.(prompt)}
-              className="text-xs text-text-secondary bg-surface-secondary border border-border rounded-full px-3 py-1.5 hover:border-accent/40 hover:text-accent transition-colors cursor-pointer"
-            >
-              {prompt}
-            </button>
-          ))}
-        </div>
-      )}
-      <p className="text-2xs text-text-muted mt-4">
-        Press <kbd className="px-1 py-0.5 bg-surface-tertiary rounded text-2xs font-mono">⌘N</kbd> {t('sidebar.newChat').toLowerCase()}
-      </p>
     </div>
   )
 }

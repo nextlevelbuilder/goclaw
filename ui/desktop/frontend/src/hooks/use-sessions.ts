@@ -1,36 +1,50 @@
 import { useEffect, useCallback } from 'react'
+import i18n from 'i18next'
+import { useTranslation } from 'react-i18next'
 import { sessionService } from '../services/session-service'
 import { useSessionStore } from '../stores/session-store'
 import { useAgentStore } from '../stores/agent-store'
 import { useChatMessageStore } from '../stores/chat-message-store'
 import { useChatActivityStore } from '../stores/chat-activity-store'
+import { toast } from '../components/ui'
+import { deleteSessionByKey, renameSessionByKey } from './chat-session-actions'
 
 export function useSessions() {
-  const { sessions, activeSessionKey, setActiveSession, setSessions, removeSession } = useSessionStore()
+  const { t } = useTranslation('sessions')
+  const { sessions, activeSessionKey, status, error, reloadNonce, setActiveSession, setSessions, setStatus, reload } = useSessionStore()
   const selectedAgentId = useAgentStore((s) => s.selectedAgentId)
 
-  // When agent changes, clear active session + chat, then fetch new sessions
+  // When the agent changes, clear the active session and the chat.
   useEffect(() => {
     if (!selectedAgentId) return
     setActiveSession(null)
     useChatMessageStore.getState().clear()
     useChatActivityStore.getState().clear()
+  }, [selectedAgentId, setActiveSession])
+
+  // Fetch the agent's sessions on agent change and whenever `reload()` is called.
+  useEffect(() => {
+    if (!selectedAgentId) return
     let cancelled = false
+    setStatus('loading')
     sessionService.list(selectedAgentId)
       .then((result) => {
         if (cancelled) return
-        const list = (result?.sessions || []).map((s) => ({
+        setSessions((result?.sessions || []).map((s) => ({
           key: s.key,
           agentId: selectedAgentId,
-          title: s.label || 'Untitled',
+          title: s.label || i18n.t('sessions:untitled'),
           lastMessageAt: new Date(s.updated || s.created).getTime(),
           messageCount: s.messageCount || 0,
-        }))
-        setSessions(list)
+        })))
       })
-      .catch(console.error)
+      .catch((err: unknown) => {
+        if (cancelled) return
+        console.error('Failed to load sessions:', err)
+        setStatus('error', err instanceof Error ? err.message : String(err))
+      })
     return () => { cancelled = true }
-  }, [selectedAgentId, setSessions, setActiveSession])
+  }, [selectedAgentId, reloadNonce, setSessions, setStatus])
 
   // "New Chat" just clears active session + chat.
   // Actual session is created by sendMessage on first message (auto-session-creation).
@@ -42,15 +56,19 @@ export function useSessions() {
 
   const deleteSession = useCallback(async (key: string) => {
     try {
-      await sessionService.delete(key)
-    } catch { /* best effort */ }
-    removeSession(key)
-    if (activeSessionKey === key) {
-      setActiveSession(null)
-      useChatMessageStore.getState().clear()
-      useChatActivityStore.getState().clear()
+      await deleteSessionByKey(key)
+    } catch {
+      toast.error(t('toast.deleteFailed'))
     }
-  }, [activeSessionKey, removeSession, setActiveSession])
+  }, [t])
 
-  return { sessions, activeSessionKey, setActiveSession, createSession, deleteSession }
+  const renameSession = useCallback(async (key: string, label: string) => {
+    try {
+      await renameSessionByKey(key, label)
+    } catch {
+      toast.error(t('toast.updateFailed'))
+    }
+  }, [t])
+
+  return { sessions, activeSessionKey, status, error, setActiveSession, createSession, deleteSession, renameSession, reload }
 }

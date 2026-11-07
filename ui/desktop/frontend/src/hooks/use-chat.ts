@@ -8,18 +8,22 @@ import { useSessionStore } from '../stores/session-store'
 import { toFileUrl } from './chat-file-helpers'
 import { useStreamBatcher } from './use-stream-batcher'
 import { mapHistoryMessages } from './chat-history-mapper'
+import { classifyRunError } from '../utils/chat-error'
 import type { AttachedFile } from '../components/chat/InputBar'
+
+/** Sent when the user asks the agent to carry on after an interrupted reply. */
+const CONTINUE_PROMPT = 'Please continue your previous reply.'
 
 export function useChat() {
   const ws = getWsClient()
   const {
     messages,
     addUserMessage, addAssistantMessage, appendChunk, appendThinking,
-    addToolCall, updateToolResult, finalizeMessage, appendErrorToLastMessage, setMessages,
+    addToolCall, updateToolResult, finalizeMessage, setMessages,
   } = useChatMessageStore()
 
   const {
-    isRunning, activity,
+    isRunning, activity, error,
     startRun, setActivity, completeRun, failRun,
   } = useChatActivityStore()
 
@@ -89,8 +93,10 @@ export function useChat() {
         case 'run.failed':
           chunkBatcher.flush()
           thinkingBatcher.flush()
-          appendErrorToLastMessage((p.error as string) ?? 'Unknown error')
-          failRun()
+          {
+            const message = (p.error as string) ?? 'Unknown error'
+            failRun({ kind: classifyRunError(message), message })
+          }
           currentRunIdRef.current = null
           break
         case 'run.cancelled':
@@ -105,10 +111,10 @@ export function useChat() {
       }
     })
     return unsub
-  }, [ws, addAssistantMessage, startRun, appendChunk, addToolCall, updateToolResult, setActivity, finalizeMessage, appendErrorToLastMessage, completeRun, failRun, chunkBatcher, thinkingBatcher])
+  }, [ws, addAssistantMessage, startRun, appendChunk, addToolCall, updateToolResult, setActivity, finalizeMessage, completeRun, failRun, chunkBatcher, thinkingBatcher])
 
   const sendMessage = useCallback(
-    async (text: string, agentId: string, attachedFiles?: AttachedFile[]) => {
+    async (text: string, agentId: string, attachedFiles?: AttachedFile[], opts?: { resend?: boolean }) => {
       if (!ws || (!text.trim() && !attachedFiles?.length)) return
 
       let sessionKey = activeSessionKey
@@ -119,7 +125,9 @@ export function useChat() {
         useSessionStore.getState().setActiveSession(sessionKey)
       }
 
-      addUserMessage(text)
+      // A resend repeats the last user message that is already in the transcript.
+      if (!opts?.resend) addUserMessage(text)
+      useChatActivityStore.getState().setError(null)
 
       let media: { path: string; filename: string }[] | undefined
       if (attachedFiles?.length) {
@@ -149,9 +157,12 @@ export function useChat() {
           ...(modelOverride && { model: modelOverride }),
           ...(media && { media }),
         })
-      } catch (err) { console.error('chat.send failed:', err) }
+      } catch (err) {
+        console.error('chat.send failed:', err)
+        failRun({ kind: 'failed', message: err instanceof Error ? err.message : String(err) })
+      }
     },
-    [ws, activeSessionKey, addUserMessage],
+    [ws, activeSessionKey, addUserMessage, failRun],
   )
 
   const loadHistory = useCallback(
@@ -163,6 +174,17 @@ export function useChat() {
     },
     [setMessages],
   )
+
+  /** Sends the last user message again without adding it to the transcript twice. */
+  const retry = useCallback(async (agentId: string) => {
+    const lastUser = [...useChatMessageStore.getState().messages].reverse().find((m) => m.role === 'user')
+    if (lastUser) await sendMessage(lastUser.content, agentId, undefined, { resend: true })
+  }, [sendMessage])
+
+  /** Asks the agent to carry on after an interrupted reply. */
+  const continueReply = useCallback((agentId: string) => sendMessage(CONTINUE_PROMPT, agentId), [sendMessage])
+
+  const dismissError = useCallback(() => useChatActivityStore.getState().setError(null), [])
 
   const abort = useCallback(async () => {
     const sk = sessionKeyRef.current
@@ -199,5 +221,5 @@ export function useChat() {
     return () => { cancelled = true }
   }, [activeSessionKey, loadHistory, chunkBatcher, thinkingBatcher])
 
-  return { messages, isRunning, activity, sendMessage, loadHistory, abort }
+  return { messages, isRunning, activity, error, sendMessage, loadHistory, abort, retry, continueReply, dismissError }
 }

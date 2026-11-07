@@ -15,6 +15,10 @@ export const sessionService = {
     return getWsClient().call('sessions.list', { agentId, limit }) as Promise<{ sessions?: SessionInfoResponse[] }>
   },
 
+  rename(key: string, label: string): Promise<unknown> {
+    return getWsClient().call('sessions.patch', { key, label })
+  },
+
   delete(key: string): Promise<unknown> {
     return getWsClient().call('sessions.delete', { key })
   },

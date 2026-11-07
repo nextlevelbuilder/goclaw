@@ -115,10 +115,10 @@ export function TaskPanel({ sessionKey, onTaskClick }: TaskPanelProps) {
   if (activeTasks.length === 0) return null
 
   return (
-    <div className="border-t border-border bg-surface-secondary/50">
+    <div className="border-t border-border-subtle bg-surface-base">
       <button
         onClick={() => setCollapsed((v) => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+        className="w-full flex items-center gap-2 px-6 py-2 text-caption text-ink-muted hover:text-ink transition-colors cursor-pointer"
       >
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={`transition-transform ${collapsed ? '' : 'rotate-90'}`}>
           <polyline points="9 18 15 12 9 6" />
@@ -142,13 +142,13 @@ export function TaskPanel({ sessionKey, onTaskClick }: TaskPanelProps) {
               <button
                 key={task.id}
                 onClick={() => onTaskClick?.(task)}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg bg-surface-secondary border border-border/50 hover:border-accent/30 transition-colors text-left cursor-pointer"
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md bg-surface-raised border border-border-subtle hover:bg-surface-hover transition-colors text-left cursor-pointer"
               >
-                <span className={`text-2xs font-medium px-1 py-0.5 rounded shrink-0 ${prio.cls}`}>{prio.label}</span>
-                <span className="text-2xs text-text-primary truncate flex-1">{task.subject}</span>
+                <span className={`text-caption font-medium px-1 py-0.5 rounded shrink-0 ${prio.cls}`}>{prio.label}</span>
+                <span className="text-caption text-ink truncate flex-1">{task.subject}</span>
                 {task.progress_percent != null && task.progress_percent > 0 && (
-                  <div className="w-12 h-1 rounded-full bg-surface-tertiary overflow-hidden shrink-0">
-                    <div className="h-full rounded-full bg-accent" style={{ width: `${task.progress_percent}%` }} />
+                  <div className="w-12 h-1 rounded-pill bg-surface-hover overflow-hidden shrink-0">
+                    <div className="h-full rounded-pill bg-accent" style={{ width: `${task.progress_percent}%` }} />
                   </div>
                 )}
               </button>

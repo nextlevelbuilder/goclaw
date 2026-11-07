@@ -1,5 +1,5 @@
 import { useMediaUrl } from '../../hooks/use-media-url'
-import { SaveFile } from '../../../wailsjs/go/main/App'
+import { wails } from '../../lib/wails'
 
 interface AuthImageProps {
   src: string
@@ -13,7 +13,7 @@ export function AuthImage({ src, alt, className, onClick }: AuthImageProps) {
   const cachedSrc = useMediaUrl(src)
 
   if (!cachedSrc) {
-    return <div className={`bg-surface-tertiary/50 animate-pulse rounded-lg ${className ?? 'h-40 w-full'}`} />
+    return <div className={`bg-surface-hover animate-pulse rounded-lg ${className ?? 'h-40 w-full'}`} />
   }
 
   return <img src={cachedSrc} alt={alt ?? ''} className={className} loading="lazy" onClick={onClick} />
@@ -25,6 +25,6 @@ export function downloadFile(url: string, _filename: string) {
   const match = url.match(/\/v1\/files\/(.+?)(?:\?|$)/)
   if (match) {
     const absPath = '/' + decodeURIComponent(match[1])
-    SaveFile(absPath)
+    void wails.saveFile(absPath)
   }
 }
