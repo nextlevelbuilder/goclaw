@@ -120,7 +120,11 @@
     "emptyTitleDefault": "Start a conversation",
     "emptyDescAgent": "Ask a question, write something, or explore ideas.",
     "emptyDescNoAgent": "Select an agent from the sidebar to begin.",
-    "suggestions": ["What's the latest news today?", "Tell me a joke", "Brainstorm ideas for the AI era"]
+    "suggestions": [
+      "What's the latest news today?",
+      "Tell me a joke",
+      "Brainstorm ideas for the AI era"
+    ]
   },
   "activity": {
     "thinking": "Thinking",
@@ -157,6 +161,91 @@
     "ready": "Update installed! Restart to apply.",
     "restart": "Restart Now",
     "failed": "Update failed.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "later": "Later"
+  },
+  "nav": {
+    "label": "Main navigation",
+    "newChat": "New chat",
+    "recent": "Recent",
+    "groups": {
+      "chat": "Chat",
+      "configure": "Configure",
+      "monitor": "Monitor"
+    },
+    "views": {
+      "chat": "Home",
+      "sessions": "Sessions",
+      "teams": "Teams",
+      "team-board": "Team board",
+      "agents": "Agents",
+      "skills": "Skills",
+      "tools": "Tools",
+      "providers": "Providers",
+      "mcp": "MCP",
+      "channels": "Channels",
+      "storage": "Storage",
+      "traces": "Traces",
+      "usage": "Usage",
+      "cron": "Cron",
+      "settings": "Settings"
+    },
+    "expand": "Expand sidebar",
+    "collapse": "Collapse sidebar",
+    "show": "Show sidebar",
+    "hide": "Hide sidebar",
+    "switchAgent": "Switch agent",
+    "noAgent": "No agent selected",
+    "manageAgents": "Manage agents",
+    "compareEditions": "Compare editions",
+    "pendingPairings_one": "{{count}} pending pairing request",
+    "pendingPairings_other": "{{count}} pending pairing requests",
+    "noSessions": "No conversations yet",
+    "deleteSession": "Delete conversation",
+    "deleteSessionTitle": "Delete conversation \"{{title}}\"?",
+    "deleteSessionDesc": "This removes the conversation and its messages. You can't undo this."
+  },
+  "titlebar": {
+    "search": "Search or run a command",
+    "shortcut": "Ctrl K",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "close": "Close",
+    "breadcrumb": "Location"
+  },
+  "palette": {
+    "label": "Command palette",
+    "placeholder": "Search views, agents, sessions and actions",
+    "groups": {
+      "actions": "Actions",
+      "views": "Go to",
+      "agents": "Agents",
+      "sessions": "Sessions"
+    },
+    "actions": {
+      "newChat": "New chat",
+      "toggleTheme": "Switch light or dark theme",
+      "openSettings": "Open settings"
+    },
+    "open": "Open",
+    "noResults": "No results for \"{{query}}\"",
+    "hintMove": "↑↓ to move",
+    "hintOpen": "Enter to open",
+    "hintClose": "Esc to close"
+  },
+  "gateway": {
+    "online": "Gateway online",
+    "offline": "Gateway offline",
+    "connecting": "Connecting to gateway"
+  },
+  "stub": {
+    "sessionsDesc": "Conversations with the selected agent.",
+    "sessionsEmpty": "Chats with agents are saved here.",
+    "teamsDesc": "Group agents so they share tasks.",
+    "teamsEmpty": "Create a team to share tasks between agents.",
+    "usageDesc": "Token use and cost across providers.",
+    "usageEmpty": "Usage for each provider is on its Usage tab.",
+    "openProviders": "Open providers"
   }
 }

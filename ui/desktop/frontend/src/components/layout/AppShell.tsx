@@ -1,48 +1,166 @@
-import { lazy, Suspense } from 'react'
-import { useUiStore } from '../../stores/ui-store'
+import { Suspense, useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { usePendingPairingsCount } from '../../hooks/use-pending-pairings-count'
+import { useSessions } from '../../hooks/use-sessions'
+import { cn } from '../../lib/cn'
+import { useUiStore, type AppView } from '../../stores/ui-store'
+import { ErrorBoundary } from '../common/ErrorBoundary'
+import { ErrorState, OfflineBanner, SkeletonList } from '../ui'
+import { CommandPalette } from './CommandPalette'
+import { startNewChat } from './shell-actions'
 import { Sidebar } from './Sidebar'
+import { Titlebar } from './Titlebar'
 import { UpdateBanner } from './UpdateBanner'
-import { SettingsView } from '../settings/SettingsView'
+import { useGatewayStatus } from './use-gateway-status'
+import { useNarrowWindow } from './use-narrow-window'
+import { VIEW_REGISTRY } from './view-registry'
 
-const TeamBoard = lazy(() => import('../teams/TeamBoard').then((m) => ({ default: m.TeamBoard })))
+const panelClass = 'rounded-xl border border-border-subtle bg-surface-base shadow-panel'
 
-interface AppShellProps {
-  children: React.ReactNode // ChatCanvas
+/** Renders the active view inside the main panel with the frame its registry entry asks for. */
+function ViewOutlet({ view }: { view: AppView }) {
+  const { t } = useTranslation('common')
+  const def = VIEW_REGISTRY[view]
+  const View = def.component
+  const fallback = def.frame === 'page' ? <SkeletonList className="px-6 py-5" /> : <SkeletonList className="p-6" />
+  const content = (
+    <ErrorBoundary
+      key={view}
+      fallback={<ErrorState description={t('errorBoundary')} onRetry={() => window.location.reload()} />}
+    >
+      <Suspense fallback={fallback}>
+        <View />
+      </Suspense>
+    </ErrorBoundary>
+  )
+
+  switch (def.frame) {
+    case 'page':
+      return <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">{content}</div>
+    case 'fill-padded':
+      return <div className="flex min-h-0 flex-1 flex-col px-6 py-5">{content}</div>
+    default:
+      return <div className="flex min-h-0 flex-1 flex-col">{content}</div>
+  }
 }
 
-export function AppShell({ children }: AppShellProps) {
-  const sidebarOpen = useUiStore((s) => s.sidebarOpen)
-  const activeView = useUiStore((s) => s.activeView)
+/** True when a modal dialog (Radix or legacy) is open, so global shortcuts stay out of its way. */
+function dialogOpen(): boolean {
+  return document.querySelector('[role="dialog"], [role="alertdialog"]') !== null
+}
 
-  let mainContent: React.ReactNode
-  switch (activeView) {
-    case 'settings':
-      mainContent = <SettingsView />
-      break
-    case 'team-board':
-      mainContent = <Suspense fallback={null}><TeamBoard /></Suspense>
-      break
-    default:
-      mainContent = children
-  }
+/**
+ * Window shell: custom title bar, sidebar panel (full, or icon rail below
+ * 1100px / when collapsed) and the main panel with update and offline banners.
+ * Owns the global shortcuts: Ctrl+K palette, Ctrl+B sidebar, Ctrl+N new chat,
+ * Ctrl+, settings, Esc closes overlays / settings.
+ */
+export function AppShell() {
+  const { t } = useTranslation('desktop')
+  const sidebarOpen = useUiStore((s) => s.sidebarOpen)
+  const toggleSidebar = useUiStore((s) => s.toggleSidebar)
+  const activeView = useUiStore((s) => s.activeView)
+  const narrow = useNarrowWindow()
+  const [overlayOpen, setOverlayOpen] = useState(false)
+  const gateway = useGatewayStatus()
+  const { deleteSession } = useSessions() // the single instance: loads sessions for the selected agent
+  const { pendingCount } = usePendingPairingsCount()
+  const badges = { channels: pendingCount }
+
+  const rail = narrow || !sidebarOpen
+  const closeOverlay = useCallback(() => setOverlayOpen(false), [])
+
+  // Leaving narrow mode closes the overlay.
+  useEffect(() => { if (!narrow) setOverlayOpen(false) }, [narrow])
+
+  const toggleNav = useCallback(() => {
+    if (narrow) setOverlayOpen((o) => !o)
+    else toggleSidebar()
+  }, [narrow, toggleSidebar])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey
+      const key = e.key.toLowerCase()
+      const ui = useUiStore.getState()
+      if (mod && key === 'k') {
+        e.preventDefault()
+        ui.setCommandPaletteOpen(!ui.commandPaletteOpen)
+        return
+      }
+      if (ui.commandPaletteOpen) return
+      if (mod && key === 'b') { e.preventDefault(); toggleNav(); return }
+      if (mod && key === 'n') { e.preventDefault(); startNewChat(); setOverlayOpen(false); return }
+      if (mod && e.key === ',') { e.preventDefault(); ui.openSettings('appearance'); return }
+      if (e.key === 'Escape' && !e.defaultPrevented && !dialogOpen()) {
+        if (overlayOpen) setOverlayOpen(false)
+        else if (ui.activeView === 'settings') ui.closeSettings()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [toggleNav, overlayOpen])
 
   return (
-    <div className="h-dvh flex bg-surface-primary overflow-hidden">
-      {/* Wails drag region — transparent overlay at top */}
-      <div className="wails-drag fixed top-0 left-0 right-0 h-8 z-50" />
+    <div className="flex h-dvh flex-col overflow-hidden bg-surface-window text-ink">
+      <Titlebar />
+      <div className="relative flex min-h-0 flex-1 gap-3 px-3 pb-3">
+        <aside
+          data-mode={rail ? 'rail' : 'full'}
+          className={cn(panelClass, 'shrink-0 overflow-hidden transition-[width] duration-200 ease-out', rail ? 'w-rail' : 'w-sidebar')}
+        >
+          {rail ? (
+            <Sidebar
+              mode="rail"
+              badges={badges}
+              onDeleteSession={deleteSession}
+              onExpand={narrow ? () => setOverlayOpen(true) : toggleSidebar}
+            />
+          ) : (
+            <Sidebar
+              mode="full"
+              badges={badges}
+              onDeleteSession={deleteSession}
+              onCollapse={toggleSidebar}
+              collapseLabel={t('nav.collapse')}
+            />
+          )}
+        </aside>
 
-      {/* Sidebar panel */}
-      {sidebarOpen && (
-        <div className="floating-panel m-3 mr-0 flex flex-col w-[260px] shrink-0">
-          <Sidebar />
-        </div>
-      )}
+        {narrow && overlayOpen && (
+          <>
+            <div aria-hidden="true" data-testid="sidebar-overlay-backdrop" className="absolute inset-0 z-30" onClick={closeOverlay} />
+            <aside
+              data-mode="overlay"
+              className="absolute bottom-3 left-3 top-0 z-40 w-sidebar overflow-hidden rounded-xl border border-border-subtle bg-surface-base shadow-popover"
+            >
+              <Sidebar
+                mode="full"
+                badges={badges}
+                onDeleteSession={deleteSession}
+                onCollapse={closeOverlay}
+                collapseLabel={t('nav.hide')}
+                onNavigate={closeOverlay}
+              />
+            </aside>
+          </>
+        )}
 
-      {/* Main panel — chat, settings, or team board */}
-      <div className="floating-panel m-3 ml-2 flex-1 flex flex-col min-w-0">
-        <UpdateBanner />
-        {mainContent}
+        <main className={cn(panelClass, 'flex min-w-0 flex-1 flex-col overflow-hidden')}>
+          <UpdateBanner />
+          {gateway.disconnected && (
+            <div className="shrink-0 px-6 pt-4">
+              <OfflineBanner
+                retryInSeconds={gateway.retryInSeconds}
+                retrying={gateway.status === 'connecting'}
+                onRetry={gateway.retryNow}
+              />
+            </div>
+          )}
+          <ViewOutlet view={activeView} />
+        </main>
       </div>
+      <CommandPalette />
     </div>
   )
 }

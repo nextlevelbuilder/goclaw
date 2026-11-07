@@ -51,7 +51,7 @@
     "light": "Light",
     "language": "Language",
     "timezone": "Timezone",
-    "timezonePlaceholder": "Timezone selection coming soon."
+    "timezoneHint": "Đổi múi giờ từ biểu tượng đồng hồ ở thanh trên cùng."
   },
   "sidebar": {
     "newChat": "Trò chuyện mới",
@@ -161,6 +161,90 @@
     "ready": "Đã cài đặt! Khởi động lại để áp dụng.",
     "restart": "Khởi động lại",
     "failed": "Cập nhật thất bại.",
-    "retry": "Thử lại"
+    "retry": "Thử lại",
+    "later": "Để sau"
+  },
+  "nav": {
+    "label": "Điều hướng chính",
+    "newChat": "Trò chuyện mới",
+    "recent": "Gần đây",
+    "groups": {
+      "chat": "Trò chuyện",
+      "configure": "Cấu hình",
+      "monitor": "Giám sát"
+    },
+    "views": {
+      "chat": "Trang chủ",
+      "sessions": "Phiên",
+      "teams": "Nhóm",
+      "team-board": "Bảng nhóm",
+      "agents": "Agent",
+      "skills": "Kỹ năng",
+      "tools": "Công cụ",
+      "providers": "Nhà cung cấp",
+      "mcp": "MCP",
+      "channels": "Kênh",
+      "storage": "Lưu trữ",
+      "traces": "Truy vết",
+      "usage": "Sử dụng",
+      "cron": "Cron",
+      "settings": "Cài đặt"
+    },
+    "expand": "Mở rộng thanh bên",
+    "collapse": "Thu gọn thanh bên",
+    "show": "Hiện thanh bên",
+    "hide": "Ẩn thanh bên",
+    "switchAgent": "Đổi agent",
+    "noAgent": "Chưa chọn agent",
+    "manageAgents": "Quản lý agent",
+    "compareEditions": "So sánh phiên bản",
+    "pendingPairings_other": "{{count}} yêu cầu ghép nối đang chờ",
+    "noSessions": "Chưa có cuộc trò chuyện nào",
+    "deleteSession": "Xóa cuộc trò chuyện",
+    "deleteSessionTitle": "Xóa cuộc trò chuyện \"{{title}}\"?",
+    "deleteSessionDesc": "Thao tác này xóa cuộc trò chuyện và các tin nhắn. Không thể hoàn tác."
+  },
+  "titlebar": {
+    "search": "Tìm kiếm hoặc chạy lệnh",
+    "shortcut": "Ctrl K",
+    "minimize": "Thu nhỏ",
+    "maximize": "Phóng to",
+    "restore": "Khôi phục",
+    "close": "Đóng",
+    "breadcrumb": "Vị trí"
+  },
+  "palette": {
+    "label": "Bảng lệnh",
+    "placeholder": "Tìm màn hình, agent, phiên và thao tác",
+    "groups": {
+      "actions": "Thao tác",
+      "views": "Đi tới",
+      "agents": "Agent",
+      "sessions": "Phiên"
+    },
+    "actions": {
+      "newChat": "Trò chuyện mới",
+      "toggleTheme": "Đổi giao diện sáng hoặc tối",
+      "openSettings": "Mở cài đặt"
+    },
+    "open": "Mở",
+    "noResults": "Không có kết quả cho \"{{query}}\"",
+    "hintMove": "↑↓ để di chuyển",
+    "hintOpen": "Enter để mở",
+    "hintClose": "Esc để đóng"
+  },
+  "gateway": {
+    "online": "Gateway trực tuyến",
+    "offline": "Gateway ngoại tuyến",
+    "connecting": "Đang kết nối gateway"
+  },
+  "stub": {
+    "sessionsDesc": "Các cuộc trò chuyện với agent đang chọn.",
+    "sessionsEmpty": "Các cuộc trò chuyện với agent được lưu ở đây.",
+    "teamsDesc": "Nhóm các agent để chia sẻ công việc.",
+    "teamsEmpty": "Tạo nhóm để các agent chia sẻ công việc.",
+    "usageDesc": "Lượng token và chi phí theo nhà cung cấp.",
+    "usageEmpty": "Mức sử dụng của từng nhà cung cấp nằm trong thẻ Sử dụng.",
+    "openProviders": "Mở nhà cung cấp"
   }
 }
