@@ -27,15 +27,15 @@
   "form": {
     "createTitle": "Добавить MCP-сервер",
     "editTitle": "Редактировать MCP-сервер",
-    "name": "Имя *",
+    "name": "Имя",
     "nameHint": "Только строчные буквы, цифры и дефисы",
     "displayName": "Отображаемое имя",
     "displayNamePlaceholder": "Мой MCP-сервер",
-    "transport": "Транспорт *",
-    "command": "Команда *",
+    "transport": "Транспорт",
+    "command": "Команда",
     "args": "Аргументы (через пробел)",
     "argsPlaceholder": "--flag1 --flag2=\"value with spaces\"",
-    "url": "URL *",
+    "url": "URL",
     "headers": "Заголовки",
     "headerKeyPlaceholder": "Имя заголовка",
     "headerValuePlaceholder": "Значение заголовка",
@@ -63,7 +63,8 @@
       "connectionFailed": "Не удалось подключиться"
     },
     "requireUserCredentials": "Требовать учётные данные пользователя",
-    "requireUserCredentialsHint": "Каждый пользователь должен настроить свои собственные учётные данные. Сервер отключён для пользователей без личных учётных данных."
+    "requireUserCredentialsHint": "Каждый пользователь должен настроить свои собственные учётные данные. Сервер отключён для пользователей без личных учётных данных.",
+    "toolPrefixAuto": "авто"
   },
   "grants": {
     "title": "Разрешения агентов — {{name}}",
@@ -101,7 +102,9 @@
     "deleted": "MCP-сервер удалён",
     "failedCreate": "Не удалось создать MCP-сервер",
     "failedUpdate": "Не удалось обновить MCP-сервер",
-    "failedDelete": "Не удалось удалить MCP-сервер"
+    "failedDelete": "Не удалось удалить MCP-сервер",
+    "reconnected": "Подключение сброшено",
+    "failedReconnect": "Не удалось переподключить сервер"
   },
   "userCredentials": {
     "title": "Мои учётные данные",
@@ -128,5 +131,44 @@
     "addEnv": "Добавить переменную",
     "saveFailed": "Не удалось сохранить учётные данные",
     "deleteFailed": "Не удалось удалить учётные данные"
+  },
+  "screen": {
+    "list": {
+      "description": "Серверов: {{count}} · включено: {{enabled}}",
+      "colStatus": "Статус",
+      "statusOn": "Вкл.",
+      "statusOff": "Выкл.",
+      "tableLabel": "Серверы MCP",
+      "rowActions": "Действия для {{name}}",
+      "enableServer": "Включить {{name}}",
+      "loading": "Загрузка серверов MCP",
+      "loadError": "Не удалось загрузить серверы MCP",
+      "loadErrorHint": "Проверьте подключение к шлюзу и повторите попытку.",
+      "clearSearch": "Сбросить поиск",
+      "limitReached": "В этой редакции можно добавить до {{max}} серверов. Удалите один, чтобы добавить другой."
+    },
+    "menu": {
+      "edit": "Изменить",
+      "delete": "Удалить сервер"
+    },
+    "transport": {
+      "stdio": "Локальный процесс",
+      "sse": "Удалённый (SSE)",
+      "http": "Удалённый (HTTP)"
+    },
+    "delete": {
+      "title": "Удалить {{name}}?",
+      "description": "Сервер и все доступы агентов будут удалены. Введите имя сервера для подтверждения."
+    },
+    "grants": {
+      "description": "Агенты, которым разрешено использовать инструменты этого сервера.",
+      "loadError": "Не удалось загрузить доступы"
+    },
+    "tools": {
+      "count_one": "{{count}} инструмент",
+      "count_few": "{{count}} инструмента",
+      "count_many": "{{count}} инструментов",
+      "count_other": "{{count}} инструмента"
+    }
   }
 }

@@ -1,6 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { Switch } from '../common/Switch'
-import { Combobox } from '../common/Combobox'
+import { Field, Input, Select, Switch, Textarea } from '../ui'
 import type { FieldDef } from './channel-schemas'
 
 interface ChannelFieldsProps {
@@ -15,7 +14,7 @@ interface ChannelFieldsProps {
 export function ChannelFields({ fields, values, onChange, idPrefix, isEdit, contextValues }: ChannelFieldsProps) {
   const allValues = contextValues ? { ...contextValues, ...values } : values
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-4">
       {fields.map((field) => {
         if (field.showWhen) {
           const depValue = allValues[field.showWhen.key] ?? fields.find((f) => f.key === field.showWhen!.key)?.defaultValue
@@ -60,73 +59,81 @@ interface FieldRendererProps {
 function FieldRenderer({ field, value, onChange, id, isEdit, disabled, disabledHint }: FieldRendererProps) {
   const { t } = useTranslation('channels')
   const label = field.label
-  const help = field.help ?? ''
-  const labelSuffix = field.required && !isEdit ? ' *' : ''
-  const editHint = isEdit && field.type === 'password' ? ` ${t('form.credentialsHint')}` : ''
-
-  const inputClass = 'w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent'
+  const help = field.help
+  const required = !!field.required && !isEdit
+  const editHint = isEdit && field.type === 'password' ? t('form.credentialsHint') : undefined
+  const helper = [help, editHint].filter(Boolean).join(' ') || undefined
 
   switch (field.type) {
     case 'text':
     case 'password':
       return (
-        <div className="space-y-1">
-          <label htmlFor={id} className="text-xs font-medium text-text-secondary">{label}{labelSuffix}{editHint}</label>
-          <input id={id} type={field.type} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} placeholder={field.placeholder} className={inputClass} />
-          {help && <p className="text-2xs text-text-muted">{help}</p>}
-        </div>
+        <Field label={label} helper={helper} required={required}>
+          <Input id={id} type={field.type} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} placeholder={field.placeholder} autoComplete="off" />
+        </Field>
       )
 
     case 'number':
       return (
-        <div className="space-y-1">
-          <label htmlFor={id} className="text-xs font-medium text-text-secondary">{label}{labelSuffix}</label>
-          <input id={id} type="number" value={value !== undefined && value !== null ? String(value) : ''} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)} placeholder={field.defaultValue !== undefined ? String(field.defaultValue) : undefined} className={inputClass} />
-          {help && <p className="text-2xs text-text-muted">{help}</p>}
-        </div>
+        <Field label={label} helper={help} required={required}>
+          <Input
+            id={id}
+            type="number"
+            value={value !== undefined && value !== null ? String(value) : ''}
+            onChange={(e) => onChange(e.target.value ? Number(e.target.value) : undefined)}
+            placeholder={field.defaultValue !== undefined ? String(field.defaultValue) : undefined}
+          />
+        </Field>
       )
 
-    case 'boolean':
+    case 'boolean': {
+      const note = disabledHint ?? help
       return (
-        <div className={`flex items-center gap-2${disabled ? ' opacity-50' : ''}`}>
-          <Switch checked={(value as boolean) ?? (field.defaultValue as boolean) ?? false} onCheckedChange={(v) => onChange(v)} disabled={disabled} />
-          <label className="text-xs text-text-secondary">{label}</label>
-          {disabledHint && <span className="text-2xs text-text-muted ml-1">— {disabledHint}</span>}
-          {!disabledHint && help && <span className="text-2xs text-text-muted ml-1">— {help}</span>}
+        <div className="flex items-start gap-3">
+          <Switch
+            id={id}
+            checked={(value as boolean) ?? (field.defaultValue as boolean) ?? false}
+            onCheckedChange={(v) => onChange(v)}
+            disabled={disabled}
+            aria-labelledby={`${id}-label`}
+            aria-describedby={note ? `${id}-note` : undefined}
+            className="mt-0.5"
+          />
+          <div className="flex min-w-0 flex-col">
+            <span id={`${id}-label`} className={disabled ? 'text-ui text-ink-muted' : 'text-ui text-ink'}>{label}</span>
+            {note && <span id={`${id}-note`} className="text-caption text-ink-muted">{note}</span>}
+          </div>
         </div>
       )
+    }
 
     case 'select':
       return (
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-text-secondary">{label}{labelSuffix}</label>
-          <Combobox
+        <Field label={label} helper={help} required={required}>
+          <Select
+            id={id}
             value={(value as string) ?? (field.defaultValue as string) ?? ''}
-            onChange={(v) => onChange(v)}
-            options={field.options?.map((opt) => ({ value: opt.value, label: opt.label })) ?? []}
-            allowCustom={false}
+            onChange={(e) => onChange(e.target.value)}
+            options={field.options ?? []}
           />
-          {help && <p className="text-2xs text-text-muted">{help}</p>}
-        </div>
+        </Field>
       )
 
     case 'tags':
       return (
-        <div className="space-y-1">
-          <label htmlFor={id} className="text-xs font-medium text-text-secondary">{label}</label>
-          <textarea
+        <Field label={label} helper={help}>
+          <Textarea
             id={id}
             value={Array.isArray(value) ? (value as string[]).join('\n') : ''}
             onChange={(e) => {
               const lines = e.target.value.split(/[\n,]/).map((l) => l.trim()).filter(Boolean)
               onChange(lines.length > 0 ? lines : undefined)
             }}
-            placeholder={field.placeholder ?? 'One per line or comma-separated'}
+            placeholder={field.placeholder ?? t('form.tagsPlaceholder')}
             rows={3}
-            className={`${inputClass} font-mono resize-y`}
+            className="font-mono"
           />
-          {help && <p className="text-2xs text-text-muted">{help}</p>}
-        </div>
+        </Field>
       )
 
     default:

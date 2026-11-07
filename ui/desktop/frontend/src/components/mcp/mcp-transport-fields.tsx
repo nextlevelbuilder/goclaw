@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { Field, Input } from '../ui'
 import { KeyValueEditor } from '../common/KeyValueEditor'
 import type { UseFormRegister, UseFormSetValue } from 'react-hook-form'
 import type { MCPFormData } from '../../schemas/mcp.schema'
@@ -12,46 +13,55 @@ interface McpTransportFieldsProps {
   env: Record<string, string>
   register: UseFormRegister<MCPFormData>
   setValue: UseFormSetValue<MCPFormData>
+  /** Field errors, already translated. */
+  errors?: { command?: string; url?: string }
+  readOnly?: boolean
 }
 
-export function McpTransportFields({ transport, headers, env, register, setValue }: McpTransportFieldsProps) {
+export function McpTransportFields({ transport, headers, env, register, setValue, errors = {}, readOnly = false }: McpTransportFieldsProps) {
   const { t } = useTranslation('mcp')
 
   return (
     <>
-      {/* Stdio fields */}
       {transport === 'stdio' && (
         <>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-text-secondary">{t('form.command')}</label>
-            <input {...register('command')} placeholder="npx" className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 font-mono text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent" />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-text-secondary">{t('form.args')}</label>
-            <input {...register('args')} placeholder={t('form.argsPlaceholder')} className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 font-mono text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent" />
-          </div>
+          <Field label={t('form.command')} required error={errors.command}>
+            <Input {...register('command')} placeholder="npx" className="font-mono" disabled={readOnly} />
+          </Field>
+          <Field label={t('form.args')}>
+            <Input {...register('args')} placeholder={t('form.argsPlaceholder')} className="font-mono" disabled={readOnly} />
+          </Field>
         </>
       )}
 
-      {/* SSE/HTTP fields */}
       {transport !== 'stdio' && (
         <>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-text-secondary">{t('form.url')}</label>
-            <input {...register('url')} placeholder="http://localhost:3001/sse" className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 font-mono text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent" />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-text-secondary">{t('form.headers')}</label>
-            <KeyValueEditor value={headers} onChange={(v) => setValue('headers', v)} sensitivePattern={SENSITIVE_HEADER_KEYS} placeholder={{ key: t('form.headerKeyPlaceholder'), value: t('form.headerValuePlaceholder') }} />
-          </div>
+          <Field label={t('form.url')} required error={errors.url}>
+            <Input {...register('url')} placeholder="http://localhost:3001/sse" className="font-mono" disabled={readOnly} />
+          </Field>
+          <Field label={t('form.headers')}>
+            <KeyValueEditor
+              value={headers}
+              onChange={(v) => setValue('headers', v)}
+              sensitivePattern={SENSITIVE_HEADER_KEYS}
+              placeholder={{ key: t('form.headerKeyPlaceholder'), value: t('form.headerValuePlaceholder') }}
+              addLabel={t('form.addHeader')}
+              disabled={readOnly}
+            />
+          </Field>
         </>
       )}
 
-      {/* Env Variables */}
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-text-secondary">{t('form.env')}</label>
-        <KeyValueEditor value={env} onChange={(v) => setValue('env', v)} sensitivePattern={SENSITIVE_ENV_KEYS} placeholder={{ key: t('form.envKeyPlaceholder'), value: t('form.envValuePlaceholder') }} />
-      </div>
+      <Field label={t('form.env')}>
+        <KeyValueEditor
+          value={env}
+          onChange={(v) => setValue('env', v)}
+          sensitivePattern={SENSITIVE_ENV_KEYS}
+          placeholder={{ key: t('form.envKeyPlaceholder'), value: t('form.envValuePlaceholder') }}
+          addLabel={t('form.addVariable')}
+          disabled={readOnly}
+        />
+      </Field>
     </>
   )
 }

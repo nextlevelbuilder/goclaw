@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Button } from '../ui'
 import { ChannelFields } from './channel-field-renderer'
 import { configSchema, NETWORK_KEYS, LIMITS_KEYS, STREAMING_KEYS, BEHAVIOR_KEYS, ACCESS_KEYS } from './channel-schemas'
 import { normalizeReasoningDeliveryConfig } from './reasoning-delivery-config'
@@ -7,6 +8,8 @@ import type { ChannelInstanceData } from '../../types/channel'
 
 interface ChannelAdvancedTabProps {
   instance: ChannelInstanceData
+  /** Disables every control while the gateway is unreachable. */
+  readOnly?: boolean
   onUpdate: (updates: Record<string, unknown>) => Promise<void>
 }
 
@@ -32,7 +35,7 @@ function deriveInitialValues(instance: ChannelInstanceData): Record<string, unkn
   )
 }
 
-export function ChannelAdvancedTab({ instance, onUpdate }: ChannelAdvancedTabProps) {
+export function ChannelAdvancedTab({ instance, readOnly = false, onUpdate }: ChannelAdvancedTabProps) {
   const { t } = useTranslation('channels')
   const [values, setValues] = useState<Record<string, unknown>>({})
   const [saving, setSaving] = useState(false)
@@ -72,28 +75,26 @@ export function ChannelAdvancedTab({ instance, onUpdate }: ChannelAdvancedTabPro
   ].filter((s) => s.fields.length > 0)
 
   if (sections.length === 0) {
-    return <p className="text-xs text-text-muted py-4">{t('detail.noAdvanced')}</p>
+    return <p className="py-4 text-ui text-ink-muted">{t('detail.noAdvanced')}</p>
   }
 
   return (
-    <div className="space-y-5">
+    <fieldset disabled={readOnly} className="m-0 flex min-w-0 flex-col gap-4 border-0 p-0">
       {sections.map((s) => (
-        <section key={s.key} className="space-y-3 rounded-lg border border-border p-4">
+        <section key={s.key} className="flex flex-col gap-4 rounded-lg border border-border-subtle bg-surface-base p-4">
           <div>
-            <h3 className="text-xs font-semibold text-text-secondary">{s.label}</h3>
-            <p className="text-2xs text-text-muted mt-0.5">{s.desc}</p>
+            <h3 className="text-ui font-medium text-ink">{s.label}</h3>
+            <p className="mt-0.5 text-caption text-ink-muted">{s.desc}</p>
           </div>
           <ChannelFields fields={s.fields} values={values} onChange={handleChange} idPrefix={`adv-${s.key}`} contextValues={values} />
         </section>
       ))}
 
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="px-4 py-1.5 text-xs bg-accent text-accent-foreground rounded-lg font-medium hover:bg-accent-hover transition-colors disabled:opacity-50 cursor-pointer"
-      >
-        {saving ? t('form.saving') : t('detail.saveConfig')}
-      </button>
-    </div>
+      <div className="flex justify-end">
+        <Button variant="primary" onClick={() => { void handleSave() }} loading={saving} disabled={readOnly}>
+          {saving ? t('form.saving') : t('detail.saveConfig')}
+        </Button>
+      </div>
+    </fieldset>
   )
 }

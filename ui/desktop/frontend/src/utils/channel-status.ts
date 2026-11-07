@@ -1,50 +1,35 @@
-import type { ChannelStatus } from "../types/channel";
+import type { StatusTone } from '../components/ui'
+import type { ChannelStatus } from '../types/channel'
 
-interface ChannelStatusDisplay {
-  dotColor: string;
-  statusText: string;
+interface ChannelStatusChip {
+  tone: StatusTone
+  label: string
 }
 
-export function getChannelStatusDisplay(
+/** Maps a channel's runtime state to a StatusChip tone and a localized word. */
+export function getChannelStatusChip(
   enabled: boolean,
   status: ChannelStatus | null,
   t: (key: string, options?: Record<string, unknown>) => string,
-): ChannelStatusDisplay {
-  // Default: disabled
-  let dotColor = "bg-gray-400";
-  let statusText = t("status.disabled");
+): ChannelStatusChip {
+  if (!enabled) return { tone: 'idle', label: t('status.disabled') }
 
-  if (enabled) {
-    switch (status?.state) {
-      case "healthy":
-        dotColor = "bg-emerald-500";
-        statusText = t("status.running");
-        break;
-      case "degraded":
-        dotColor = "bg-amber-500";
-        statusText = t("status.degraded", { defaultValue: "Degraded" });
-        break;
-      case "starting":
-        dotColor = "bg-sky-500";
-        statusText = t("status.starting", { defaultValue: "Starting" });
-        break;
-      case "registered":
-        dotColor = "bg-slate-400";
-        statusText = t("status.registered", { defaultValue: "Configured" });
-        break;
-      case "failed":
-        dotColor = "bg-red-500";
-        statusText = t("status.failed", { defaultValue: "Failed" });
-        break;
-      case "stopped":
-        dotColor = "bg-gray-400";
-        statusText = t("status.stopped");
-        break;
-      default:
-        dotColor = status?.running ? "bg-emerald-500" : "bg-gray-400";
-        statusText = status?.running ? t("status.running") : t("status.stopped");
-    }
+  switch (status?.state) {
+    case 'healthy':
+      return { tone: 'success', label: t('status.running') }
+    case 'degraded':
+      return { tone: 'warning', label: t('status.degraded') }
+    case 'starting':
+      return { tone: 'info', label: t('status.starting') }
+    case 'registered':
+      return { tone: 'idle', label: t('status.registered') }
+    case 'failed':
+      return { tone: 'danger', label: t('status.failed') }
+    case 'stopped':
+      return { tone: 'idle', label: t('status.stopped') }
+    default:
+      return status?.running
+        ? { tone: 'success', label: t('status.running') }
+        : { tone: 'idle', label: t('status.stopped') }
   }
-
-  return { dotColor, statusText };
 }

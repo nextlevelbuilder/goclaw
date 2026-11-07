@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Switch } from '../common/Switch'
-import { Combobox } from '../common/Combobox'
+import { Button, Field, Input, Select, Switch } from '../ui'
 import { ChannelFields } from './channel-field-renderer'
 import { configSchema, ESSENTIAL_CONFIG_KEYS } from './channel-schemas'
 import type { ChannelInstanceData } from '../../types/channel'
@@ -10,10 +9,12 @@ import type { AgentData } from '../../types/agent'
 interface ChannelGeneralTabProps {
   instance: ChannelInstanceData
   agents: AgentData[]
+  /** Disables every control while the gateway is unreachable. */
+  readOnly?: boolean
   onUpdate: (updates: Record<string, unknown>) => Promise<void>
 }
 
-export function ChannelGeneralTab({ instance, agents, onUpdate }: ChannelGeneralTabProps) {
+export function ChannelGeneralTab({ instance, agents, readOnly = false, onUpdate }: ChannelGeneralTabProps) {
   const { t } = useTranslation('channels')
 
   const [displayName, setDisplayName] = useState(instance.display_name ?? '')
@@ -71,51 +72,49 @@ export function ChannelGeneralTab({ instance, agents, onUpdate }: ChannelGeneral
   }
 
   return (
-    <div className="space-y-4">
-      {/* Identity section */}
-      <section className="space-y-3 rounded-lg border border-border p-4">
-        <h3 className="text-xs font-semibold text-text-secondary">{t('detail.general.identity')}</h3>
+    <fieldset disabled={readOnly} className="m-0 flex min-w-0 flex-col gap-4 border-0 p-0">
+      <section className="flex flex-col gap-4 rounded-lg border border-border-subtle bg-surface-base p-4">
+        <h3 className="text-ui font-medium text-ink">{t('detail.general.identity')}</h3>
 
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-text-secondary">{t('detail.general.name')}</label>
-          <div className="px-3 py-2 rounded-lg border border-border bg-surface-tertiary/50 text-xs text-text-muted font-mono">
-            {instance.name}
-          </div>
-          <p className="text-2xs text-text-muted">{t('detail.general.nameHint')}</p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label={t('detail.general.name')} helper={t('detail.general.nameHint')}>
+            <Input value={instance.name} readOnly className="font-mono" />
+          </Field>
+          <Field label={t('detail.general.channelType')}>
+            <Input value={t(`channelTypes.${instance.channel_type}`, { defaultValue: instance.channel_type })} readOnly />
+          </Field>
         </div>
 
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-text-secondary">{t('detail.general.channelType')}</label>
-          <div className="px-3 py-2 rounded-lg border border-border bg-surface-tertiary/50 text-xs text-text-muted">
-            {t(`channelTypes.${instance.channel_type}`)}
-          </div>
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-text-secondary">{t('detail.general.displayName')}</label>
-          <input
+        <Field label={t('detail.general.displayName')}>
+          <Input
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder={t('detail.general.displayNamePlaceholder')}
-            className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
           />
-        </div>
+        </Field>
 
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-text-secondary">{t('detail.general.agent')}</label>
-          <Combobox value={agentId} onChange={setAgentId} options={agentOptions} placeholder={t('detail.general.selectAgent')} />
-        </div>
+        <Field label={t('detail.general.agent')}>
+          <Select
+            value={agentId}
+            onChange={(e) => setAgentId(e.target.value)}
+            options={agentOptions}
+            placeholder={t('detail.general.selectAgent')}
+          />
+        </Field>
 
-        <div className="flex items-center gap-2">
-          <Switch checked={enabled} onCheckedChange={setEnabled} />
-          <span className="text-xs text-text-secondary">{t('detail.general.enabled')}</span>
+        <div className="flex items-center gap-3">
+          <Switch
+            checked={enabled}
+            onCheckedChange={setEnabled}
+            aria-labelledby="channel-general-enabled"
+          />
+          <span id="channel-general-enabled" className="text-ui text-ink">{t('detail.general.enabled')}</span>
         </div>
       </section>
 
-      {/* Policies section */}
       {essentialFields.length > 0 && (
-        <section className="space-y-3 rounded-lg border border-border p-4">
-          <h3 className="text-xs font-semibold text-text-secondary">{t('detail.policies')}</h3>
+        <section className="flex flex-col gap-4 rounded-lg border border-border-subtle bg-surface-base p-4">
+          <h3 className="text-ui font-medium text-ink">{t('detail.policies')}</h3>
           <ChannelFields
             fields={essentialFields}
             values={policyValues}
@@ -126,14 +125,11 @@ export function ChannelGeneralTab({ instance, agents, onUpdate }: ChannelGeneral
         </section>
       )}
 
-      {/* Save button */}
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="px-4 py-1.5 text-xs bg-accent text-accent-foreground rounded-lg font-medium hover:bg-accent-hover transition-colors disabled:opacity-50 cursor-pointer"
-      >
-        {saving ? t('detail.general.saving') : t('detail.general.saveChanges')}
-      </button>
-    </div>
+      <div className="flex justify-end">
+        <Button variant="primary" onClick={() => { void handleSave() }} loading={saving} disabled={readOnly}>
+          {saving ? t('detail.general.saving') : t('detail.general.saveChanges')}
+        </Button>
+      </div>
+    </fieldset>
   )
 }
