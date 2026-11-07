@@ -170,6 +170,37 @@ func TestSecretPayloadNeverFormatsValue(t *testing.T) {
 	}
 }
 
+func TestValidateSecretVaultEntryDerivesOrigin(t *testing.T) {
+	base := func() *SecretVaultEntry {
+		return &SecretVaultEntry{Name: "tok", Kind: SecretKindAPIKey, AllowedDomains: []string{"a.com"}}
+	}
+
+	user := base()
+	user.Status, user.CreatedVia = SecretVaultStatusPending, SecretVaultCreatedViaAgent
+	if err := ValidateSecretVaultEntry(user); err != nil {
+		t.Fatal(err)
+	}
+	if user.Status != SecretVaultStatusActive || user.CreatedVia != SecretVaultCreatedViaUser {
+		t.Fatalf("user entry: %s %s", user.Status, user.CreatedVia)
+	}
+
+	agent := base()
+	id := uuid.New()
+	agent.CreatedByAgent, agent.Status = &id, SecretVaultStatusActive
+	if err := ValidateSecretVaultEntry(agent); err != nil {
+		t.Fatal(err)
+	}
+	if agent.Status != SecretVaultStatusPending || agent.CreatedVia != SecretVaultCreatedViaAgent {
+		t.Fatalf("agent entry: %s %s", agent.Status, agent.CreatedVia)
+	}
+
+	empty := base()
+	empty.CreatedByAgent = &uuid.UUID{}
+	if err := ValidateSecretVaultEntry(empty); !errors.Is(err, ErrSecretVaultInvalid) {
+		t.Fatalf("nil agent id: %v", err)
+	}
+}
+
 // With a keyring, new writes name their key; rewrap moves a value written under
 // another key to the active one and leaves a current value alone.
 func TestSecretRewrapFollowsActiveKey(t *testing.T) {

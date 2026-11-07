@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -37,6 +38,7 @@ func (h *SecretVaultHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/secret-vault/{id}/grants", h.auth(h.handleListGrants))
 	mux.HandleFunc("PUT /v1/secret-vault/{id}/grants", h.auth(h.handleSetGrants))
 	mux.HandleFunc("GET /v1/secret-vault/{id}/audit", h.auth(h.handleAudit))
+	mux.HandleFunc("POST /v1/secret-vault/{id}/approve", h.auth(h.handleApprove))
 }
 
 // auth requires an admin role, then membership as tenant admin: RoleAdmin alone
@@ -65,8 +67,13 @@ type secretVaultEntryView struct {
 	Hints           string    `json:"hints"`
 	Revision        int64     `json:"revision"`
 	CreatedBy       string    `json:"created_by"`
-	CreatedAt       string    `json:"created_at"`
-	UpdatedAt       string    `json:"updated_at"`
+	// Status is active or pending; a pending entry cannot be used until approved.
+	Status string `json:"status"`
+	// CreatedVia is user or agent; CreatedByAgent is null for user entries.
+	CreatedVia     string     `json:"created_via"`
+	CreatedByAgent *uuid.UUID `json:"created_by_agent"`
+	CreatedAt      string     `json:"created_at"`
+	UpdatedAt      string     `json:"updated_at"`
 }
 
 func toSecretVaultView(e store.SecretVaultEntry) secretVaultEntryView {
@@ -77,6 +84,7 @@ func toSecretVaultView(e store.SecretVaultEntry) secretVaultEntryView {
 	return secretVaultEntryView{
 		ID: e.ID, Name: e.Name, Kind: e.Kind, AllowedDomains: domains,
 		RequireApproval: e.RequireApproval, Hints: e.Hints, Revision: e.Revision, CreatedBy: e.CreatedBy,
+		Status: e.Status, CreatedVia: e.CreatedVia, CreatedByAgent: e.CreatedByAgent,
 		CreatedAt: e.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 		UpdatedAt: e.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 	}
@@ -90,7 +98,7 @@ func writeVaultError(w http.ResponseWriter, r *http.Request, op string, err erro
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "secret", "")})
 	case errors.Is(err, store.ErrSecretVaultConflict):
 		writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error(), "code": "revision_conflict"})
-	case errors.Is(err, store.ErrSecretVaultNameTaken):
+	case errors.Is(err, store.ErrSecretVaultNameTaken), errors.Is(err, store.ErrSecretVaultNotPending):
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 	case errors.Is(err, store.ErrSecretVaultInvalid), errors.Is(err, store.ErrSecretVaultAgentInvalid):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -358,6 +366,36 @@ func (h *SecretVaultHandler) handleSetGrants(w http.ResponseWriter, r *http.Requ
 		req.AgentIDs = []uuid.UUID{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"agent_ids": req.AgentIDs})
+}
+
+// handleApprove activates an agent-created pending entry. The body must carry
+// the allowed domains the user confirmed; the agent's proposal is never
+// accepted implicitly. The store writes the approved audit row itself.
+func (h *SecretVaultHandler) handleApprove(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.entryID(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		AllowedDomains []string `json:"allowed_domains"`
+	}
+	if !decodeVaultBody(w, r, &req) {
+		return
+	}
+	if len(req.AllowedDomains) == 0 {
+		writeVaultError(w, r, "approve", fmt.Errorf("%w: confirm at least one allowed domain", store.ErrSecretVaultInvalid))
+		return
+	}
+	if err := h.store.Approve(r.Context(), id, req.AllowedDomains); err != nil {
+		writeVaultError(w, r, "approve", err)
+		return
+	}
+	e, err := h.store.Get(r.Context(), id)
+	if err != nil {
+		writeVaultError(w, r, "approve", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toSecretVaultView(*e))
 }
 
 func (h *SecretVaultHandler) handleAudit(w http.ResponseWriter, r *http.Request) {

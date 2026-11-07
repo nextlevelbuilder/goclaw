@@ -1,5 +1,8 @@
 export type SecretKind = "api_key" | "login";
 
+/** "pending" entries were saved by an agent and stay unusable until approved. */
+export type SecretVaultStatus = "active" | "pending";
+
 /** Secret metadata. The API never returns the secret value. */
 export interface SecretVaultEntry {
   id: string;
@@ -11,8 +14,17 @@ export interface SecretVaultEntry {
   /** Version of the entry; sent back as If-Match so a stale edit is refused. */
   revision: number;
   created_by: string;
+  status: SecretVaultStatus;
+  created_via: "user" | "agent";
+  /** Agent that saved the entry; null for user entries or after the agent is deleted. */
+  created_by_agent: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Body of POST /v1/secret-vault/{id}/approve: the domains the user confirmed. */
+export interface SecretVaultApproveInput {
+  allowed_domains: string[];
 }
 
 /** Write-only: sent once on create, never read back. */

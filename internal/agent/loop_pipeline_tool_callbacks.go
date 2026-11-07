@@ -40,6 +40,7 @@ func (l *Loop) makeExecuteToolCall(req *RunRequest, bridgeRS *runState) func(ctx
 	return func(ctx context.Context, state *pipeline.RunState, tc providers.ToolCall) ([]providers.Message, error) {
 		tc = l.normalizeToolCall(tc)
 		registryName := l.canonicalToolName(l.resolveToolCallName(tc.Name))
+		maskSensitiveToolArgs(ctx, registryName, tc.Arguments)
 		argsJSON, _ := json.Marshal(tc.Arguments)
 		slog.Info("tool call", "agent", l.id, "tool", tc.Name, "args_len", len(argsJSON))
 
@@ -122,6 +123,7 @@ func (l *Loop) makeExecuteToolRaw(req *RunRequest) func(ctx context.Context, tc 
 	return func(ctx context.Context, tc providers.ToolCall) (providers.Message, any, error) {
 		tc = l.normalizeToolCall(tc)
 		registryName := l.canonicalToolName(l.resolveToolCallName(tc.Name))
+		maskSensitiveToolArgs(ctx, registryName, tc.Arguments)
 		argsJSON, _ := json.Marshal(tc.Arguments)
 		slog.Info("tool call", "agent", l.id, "tool", tc.Name, "args_len", len(argsJSON))
 

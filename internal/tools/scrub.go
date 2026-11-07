@@ -176,6 +176,33 @@ func AddScrubValuesCtx(ctx context.Context, vs ...string) {
 // Use this in the adapter pipeline so one tenant's secrets cannot leak into
 // another tenant's output through the shared global.
 func ScrubCredentialsCtx(ctx context.Context, text string) string {
+	return shieldSecretPlaceholders(text, func(s string) string { return scrubCredentialsCtx(ctx, s) })
+}
+
+// secretPlaceholderRe matches a vault placeholder. It carries only a secret
+// name, never a value, and must reach the model intact so it can be reused.
+var secretPlaceholderRe = regexp.MustCompile(`\{\{secret:[a-z0-9][a-z0-9_-]{0,63}\}\}`)
+
+// shieldSecretPlaceholders applies scrub to the text around vault placeholders
+// and leaves the placeholders themselves untouched. Without it the generic
+// "secret:<value>" pattern rewrites {{secret:github-token}} to a mangled form.
+func shieldSecretPlaceholders(text string, scrub func(string) string) string {
+	locs := secretPlaceholderRe.FindAllStringIndex(text, -1)
+	if len(locs) == 0 {
+		return scrub(text)
+	}
+	var b strings.Builder
+	last := 0
+	for _, l := range locs {
+		b.WriteString(scrub(text[last:l[0]]))
+		b.WriteString(text[l[0]:l[1]])
+		last = l[1]
+	}
+	b.WriteString(scrub(text[last:]))
+	return b.String()
+}
+
+func scrubCredentialsCtx(ctx context.Context, text string) string {
 	for _, pat := range credentialPatterns {
 		text = pat.ReplaceAllString(text, redactedPlaceholder)
 	}
@@ -199,6 +226,10 @@ func ScrubCredentialsCtx(ctx context.Context, text string) string {
 
 // ScrubCredentials replaces known credential patterns and dynamic values in text.
 func ScrubCredentials(text string) string {
+	return shieldSecretPlaceholders(text, scrubCredentials)
+}
+
+func scrubCredentials(text string) string {
 	for _, pat := range credentialPatterns {
 		text = pat.ReplaceAllString(text, redactedPlaceholder)
 	}

@@ -254,6 +254,23 @@ func (a *AgentData) ParseAllowImageGeneration() bool {
 	return *bag.AllowImageGeneration
 }
 
+// ParseAllowVaultWrite returns whether the agent may write secrets into the
+// secret vault (browser capture_secret, vault_secret_set, vault_grant). Opt-in:
+// anything but an explicit other_config.vault_agent_write = true is false.
+// No DB column, same as allow_image_generation.
+func (a *AgentData) ParseAllowVaultWrite() bool {
+	if a == nil || len(a.OtherConfig) <= 2 {
+		return false
+	}
+	var bag struct {
+		VaultAgentWrite *bool `json:"vault_agent_write"`
+	}
+	if json.Unmarshal(a.OtherConfig, &bag) != nil || bag.VaultAgentWrite == nil {
+		return false
+	}
+	return *bag.VaultAgentWrite
+}
+
 // ParseInboundDebounceMs returns the per-agent inbound debounce override.
 // Missing or malformed config means "inherit global gateway.inbound_debounce_ms".
 func (a *AgentData) ParseInboundDebounceMs() (int, bool) {

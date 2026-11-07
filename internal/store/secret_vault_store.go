@@ -26,6 +26,26 @@ const (
 	SecretAuditConflict = "conflict"
 )
 
+// SecretAuditOutcomeAgentPending marks the created audit row of an entry an
+// agent wrote; the entry waits for user approval.
+const SecretAuditOutcomeAgentPending = "agent_pending"
+
+// Entry status. Only active entries are ever resolved for an agent.
+const (
+	SecretVaultStatusActive  = "active"
+	SecretVaultStatusPending = "pending"
+)
+
+// Entry origin.
+const (
+	SecretVaultCreatedViaUser  = "user"
+	SecretVaultCreatedViaAgent = "agent"
+)
+
+// SecretVaultMaxPendingPerAgent caps how many pending entries one agent may
+// hold at a time, so a misbehaving agent cannot flood the approval queue.
+const SecretVaultMaxPendingPerAgent = 20
+
 var (
 	// ErrSecretVaultNoKey is returned when the store has no encryption key.
 	// The vault fails closed: crypto.Encrypt returns plaintext for an empty key.
@@ -39,6 +59,8 @@ var (
 	ErrSecretVaultAgentInvalid = errors.New("secret vault: agent not found in tenant")
 	ErrSecretVaultNoTenant     = errors.New("secret vault: tenant required")
 	ErrSecretVaultInvalid      = errors.New("secret vault: invalid input")
+	ErrSecretVaultNotPending   = errors.New("secret vault: secret is not pending approval")
+	ErrSecretVaultPendingLimit = errors.New("secret vault: too many secrets pending approval for this agent")
 	// ErrSecretVaultConflict is returned by a write whose expected revision no
 	// longer matches the stored one (a concurrent edit won).
 	ErrSecretVaultConflict = errors.New("secret vault: entry was modified by someone else")
@@ -57,10 +79,19 @@ type SecretVaultEntry struct {
 	Hints           string    `json:"hints" db:"hints"`
 	// Revision starts at 1 and increases on every value or metadata write. It
 	// is part of the ciphertext binding and the optimistic-concurrency token.
-	Revision  int64     `json:"revision" db:"revision"`
-	CreatedBy string    `json:"created_by" db:"created_by"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+	Revision  int64  `json:"revision" db:"revision"`
+	CreatedBy string `json:"created_by" db:"created_by"`
+	// Status is active or pending. Create derives it from the origin: an
+	// agent-created entry is always pending, a user-created one always active.
+	Status string `json:"status" db:"status"`
+	// CreatedVia is user or agent; Create sets it from CreatedByAgent.
+	CreatedVia string `json:"created_via" db:"created_via"`
+	// CreatedByAgent is the agent that wrote the entry, nil for user entries
+	// and after that agent is deleted. Setting it on Create marks the entry
+	// as agent-created.
+	CreatedByAgent *uuid.UUID `json:"created_by_agent" db:"created_by_agent"`
+	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 // SecretVaultPayload is the secret material. For kind api_key only Secret is
@@ -111,7 +142,22 @@ type SecretVaultResolved struct {
 // master fallback). Values are write-only: only ResolveForUse returns them.
 type SecretVaultStore interface {
 	// Create validates and stores a new entry. e.ID is generated when nil.
+	// It never replaces an existing entry: a taken name returns
+	// ErrSecretVaultNameTaken. When e.CreatedByAgent is set the entry is
+	// agent-created: the agent must belong to the tenant
+	// (ErrSecretVaultAgentInvalid), the entry is stored pending, the agent's
+	// pending cap is enforced (ErrSecretVaultPendingLimit), and the created
+	// audit row (agent id, outcome agent_pending) is written in the same
+	// transaction. User-created entries are stored active; their caller audits.
 	Create(ctx context.Context, e *SecretVaultEntry, p SecretVaultPayload) error
+	// Approve activates a pending entry with the user-confirmed allowed
+	// domains and writes the approved audit row with the context user id.
+	// Domains are bound into the ciphertext, so this re-encrypts the payload
+	// and bumps the revision. Returns ErrSecretVaultNotPending when the entry
+	// is already active.
+	Approve(ctx context.Context, id uuid.UUID, domains []string) error
+	// CountPendingByAgent counts the pending entries the agent created.
+	CountPendingByAgent(ctx context.Context, agentID uuid.UUID) (int, error)
 	// ReplaceValue overwrites the stored secret value and returns the new
 	// revision. expectedRev must match the stored revision, otherwise
 	// ErrSecretVaultConflict is returned; pass 0 only from paths that
@@ -128,15 +174,21 @@ type SecretVaultStore interface {
 
 	// SetGrants replaces the set of agents allowed to use the entry.
 	SetGrants(ctx context.Context, entryID uuid.UUID, agentIDs []uuid.UUID) error
+	// AddGrant adds one agent to the entry's grants and leaves the others as
+	// they are. Granting an agent that already has it is a no-op. The agent
+	// must belong to the tenant (ErrSecretVaultAgentInvalid).
+	AddGrant(ctx context.Context, entryID, agentID uuid.UUID) error
 	ListGrants(ctx context.Context, entryID uuid.UUID) ([]uuid.UUID, error)
-	// ListGrantedMeta returns metadata of the entries granted to an agent.
+	// ListGrantedMeta returns metadata of the active entries granted to an agent.
 	ListGrantedMeta(ctx context.Context, agentID uuid.UUID) ([]SecretVaultEntry, error)
 
-	// ResolveForUse returns metadata and the decrypted value for an entry
-	// granted to the agent. Runtime use only; never expose through an API.
+	// ResolveForUse returns metadata and the decrypted value for an active
+	// entry granted to the agent. A pending entry returns
+	// ErrSecretVaultNotGranted, like an ungranted one. Runtime use only;
+	// never expose through an API.
 	ResolveForUse(ctx context.Context, agentID uuid.UUID, name string) (*SecretVaultEntry, SecretVaultPayload, error)
 
-	// ListGrantedSecrets returns every entry granted to the agent with its
+	// ListGrantedSecrets returns every active entry granted to the agent with its
 	// decrypted value, in one query. Runtime use only: the agent loop preloads
 	// the redactor with it. Never expose through an API.
 	ListGrantedSecrets(ctx context.Context, agentID uuid.UUID) ([]SecretVaultResolved, error)

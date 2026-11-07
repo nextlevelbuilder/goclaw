@@ -440,6 +440,33 @@ func TestParseAllowImageGeneration_UnrelatedKeys_DefaultsTrue(t *testing.T) {
 	}
 }
 
+func TestParseAllowVaultWrite_DefaultsFalse(t *testing.T) {
+	cases := map[string]json.RawMessage{
+		"no other_config": nil,
+		"empty object":    json.RawMessage(`{}`),
+		"malformed":       json.RawMessage(`{not-json`),
+		"unrelated keys":  json.RawMessage(`{"allow_image_generation":true}`),
+		"explicit false":  json.RawMessage(`{"vault_agent_write":false}`),
+		"wrong type":      json.RawMessage(`{"vault_agent_write":"true"}`),
+	}
+	for name, raw := range cases {
+		if (&AgentData{OtherConfig: raw}).ParseAllowVaultWrite() {
+			t.Errorf("%s: must default to false", name)
+		}
+	}
+	var nilAgent *AgentData
+	if nilAgent.ParseAllowVaultWrite() {
+		t.Error("nil agent must be false")
+	}
+}
+
+func TestParseAllowVaultWrite_ExplicitTrue(t *testing.T) {
+	ag := &AgentData{OtherConfig: json.RawMessage(`{"self_evolve":true,"vault_agent_write":true}`)}
+	if !ag.ParseAllowVaultWrite() {
+		t.Error("explicit true must return true")
+	}
+}
+
 func TestParseToolsConfigWaitPolicy(t *testing.T) {
 	t.Parallel()
 	agent := AgentData{
