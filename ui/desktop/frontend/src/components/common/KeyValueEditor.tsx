@@ -1,11 +1,16 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Button, IconButton, Input } from '../ui'
+import { IconClose, IconPlus } from './Icons'
 
 interface KeyValueEditorProps {
   value: Record<string, string>
   onChange: (v: Record<string, string>) => void
   sensitivePattern?: RegExp
   placeholder?: { key?: string; value?: string }
+  /** Label of the add button ("Add header"). */
+  addLabel: string
+  disabled?: boolean
 }
 
 interface Row {
@@ -17,9 +22,7 @@ interface Row {
 let nextRowId = 1
 
 function toRows(obj: Record<string, string>): Row[] {
-  const entries = Object.entries(obj)
-  if (entries.length === 0) return []
-  return entries.map(([key, value]) => ({ id: nextRowId++, key, value }))
+  return Object.entries(obj).map(([key, value]) => ({ id: nextRowId++, key, value }))
 }
 
 function fromRows(rows: Row[]): Record<string, string> {
@@ -30,7 +33,8 @@ function fromRows(rows: Row[]): Record<string, string> {
   return result
 }
 
-export function KeyValueEditor({ value, onChange, sensitivePattern, placeholder }: KeyValueEditorProps) {
+/** Editable list of key/value pairs; values of sensitive-looking keys are masked. */
+export function KeyValueEditor({ value, onChange, sensitivePattern, placeholder, addLabel, disabled = false }: KeyValueEditorProps) {
   const { t } = useTranslation('common')
   const [rows, setRows] = useState<Row[]>(() => toRows(value))
 
@@ -39,62 +43,48 @@ export function KeyValueEditor({ value, onChange, sensitivePattern, placeholder 
     onChange(fromRows(updated))
   }
 
-  function addRow() {
-    updateAndEmit([...rows, { id: nextRowId++, key: '', value: '' }])
-  }
-
-  function removeRow(id: number) {
-    updateAndEmit(rows.filter((r) => r.id !== id))
-  }
-
-  function updateRow(id: number, field: 'key' | 'value', val: string) {
-    updateAndEmit(rows.map((r) => r.id === id ? { ...r, [field]: val } : r))
-  }
-
-  function isSensitive(key: string): boolean {
-    if (!sensitivePattern || !key) return false
-    return sensitivePattern.test(key)
-  }
+  const isSensitive = (key: string) => Boolean(sensitivePattern && key && sensitivePattern.test(key))
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       {rows.map((row) => (
         <div key={row.id} className="flex items-center gap-2">
-          <input
+          <Input
             value={row.key}
-            onChange={(e) => updateRow(row.id, 'key', e.target.value)}
-            placeholder={placeholder?.key ?? 'Key'}
-            className="flex-1 min-w-0 bg-surface-tertiary border border-border rounded-lg px-2.5 py-1.5 text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+            onChange={(e) => updateAndEmit(rows.map((r) => (r.id === row.id ? { ...r, key: e.target.value } : r)))}
+            placeholder={placeholder?.key}
+            aria-label={placeholder?.key}
+            className="min-w-0 flex-1 font-mono"
+            disabled={disabled}
           />
-          <input
+          <Input
             type={isSensitive(row.key) ? 'password' : 'text'}
             value={row.value}
-            onChange={(e) => updateRow(row.id, 'value', e.target.value)}
-            placeholder={placeholder?.value ?? 'Value'}
-            className="flex-1 min-w-0 bg-surface-tertiary border border-border rounded-lg px-2.5 py-1.5 text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+            onChange={(e) => updateAndEmit(rows.map((r) => (r.id === row.id ? { ...r, value: e.target.value } : r)))}
+            placeholder={placeholder?.value}
+            aria-label={placeholder?.value}
+            className="min-w-0 flex-1 font-mono"
+            disabled={disabled}
           />
-          <button
-            type="button"
+          <IconButton
             aria-label={t('remove')}
-            onClick={() => removeRow(row.id)}
-            className="shrink-0 p-2 text-text-muted hover:text-error transition-colors"
-          >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 6 6 18" /><path d="m6 6 12 12" />
-            </svg>
-          </button>
+            icon={<IconClose size={14} />}
+            onClick={() => updateAndEmit(rows.filter((r) => r.id !== row.id))}
+            disabled={disabled}
+          />
         </div>
       ))}
-      <button
-        type="button"
-        onClick={addRow}
-        className="text-xs text-accent hover:text-accent-hover flex items-center gap-1 transition-colors"
-      >
-        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M5 12h14" /><path d="M12 5v14" />
-        </svg>
-        Add row
-      </button>
+      <div>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={<IconPlus size={12} />}
+          onClick={() => updateAndEmit([...rows, { id: nextRowId++, key: '', value: '' }])}
+          disabled={disabled}
+        >
+          {addLabel}
+        </Button>
+      </div>
     </div>
   )
 }

@@ -1,115 +1,145 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMcpServers, MAX_MCP_LITE } from '../../hooks/use-mcp-servers'
 import { useAgentCrud } from '../../hooks/use-agent-crud'
+import { useGatewayStatus } from '../layout/use-gateway-status'
+import { cn } from '../../lib/cn'
+import { Button, ConfirmDialog, EmptyState, ErrorState, IconButton, Input, PageHeader, SkeletonList } from '../ui'
+import { IconPlus, IconRefresh } from '../common/Icons'
 import { McpFormDialog } from './McpFormDialog'
 import { McpGrantsDialog } from './McpGrantsDialog'
 import { McpToolsDialog } from './McpToolsDialog'
-import { ConfirmDeleteDialog } from '../common/ConfirmDeleteDialog'
-import { RefreshButton } from '../common/RefreshButton'
-import { McpServerRow } from './mcp-server-row'
+import { McpServerTable } from './mcp-server-table'
 import type { MCPServerData } from '../../types/mcp'
 
 export function McpServerList() {
   const { t } = useTranslation(['mcp', 'common'])
   const {
-    servers, loading, atLimit,
-    fetchServers, createServer, updateServer, deleteServer,
+    servers, loading, error, atLimit,
+    fetchServers, createServer, updateServer, setServerEnabled, deleteServer,
     testConnection, reconnectServer, listServerTools,
     listGrants, grantAgent, revokeAgent,
   } = useMcpServers()
   const { agents } = useAgentCrud()
+  const { disconnected } = useGatewayStatus()
 
+  const [query, setQuery] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [editServer, setEditServer] = useState<MCPServerData | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<MCPServerData | null>(null)
   const [grantsServer, setGrantsServer] = useState<MCPServerData | null>(null)
   const [toolsServer, setToolsServer] = useState<MCPServerData | null>(null)
   const [reconnectingId, setReconnectingId] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
-  function openCreate() { setEditServer(null); setFormOpen(true) }
-  function openEdit(s: MCPServerData) { setEditServer(s); setFormOpen(true) }
+  const openCreate = () => { setEditServer(null); setFormOpen(true) }
+  const openEdit = (s: MCPServerData) => { if (!disconnected) { setEditServer(s); setFormOpen(true) } }
 
-  async function handleReconnect(id: string) {
-    setReconnectingId(id)
-    try { await reconnectServer(id) } finally { setReconnectingId(null) }
+  const handleReconnect = async (s: MCPServerData) => {
+    setReconnectingId(s.id)
+    try { await reconnectServer(s.id) } catch { /* reported by the hook */ } finally { setReconnectingId(null) }
+  }
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try { await fetchServers() } finally { setRefreshing(false) }
+  }
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return servers
+    return servers.filter((s) => `${s.name} ${s.display_name} ${s.url} ${s.command}`.toLowerCase().includes(q))
+  }, [servers, query])
+
+  const enabledCount = servers.filter((s) => s.enabled).length
+  const name = (s: MCPServerData) => s.display_name || s.name
+
+  const addButton = (
+    <Button variant="primary" icon={<IconPlus size={14} />} onClick={openCreate} disabled={atLimit || disconnected}>
+      {t('addServer')}
+    </Button>
+  )
+
+  let body
+  if (loading) {
+    body = <SkeletonList rows={4} label={t('screen.list.loading')} />
+  } else if (error && servers.length === 0) {
+    body = (
+      <ErrorState
+        title={t('screen.list.loadError')}
+        description={t('screen.list.loadErrorHint')}
+        onRetry={() => { void handleRefresh() }}
+        retrying={refreshing}
+      />
+    )
+  } else if (servers.length === 0) {
+    body = (
+      <EmptyState
+        title={t('emptyTitle')}
+        description={t('emptyDescription')}
+        action={<Button variant="primary" icon={<IconPlus size={14} />} onClick={openCreate} disabled={disconnected}>{t('addServer')}</Button>}
+      />
+    )
+  } else if (filtered.length === 0) {
+    body = (
+      <EmptyState
+        title={t('noMatchTitle')}
+        description={t('noMatchDescription')}
+        action={<Button onClick={() => setQuery('')}>{t('screen.list.clearSearch')}</Button>}
+      />
+    )
+  } else {
+    body = (
+      <McpServerTable
+        servers={filtered}
+        readOnly={disconnected}
+        reconnectingId={reconnectingId}
+        onToggle={(s, v) => { void setServerEnabled(s.id, v) }}
+        onEdit={openEdit}
+        onDelete={setDeleteTarget}
+        onViewTools={setToolsServer}
+        onManageGrants={setGrantsServer}
+        onReconnect={(s) => { void handleReconnect(s) }}
+      />
+    )
   }
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-text-primary">{t('title')}</h2>
-          <p className="text-xs text-text-muted mt-0.5">{t('description')} (max {MAX_MCP_LITE})</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={openCreate}
-            disabled={atLimit}
-            className="bg-accent text-accent-foreground rounded-lg px-3 py-1.5 text-xs hover:bg-accent-hover disabled:opacity-50 transition-colors flex items-center gap-1.5"
-          >
-            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 12h14" /><path d="M12 5v14" />
-            </svg>
-            {t('addServer')}
-          </button>
-          <RefreshButton onRefresh={fetchServers} />
-        </div>
+    <div className="flex h-full min-h-0 flex-col">
+      <PageHeader
+        title={t('title')}
+        description={t('screen.list.description', { count: servers.length, enabled: enabledCount })}
+        actions={
+          <>
+            <IconButton
+              aria-label={t('common:refresh')}
+              icon={<IconRefresh size={16} />}
+              onClick={() => { void handleRefresh() }}
+              disabled={refreshing}
+            />
+            {addButton}
+          </>
+        }
+      />
+
+      <div className={cn('flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 py-4', disconnected && 'opacity-60')}>
+        {servers.length > 0 && (
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('searchPlaceholder')}
+            aria-label={t('searchPlaceholder')}
+            className="max-w-sm"
+          />
+        )}
+        {atLimit && (
+          <p role="status" className="rounded-md bg-warning-subtle px-3 py-2 text-caption text-warning">
+            {t('screen.list.limitReached', { max: MAX_MCP_LITE })}
+          </p>
+        )}
+        {body}
       </div>
-
-      {atLimit && (
-        <p className="text-2xs text-amber-600 dark:text-amber-400">
-          {t('noMatchTitle')} ({MAX_MCP_LITE}). {t('noMatchDescription')}
-        </p>
-      )}
-
-      {/* Loading skeleton */}
-      {loading ? (
-        <div className="space-y-2">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-12 rounded-lg bg-surface-tertiary/50 animate-pulse" />
-          ))}
-        </div>
-      ) : servers.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-12">
-          <svg className="h-10 w-10 text-text-muted/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 22v-5" /><path d="M9 8V2" /><path d="M15 8V2" />
-            <path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z" />
-          </svg>
-          <p className="text-sm text-text-muted">{t('emptyTitle')}</p>
-          <p className="text-xs text-text-muted/70">{t('emptyDescription')}</p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-tertiary/40">
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">{t('columns.name')}</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">{t('columns.transport')}</th>
-                <th className="px-4 py-2.5 text-center text-xs font-medium text-text-muted">{t('columns.tools')}</th>
-                <th className="px-4 py-2.5 text-center text-xs font-medium text-text-muted">{t('columns.agents')}</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">{t('columns.enabled')}</th>
-                <th className="px-4 py-2.5 text-right text-xs font-medium text-text-muted">{t('columns.actions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {servers.map((s) => (
-                <McpServerRow
-                  key={s.id}
-                  server={s}
-                  reconnectingId={reconnectingId}
-                  onReconnect={handleReconnect}
-                  onEdit={openEdit}
-                  onDelete={(srv) => setDeleteTarget(srv)}
-                  onViewTools={(srv) => setToolsServer(srv)}
-                  onManageGrants={(srv) => setGrantsServer(srv)}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
 
       <McpFormDialog
         open={formOpen}
@@ -120,18 +150,23 @@ export function McpServerList() {
           else await createServer(data)
         }}
         onTest={testConnection}
+        readOnly={disconnected}
+        onDelete={editServer ? () => { setFormOpen(false); setDeleteTarget(editServer) } : undefined}
       />
 
-      {deleteTarget && (
-        <ConfirmDeleteDialog
-          open
-          onOpenChange={() => setDeleteTarget(null)}
-          title="Delete MCP Server"
-          description={`This will permanently delete the server "${deleteTarget.display_name || deleteTarget.name}" and all its agent grants.`}
-          confirmValue={deleteTarget.name}
-          onConfirm={async () => { await deleteServer(deleteTarget.id); setDeleteTarget(null) }}
-        />
-      )}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        title={deleteTarget ? t('screen.delete.title', { name: name(deleteTarget) }) : ''}
+        description={t('screen.delete.description')}
+        confirmLabel={t('delete.confirmLabel')}
+        variant="destructive"
+        confirmValue={deleteTarget?.name}
+        onConfirm={async () => {
+          if (!deleteTarget) return
+          try { await deleteServer(deleteTarget.id); setDeleteTarget(null) } catch { /* reported by the hook */ }
+        }}
+      />
 
       {grantsServer && (
         <McpGrantsDialog
@@ -139,6 +174,7 @@ export function McpServerList() {
           onOpenChange={() => setGrantsServer(null)}
           server={grantsServer}
           agents={agents}
+          readOnly={disconnected}
           onLoadGrants={listGrants}
           onGrant={grantAgent}
           onRevoke={revokeAgent}
