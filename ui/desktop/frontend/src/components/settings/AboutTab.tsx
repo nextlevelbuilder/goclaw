@@ -1,174 +1,143 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
-import { wails } from '../../lib/wails'
+import { wails, wailsRuntime, type UpdateInfo } from '../../lib/wails'
+import { IconDownload } from '../common/Icons'
+import { Button, Spinner, StatusChip } from '../ui'
+import { SettingsCard, SettingsRow } from './settings-row'
+
+type UpdateState =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | { kind: 'current' }
+  | { kind: 'available'; info: UpdateInfo }
+  | { kind: 'downloading' }
+  | { kind: 'ready' }
+  | { kind: 'checkFailed' }
+  | { kind: 'updateFailed'; info: UpdateInfo }
+
+const LIMIT_KEYS = ['agents', 'teams', 'teamMembers', 'database', 'users'] as const
 
 export function AboutTab() {
-  const { t } = useTranslation('desktop')
-  const [version, setVersion] = useState('...')
+  const { t } = useTranslation('settings')
+  const [version, setVersion] = useState('…')
   const [dataDir, setDataDir] = useState('')
-  const [showReset, setShowReset] = useState(false)
+  const [update, setUpdate] = useState<UpdateState>({ kind: 'idle' })
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     wails.getVersion().then(setVersion).catch(() => setVersion('unknown'))
     wails.getDataDir().then(setDataDir).catch(() => {})
   }, [])
 
-  return (
-    <div className="space-y-6 max-w-lg">
-      <div className="flex items-center gap-4">
-        <img src="/goclaw-icon.svg" alt="GoClaw" className="h-12 w-12" />
-        <div>
-          <h3 className="text-base font-semibold text-text-primary">{t('about.title')}</h3>
-          <p className="text-xs text-text-muted">{t('about.subtitle')}</p>
-        </div>
-      </div>
-
-      <div className="rounded-lg border border-border p-4 space-y-3">
-        <div className="flex justify-between text-xs">
-          <span className="text-text-muted">{t('about.version')}</span>
-          <span className="text-text-primary font-mono">{version}</span>
-        </div>
-        <div className="flex justify-between text-xs">
-          <span className="text-text-muted">{t('about.edition')}</span>
-          <span className="text-accent font-medium">Lite (SQLite)</span>
-        </div>
-        <div className="flex justify-between text-xs">
-          <span className="text-text-muted">{t('about.runtime')}</span>
-          <span className="text-text-primary font-mono">{t('about.runtimeValue')}</span>
-        </div>
-        {dataDir && (
-          <div className="flex justify-between text-xs items-center">
-            <span className="text-text-muted">{t('about.database')}</span>
-            <button
-              onClick={() => wails.openFile(dataDir)}
-              className="text-accent hover:underline cursor-pointer font-mono text-right truncate max-w-[260px]"
-              title={dataDir}
-            >
-              {dataDir}
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div>
-        <h3 className="text-sm font-semibold text-text-primary mb-2">{t('about.editionLimits')}</h3>
-        <div className="rounded-lg border border-border divide-y divide-border text-xs">
-          {[
-            { label: t('about.agents'), limit: t('about.maxAgents') },
-            { label: t('about.teams'), limit: t('about.maxTeams') },
-            { label: t('about.teamMembers'), limit: t('about.maxTeamMembers') },
-            { label: t('about.database'), limit: t('about.databaseValue') },
-            { label: t('about.users'), limit: t('about.usersValue') },
-          ].map((item) => (
-            <div key={item.label} className="flex justify-between px-3 py-2">
-              <span className="text-text-muted">{item.label}</span>
-              <span className="text-text-secondary">{item.limit}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Reset Database */}
-      <div className="rounded-lg border border-error/30 bg-error/5 p-4 space-y-2">
-        <h3 className="text-sm font-semibold text-error">{t('about.reset.title')}</h3>
-        <p className="text-xs text-text-muted">{t('about.reset.description')}</p>
-        <button
-          onClick={() => setShowReset(true)}
-          className="bg-error/10 text-error border border-error/30 rounded-lg px-4 py-1.5 text-sm font-medium hover:bg-error/20 transition-colors cursor-pointer"
-        >
-          {t('about.reset.button')}
-        </button>
-      </div>
-
-      <div className="text-xs text-text-muted">
-        <button
-          onClick={() => BrowserOpenURL('https://github.com/nextlevelbuilder/goclaw')}
-          className="text-accent hover:underline cursor-pointer"
-        >
-          GitHub
-        </button>
-        <span className="mx-2">·</span>
-        <span>{t('about.builtWith')}</span>
-      </div>
-
-      {showReset && <ResetConfirmModal onClose={() => setShowReset(false)} />}
-    </div>
-  )
-}
-
-/* ─── Reset Confirm Modal ─── */
-
-function ResetConfirmModal({ onClose }: { onClose: () => void }) {
-  const { t } = useTranslation('desktop')
-  const [confirmText, setConfirmText] = useState('')
-  const [resetting, setResetting] = useState(false)
-
-  const confirmWord = 'RESET'
-  const isConfirmed = confirmText === confirmWord
-
-  async function handleReset() {
-    if (!isConfirmed) return
-    setResetting(true)
+  const check = async () => {
+    setUpdate({ kind: 'checking' })
     try {
-      await wails.resetDatabase()
+      const info = await wails.checkForUpdate()
+      setUpdate(info?.available ? { kind: 'available', info } : { kind: 'current' })
     } catch {
-      setResetting(false)
+      setUpdate({ kind: 'checkFailed' })
+    }
+  }
+
+  const apply = async (info: UpdateInfo) => {
+    setUpdate({ kind: 'downloading' })
+    try {
+      await wails.applyUpdate()
+      setUpdate({ kind: 'ready' })
+    } catch {
+      setUpdate({ kind: 'updateFailed', info })
+    }
+  }
+
+  const copyDetails = async () => {
+    const text = [`GoClaw Desktop ${version}`, t('about.editionValue'), navigator.userAgent, dataDir].filter(Boolean).join('\n')
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setCopied(false)
     }
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full max-w-sm mx-4 bg-surface-secondary rounded-xl border border-border overflow-hidden">
-        <div className="p-5 space-y-4">
-          <div className="flex items-center gap-3">
-            {/* Warning icon */}
-            <div className="shrink-0 h-10 w-10 rounded-full bg-error/10 flex items-center justify-center">
-              <svg className="h-5 w-5 text-error" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-                <path d="M12 9v4" /><path d="M12 17h.01" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-text-primary">{t('about.reset.confirmTitle')}</h3>
-              <p className="text-xs text-text-muted mt-0.5">{t('about.reset.confirmDescription')}</p>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs text-text-secondary">
-              {t('about.reset.confirmPrompt', { word: confirmWord })}
-            </label>
-            <input
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              placeholder={confirmWord}
-              autoFocus
-              className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-error font-mono"
-            />
-          </div>
+    <>
+      <div className="flex items-center gap-4">
+        <span aria-hidden="true" className="flex size-12 items-center justify-center rounded-xl bg-accent text-title font-bold text-on-accent">G</span>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-title text-ink">{t('about.title')}</h2>
+          <p className="text-caption text-ink-muted">{t('about.subtitle', { version })}</p>
         </div>
-
-        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={resetting}
-            className="border border-border rounded-lg px-4 py-1.5 text-sm text-text-secondary hover:bg-surface-tertiary transition-colors"
-          >
-            {t('about.reset.cancel')}
-          </button>
-          <button
-            type="button"
-            onClick={handleReset}
-            disabled={!isConfirmed || resetting}
-            className="bg-error rounded-lg px-4 py-1.5 text-sm text-error-foreground hover:bg-error/90 disabled:opacity-50 transition-colors"
-          >
-            {resetting ? t('about.reset.resetting') : t('about.reset.confirm')}
-          </button>
-        </div>
+        {update.kind === 'available' && <StatusChip tone="info" label={t('about.available', { version: update.info.version })} />}
       </div>
-    </div>
+
+      <SettingsCard title={t('about.updatesTitle')}>
+        <SettingsRow label={t('about.updatesTitle')} hint={updateHint(update, t)}>
+          {update.kind === 'available' || update.kind === 'updateFailed' ? (
+            <Button variant="primary" icon={<IconDownload size={14} />} onClick={() => { void apply(update.info) }}>{t('about.updateNow')}</Button>
+          ) : update.kind === 'ready' ? (
+            <Button variant="primary" onClick={() => { void wails.restartApp().catch(() => setUpdate({ kind: 'checkFailed' })) }}>{t('about.restart')}</Button>
+          ) : update.kind === 'downloading' ? (
+            <Spinner size={16} />
+          ) : (
+            <Button loading={update.kind === 'checking'} onClick={() => { void check() }}>
+              {update.kind === 'checking' ? t('about.checking') : t('about.check')}
+            </Button>
+          )}
+        </SettingsRow>
+      </SettingsCard>
+
+      <SettingsCard title={t('about.detailsTitle')}>
+        <SettingsRow label={t('about.version')}><span className="text-code text-ink-secondary">{version}</span></SettingsRow>
+        <SettingsRow label={t('about.edition')}><span className="text-ui text-ink-secondary">{t('about.editionValue')}</span></SettingsRow>
+        <SettingsRow label={t('about.runtime')}><span className="text-code text-ink-secondary">{t('about.runtimeValue')}</span></SettingsRow>
+        {dataDir && (
+          <SettingsRow label={t('about.dataDir')}>
+            <button
+              type="button"
+              onClick={() => { void wails.openFile(dataDir).catch(() => {}) }}
+              title={dataDir}
+              className="max-w-[260px] truncate text-code text-accent hover:underline"
+            >
+              {dataDir}
+            </button>
+          </SettingsRow>
+        )}
+      </SettingsCard>
+
+      <SettingsCard title={t('about.diagnosticsTitle')}>
+        <SettingsRow label={t('about.diagnosticsTitle')} hint={t('about.diagnosticsHint')}>
+          <Button onClick={() => { void copyDetails() }}>{copied ? t('about.copied') : t('about.copy')}</Button>
+        </SettingsRow>
+      </SettingsCard>
+
+      <SettingsCard title={t('about.limitsTitle')}>
+        {LIMIT_KEYS.map((key) => (
+          <SettingsRow key={key} label={t(`about.limits.${key}`)}>
+            <span className="text-ui text-ink-secondary">{t(`about.limits.${key}Value`)}</span>
+          </SettingsRow>
+        ))}
+      </SettingsCard>
+
+      <p className="text-caption text-ink-muted">
+        <button type="button" onClick={() => wailsRuntime.browserOpenURL('https://github.com/nextlevelbuilder/goclaw')} className="text-accent hover:underline">
+          {t('about.github')}
+        </button>
+        <span className="mx-2" aria-hidden="true">·</span>
+        {t('about.builtWith')}
+      </p>
+    </>
   )
+}
+
+function updateHint(update: UpdateState, t: (key: string, opts?: Record<string, unknown>) => string): string {
+  switch (update.kind) {
+    case 'current': return t('about.upToDate')
+    case 'available': return t('about.available', { version: update.info.version })
+    case 'downloading': return t('about.downloading')
+    case 'ready': return t('about.ready')
+    case 'checkFailed': return t('about.checkFailed')
+    case 'updateFailed': return t('about.updateFailed')
+    default: return t('about.updatesHint')
+  }
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { getApiClient } from '../lib/api'
 import type { ProviderData } from '../types/provider'
 import type { AgentData } from '../types/agent'
@@ -14,21 +14,27 @@ export function useBootstrapStatus() {
   const [providers, setProviders] = useState<ProviderData[]>([])
   const [agents, setAgents] = useState<AgentData[]>([])
   const [loading, setLoading] = useState(true)
+  // Both requests failed: the gateway could not be asked, so the setup state is unknown.
+  const [error, setError] = useState(false)
+
+  const reload = useCallback(async () => {
+    setLoading(true)
+    setError(false)
+    const api = getApiClient()
+    // Fetch independently — one failing shouldn't block the other
+    const [pRes, aRes] = await Promise.allSettled([
+      api.get<{ providers?: ProviderData[] | null }>('/v1/providers'),
+      api.get<{ agents?: AgentData[] | null }>('/v1/agents'),
+    ])
+    if (pRes.status === 'fulfilled') setProviders(pRes.value.providers ?? [])
+    if (aRes.status === 'fulfilled') setAgents(aRes.value.agents ?? [])
+    setError(pRes.status === 'rejected' && aRes.status === 'rejected')
+    setLoading(false)
+  }, [])
 
   useEffect(() => {
-    const doFetch = async () => {
-      const api = getApiClient()
-      // Fetch independently — one failing shouldn't block the other
-      const [pRes, aRes] = await Promise.allSettled([
-        api.get<{ providers?: ProviderData[] | null }>('/v1/providers'),
-        api.get<{ agents?: AgentData[] | null }>('/v1/agents'),
-      ])
-      if (pRes.status === 'fulfilled') setProviders(pRes.value.providers ?? [])
-      if (aRes.status === 'fulfilled') setAgents(aRes.value.agents ?? [])
-      setLoading(false)
-    }
-    doFetch()
-  }, [])
+    void reload()
+  }, [reload])
 
   const currentStep = useMemo<SetupStep>(() => {
     if (loading) return 1
@@ -39,5 +45,5 @@ export function useBootstrapStatus() {
     return 'complete'
   }, [loading, providers, agents])
 
-  return { currentStep, loading, providers, agents }
+  return { currentStep, loading, error, reload, providers, agents }
 }

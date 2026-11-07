@@ -1,65 +1,44 @@
 import { useTranslation } from 'react-i18next'
+import { cn } from '../../lib/cn'
+import { IconCheck } from '../common/Icons'
 
 interface SetupStepperProps {
   currentStep: 1 | 2 | 3
   completedSteps: number[]
 }
 
-export function SetupStepper({ currentStep, completedSteps }: SetupStepperProps) {
-  const { t } = useTranslation('desktop')
+const STEPS = [
+  { num: 1, key: 'provider' },
+  { num: 2, key: 'model' },
+  { num: 3, key: 'agent' },
+] as const
 
-  const STEPS = [
-    { num: 1, label: t('onboarding.stepProvider') },
-    { num: 2, label: t('onboarding.stepModel') },
-    { num: 3, label: t('onboarding.stepAgent') },
-  ]
+export function SetupStepper({ currentStep, completedSteps }: SetupStepperProps) {
+  const { t } = useTranslation('onboarding')
 
   return (
-    <div className="flex items-center justify-center gap-0 mb-6">
+    <ol aria-label={t('steps.label')} className="flex items-center gap-3 text-caption font-medium">
       {STEPS.map((step, i) => {
-        const isCompleted = completedSteps.includes(step.num)
-        const isCurrent = step.num === currentStep
-
+        const done = completedSteps.includes(step.num)
+        const current = step.num === currentStep
         return (
-          <div key={step.num} className="flex items-center">
-            <div className="flex flex-col items-center gap-1.5">
-              <div
-                className={[
-                  'flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium transition-colors',
-                  isCompleted
-                    ? 'bg-accent text-accent-foreground'
-                    : isCurrent
-                      ? 'border-2 border-accent bg-surface-primary text-accent'
-                      : 'border border-border bg-surface-tertiary text-text-muted',
-                ].join(' ')}
-              >
-                {isCompleted ? (
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M3 8L6.5 11.5L13 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                ) : step.num}
-              </div>
+          <li key={step.num} aria-current={current ? 'step' : undefined} className="flex items-center gap-3">
+            <span className={cn('flex items-center gap-2', done ? 'text-success' : current ? 'text-ink' : 'text-ink-muted')}>
               <span
-                className={[
-                  'text-xs font-medium',
-                  isCurrent || isCompleted ? 'text-text-primary' : 'text-text-muted',
-                ].join(' ')}
+                className={cn(
+                  'flex size-[22px] items-center justify-center rounded-pill border border-border-control',
+                  done && 'border-transparent bg-success-subtle',
+                  current && 'border-transparent bg-accent text-on-accent',
+                )}
               >
-                {step.label}
+                {done ? <IconCheck size={12} /> : step.num}
               </span>
-            </div>
-
-            {i < STEPS.length - 1 && (
-              <div
-                className={[
-                  'mx-3 mb-6 h-0.5 w-12',
-                  isCompleted ? 'bg-accent' : 'bg-border',
-                ].join(' ')}
-              />
-            )}
-          </div>
+              {t(`steps.${step.key}`)}
+            </span>
+            {i < STEPS.length - 1 && <span aria-hidden="true" className="h-px w-8 bg-border-control" />}
+          </li>
         )
       })}
-    </div>
+    </ol>
   )
 }
