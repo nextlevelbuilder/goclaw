@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import i18n from "@/i18n";
+import { ApiError } from "@/api/errors";
 import { useHttp } from "@/hooks/use-ws";
 import { toast } from "@/stores/use-toast-store";
 import type {
@@ -14,9 +15,15 @@ import type {
 const QUERY_KEY = ["secretVault"] as const;
 
 function fail(err: unknown): never {
-  toast.error(i18n.t("secret-vault:toast.failed"), err instanceof Error ? err.message : "");
+  if (err instanceof ApiError && err.code === "revision_conflict") {
+    toast.error(i18n.t("secret-vault:toast.conflict"), i18n.t("secret-vault:toast.conflictHint"));
+  } else {
+    toast.error(i18n.t("secret-vault:toast.failed"), err instanceof Error ? err.message : "");
+  }
   throw err;
 }
+
+const ifMatch = (revision: number) => ({ "If-Match": String(revision) });
 
 export function useSecretVault() {
   const http = useHttp();
@@ -45,26 +52,31 @@ export function useSecretVault() {
   );
 
   const updateMeta = useCallback(
-    async (id: string, input: SecretVaultMetaInput) => {
+    async (id: string, input: SecretVaultMetaInput, revision: number) => {
       try {
-        await http.put(`/v1/secret-vault/${id}`, input);
+        const res = await http.put<SecretVaultEntry>(`/v1/secret-vault/${id}`, input, ifMatch(revision));
         await invalidate();
         toast.success(i18n.t("secret-vault:toast.updated"));
+        return res;
       } catch (err) {
-        fail(err);
+        // A conflict means the list on screen is stale: reload it before the user retries.
+        await invalidate();
+        return fail(err);
       }
     },
     [http, invalidate],
   );
 
   const replaceValue = useCallback(
-    async (id: string, input: SecretVaultValueInput) => {
+    async (id: string, input: SecretVaultValueInput, revision: number) => {
       try {
-        await http.put(`/v1/secret-vault/${id}/value`, input);
+        const res = await http.put<SecretVaultEntry>(`/v1/secret-vault/${id}/value`, input, ifMatch(revision));
         await invalidate();
         toast.success(i18n.t("secret-vault:toast.updated"));
+        return res;
       } catch (err) {
-        fail(err);
+        await invalidate();
+        return fail(err);
       }
     },
     [http, invalidate],

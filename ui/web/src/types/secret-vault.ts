@@ -8,6 +8,8 @@ export interface SecretVaultEntry {
   allowed_domains: string[];
   require_approval: boolean;
   hints: string;
+  /** Version of the entry; sent back as If-Match so a stale edit is refused. */
+  revision: number;
   created_by: string;
   created_at: string;
   updated_at: string;
