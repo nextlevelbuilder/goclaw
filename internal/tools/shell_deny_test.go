@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -216,7 +217,7 @@ func TestPathExemptions(t *testing.T) {
 		{
 			"quoted_single_absolute",
 			`cat '/app/data/skills-store/my-skill/README.md'`,
-			true,
+			runtime.GOOS != "windows", // cmd.exe keeps single quotes literally
 		},
 		{
 			"quoted_double_relative",
@@ -355,7 +356,11 @@ func TestPathExemptions(t *testing.T) {
 					continue
 				}
 				// Replicate per-field exemption logic from Execute()
-				fields := parseExecCommandWords(strings.TrimSpace(normalizedCmd))
+				fields, wordsOK := parseExecCommandWords(strings.TrimSpace(normalizedCmd))
+				if !wordsOK {
+					denied = true
+					break
+				}
 				matchingFields := 0
 				exemptFields := 0
 				for _, field := range fields {
@@ -385,6 +390,28 @@ func TestPathExemptions(t *testing.T) {
 	}
 }
 
+// TestPathExemptions_WindowsBackslashPath verifies that double-quoted Windows
+// paths keep their backslashes and still match their exemption.
+func TestPathExemptions_WindowsBackslashPath(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows command paths only")
+	}
+	dataDir := t.TempDir()
+	workspace := filepath.Join(t.TempDir(), "workspace")
+	tool := &ExecTool{}
+	tool.DenyPaths(dataDir)
+	exempt := filepath.Join(dataDir, "skills-store")
+	tool.AllowPathExemptions(exempt)
+	command := `python3 "` + filepath.Join(exempt, "skill", "scripts", "run.py") + `"`
+	fields, ok := parseExecCommandWords(command)
+	if !ok || len(fields) != 2 || fields[1] != filepath.Join(exempt, "skill", "scripts", "run.py") {
+		t.Fatalf("parseExecCommandWords(%q) = %#v; Windows backslashes must be preserved", command, fields)
+	}
+	if !matchesAnyPathExemption(fields[1], tool.denyExemptions, workspace) {
+		t.Fatalf("Windows path %q did not match its exemption", fields[1])
+	}
+}
+
 // TestPathExemptions_MixedArgs verifies that a command with both a denied
 // path and an exempt path in different arguments is correctly denied.
 // Per-field matching ensures the non-exempt field causes denial.
@@ -406,7 +433,11 @@ func TestPathExemptions_MixedArgs(t *testing.T) {
 		if !pattern.MatchString(normalizedCmd) {
 			continue
 		}
-		fields := parseExecCommandWords(strings.TrimSpace(normalizedCmd))
+		fields, wordsOK := parseExecCommandWords(strings.TrimSpace(normalizedCmd))
+		if !wordsOK {
+			denied = true
+			continue
+		}
 		matchingFields := 0
 		exemptFields := 0
 		for _, field := range fields {

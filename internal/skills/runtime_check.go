@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -41,7 +42,21 @@ func CheckRuntimes() *RuntimeStatus {
 	for _, c := range checks {
 		info := RuntimeInfo{Name: c.name}
 
-		if _, err := exec.LookPath(c.bin); err != nil {
+		bin := firstAvailableBinary(c.bin)
+		if runtime.GOOS == "windows" {
+			// Windows installations commonly expose Python and pip as
+			// `python.exe`/`pip.exe`, not the Unix-style `python3`/`pip3`.
+			// Keep the API's stable runtime names while accepting those
+			// platform aliases for readiness checks.
+			switch c.bin {
+			case "python3":
+				bin = firstAvailableBinary("python3", "python")
+			case "pip3":
+				bin = firstAvailableBinary("pip3", "pip")
+			}
+		}
+
+		if bin == "" {
 			info.Available = false
 			if c.critical {
 				status.Ready = false
@@ -49,7 +64,7 @@ func CheckRuntimes() *RuntimeStatus {
 		} else {
 			info.Available = true
 			if c.vFlag != "" {
-				info.Version = getVersion(c.bin, c.vFlag)
+				info.Version = getVersion(bin, c.vFlag)
 			}
 		}
 
@@ -77,6 +92,15 @@ func CheckRuntimes() *RuntimeStatus {
 	status.Runtimes = append(status.Runtimes, ghInfo)
 
 	return status
+}
+
+func firstAvailableBinary(names ...string) string {
+	for _, name := range names {
+		if path, err := exec.LookPath(name); err == nil {
+			return path
+		}
+	}
+	return ""
 }
 
 // getVersion runs "bin flag" with a timeout and returns the first line of output.
