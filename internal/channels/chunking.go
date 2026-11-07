@@ -19,6 +19,7 @@ func ChunkMarkdown(text string, maxLen int) []string {
 	var chunks []string
 	remaining := text
 	needFenceReopen := false
+	preserveRaw := false
 
 	for len(remaining) > 0 {
 		// Repair fence from previous force-split
@@ -34,6 +35,9 @@ func ChunkMarkdown(text string, maxLen int) []string {
 
 		window := remaining[:maxLen]
 		cutAt := findSafeSplit(window)
+		if preserveRaw {
+			cutAt = -1
+		}
 
 		if cutAt > 0 {
 			// Safe split found outside fenced block
@@ -41,7 +45,13 @@ func ChunkMarkdown(text string, maxLen int) []string {
 			remaining = strings.TrimLeft(remaining[cutAt:], "\n")
 		} else {
 			// No safe split — force at maxLen, adjust to rune boundary
+			// Leave room for the reopened fence, one complete rune, and the closing fence.
+			inFence := isInFence(window)
+			repairFence := !preserveRaw && inFence && maxLen >= len("```\n")+utf8.UTFMax+len("\n```")
 			cutAt := maxLen
+			if repairFence {
+				cutAt -= len("\n```")
+			}
 			for cutAt > 0 && !utf8.RuneStart(remaining[cutAt]) {
 				cutAt--
 			}
@@ -49,9 +59,13 @@ func ChunkMarkdown(text string, maxLen int) []string {
 				cutAt = maxLen // shouldn't happen, but prevent infinite loop
 			}
 
-			if isInFence(window) {
+			if repairFence {
 				chunks = append(chunks, remaining[:cutAt]+"\n```")
 				needFenceReopen = true
+			} else if preserveRaw || inFence {
+				// Without fence repair, keep the remaining code bytes intact across splits.
+				preserveRaw = true
+				chunks = append(chunks, remaining[:cutAt])
 			} else {
 				chunks = append(chunks, strings.TrimRight(remaining[:cutAt], " \n"))
 			}
