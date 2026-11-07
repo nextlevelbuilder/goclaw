@@ -22,7 +22,6 @@
   "card": {
     "apiKeySet": "已设置API密钥",
     "authenticated": "已认证",
-    "oauthLinked": "已链接OAuth",
     "oauthAccount": "OAuth 账户",
     "oauthAlias": "别名：{{name}}",
     "connected": "已连接",
@@ -65,6 +64,7 @@
     }
   },
   "detail": {
+    "title": "Provider 详情",
     "advanced": "高级设置",
     "identity": "身份",
     "identityDesc": "Provider标识",
@@ -165,15 +165,6 @@
     "oauthAliasHint": "为这个 OpenAI/Codex 账户使用唯一的小写别名，例如 primary、work 或 team。之后可以再添加更多别名用于池或 round robin。",
     "oauthDisplayNamePlaceholder": "主 Codex 账户",
     "oauthDisplayNameHint": "界面里显示的友好标签。当您拥有多个 OpenAI Codex OAuth 账户时会更清晰。",
-    "oauthSetupBadge": "1 个别名 = 1 个账户",
-    "oauthSetupAliasTitle": "别名",
-    "oauthSetupAliasDesc": "Agent 池和路由里使用的小写路由键。",
-    "oauthSetupLabelTitle": "显示名称",
-    "oauthSetupLabelDesc": "可选标签，多个账户时在面板里更容易分辨。",
-    "oauthSetupPoolTitle": "后续",
-    "oauthSetupPoolDesc": "稍后可在 agent 中继续添加已登录别名，用于池成员或 round robin。",
-    "oauthAliasBadge": "路由键",
-    "oauthDisplayNameBadge": "可选",
     "lowercaseHint": "小写字母、数字、连字符"
   },
   "delete": {
@@ -243,14 +234,6 @@
     "aliasRequired": "开始 OpenAI Codex OAuth 之前，请先输入有效的小写账户别名。",
     "removeToken": "断开账户",
     "signInDesc": "每个 OpenAI Codex OAuth provider 都代表一个具名账户。登录后即可直接使用您的 ChatGPT/Codex 订阅，无需单独 API 密钥。",
-    "subscriptionBadge": "订阅登录",
-    "aliasBadge": "别名",
-    "accountCardTitle": "当前账户",
-    "accountCardDesc": "通过订阅登录连接一个 OpenAI/Codex 账户。",
-    "routingCardTitle": "池与 round robin",
-    "routingCardDesc": "稍后可从使用该账户的 agent 中再添加更多已登录别名。",
-    "prefixCardTitle": "模型前缀",
-    "prefixCardDesc": "在 agent 配置里把这个别名用作 provider 前缀。",
     "waiting": "等待认证中... 请在已打开的窗口中完成登录。",
     "remoteVpsHint": "登录后，您的浏览器将尝试打开",
     "remoteVpsError": "并显示「无法访问此页面」错误。这是正常的 — 从浏览器地址栏复制完整 URL 并粘贴到下方。",

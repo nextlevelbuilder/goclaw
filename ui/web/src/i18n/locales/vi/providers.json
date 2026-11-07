@@ -22,7 +22,6 @@
   "card": {
     "apiKeySet": "Đã đặt API key",
     "authenticated": "Đã xác thực",
-    "oauthLinked": "Đã liên kết OAuth",
     "oauthAccount": "Tài khoản OAuth",
     "oauthAlias": "Bí danh: {{name}}",
     "connected": "Đã kết nối",
@@ -65,6 +64,7 @@
     }
   },
   "detail": {
+    "title": "Chi tiết Provider",
     "advanced": "Nâng cao",
     "identity": "Danh tính",
     "identityDesc": "Nhận dạng provider",

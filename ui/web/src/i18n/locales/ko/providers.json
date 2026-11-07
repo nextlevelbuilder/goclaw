@@ -276,6 +276,38 @@
     "verifyFailed": "임베딩 확인 실패",
     "dimensionsMismatch": "{{count}} 차원 — 필수 1536과 일치하지 않음"
   },
+  "pricing": {
+    "title": "모델 가격",
+    "description": "OpenRouter 가격을 동기화하고 사용량 한도를 위해 이 공급자의 모델 비용을 재정의합니다.",
+    "skippedDescription": "사용량 한도는 구독형 및 로컬 공급자를 건너뛰지만, 이후 API 기반 라우팅을 위해 가격을 미리 설정할 수 있습니다.",
+    "sync": "OpenRouter 동기화",
+    "model": "모델",
+    "saveOverride": "재정의 저장",
+    "catalogMatches": "OpenRouter 카탈로그 일치 항목",
+    "source": "출처",
+    "configuredFields": "설정된 필드",
+    "override": "재정의",
+    "emptyOverrides": "이 공급자에는 가격 재정의가 없습니다.",
+    "deleteOverride": "재정의 삭제",
+    "fields": {
+      "input": "입력",
+      "output": "출력",
+      "cache_read": "캐시 읽기",
+      "cache_write": "캐시 쓰기",
+      "reasoning": "추론",
+      "request": "요청",
+      "image": "이미지",
+      "web_search": "웹 검색"
+    },
+    "toast": {
+      "synced": "OpenRouter 모델 {{count}}개를 동기화했습니다",
+      "syncFailed": "OpenRouter 가격을 동기화할 수 없습니다",
+      "saved": "가격 재정의를 저장했습니다",
+      "saveFailed": "가격 재정의를 저장할 수 없습니다",
+      "deleted": "가격 재정의를 삭제했습니다",
+      "deleteFailed": "가격 재정의를 삭제할 수 없습니다"
+    }
+  },
   "reasoning": {
     "off": "끄기",
     "offDesc": "기본 확장 사고 없음",
