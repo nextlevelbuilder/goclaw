@@ -27,6 +27,7 @@
     "oauthLinked": "Đã liên kết OAuth"
   },
   "detail": {
+    "title": "Chi tiết Provider",
     "advanced": "Nâng cao",
     "identity": "Danh tính",
     "identityDesc": "Nhận dạng provider",

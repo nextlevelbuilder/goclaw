@@ -13,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/bitrix24"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/heartbeat"
 	"github.com/nextlevelbuilder/goclaw/internal/orchestration"
@@ -243,7 +244,7 @@ func (d *gatewayDeps) runLifecycle(
 			},
 		)
 		// K6: decrypt raw secret for outbound HMAC signing using the same key as inbound verify.
-		ww.SetEncKey(os.Getenv("GOCLAW_ENCRYPTION_KEY"))
+		ww.SetEncKey(crypto.ActiveKeyFromEnv())
 		var workerCtx context.Context
 		workerCtx, webhookWorkerCancel = context.WithCancel(ctx)
 		go ww.Run(workerCtx)

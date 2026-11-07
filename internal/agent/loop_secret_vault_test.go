@@ -181,3 +181,59 @@ func TestRunSinks_UseVaultRedactorWithoutDroppingMedia(t *testing.T) {
 		t.Error("vault redaction must not drop media of a normal run")
 	}
 }
+
+// lookupAgents knows one agent per key; access lists the users that may use it.
+type lookupAgents struct {
+	store.AgentStore
+	agents map[string]*store.AgentData
+	access map[uuid.UUID][]string
+}
+
+func (a *lookupAgents) GetByKey(_ context.Context, key string) (*store.AgentData, error) {
+	if ag, ok := a.agents[key]; ok {
+		return ag, nil
+	}
+	return nil, errors.New("not found")
+}
+
+func (a *lookupAgents) CanAccess(_ context.Context, id uuid.UUID, user string) (bool, string, error) {
+	for _, u := range a.access[id] {
+		if u == user {
+			return true, "user", nil
+		}
+	}
+	return false, "", nil
+}
+
+// vault_grant may only name an agent the approving user (the run's user) can
+// access; any other agent looks missing.
+func TestSecretVaultAgentLookup_OnlyAgentsTheUserCanAccess(t *testing.T) {
+	tenant := uuid.New()
+	mine := &store.AgentData{TenantID: tenant}
+	mine.ID = uuid.New()
+	hidden := &store.AgentData{TenantID: tenant}
+	hidden.ID = uuid.New()
+	foreign := &store.AgentData{TenantID: uuid.New()}
+	foreign.ID = uuid.New()
+	agents := &lookupAgents{
+		agents: map[string]*store.AgentData{"mine": mine, "hidden": hidden, "foreign": foreign},
+		access: map[uuid.UUID][]string{mine.ID: {"user-1"}, foreign.ID: {"user-1"}},
+	}
+	lookup := secretVaultAgentLookup(agents)
+	ctx := store.WithUserID(store.WithTenantID(context.Background(), tenant), "user-1")
+
+	if id, err := lookup(ctx, "mine"); err != nil || id != mine.ID {
+		t.Fatalf("accessible agent: id=%v err=%v", id, err)
+	}
+	for _, key := range []string{"hidden", "foreign", "missing"} {
+		if _, err := lookup(ctx, key); !errors.Is(err, secretvault.ErrAgentNotFound) {
+			t.Errorf("%s: want ErrAgentNotFound, got %v", key, err)
+		}
+	}
+	if _, err := lookup(store.WithTenantID(context.Background(), tenant), "mine"); !errors.Is(err, secretvault.ErrAgentNotFound) {
+		t.Fatalf("no user: %v", err)
+	}
+	if secretVaultAgentLookup(nil) != nil || secretVaultTenantRoles(nil) != nil {
+		t.Fatal("no store must disable the lookups")
+	}
+}

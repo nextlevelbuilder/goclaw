@@ -27,6 +27,7 @@
     "oauthLinked": "OAuth привязан"
   },
   "detail": {
+    "title": "Сведения о провайдере",
     "advanced": "Дополнительно",
     "identity": "Идентификация",
     "identityDesc": "Идентификация провайдера",

@@ -27,6 +27,7 @@
     "oauthLinked": "OAuth linked"
   },
   "detail": {
+    "title": "Provider Details",
     "advanced": "Advanced",
     "identity": "Identity",
     "identityDesc": "Provider identification",

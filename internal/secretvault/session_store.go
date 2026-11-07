@@ -1,6 +1,7 @@
 package secretvault
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -57,12 +58,49 @@ func (s *SessionStore) Put(tenant uuid.UUID, session string, e store.SecretVault
 	if old, ok := s.m[k]; ok {
 		old.wipe()
 	}
-	s.m[k] = &sessionEntry{
+	s.m[k] = s.newEntryLocked(e, p)
+}
+
+func (s *SessionStore) newEntryLocked(e store.SecretVaultEntry, p store.SecretVaultPayload) *sessionEntry {
+	return &sessionEntry{
 		entry:    e,
 		username: []byte(p.Username),
 		secret:   []byte(p.Secret),
 		expires:  s.now().Add(s.ttl),
 	}
+}
+
+// MaxSessionSecrets caps how many secrets an agent may keep in one chat
+// session, in the same spirit as the pending cap of the vault.
+const MaxSessionSecrets = 20
+
+var (
+	errSessionNameTaken = errors.New("name already used in this session")
+	errSessionFull      = errors.New("session secret limit reached")
+)
+
+// PutNew stores a secret only when the name is not used in the session yet
+// and the session holds fewer than limit live secrets. The check and the
+// write happen under one lock.
+func (s *SessionStore) PutNew(tenant uuid.UUID, session string, e store.SecretVaultEntry, p store.SecretVaultPayload, limit int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sweepLocked()
+	k := sessionKey{tenant, session, e.Name}
+	if _, ok := s.m[k]; ok {
+		return errSessionNameTaken
+	}
+	n := 0
+	for other := range s.m {
+		if other.tenant == tenant && other.session == session {
+			n++
+		}
+	}
+	if n >= limit {
+		return errSessionFull
+	}
+	s.m[k] = s.newEntryLocked(e, p)
+	return nil
 }
 
 // Get returns a live session secret. The payload is a fresh copy.

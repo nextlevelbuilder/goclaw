@@ -93,9 +93,43 @@ func releaseAdvisoryLock(ctx context.Context, conn *sql.Conn) {
 	conn.Close()
 }
 
+// evolutionTenantLister and evolutionAgentLister are the store methods the
+// cron needs; narrow interfaces keep listAgentsAcrossTenants testable.
+type evolutionTenantLister interface {
+	ListTenants(ctx context.Context) ([]store.TenantData, error)
+}
+
+type evolutionAgentLister interface {
+	List(ctx context.Context, ownerID string) ([]store.AgentData, error)
+}
+
+// listAgentsAcrossTenants returns the agents of every active tenant. AgentStore.List
+// is tenant-scoped and fails closed on a context without a tenant, so each tenant
+// is queried with its own scoped context. One tenant failing is logged and does
+// not hide the agents of the others.
+func listAgentsAcrossTenants(ctx context.Context, tenants evolutionTenantLister, agents evolutionAgentLister) ([]store.AgentData, error) {
+	tenantList, err := tenants.ListTenants(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var all []store.AgentData
+	for _, t := range tenantList {
+		if t.Status != store.TenantStatusActive {
+			continue
+		}
+		list, err := agents.List(store.WithTenantID(ctx, t.ID), "")
+		if err != nil {
+			slog.Warn("evolution.cron.list_agents_tenant_failed", "tenant_id", t.ID, "error", err)
+			continue
+		}
+		all = append(all, list...)
+	}
+	return all, nil
+}
+
 // runSuggestionAnalysis lists agents with evolution enabled and runs analysis.
-// Note: List(ctx, "") uses bare context (no tenant) to list ALL agents cross-tenant.
-// Per-agent calls are scoped via WithTenantID.
+// Agents are listed per tenant (see listAgentsAcrossTenants); per-agent calls
+// are scoped via WithTenantID.
 func runSuggestionAnalysis(stores *store.Stores, engine *agent.SuggestionEngine) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -108,7 +142,7 @@ func runSuggestionAnalysis(stores *store.Stores, engine *agent.SuggestionEngine)
 	}
 	defer releaseAdvisoryLock(ctx, conn)
 
-	agents, err := stores.Agents.List(ctx, "")
+	agents, err := listAgentsAcrossTenants(ctx, stores.Tenants, stores.Agents)
 	if err != nil {
 		slog.Warn("evolution.cron.list_agents_failed", "error", err)
 		return
@@ -143,7 +177,7 @@ func runEvolutionEvaluation(stores *store.Stores) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	agents, err := stores.Agents.List(ctx, "")
+	agents, err := listAgentsAcrossTenants(ctx, stores.Tenants, stores.Agents)
 	if err != nil {
 		slog.Warn("evolution.cron.eval_list_failed", "error", err)
 		return

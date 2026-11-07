@@ -8395,6 +8395,84 @@
         }
       }
     },
+    "/v1/secret-vault/{id}/approve": {
+      "post": {
+        "tags": [
+          "Secret Vault"
+        ],
+        "summary": "Approve a pending secret saved by an agent and confirm its allowed domains",
+        "description": "Activates an entry with status pending. The body carries the allowed domains the user confirms; the agent's proposal is never accepted implicitly. Writes one approved audit row with the approving user. Tenant admin only.",
+        "parameters": [
+          {
+            "name": "X-GoClaw-User-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "External user ID for multi-tenant context."
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "allowed_domains"
+                ],
+                "properties": {
+                  "allowed_domains": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Approved; the entry is now active.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecretVaultEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Caller is not a tenant admin."
+          },
+          "404": {
+            "description": "Not found (unknown id or another tenant's entry)."
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          }
+        }
+      }
+    },
     "/v1/cli-credentials": {
       "get": {
         "tags": [
@@ -11466,6 +11544,27 @@
           },
           "created_by": {
             "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "pending"
+            ],
+            "description": "A pending entry was saved by an agent and cannot be used until approved."
+          },
+          "created_via": {
+            "type": "string",
+            "enum": [
+              "user",
+              "agent"
+            ]
+          },
+          "created_by_agent": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Agent that saved the entry; null for user entries or after the agent is deleted."
           },
           "created_at": {
             "type": "string",

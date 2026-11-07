@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels/bitrix24"
+	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 )
@@ -91,7 +92,7 @@ old credentials cannot refresh under new client_id/secret); pass
 				return fmt.Errorf("ping db: %w", err)
 			}
 
-			encKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
+			encKey := crypto.ActiveKeyFromEnv()
 			if encKey == "" {
 				fmt.Fprintln(os.Stderr, "WARNING: GOCLAW_ENCRYPTION_KEY is not set — credentials will be stored UNENCRYPTED")
 			}
@@ -180,7 +181,7 @@ to authorize the app — the install handler writes the OAuth token into the
 				return fmt.Errorf("ping db: %w", err)
 			}
 
-			encKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
+			encKey := crypto.ActiveKeyFromEnv()
 			if encKey == "" {
 				// Not fatal — pg store passes plaintext through when the key is
 				// empty — but the runtime gateway would also run unencrypted,
@@ -250,7 +251,7 @@ func bitrixPortalListCmd() *cobra.Command {
 				return fmt.Errorf("ping db: %w", err)
 			}
 
-			portalStore := pg.NewPGBitrixPortalStore(db, os.Getenv("GOCLAW_ENCRYPTION_KEY"))
+			portalStore := pg.NewPGBitrixPortalStore(db, crypto.ActiveKeyFromEnv())
 
 			var rows []store.BitrixPortalData
 			if tenantID == "" {
@@ -339,7 +340,7 @@ initial backfill.`,
 				return fmt.Errorf("ping db: %w", err)
 			}
 
-			encKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
+			encKey := crypto.ActiveKeyFromEnv()
 			if encKey == "" {
 				fmt.Fprintln(os.Stderr, "WARNING: GOCLAW_ENCRYPTION_KEY is not set — state will be read/written UNENCRYPTED")
 			}

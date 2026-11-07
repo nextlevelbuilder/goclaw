@@ -1,22 +1,36 @@
 import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import i18n from "@/i18n";
+import { ApiError } from "@/api/errors";
 import { useHttp } from "@/hooks/use-ws";
 import { toast } from "@/stores/use-toast-store";
+import { queryKeys } from "@/lib/query-keys";
+import type { AgentData } from "@/types/agent";
 import type {
   SecretVaultEntry,
   SecretVaultCreateInput,
   SecretVaultMetaInput,
   SecretVaultValueInput,
+  SecretVaultApproveInput,
   SecretVaultAuditRow,
 } from "@/types/secret-vault";
+import { withVaultAgentWrite } from "../secret-vault-utils";
 
 const QUERY_KEY = ["secretVault"] as const;
 
+// Stable reference so consumers can safely memoize on `items`.
+const NO_ENTRIES: SecretVaultEntry[] = [];
+
 function fail(err: unknown): never {
-  toast.error(i18n.t("secret-vault:toast.failed"), err instanceof Error ? err.message : "");
+  if (err instanceof ApiError && err.code === "revision_conflict") {
+    toast.error(i18n.t("secret-vault:toast.conflict"), i18n.t("secret-vault:toast.conflictHint"));
+  } else {
+    toast.error(i18n.t("secret-vault:toast.failed"), err instanceof Error ? err.message : "");
+  }
   throw err;
 }
+
+const ifMatch = (revision: number) => ({ "If-Match": String(revision) });
 
 export function useSecretVault() {
   const http = useHttp();
@@ -45,26 +59,31 @@ export function useSecretVault() {
   );
 
   const updateMeta = useCallback(
-    async (id: string, input: SecretVaultMetaInput) => {
+    async (id: string, input: SecretVaultMetaInput, revision: number) => {
       try {
-        await http.put(`/v1/secret-vault/${id}`, input);
+        const res = await http.put<SecretVaultEntry>(`/v1/secret-vault/${id}`, input, ifMatch(revision));
         await invalidate();
         toast.success(i18n.t("secret-vault:toast.updated"));
+        return res;
       } catch (err) {
-        fail(err);
+        // A conflict means the list on screen is stale: reload it before the user retries.
+        await invalidate();
+        return fail(err);
       }
     },
     [http, invalidate],
   );
 
   const replaceValue = useCallback(
-    async (id: string, input: SecretVaultValueInput) => {
+    async (id: string, input: SecretVaultValueInput, revision: number) => {
       try {
-        await http.put(`/v1/secret-vault/${id}/value`, input);
+        const res = await http.put<SecretVaultEntry>(`/v1/secret-vault/${id}/value`, input, ifMatch(revision));
         await invalidate();
         toast.success(i18n.t("secret-vault:toast.updated"));
+        return res;
       } catch (err) {
-        fail(err);
+        await invalidate();
+        return fail(err);
       }
     },
     [http, invalidate],
@@ -83,7 +102,55 @@ export function useSecretVault() {
     [http, invalidate],
   );
 
-  return { items: data ?? [], loading, refresh: invalidate, createSecret, updateMeta, replaceValue, deleteSecret };
+  const approveSecret = useCallback(
+    async (id: string, input: SecretVaultApproveInput) => {
+      try {
+        await http.post<SecretVaultEntry>(`/v1/secret-vault/${id}/approve`, input);
+        await invalidate();
+        toast.success(i18n.t("secret-vault:toast.approved"));
+      } catch (err) {
+        fail(err);
+      }
+    },
+    [http, invalidate],
+  );
+
+  return {
+    items: data ?? NO_ENTRIES,
+    loading,
+    refresh: invalidate,
+    createSecret,
+    updateMeta,
+    replaceValue,
+    deleteSecret,
+    approveSecret,
+  };
+}
+
+/**
+ * Toggles other_config.vault_agent_write for one agent. PUT /v1/agents/{id}
+ * replaces the whole other_config, so the agent is re-read right before the
+ * write and only the flag is changed; the cached list may be stale.
+ */
+export function useVaultAgentWrite() {
+  const http = useHttp();
+  const queryClient = useQueryClient();
+
+  const setAgentWrite = useCallback(
+    async (agentId: string, on: boolean) => {
+      try {
+        const agent = await http.get<AgentData>(`/v1/agents/${agentId}`);
+        await http.put(`/v1/agents/${agentId}`, { other_config: withVaultAgentWrite(agent.other_config, on) });
+        await queryClient.invalidateQueries({ queryKey: queryKeys.agents.all });
+        toast.success(i18n.t("secret-vault:toast.agentWriteSaved"));
+      } catch (err) {
+        fail(err);
+      }
+    },
+    [http, queryClient],
+  );
+
+  return { setAgentWrite };
 }
 
 // Stable reference: a fresh [] per render would retrigger the dialog's effect forever.

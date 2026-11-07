@@ -63,13 +63,15 @@ func (r *Redactor) add(values []string) {
 	}
 }
 
-// rebuild recomputes the matchers. Caller holds the write lock.
+// rebuild recomputes the matchers. Caller holds the write lock. It always
+// builds fresh slices: Redact iterates the previous short slice outside the
+// lock, so that backing array must never be written again.
 func (r *Redactor) rebuild() {
 	long := make([]string, 0, len(r.needles))
-	r.short = r.short[:0]
+	short := make([]string, 0, len(r.short)+1)
 	for n := range r.needles {
 		if len(n) < shortValueLen {
-			r.short = append(r.short, n)
+			short = append(short, n)
 		} else {
 			long = append(long, n)
 		}
@@ -80,7 +82,8 @@ func (r *Redactor) rebuild() {
 		}
 		return long[i] < long[j]
 	})
-	sort.Slice(r.short, func(i, j int) bool { return len(r.short[i]) > len(r.short[j]) })
+	sort.Slice(short, func(i, j int) bool { return len(short[i]) > len(short[j]) })
+	r.short = short
 	if len(long) == 0 {
 		r.replacer = nil
 		return

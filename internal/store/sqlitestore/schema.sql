@@ -2497,11 +2497,18 @@ CREATE TABLE IF NOT EXISTS secret_vault_entries (
     allowed_domains   TEXT NOT NULL CHECK (json_valid(allowed_domains) AND json_array_length(allowed_domains) > 0),
     require_approval  INTEGER NOT NULL DEFAULT 0,
     hints             TEXT NOT NULL DEFAULT '',
+    revision          INTEGER NOT NULL DEFAULT 1,
     created_by        TEXT NOT NULL DEFAULT '',
     created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    status            TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending')),
+    created_via       TEXT NOT NULL DEFAULT 'user' CHECK (created_via IN ('user', 'agent')),
+    created_by_agent  TEXT REFERENCES agents(id) ON DELETE SET NULL,
     UNIQUE (tenant_id, name)
 );
+-- Agent-written entries (PG migration 000105): per-agent pending cap lookup.
+CREATE INDEX IF NOT EXISTS idx_secret_vault_entries_pending_agent
+    ON secret_vault_entries(tenant_id, created_by_agent) WHERE status = 'pending';
 CREATE TABLE IF NOT EXISTS secret_vault_grants (
     entry_id   TEXT NOT NULL REFERENCES secret_vault_entries(id) ON DELETE CASCADE,
     agent_id   TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,

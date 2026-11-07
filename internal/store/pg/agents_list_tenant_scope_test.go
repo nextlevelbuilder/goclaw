@@ -2,11 +2,14 @@ package pg
 
 import (
 	"context"
+	"errors"
 	"testing"
+
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// TestPGAgentStoreList_NilTenant_FailsClosed verifies List returns an empty
-// result (not an unscoped cross-tenant leak) when the incoming context
+// TestPGAgentStoreList_NilTenant_FailsClosed verifies List returns an error
+// (not an empty result, not an unscoped cross-tenant leak) when the incoming context
 // carries no tenant scope — matching the fail-closed contract already
 // enforced by GetByID/GetByKey/CronStore.ListJobs/TeamStore.ListTeams.
 // Regression test for the bug where List silently swallowed scopeClause's
@@ -31,10 +34,11 @@ func TestPGAgentStoreList_NilTenant_FailsClosed(t *testing.T) {
 	}
 
 	// No tenant in context at all (uuid.Nil, not master, not cross-tenant):
-	// must fail closed (empty, no error), never return unscoped rows.
+	// must fail closed with an error the caller can see, never return
+	// unscoped rows or an empty list that looks like "no agents".
 	unscoped, err := agentStore.List(context.Background(), "")
-	if err != nil {
-		t.Fatalf("List (no tenant context): unexpected error %v", err)
+	if !errors.Is(err, store.ErrTenantRequired) {
+		t.Fatalf("List (no tenant context): err = %v, want store.ErrTenantRequired", err)
 	}
 	if len(unscoped) != 0 {
 		t.Fatalf("List (no tenant context) leaked %d rows across tenants, want 0 (fail-closed)", len(unscoped))

@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -74,6 +75,9 @@ type FormSpec struct {
 type FormResult struct {
 	Status     string
 	SecretName string
+	// ApproverRole is the gateway role of the client that answered an
+	// approval (server-side only).
+	ApproverRole permissions.Role
 }
 
 type pendingRequest struct {
@@ -142,12 +146,18 @@ func (m *FormManager) RequestForm(ctx context.Context, spec FormSpec) (FormResul
 
 // RequestApproval asks the user to approve one use of a secret.
 func (m *FormManager) RequestApproval(ctx context.Context, spec FormSpec) (bool, error) {
-	spec.Kind = KindApproval
-	res, err := m.request(ctx, spec, m.ApprovalTimeout)
+	res, err := m.requestApproval(ctx, spec)
 	if err != nil {
 		return false, err
 	}
 	return res.Status == StatusApproved, nil
+}
+
+// requestApproval is RequestApproval with the full result, including the
+// role of the client that answered.
+func (m *FormManager) requestApproval(ctx context.Context, spec FormSpec) (FormResult, error) {
+	spec.Kind = KindApproval
+	return m.request(ctx, spec, m.ApprovalTimeout)
 }
 
 func (m *FormManager) request(ctx context.Context, spec FormSpec, timeout time.Duration) (FormResult, error) {
@@ -300,9 +310,13 @@ func (m *FormManager) save(ctx context.Context, p *pendingRequest, entry *store.
 		if existing.Kind != entry.Kind {
 			return fmt.Errorf("%w: %q exists with a different kind", store.ErrSecretVaultInvalid, entry.Name)
 		}
-		if err = st.ReplaceValue(ctx, existing.ID, payload); err != nil {
-			return err
+		// Pinned to the revision just read: a concurrent edit makes this fail
+		// with a conflict instead of silently overwriting it.
+		newRev, rerr := st.ReplaceValue(ctx, existing.ID, payload, existing.Revision)
+		if rerr != nil {
+			return rerr
 		}
+		existing.Revision = newRev
 		*entry = *existing
 		action = store.SecretAuditUpdated
 	} else if err != nil {
@@ -343,8 +357,9 @@ func findByName(ctx context.Context, st store.SecretVaultStore, name string) (*s
 	return nil, store.ErrSecretVaultNotFound
 }
 
-// Respond answers an approval request.
-func (m *FormManager) Respond(tenant uuid.UUID, user, id string, approve bool) error {
+// Respond answers an approval request. role is the gateway role of the
+// answering client; approvals that need a tenant admin check it.
+func (m *FormManager) Respond(tenant uuid.UUID, user, id string, approve bool, role permissions.Role) error {
 	p, err := m.claim(id, tenant, user, "", true)
 	if err != nil {
 		return err
@@ -353,7 +368,7 @@ func (m *FormManager) Respond(tenant uuid.UUID, user, id string, approve bool) e
 	if approve {
 		status = StatusApproved
 	}
-	p.done <- FormResult{Status: status, SecretName: p.spec.Name}
+	p.done <- FormResult{Status: status, SecretName: p.spec.Name, ApproverRole: role}
 	return nil
 }
 

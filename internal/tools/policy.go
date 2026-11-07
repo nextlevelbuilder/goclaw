@@ -23,13 +23,13 @@ var builtinToolGroups = map[string][]string{
 	"messaging":  {"message", "create_forum_topic", "list_group_members", "zalo_list_groups"},
 	"team":       {"team_tasks"},
 	"vault":      {"vault_search", "vault_read"},
-	"secrets":    {"request_secret"},
+	"secrets":    {"request_secret", "vault_secret_set", "vault_grant"},
 	// Composite group: all goclaw native tools (excludes MCP/custom plugins).
 	"goclaw": {
 		"read_file", "write_file", "list_files", "edit", "exec", "wait",
 		"web_search", "web_fetch", "http_request", "browser",
 		"memory_search", "memory_get", "memory_expand",
-		"knowledge_graph_search", "vault_search", "vault_read", "request_secret",
+		"knowledge_graph_search", "vault_search", "vault_read", "request_secret", "vault_secret_set", "vault_grant",
 		"sessions_list", "sessions_history", "sessions_send", "spawn", "session_status",
 		"delegate",
 		"cron", "datetime", "heartbeat",

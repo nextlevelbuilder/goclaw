@@ -3,13 +3,14 @@ package browser
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/nextlevelbuilder/goclaw/internal/secretvault"
 	"github.com/nextlevelbuilder/goclaw/internal/browsertakeover"
+	"github.com/nextlevelbuilder/goclaw/internal/secretvault"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
@@ -44,7 +45,7 @@ Actions:
 - act: Interact with elements (requires request object with kind, ref, etc.)
 - takeover: Hand a tab to the user for a step only a person can do (SSO, CAPTCHA, QR, OTP, passkey). Use targetId and reason (say what they must do, never include secrets). Blocks until they finish; then snapshot to continue. Input values stay hidden afterwards.
 
-Act kinds: click, type, press, hover, wait, evaluate, fill_secret
+Act kinds: click, type, press, hover, wait, evaluate, fill_secret, capture_secret
 - click: Click element (request: {kind:"click", ref:"e1"})
 - type: Type text (request: {kind:"type", ref:"e1", text:"hello"})
 - press: Press key (request: {kind:"press", key:"Enter"})
@@ -54,6 +55,9 @@ Act kinds: click, type, press, hover, wait, evaluate, fill_secret
 - fill_secret: Fill a vault secret into an input of the page (request: {kind:"fill_secret", ref:"e1", secret:"my-login", field:"username"|"password", submit:false}).
   ALWAYS use this for passwords and API keys; never use type for them and never write the value. The secret must be allowed for the page's domain.
   While a secret is on the page its fields are masked in snapshots, and evaluate, wait with fn, console and screenshot are disabled.
+- capture_secret: Save a token the page holds straight into the vault without seeing it (request: {kind:"capture_secret", source:"localStorage"|"sessionStorage"|"cookie", key:"access_token", secret_name:"app-token"}).
+  ALWAYS use this instead of reading a token with evaluate. The value never reaches you; you get only a status and the placeholder {{secret:name}}.
+  The secret is bound to the page's host and stays pending until the user approves it. Only works when writing secrets is enabled for this agent; the name must be new.
 
 Workflow: start → open URL → snapshot (get refs) → act (use refs) → snapshot again`
 }
@@ -105,7 +109,7 @@ func (t *BrowserTool) Parameters() map[string]any {
 				"properties": map[string]any{
 					"kind": map[string]any{
 						"type":        "string",
-						"enum":        []string{"click", "type", "press", "hover", "wait", "evaluate", "fill_secret"},
+						"enum":        []string{"click", "type", "press", "hover", "wait", "evaluate", "fill_secret", "capture_secret"},
 						"description": "The interaction kind",
 					},
 					"ref": map[string]any{
@@ -118,7 +122,7 @@ func (t *BrowserTool) Parameters() map[string]any {
 					},
 					"key": map[string]any{
 						"type":        "string",
-						"description": "Key to press (e.g. Enter, Tab, Escape)",
+						"description": "Key to press (e.g. Enter, Tab, Escape); for capture_secret the storage key or cookie name",
 					},
 					"secret": map[string]any{
 						"type":        "string",
@@ -128,6 +132,20 @@ func (t *BrowserTool) Parameters() map[string]any {
 						"type":        "string",
 						"enum":        []string{"username", "password"},
 						"description": "Which part of the secret fill_secret types (default password)",
+					},
+					"source": map[string]any{
+						"type":        "string",
+						"enum":        []string{captureLocalStorage, captureSessionStorage, captureCookie},
+						"description": "Where capture_secret reads the value",
+					},
+					"secret_name": map[string]any{
+						"type":        "string",
+						"description": "Name of the new vault secret for capture_secret: 1-64 lowercase letters, digits, '-' or '_'",
+					},
+					"secret_kind": map[string]any{
+						"type":        "string",
+						"enum":        []string{store.SecretKindAPIKey},
+						"description": "Kind of the captured secret (only api_key)",
 					},
 					"submit": map[string]any{
 						"type":        "boolean",
@@ -487,6 +505,21 @@ func (t *BrowserTool) handleAct(ctx context.Context, args map[string]any) *tools
 		}
 		return tools.NewResult("Secret filled. Its value is hidden from snapshots; do not try to read it back.")
 
+	case "capture_secret":
+		opts := CaptureSecretOpts{}
+		opts.Source, _ = req["source"].(string)
+		opts.Key, _ = req["key"].(string)
+		opts.SecretName, _ = req["secret_name"].(string)
+		opts.SecretKind, _ = req["secret_kind"].(string)
+		status, err := t.manager.CaptureSecret(ctx, targetID, opts)
+		if errors.Is(err, secretvault.ErrWriteDisabled) {
+			return tools.ErrorResult("capture_secret failed: writing secrets is not enabled for this agent. Ask the user to enable it in the Secret Vault page.")
+		}
+		if err != nil {
+			return tools.ErrorResult(fmt.Sprintf("capture_secret failed: %v", err))
+		}
+		return tools.NewResult(captureResultText(opts.SecretName, status))
+
 	case "evaluate":
 		fn, _ := req["fn"].(string)
 		if fn == "" {
@@ -501,6 +534,15 @@ func (t *BrowserTool) handleAct(ctx context.Context, args map[string]any) *tools
 	default:
 		return tools.ErrorResult(fmt.Sprintf("unknown act kind: %s", kind))
 	}
+}
+
+// captureResultText is the whole capture_secret result: status and placeholder.
+func captureResultText(name, status string) string {
+	ph := "{{secret:" + name + "}}"
+	if status == secretvault.WriteActive {
+		return fmt.Sprintf("Secret saved and approved by the user (status: active). Use the placeholder %s.", ph)
+	}
+	return fmt.Sprintf("Secret saved (status: pending). It cannot be used until the user approves it in the Secret Vault page; then use the placeholder %s.", ph)
 }
 
 func jsonResult(v any) *tools.Result {

@@ -29,7 +29,7 @@ func TestIssue1034_Bug1_VerifyEmptyBody(t *testing.T) {
 	p := &store.LLMProviderData{
 		Name:         "openai-compat-bug1-" + suffix,
 		DisplayName:  "Bug1 test",
-		ProviderType: "openai-compat",
+		ProviderType: store.ProviderOpenAICompat,
 		APIBase:      "http://127.0.0.1:0",
 		APIKey:       "x",
 		Enabled:      true,
@@ -105,7 +105,7 @@ func TestIssue1034_Bug1_VerifyMalformedBody(t *testing.T) {
 	suffix := uuid.NewString()[:8]
 	p := &store.LLMProviderData{
 		Name:         "openai-compat-bug1m-" + suffix,
-		ProviderType: "openai-compat",
+		ProviderType: store.ProviderOpenAICompat,
 		APIBase:      "http://127.0.0.1:0",
 		APIKey:       "x",
 		Enabled:      true,
@@ -142,7 +142,7 @@ func TestIssue1034_Bug2_DeleteProviderWithHeartbeat(t *testing.T) {
 	suffix := uuid.NewString()[:8]
 	p := &store.LLMProviderData{
 		Name:         "openai-compat-bug2-" + suffix,
-		ProviderType: "openai-compat",
+		ProviderType: store.ProviderOpenAICompat,
 		APIBase:      "http://127.0.0.1:0",
 		APIKey:       "x",
 		Enabled:      true,
@@ -200,7 +200,7 @@ func TestIssue1034_Bug2_DeleteProviderCrossTenantIsolation(t *testing.T) {
 	// Provider lives in tenant B.
 	pB := &store.LLMProviderData{
 		Name:         "openai-compat-tenantB-" + suffix,
-		ProviderType: "openai-compat",
+		ProviderType: store.ProviderOpenAICompat,
 		APIBase:      "http://127.0.0.1:0",
 		APIKey:       "x",
 		Enabled:      true,
@@ -256,7 +256,7 @@ func TestIssue1034_Bug3_DoctorDisplayNameEmpty(t *testing.T) {
 	p := &store.LLMProviderData{
 		Name:         canonicalName,
 		DisplayName:  "", // empty (not NULL) — the bug condition
-		ProviderType: "openai-compat",
+		ProviderType: store.ProviderOpenAICompat,
 		APIBase:      "http://127.0.0.1:0",
 		APIKey:       "x",
 		Enabled:      true,

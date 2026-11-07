@@ -9,6 +9,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
@@ -33,7 +34,7 @@ func setupStoresAndTracing(
 
 	storeCfg := store.StoreConfig{
 		PostgresDSN:      cfg.Database.PostgresDSN,
-		EncryptionKey:    os.Getenv("GOCLAW_ENCRYPTION_KEY"),
+		EncryptionKey:    crypto.ActiveKeyFromEnv(),
 		SkillsStorageDir: filepath.Join(dataDir, "skills-store"),
 	}
 	pgStores, pgErr := pg.NewPGStores(storeCfg)

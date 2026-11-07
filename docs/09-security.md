@@ -226,7 +226,7 @@ Docker-compose.yml mounts data volume at `/app/data`, which contains:
 
 ## 3. Encryption
 
-AES-256-GCM encryption for secrets stored in PostgreSQL. Key provided via `GOCLAW_ENCRYPTION_KEY` environment variable.
+AES-256-GCM encryption for secrets stored in PostgreSQL. Key provided via the `GOCLAW_ENCRYPTION_KEY` environment variable, or a set of keys via `GOCLAW_ENCRYPTION_KEYS` (see Key rotation below).
 
 | What's Encrypted | Table | Column |
 |-----------------|-------|--------|
@@ -235,11 +235,51 @@ AES-256-GCM encryption for secrets stored in PostgreSQL. Key provided via `GOCLA
 | Custom tool env vars | `custom_tools` | `env` |
 | Credentialed CLI env vars | `secure_cli_binaries`, `secure_cli_agent_grants`, `secure_cli_user_credentials`, `secure_cli_agent_credentials` | `encrypted_env` |
 
-**Format**: `"aes-gcm:" + base64(12-byte nonce + ciphertext + GCM tag)`
+**Format**: `"aes-gcm:" + base64(12-byte nonce + ciphertext + GCM tag)`; with a keyring, new values are `v3:aes-gcm:<kid>:...` and name the key that sealed them.
 
 Backward compatible: values without the `aes-gcm:` prefix are returned as plaintext (for migration from unencrypted data).
 
 Credentialed CLI env entries have a separate visibility kind inside the encrypted JSON blob when `GOCLAW_ENCRYPTION_KEY` is configured. `sensitive` entries are masked in normal API/UI responses and never returned raw except through the explicit audited grant reveal flow. `value` entries use the same at-rest storage path but are returned to authorized admins for operational review.
+
+### Key rotation
+
+Several keys can be configured at once; each is identified by a key id (kid),
+the first 8 hex characters of the SHA-256 of the raw 32-byte key.
+
+| Variable | Meaning |
+|----------|---------|
+| `GOCLAW_ENCRYPTION_KEYS` | `kid=key,kid=key` - every key that may open stored data. Each label must equal the id of its key. |
+| `GOCLAW_ENCRYPTION_KEY_ID` | The kid used for new writes. Required when `GOCLAW_ENCRYPTION_KEYS` holds several keys and `GOCLAW_ENCRYPTION_KEY` is unset. |
+| `GOCLAW_ENCRYPTION_KEY` | Single-key setup, unchanged. Loaded under its own kid and active unless `GOCLAW_ENCRYPTION_KEY_ID` says otherwise. |
+
+With a key configured, new values are written as
+`v3:aes-gcm:<kid>:<base64url(nonce + ciphertext + tag)>`. A v3 value is opened
+with the key it names; if that kid is not configured the read fails with an
+error naming the kid and never tries another key. Values written before key ids
+(`aes-gcm:`, `v2:aes-gcm:`) are opened with the active key and then the other
+configured keys, so they stay readable until rotated. A malformed key list stops
+the gateway and every CLI command at startup with a message that names the
+variable and never prints key material.
+
+Rotate with one command after adding the new key:
+
+```bash
+goclaw keys add --generate                 # prints the new key once, its kid, and the entry to add
+# add <kid>=<key> to GOCLAW_ENCRYPTION_KEYS (keep the old key), set GOCLAW_ENCRYPTION_KEY_ID=<kid>, restart
+goclaw keys rotate --to <kid> [--dry-run]  # re-encrypts every column and every tenant's vault
+goclaw keys status                         # nothing should be left under the old kid
+```
+
+Then remove the old key from `GOCLAW_ENCRYPTION_KEYS`. `rotate` is batched,
+idempotent and resumable (run it again after an interruption); each write only
+applies if the row still holds the value that was read. It prints counts per
+column, never a value, and exits non-zero if any value cannot be opened with the
+configured keys (those are reported per kid and left untouched). It covers the
+columns listed above plus MCP user/context credentials and headers, MCP OAuth
+tokens, channel instance credentials, Bitrix portals, browser cookies, config
+secrets, workstations and webhook secrets, and the secret vault of every tenant.
+The desktop (Lite) edition has no rotation command; it uses the single key held
+in the OS keyring.
 
 ---
 
