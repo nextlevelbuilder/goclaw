@@ -21,5 +21,9 @@
   "toast": {
     "deleted": "文件已删除",
     "deleteFailed": "删除文件失败"
+  },
+  "states": {
+    "errorTitle": "无法加载文件",
+    "errorBody": "网关未返回文件列表。请检查连接后重试。"
   }
 }

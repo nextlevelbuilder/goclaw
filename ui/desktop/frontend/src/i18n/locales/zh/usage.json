@@ -1,1 +1,40 @@
-{}
+{
+  "title": "用量",
+  "description": "所有提供商的请求、令牌和费用",
+  "range": {
+    "label": "时间范围",
+    "24h": "24 小时",
+    "7d": "7 天",
+    "30d": "30 天"
+  },
+  "units": {
+    "seconds": "秒",
+    "milliseconds": "毫秒"
+  },
+  "kpi": {
+    "requests": "请求",
+    "tokens": "令牌",
+    "cost": "预估费用",
+    "users": "活跃用户"
+  },
+  "vsPrevious": "较上一周期 {{change}}",
+  "chart": {
+    "title": "每日令牌",
+    "input": "输入",
+    "output": "输出",
+    "barLabel": "{{date}}：输入 {{input}}，输出 {{output}}"
+  },
+  "detail": {
+    "llmCalls": "LLM 调用",
+    "toolCalls": "工具调用",
+    "errorRate": "错误率",
+    "avgDuration": "平均时长"
+  },
+  "emptyTitle": "此范围内没有用量",
+  "emptyDescription": "智能体开始处理请求后，用量会显示在这里。",
+  "startChat": "开始对话",
+  "states": {
+    "errorTitle": "无法加载用量",
+    "errorBody": "网关未返回用量数据。请检查连接后重试。"
+  }
+}

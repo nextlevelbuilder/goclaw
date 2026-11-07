@@ -38,7 +38,10 @@
     "llmCalls": "LLM",
     "toolCalls": "tool",
     "export": "Export trace",
-    "stopRun": "Stop run"
+    "stopRun": "Stop run",
+    "exported": "Trace exported",
+    "exportFailed": "Failed to export trace",
+    "tokensInOut": "{{input}} in / {{output}} out"
   },
   "span": {
     "model": "Model:",
@@ -52,12 +55,33 @@
     "cacheRead": "read",
     "cacheWrite": "write",
     "thinking": "thinking",
-    "cached": "cached"
+    "cached": "cached",
+    "copied": "Copied"
   },
   "toast": {
     "failedLoad": "Failed to load traces",
     "abortSent": "Run stopped",
     "abortFailed": "Failed to stop run",
     "abortNotFound": "Run already finished or not found"
+  },
+  "delegated": "Delegated",
+  "status": {
+    "completed": "Completed",
+    "failed": "Failed",
+    "running": "Running"
+  },
+  "noMatchTitle": "No traces for this agent",
+  "noMatchDescription": "Try another agent or clear the filter.",
+  "clearFilter": "Clear filter",
+  "startChat": "Start a chat",
+  "openAgents": "Open agents",
+  "loadMore": "Load more ({{shown}} of {{total}})",
+  "summary_one": "{{count}} trace",
+  "summary_other": "{{count}} traces",
+  "filterByAgent": "Filter by agent",
+  "states": {
+    "errorTitle": "Couldn't load traces",
+    "errorBody": "The gateway did not return any traces. Check the connection and try again.",
+    "detailErrorTitle": "Couldn't load this trace"
   }
 }

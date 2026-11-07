@@ -1,7 +1,7 @@
 {
   "title": "Provider",
   "description": "Quản lý các provider LLM",
-  "addProvider": "Thêm provider",
+  "addProvider": "Thêm nhà cung cấp",
   "searchPlaceholder": "Tìm kiếm provider...",
   "emptyTitle": "Không có provider",
   "emptyDescription": "Thêm provider LLM đầu tiên để bắt đầu.",
@@ -13,7 +13,9 @@
     "apiBase": "API Base",
     "apiKey": "API Key",
     "status": "Trạng thái",
-    "actions": "Thao tác"
+    "actions": "Thao tác",
+    "models": "Mô hình",
+    "enabled": "Bật"
   },
   "apiKey": {
     "oauthToken": "OAuth Token",
@@ -25,8 +27,25 @@
     "oauthLinked": "Đã liên kết OAuth"
   },
   "detail": {
-    "title": "Chi tiết Provider",
-    "advanced": "Nâng cao"
+    "advanced": "Nâng cao",
+    "identity": "Danh tính",
+    "identityDesc": "Nhận dạng provider",
+    "connection": "Kết nối",
+    "connectionDesc": "Cấu hình endpoint API",
+    "acpConfig": "Cấu hình ACP",
+    "acpConfigDesc": "Cài đặt tiến trình con agent",
+    "cliConfig": "Claude CLI",
+    "cliConfigDesc": "Xác thực CLI cục bộ",
+    "oauthConfig": "OAuth",
+    "oauthConfigDesc": "Xác thực OAuth ChatGPT",
+    "nameReadonly": "Định danh provider, không thể thay đổi",
+    "providerType": "Loại provider",
+    "apiKeySection": "API Key",
+    "apiKeySectionDesc": "Thông tin xác thực",
+    "statusSection": "Trạng thái",
+    "statusSectionDesc": "Tình trạng hoạt động của provider",
+    "enabledDesc": "Provider đang hoạt động và sẵn sàng cho các agent",
+    "embeddingSection": "Embedding"
   },
   "form": {
     "transportAuth": "Giao thức & Xác thực",
@@ -54,7 +73,17 @@
     "alreadyAdded": "(đã thêm)",
     "nameFixed": "Tên",
     "configure": "Cấu hình kết nối provider LLM.",
-    "lowercaseHint": "Chữ thường, số, dấu gạch ngang"
+    "lowercaseHint": "Chữ thường, số, dấu gạch ngang",
+    "apiKeyStored": "Đã lưu một khóa API. Để trống để giữ nguyên.",
+    "testConnection": "Kiểm tra kết nối",
+    "testOk": "Kết nối hoạt động.",
+    "testFailed": "Kết nối thất bại: {{error}}",
+    "errors": {
+      "summary_other": "Sửa {{count}} trường để tiếp tục",
+      "saveFailed": "Không lưu được nhà cung cấp",
+      "typeRequired": "Chọn loại nhà cung cấp.",
+      "apiBaseScheme": "Nhập URL bắt đầu bằng http:// hoặc https://."
+    }
   },
   "delete": {
     "title": "Xóa provider",
@@ -133,27 +162,6 @@
     "notAuthenticated": "Chưa xác thực",
     "runOnServer": "Chạy trên terminal máy chủ:",
     "recheckButton": "Kiểm tra lại"
-  },
-  "detail": {
-    "advanced": "Nâng cao",
-    "identity": "Danh tính",
-    "identityDesc": "Nhận dạng provider",
-    "connection": "Kết nối",
-    "connectionDesc": "Cấu hình endpoint API",
-    "acpConfig": "Cấu hình ACP",
-    "acpConfigDesc": "Cài đặt tiến trình con agent",
-    "cliConfig": "Claude CLI",
-    "cliConfigDesc": "Xác thực CLI cục bộ",
-    "oauthConfig": "OAuth",
-    "oauthConfigDesc": "Xác thực OAuth ChatGPT",
-    "nameReadonly": "Định danh provider, không thể thay đổi",
-    "providerType": "Loại provider",
-    "apiKeySection": "API Key",
-    "apiKeySectionDesc": "Thông tin xác thực",
-    "statusSection": "Trạng thái",
-    "statusSectionDesc": "Tình trạng hoạt động của provider",
-    "enabledDesc": "Provider đang hoạt động và sẵn sàng cho các agent",
-    "embeddingSection": "Embedding"
   },
   "embedding": {
     "enable": "Bật Embedding",
@@ -293,5 +301,12 @@
       "emptyBody": "Hãy chọn khoảng dài hơn, hoặc chat với agent dùng provider này.",
       "staleNote": "Không làm mới được. Đang hiển thị dữ liệu lúc {{time}}."
     }
+  },
+  "enableToggle": "Bật {{name}}",
+  "rowMenu": "Thao tác cho {{name}}",
+  "summary_other": "{{count}} nhà cung cấp · {{active}} đang bật",
+  "states": {
+    "errorTitle": "Không tải được danh sách nhà cung cấp",
+    "errorBody": "Gateway không trả về danh sách nhà cung cấp. Kiểm tra kết nối rồi thử lại."
   }
 }

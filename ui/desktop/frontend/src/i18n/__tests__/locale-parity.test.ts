@@ -16,9 +16,7 @@ type Locale = (typeof LOCALES)[number]
  * `<namespace>:<locale>:<key>`. Remove an entry once the key is translated;
  * the test fails on stale entries so this list can only shrink.
  */
-const KNOWN_GAPS = new Set<string>([
-  'traces:zh:span.createdAt',
-])
+const KNOWN_GAPS = new Set<string>([])
 
 const files = import.meta.glob<Record<string, unknown>>('../locales/*/*.json', {
   eager: true,

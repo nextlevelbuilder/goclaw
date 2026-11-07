@@ -166,6 +166,11 @@ function toRFC3339(d: Date): string {
   return d.toISOString().replace(/\.\d{3}Z$/, 'Z')
 }
 
+export interface UsageOverview {
+  summary: UsageSummary
+  points: UsageTimeSeriesPoint[]
+}
+
 export const usageService = {
   async health(providerId: string): Promise<ProviderHealth> {
     const raw = await getApiClient().get<unknown>(`/v1/providers/${encodeURIComponent(providerId)}/health`)
@@ -194,6 +199,17 @@ export const usageService = {
       provider: providerName,
     })
     return parseUsageTimeSeries(raw)
+  },
+
+  /** Totals across all providers for the Usage view (no provider filter). */
+  async overview(range: UsageRange, now: Date = new Date()): Promise<UsageOverview> {
+    const { from, to } = rangeWindow(range, now)
+    const api = getApiClient()
+    const [summaryRaw, seriesRaw] = await Promise.all([
+      api.getWithParams<unknown>('/v1/usage/summary', { period: range }),
+      api.getWithParams<unknown>('/v1/usage/timeseries', { from, to, group_by: 'day' }),
+    ])
+    return { summary: parseUsageSummary(summaryRaw), points: parseUsageTimeSeries(seriesRaw) }
   },
 
   /** Fetches everything the Usage tab needs for one provider and range, in parallel. */

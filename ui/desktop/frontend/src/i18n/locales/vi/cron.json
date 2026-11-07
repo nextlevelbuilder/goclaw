@@ -1,7 +1,7 @@
 {
   "title": "Tác vụ định kỳ",
   "description": "Lên lịch các tác vụ agent định kỳ",
-  "newJob": "Tác vụ mới",
+  "newJob": "Tạo công việc",
   "emptyTitle": "Không có tác vụ định kỳ",
   "emptyDescription": "Tạo tác vụ định kỳ để lên lịch các tác vụ agent định kỳ.",
   "columns": {
@@ -10,7 +10,9 @@
     "schedule": "Lịch",
     "message": "Tin nhắn",
     "agent": "Agent",
-    "actions": "Thao tác"
+    "actions": "Thao tác",
+    "nextRun": "Lần chạy tới",
+    "lastRun": "Lần chạy gần nhất"
   },
   "runNow": "Chạy ngay",
   "running": "Đang chạy...",
@@ -63,7 +65,15 @@
   "runLog": {
     "title": "Lịch sử chạy: {{name}}",
     "noHistory": "Chưa có lịch sử chạy nào.",
-    "loading": "Đang tải..."
+    "loading": "Đang tải...",
+    "time": "Thời gian",
+    "status": "Trạng thái",
+    "duration": "Thời lượng",
+    "tokens": "Token",
+    "summary": "Tóm tắt",
+    "errorTitle": "Không tải được lịch sử chạy",
+    "errorBody": "Gateway không trả về nhật ký chạy. Hãy thử lại.",
+    "noHistoryDescription": "Các lần chạy sẽ xuất hiện ở đây sau khi công việc được kích hoạt."
   },
   "detail": {
     "runNow": "Chạy ngay",
@@ -145,5 +155,54 @@
     "failedRun": "Không thể chạy tác vụ định kỳ",
     "updated": "Đã cập nhật job",
     "failedUpdate": "Cập nhật job thất bại"
+  },
+  "enableToggle": "Bật {{name}}",
+  "rowMenu": "Thao tác cho {{name}}",
+  "paused": "Đã tạm dừng",
+  "summary_other": "{{count}} công việc · {{active}} đang bật",
+  "states": {
+    "errorTitle": "Không tải được công việc cron",
+    "errorBody": "Gateway không trả về danh sách công việc. Kiểm tra kết nối rồi thử lại."
+  },
+  "status": {
+    "succeeded": "Thành công",
+    "failed": "Thất bại",
+    "running": "Đang chạy",
+    "other": "Không rõ",
+    "paused": "Đã tạm dừng"
+  },
+  "schedule": {
+    "everySeconds_other": "Mỗi {{count}} giây",
+    "everyMinutes_other": "Mỗi {{count}} phút",
+    "everyHours_other": "Mỗi {{count}} giờ",
+    "onceAt": "Một lần lúc {{time}}"
+  },
+  "edit": {
+    "menu": "Sửa",
+    "title": "Sửa công việc cron",
+    "save": "Lưu thay đổi",
+    "delete": "Xóa công việc"
+  },
+  "form": {
+    "interval": "Khoảng thời gian",
+    "unit": "Đơn vị",
+    "units": {
+      "seconds": "Giây",
+      "minutes": "Phút",
+      "hours": "Giờ"
+    },
+    "timezone": "Múi giờ: {{tz}}",
+    "nextRun": "Lần chạy tới: {{time}}",
+    "onceAt": "Chạy một lần lúc {{time}}.",
+    "lastFailed": "Lần chạy gần nhất thất bại. {{error}}",
+    "viewLog": "Xem nhật ký",
+    "errors": {
+      "saveFailed": "Không lưu được công việc",
+      "nameRequired": "Nhập tên.",
+      "nameFormat": "Chỉ dùng chữ thường, số và dấu gạch ngang.",
+      "everyMin": "Nhập từ 1 trở lên.",
+      "messageRequired": "Cho agent biết cần làm gì.",
+      "cronFields": "Biểu thức cron cần 5 trường."
+    }
   }
 }

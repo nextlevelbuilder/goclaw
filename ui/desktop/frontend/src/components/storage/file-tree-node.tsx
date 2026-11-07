@@ -27,14 +27,14 @@ export function ChevronRightIcon({ className }: { className?: string }) {
 export function FolderIcon({ open }: { open?: boolean }) {
   if (open) {
     return (
-      <svg className={`${cls} text-yellow-600`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <svg className={`${cls} text-warning`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
         <path d="M5 19a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4l2 2h4a2 2 0 0 1 2 2v1" />
         <path d="M20.28 11H7.72a2 2 0 0 0-1.93 1.47l-1.44 5.09A2 2 0 0 0 6.28 20h11.44a2 2 0 0 0 1.93-2.44l-1.44-5.09A2 2 0 0 0 16.28 11z" />
       </svg>
     )
   }
   return (
-    <svg className={`${cls} text-yellow-600`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <svg className={`${cls} text-warning`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
     </svg>
   )
@@ -42,14 +42,14 @@ export function FolderIcon({ open }: { open?: boolean }) {
 
 export function FileIcon({ name }: { name: string }) {
   const ext = extOf(name)
-  let color = 'text-text-muted'
-  if (ext === 'md' || ext === 'mdx') color = 'text-blue-500'
-  else if (ext === 'json' || ext === 'json5') color = 'text-yellow-600'
-  else if (ext === 'yaml' || ext === 'yml' || ext === 'toml') color = 'text-orange-500'
-  else if (ext === 'csv') color = 'text-green-600'
-  else if (ext === 'sh' || ext === 'bash' || ext === 'zsh') color = 'text-lime-600'
-  else if (IMAGE_EXTENSIONS.has(ext)) color = 'text-emerald-500'
-  else if (CODE_EXTENSIONS.has(ext)) color = 'text-orange-500'
+  let color = 'text-ink-muted'
+  if (ext === 'md' || ext === 'mdx') color = 'text-info'
+  else if (ext === 'json' || ext === 'json5') color = 'text-warning'
+  else if (ext === 'yaml' || ext === 'yml' || ext === 'toml') color = 'text-warning'
+  else if (ext === 'csv') color = 'text-success'
+  else if (ext === 'sh' || ext === 'bash' || ext === 'zsh') color = 'text-success'
+  else if (IMAGE_EXTENSIONS.has(ext)) color = 'text-success'
+  else if (CODE_EXTENSIONS.has(ext)) color = 'text-warning'
 
   return (
     <svg className={`${cls} ${color}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -61,7 +61,7 @@ export function FileIcon({ name }: { name: string }) {
 
 export function SpinnerIcon() {
   return (
-    <svg className="h-3 w-3 shrink-0 animate-spin text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+    <svg className="h-3 w-3 shrink-0 animate-spin text-ink-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
       <path d="M21 12a9 9 0 1 1-6.219-8.56" />
     </svg>
   )
@@ -99,7 +99,7 @@ export function RootDropZone({ children }: { children: React.ReactNode }) {
 
 export function DragPreview({ name, isDir }: { name: string; isDir: boolean }) {
   return (
-    <div className="flex items-center gap-1.5 rounded-md bg-surface-secondary border border-border px-2.5 py-1.5 text-xs shadow-lg">
+    <div className="flex items-center gap-1.5 rounded-md bg-surface-base border border-border-subtle px-2.5 py-1.5 text-caption shadow-popover">
       {isDir ? <FolderIcon /> : <FileIcon name={name} />}
       <span className="truncate max-w-[180px]">{name}</span>
     </div>
@@ -139,7 +139,7 @@ export function TreeItem({
   const deleteBtn = onDelete && !node.protected && (
     <button
       type="button"
-      className="ml-auto shrink-0 opacity-0 group-hover/tree-item:opacity-100 text-error hover:text-error/80 transition-opacity cursor-pointer p-0.5"
+      className="ml-auto shrink-0 opacity-0 group-hover/tree-item:opacity-100 text-danger hover:text-danger/80 transition-opacity cursor-pointer p-0.5"
       title={node.isDir ? t('deleteFolder') : t('deleteFile')}
       onClick={(e) => { e.stopPropagation(); onDelete(node.path, node.isDir) }}
     >
@@ -148,7 +148,7 @@ export function TreeItem({
   )
 
   const sizeLabel = showSize && !node.isDir && node.size > 0 && (
-    <span className="ml-auto shrink-0 text-2xs text-text-muted tabular-nums">
+    <span className="ml-auto shrink-0 text-caption text-ink-muted tabular-nums">
       {formatSize(node.size)}
     </span>
   )
@@ -157,15 +157,15 @@ export function TreeItem({
     const folderContent = (isDropTargetActive: boolean) => (
       <>
         <div
-          className={`group/tree-item flex w-full items-center gap-1 rounded px-2 py-1 text-left text-xs cursor-pointer ${
-            isDropTargetActive ? 'bg-accent/10 ring-1 ring-accent' : 'hover:bg-surface-tertiary'
+          className={`group/tree-item flex w-full items-center gap-1 rounded px-2 py-1 text-left text-caption cursor-pointer ${
+            isDropTargetActive ? 'bg-accent/10 ring-1 ring-accent' : 'hover:bg-surface-hover'
           }`}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
           onClick={handleToggle}
         >
           <ChevronRightIcon className={`h-3 w-3 shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} />
           <FolderIcon open={expanded} />
-          <span className="truncate text-text-primary">{node.name}</span>
+          <span className="truncate text-ink">{node.name}</span>
           {node.loading && <SpinnerIcon />}
           {sizeLabel}
           {deleteBtn}
@@ -179,7 +179,7 @@ export function TreeItem({
         ))}
         {expanded && node.hasChildren && node.children.length === 0 && !node.loading && (
           <div
-            className="flex items-center gap-1 text-2xs text-text-muted cursor-pointer hover:text-text-primary"
+            className="flex items-center gap-1 text-caption text-ink-muted cursor-pointer hover:text-ink"
             style={{ paddingLeft: `${(depth + 1) * 16 + 20}px` }}
             onClick={() => onLoadMore?.(node.path)}
           >
@@ -205,8 +205,8 @@ export function TreeItem({
   // File node
   const fileContent = (
     <div
-      className={`group/tree-item flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs cursor-pointer ${
-        isActive ? 'bg-accent/10 text-accent' : 'hover:bg-surface-tertiary text-text-primary'
+      className={`group/tree-item flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-caption cursor-pointer ${
+        isActive ? 'bg-accent/10 text-accent' : 'hover:bg-surface-hover text-ink'
       }`}
       style={{ paddingLeft: `${depth * 16 + 20}px` }}
       onClick={() => onSelect(node.path)}

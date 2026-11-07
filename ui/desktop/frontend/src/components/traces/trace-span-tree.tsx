@@ -3,7 +3,21 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { SpanData } from '../../types/trace'
-import { formatDuration, formatTokens, statusClass, spanTypeIcon } from './trace-detail-formatters'
+import { IconActivity, IconBarChart, IconBot, IconChat, IconChevronDown, IconDot, IconWrench } from '../common/Icons'
+import { StatusChip } from '../ui'
+import { formatDuration, formatTokens, statusLabelKey, statusTone } from './trace-detail-formatters'
+
+function SpanTypeIcon({ type }: { type: string }) {
+  const props = { size: 14, className: 'shrink-0 text-ink-muted' }
+  switch (type) {
+    case 'llm_call': return <IconChat {...props} />
+    case 'tool_call': return <IconWrench {...props} />
+    case 'agent': return <IconBot {...props} />
+    case 'embedding': return <IconBarChart {...props} />
+    case 'event': return <IconActivity {...props} />
+    default: return <IconDot {...props} />
+  }
+}
 
 // Build span tree from flat list using parent_span_id
 export interface SpanNode { span: SpanData; children: SpanNode[]; depth: number }
@@ -35,6 +49,7 @@ export function buildSpanTree(spans: SpanData[]): SpanNode[] {
 }
 
 function TraceContentPreview({ text }: { text?: string }) {
+  const { t } = useTranslation('traces')
   const [copied, setCopied] = useState(false)
   if (!text) return null
   const trimmed = text.trim()
@@ -50,16 +65,16 @@ function TraceContentPreview({ text }: { text?: string }) {
     setTimeout(() => setCopied(false), 1500)
   }
   return (
-    <div className="rounded-lg border border-border overflow-hidden">
+    <div className="rounded-lg border border-border-subtle overflow-hidden">
       {lang && (
-        <div className="flex items-center justify-between px-3 py-1 bg-surface-tertiary text-2xs">
-          <span className="text-text-muted font-mono">{lang}</span>
-          <button onClick={handleCopy} className="text-text-muted hover:text-text-primary transition-colors cursor-pointer">
-            {copied ? 'Copied!' : 'Copy'}
+        <div className="flex items-center justify-between px-3 py-1 bg-surface-hover text-caption">
+          <span className="text-ink-muted font-mono">{lang}</span>
+          <button onClick={handleCopy} className="text-ink-muted hover:text-ink transition-colors cursor-pointer">
+            {copied ? t('span.copied') : t('span.copy')}
           </button>
         </div>
       )}
-      <pre className="text-xs text-text-primary whitespace-pre-wrap p-3 max-h-[40vh] overflow-y-auto overscroll-contain">{display}</pre>
+      <pre className="text-caption text-ink whitespace-pre-wrap p-3 max-h-[40vh] overflow-y-auto overscroll-contain">{display}</pre>
     </div>
   )
 }
@@ -77,54 +92,50 @@ export function SpanRow({ node, expanded, onToggle }: { node: SpanNode; expanded
   const hasExpandContent = !!span.input_preview || !!span.output_preview || !!span.error || cacheCreate > 0
 
   return (
-    <div className="border-b border-border last:border-0">
+    <div className="border-b border-border-subtle last:border-0">
       <button
         type="button"
         onClick={hasExpandContent ? onToggle : undefined}
-        className={`w-full flex items-center gap-1.5 px-3 py-2 text-left transition-colors ${hasExpandContent ? 'hover:bg-surface-tertiary/30 cursor-pointer' : ''}`}
+        className={`w-full flex items-center gap-1.5 px-3 py-2 text-left transition-colors ${hasExpandContent ? 'hover:bg-surface-hover cursor-pointer' : ''}`}
         style={{ paddingLeft: `${12 + depth * 16}px` }}
       >
-        <svg
-          className={`h-3 w-3 shrink-0 text-text-muted transition-transform ${expanded ? 'rotate-90' : ''} ${!hasExpandContent ? 'invisible' : ''}`}
-          viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}
-        >
-          <path d="M9 18l6-6-6-6" />
-        </svg>
-        <span className="text-sm shrink-0">{spanTypeIcon(span.span_type)}</span>
-        <span className="text-xs font-medium text-text-primary truncate min-w-0 flex-1">{span.name}</span>
-        {subtitle && <span className="text-2xs text-text-muted truncate max-w-[120px] shrink-0">{subtitle}</span>}
-        <div className="flex items-center gap-2 shrink-0 text-2xs text-text-muted ml-auto">
+        <IconChevronDown
+          size={12}
+          className={`shrink-0 text-ink-muted transition-transform ${expanded ? '' : '-rotate-90'} ${!hasExpandContent ? 'invisible' : ''}`}
+        />
+        <SpanTypeIcon type={span.span_type} />
+        <span className="text-caption font-medium text-ink truncate min-w-0 flex-1">{span.name}</span>
+        {subtitle && <span className="text-caption text-ink-muted truncate max-w-[120px] shrink-0">{subtitle}</span>}
+        <div className="flex items-center gap-2 shrink-0 text-caption text-ink-muted ml-auto">
           {hasTokens && (
             <span className="font-mono">
               {formatTokens(span.input_tokens)}/{formatTokens(span.output_tokens)}
-              {cacheRead > 0 && <span className="ml-1 text-emerald-600 dark:text-emerald-400">({formatTokens(cacheRead)} cached)</span>}
-              {thinkingTokens > 0 && <span className="ml-1 text-orange-600 dark:text-orange-400">({formatTokens(thinkingTokens)} thinking)</span>}
+              {cacheRead > 0 && <span className="ml-1 text-success">({formatTokens(cacheRead)} {t('span.cached')})</span>}
+              {thinkingTokens > 0 && <span className="ml-1 text-warning">({formatTokens(thinkingTokens)} {t('span.thinking')})</span>}
             </span>
           )}
           <span>{formatDuration(span.duration_ms, span.start_time, span.end_time)}</span>
-          <span className={`rounded-full px-1.5 py-0.5 border text-2xs font-medium ${statusClass(span.status)}`}>
-            {span.status}
-          </span>
+          <StatusChip tone={statusTone(span.status)} label={statusLabelKey(span.status) ? t(statusLabelKey(span.status)!) : span.status} />
         </div>
       </button>
 
       {expanded && hasExpandContent && (
         <div className="px-4 pb-3 space-y-2" style={{ paddingLeft: `${28 + depth * 16}px` }}>
           {cacheCreate > 0 && (
-            <div className="text-2xs">
-              <span className="text-yellow-600 dark:text-yellow-400">+{formatTokens(cacheCreate)} cache write</span>
+            <div className="text-caption">
+              <span className="text-warning">+{formatTokens(cacheCreate)} {t('span.cacheWrite')}</span>
             </div>
           )}
-          {span.error && <p className="text-2xs text-red-600 dark:text-red-400">{span.error}</p>}
+          {span.error && <p className="text-caption text-danger">{span.error}</p>}
           {span.input_preview && (
             <div>
-              <p className="text-2xs font-medium text-text-secondary mb-1">{t('detail.input')}</p>
+              <p className="text-caption font-medium text-ink-secondary mb-1">{t('detail.input')}</p>
               <TraceContentPreview text={span.input_preview} />
             </div>
           )}
           {span.output_preview && (
             <div>
-              <p className="text-2xs font-medium text-text-secondary mb-1">{t('detail.output')}</p>
+              <p className="text-caption font-medium text-ink-secondary mb-1">{t('detail.output')}</p>
               <TraceContentPreview text={span.output_preview} />
             </div>
           )}

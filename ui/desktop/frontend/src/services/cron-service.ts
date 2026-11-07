@@ -10,6 +10,16 @@ export interface CreateJobParams {
   deleteAfterRun?: boolean
 }
 
+/** Fields of `cron.update` (gateway `store.CronJobPatch`); omitted fields stay unchanged. */
+export interface CronJobPatch {
+  name?: string
+  agentId?: string
+  enabled?: boolean
+  schedule?: CronSchedule
+  message?: string
+  deleteAfterRun?: boolean
+}
+
 export const cronService = {
   list(agentId?: string): Promise<{ jobs: CronJob[] | null }> {
     const params: Record<string, unknown> = {}
@@ -19,6 +29,11 @@ export const cronService = {
 
   create(params: CreateJobParams): Promise<CronJob> {
     return getWsClient().call('cron.create', params as unknown as Record<string, unknown>) as Promise<CronJob>
+  },
+
+  async update(jobId: string, patch: CronJobPatch): Promise<CronJob> {
+    const res = await getWsClient().call('cron.update', { jobId, patch: patch as unknown as Record<string, unknown> }) as { job: CronJob }
+    return res.job
   },
 
   delete(jobId: string): Promise<unknown> {

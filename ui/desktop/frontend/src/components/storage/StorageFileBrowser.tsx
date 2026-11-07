@@ -57,9 +57,9 @@ export function StorageFileBrowser({
   }, [treeWidth])
 
   return (
-    <div ref={containerRef} className="flex-1 flex border border-border rounded-lg overflow-hidden min-h-0">
+    <div ref={containerRef} className="flex-1 flex border border-border-subtle rounded-lg overflow-hidden min-h-0">
       {/* Tree panel */}
-      <div className="overflow-y-auto overscroll-contain bg-surface-tertiary/20 py-1 shrink-0" style={{ width: treeWidth }}>
+      <div className="overflow-y-auto overscroll-contain bg-surface-hover/20 py-1 shrink-0" style={{ width: treeWidth }}>
         <FileTreePanel
           tree={tree}
           filesLoading={filesLoading}
@@ -74,21 +74,21 @@ export function StorageFileBrowser({
 
       {/* Resizable divider */}
       <div
-        className="w-1 cursor-col-resize bg-border hover:bg-accent/30 active:bg-accent/50 shrink-0"
+        className="w-1 cursor-col-resize bg-border-subtle hover:bg-accent-subtle active:bg-accent-subtle shrink-0"
         onMouseDown={onMouseDown}
       />
 
       {/* Viewer panel */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {fileContent && (
-          <div className="flex items-center justify-between text-2xs text-text-muted border-b border-border px-3 py-2 shrink-0">
+          <div className="flex items-center justify-between text-caption text-ink-muted border-b border-border-subtle px-3 py-2 shrink-0">
             <span className="font-mono truncate">{fileContent.path}</span>
             <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-              <span className="text-2xs tabular-nums">{formatSize(fileContent.size)}</span>
+              <span className="text-caption tabular-nums">{formatSize(fileContent.size)}</span>
               {onDownload && (
                 <button
                   onClick={() => onDownload(fileContent.path)}
-                  className="p-0.5 text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+                  className="p-0.5 text-ink-muted hover:text-ink transition-colors cursor-pointer"
                   title={t('download')}
                 >
                   <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">

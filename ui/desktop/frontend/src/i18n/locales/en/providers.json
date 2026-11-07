@@ -1,7 +1,7 @@
 {
   "title": "Providers",
   "description": "Manage LLM providers",
-  "addProvider": "Add Provider",
+  "addProvider": "Add provider",
   "searchPlaceholder": "Search providers...",
   "emptyTitle": "No providers",
   "emptyDescription": "Add your first LLM provider to get started.",
@@ -13,7 +13,9 @@
     "apiBase": "API Base",
     "apiKey": "API Key",
     "status": "Status",
-    "actions": "Actions"
+    "actions": "Actions",
+    "models": "Models",
+    "enabled": "Enabled"
   },
   "apiKey": {
     "oauthToken": "OAuth Token",
@@ -25,8 +27,25 @@
     "oauthLinked": "OAuth linked"
   },
   "detail": {
-    "title": "Provider Details",
-    "advanced": "Advanced"
+    "advanced": "Advanced",
+    "identity": "Identity",
+    "identityDesc": "Provider identification",
+    "connection": "Connection",
+    "connectionDesc": "API endpoint configuration",
+    "acpConfig": "ACP Configuration",
+    "acpConfigDesc": "Agent subprocess settings",
+    "cliConfig": "Claude CLI",
+    "cliConfigDesc": "Local CLI authentication",
+    "oauthConfig": "OAuth",
+    "oauthConfigDesc": "ChatGPT OAuth authentication",
+    "nameReadonly": "Provider identifier, cannot be changed",
+    "providerType": "Provider Type",
+    "apiKeySection": "API Key",
+    "apiKeySectionDesc": "Authentication credentials",
+    "statusSection": "Status",
+    "statusSectionDesc": "Provider availability",
+    "enabledDesc": "Provider is active and available for agents",
+    "embeddingSection": "Embedding"
   },
   "form": {
     "transportAuth": "Transport & Authentication",
@@ -54,7 +73,18 @@
     "alreadyAdded": "(already added)",
     "nameFixed": "Name",
     "configure": "Configure an LLM provider connection.",
-    "lowercaseHint": "Lowercase, numbers, hyphens"
+    "lowercaseHint": "Lowercase, numbers, hyphens",
+    "apiKeyStored": "An API key is stored. Leave this empty to keep it.",
+    "testConnection": "Test connection",
+    "testOk": "Connection works.",
+    "testFailed": "Connection failed: {{error}}",
+    "errors": {
+      "summary_one": "Fix {{count}} field to continue",
+      "summary_other": "Fix {{count}} fields to continue",
+      "saveFailed": "Couldn't save the provider",
+      "typeRequired": "Choose a provider type.",
+      "apiBaseScheme": "Enter a URL that starts with http:// or https://."
+    }
   },
   "delete": {
     "title": "Delete Provider",
@@ -133,27 +163,6 @@
     "notAuthenticated": "Not authenticated",
     "runOnServer": "Run on the server terminal:",
     "recheckButton": "Re-check"
-  },
-  "detail": {
-    "advanced": "Advanced",
-    "identity": "Identity",
-    "identityDesc": "Provider identification",
-    "connection": "Connection",
-    "connectionDesc": "API endpoint configuration",
-    "acpConfig": "ACP Configuration",
-    "acpConfigDesc": "Agent subprocess settings",
-    "cliConfig": "Claude CLI",
-    "cliConfigDesc": "Local CLI authentication",
-    "oauthConfig": "OAuth",
-    "oauthConfigDesc": "ChatGPT OAuth authentication",
-    "nameReadonly": "Provider identifier, cannot be changed",
-    "providerType": "Provider Type",
-    "apiKeySection": "API Key",
-    "apiKeySectionDesc": "Authentication credentials",
-    "statusSection": "Status",
-    "statusSectionDesc": "Provider availability",
-    "enabledDesc": "Provider is active and available for agents",
-    "embeddingSection": "Embedding"
   },
   "embedding": {
     "enable": "Enable Embedding",
@@ -296,5 +305,13 @@
       "emptyBody": "Try a longer range, or chat with an agent that uses this provider.",
       "staleNote": "Couldn't refresh. Showing data from {{time}}."
     }
+  },
+  "enableToggle": "Enable {{name}}",
+  "rowMenu": "Actions for {{name}}",
+  "summary_one": "{{count}} provider · {{active}} enabled",
+  "summary_other": "{{count}} providers · {{active}} enabled",
+  "states": {
+    "errorTitle": "Couldn't load providers",
+    "errorBody": "The gateway did not return the provider list. Check the connection and try again."
   }
 }

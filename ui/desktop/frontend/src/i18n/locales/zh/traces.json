@@ -29,7 +29,10 @@
     "tokens": "令牌：",
     "toolCalls": "工具",
     "export": "导出追踪",
-    "stopRun": "停止运行"
+    "stopRun": "停止运行",
+    "exported": "追踪已导出",
+    "exportFailed": "导出追踪失败",
+    "tokensInOut": "输入 {{input}} / 输出 {{output}}"
   },
   "emptyDescription": "暂无追踪记录。当Agent处理请求时将自动记录追踪。",
   "emptyTitle": "暂无追踪",
@@ -48,7 +51,9 @@
     "model": "模型：",
     "output": "输出：",
     "thinking": "思考",
-    "tokens": "令牌："
+    "tokens": "令牌：",
+    "copied": "已复制",
+    "createdAt": "创建时间："
   },
   "title": "追踪",
   "toast": {
@@ -58,5 +63,24 @@
     "abortNotFound": "运行已完成或未找到"
   },
   "unnamed": "未命名",
-  "stopRun": "停止运行"
+  "stopRun": "停止运行",
+  "delegated": "已委派",
+  "status": {
+    "completed": "已完成",
+    "failed": "失败",
+    "running": "运行中"
+  },
+  "noMatchTitle": "此智能体没有追踪记录",
+  "noMatchDescription": "请换一个智能体或清除筛选。",
+  "clearFilter": "清除筛选",
+  "startChat": "开始对话",
+  "openAgents": "打开智能体",
+  "loadMore": "加载更多（{{shown}}/{{total}}）",
+  "summary_other": "{{count}} 条追踪",
+  "filterByAgent": "按智能体筛选",
+  "states": {
+    "errorTitle": "无法加载追踪记录",
+    "errorBody": "网关未返回任何追踪记录。请检查连接后重试。",
+    "detailErrorTitle": "无法加载此追踪记录"
+  }
 }
