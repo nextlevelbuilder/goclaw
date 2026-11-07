@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 )
@@ -33,7 +34,8 @@ func secretVaultCmd() *cobra.Command {
 Values are write-only. "set" reads the value from stdin (hidden when stdin is a
 terminal); nothing prints it back. Requires GOCLAW_ENCRYPTION_KEY.`,
 	}
-	cmd.AddCommand(secretVaultListCmd(), secretVaultSetCmd(), secretVaultApproveCmd(), secretVaultDeleteCmd())
+	cmd.AddCommand(secretVaultListCmd(), secretVaultSetCmd(), secretVaultApproveCmd(), secretVaultDeleteCmd(),
+		secretVaultRewrapCmd())
 	return cmd
 }
 
@@ -43,7 +45,7 @@ func openSecretVault(cmd *cobra.Command, tenantID string) (store.SecretVaultStor
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("--tenant-id must be a tenant UUID")
 	}
-	encKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
+	encKey := crypto.ActiveKeyFromEnv()
 	if encKey == "" {
 		return nil, nil, nil, fmt.Errorf("GOCLAW_ENCRYPTION_KEY is not set: the vault refuses to store plaintext")
 	}
@@ -243,7 +245,7 @@ func setSecretVault(ctx context.Context, st store.SecretVaultStore, o secretVaul
 		if existing == nil {
 			return "", err
 		}
-		if err = st.ReplaceValue(ctx, existing.ID, payload); err != nil {
+		if _, err = st.ReplaceValue(ctx, existing.ID, payload, existing.Revision); err != nil {
 			return "", err
 		}
 		e, action, msg = existing, store.SecretAuditUpdated, fmt.Sprintf("Replaced the value of secret %q.", o.Name)
@@ -294,6 +296,54 @@ func secretVaultDeleteCmd() *cobra.Command {
 	_ = cmd.MarkFlagRequired("tenant-id")
 	_ = cmd.MarkFlagRequired("name")
 	return cmd
+}
+
+// secretVaultRewrapCmd upgrades legacy ciphertext to the entry-bound envelope.
+func secretVaultRewrapCmd() *cobra.Command {
+	var (
+		tenantID string
+		dryRun   bool
+	)
+	cmd := &cobra.Command{
+		Use:   "rewrap",
+		Short: "Seal legacy secrets under the entry-bound envelope (values are never printed)",
+		Long: `Re-encrypts secrets stored before the entry-bound envelope so they can no
+longer be copied onto another entry. Revisions and timestamps are unchanged.
+Safe to re-run. Exits non-zero when any secret cannot be read with the
+configured key; those are listed by ID and left untouched.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			st, ctx, closeFn, err := openSecretVault(cmd, tenantID)
+			if err != nil {
+				return err
+			}
+			defer closeFn()
+			return rewrapSecretVault(ctx, st, dryRun, cmd.OutOrStdout())
+		},
+	}
+	cmd.Flags().StringVar(&tenantID, "tenant-id", "", "Tenant UUID (required)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Only count what would be rewrapped")
+	_ = cmd.MarkFlagRequired("tenant-id")
+	return cmd
+}
+
+func rewrapSecretVault(ctx context.Context, st store.SecretVaultStore, dryRun bool, out io.Writer) error {
+	rep, err := st.RewrapSecrets(ctx, dryRun)
+	if err != nil {
+		return err
+	}
+	verb := "Rewrapped"
+	if dryRun {
+		verb = "Would rewrap"
+	}
+	fmt.Fprintf(out, "%s %d of %d secrets (%d already bound, %d unreadable).\n",
+		verb, rep.Rewrapped, rep.Total, rep.Current, len(rep.Unreadable))
+	for _, id := range rep.Unreadable {
+		fmt.Fprintf(out, "unreadable: %s\n", id)
+	}
+	if len(rep.Unreadable) > 0 {
+		return fmt.Errorf("%d secrets could not be read with the configured key", len(rep.Unreadable))
+	}
+	return nil
 }
 
 // readSecretValue reads the secret from stdin without echoing it: hidden input

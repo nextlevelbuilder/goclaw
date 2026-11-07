@@ -214,8 +214,12 @@ export function SecretVaultPage() {
         entry={editing}
         onCreate={createSecret}
         onUpdate={async (id, meta, value) => {
-          await updateMeta(id, meta);
-          if (value) await replaceValue(id, value);
+          const current = items.find((e) => e.id === id);
+          if (!current) return;
+          // Each write returns the entry at its new revision; the value write
+          // must be pinned to that one, not to the revision the form opened with.
+          const updated = await updateMeta(id, meta, current.revision);
+          if (value) await replaceValue(id, value, updated.revision);
         }}
       />
       <SecretVaultGrantsDialog entry={grantsFor} onClose={() => setGrantsFor(null)} />

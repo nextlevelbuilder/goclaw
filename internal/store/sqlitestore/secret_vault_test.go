@@ -82,20 +82,20 @@ func TestSecretVault_CRUDAndResolve(t *testing.T) {
 	}
 
 	appr, hints, doms := true, "use for GitHub", []string{"*.example.com"}
-	if err := s.UpdateMeta(ctx, e.ID, store.SecretVaultMetaUpdate{RequireApproval: &appr, Hints: &hints, AllowedDomains: &doms}); err != nil {
+	if _, err := s.UpdateMeta(ctx, e.ID, store.SecretVaultMetaUpdate{RequireApproval: &appr, Hints: &hints, AllowedDomains: &doms}, 0); err != nil {
 		t.Fatal(err)
 	}
 	g, err := s.Get(ctx, e.ID)
 	if err != nil || !g.RequireApproval || g.Hints != hints || g.AllowedDomains[0] != "*.example.com" {
 		t.Fatalf("get after update: %v", err)
 	}
-	if err := s.ReplaceValue(ctx, e.ID, store.SecretVaultPayload{Secret: "tok-456"}); err != nil {
+	if _, err := s.ReplaceValue(ctx, e.ID, store.SecretVaultPayload{Secret: "tok-456"}, 0); err != nil {
 		t.Fatal(err)
 	}
 	if _, p, _ := s.ResolveForUse(ctx, agent, "gh-token"); p.Secret != "tok-456" {
 		t.Fatal("value not replaced")
 	}
-	if err := s.ReplaceValue(ctx, e.ID, store.SecretVaultPayload{Username: "u", Secret: "x"}); !errors.Is(err, store.ErrSecretVaultInvalid) {
+	if _, err := s.ReplaceValue(ctx, e.ID, store.SecretVaultPayload{Username: "u", Secret: "x"}, 0); !errors.Is(err, store.ErrSecretVaultInvalid) {
 		t.Fatalf("api_key with username: %v", err)
 	}
 
@@ -314,8 +314,10 @@ func TestSecretVault_AgentCreatedIsPendingUntilApproved(t *testing.T) {
 		t.Fatalf("second approve: %v", err)
 	}
 	resolved, p, err := s.ResolveForUse(ctx, agent, "agent-made")
+	// The confirmed domains are bound into the ciphertext: approval re-seals
+	// the value and moves the entry to the next revision.
 	if err != nil || p.Secret != "agent-value" || resolved.Status != store.SecretVaultStatusActive ||
-		len(resolved.AllowedDomains) != 1 || resolved.AllowedDomains[0] != "final.example.com" {
+		len(resolved.AllowedDomains) != 1 || resolved.AllowedDomains[0] != "final.example.com" || resolved.Revision != 2 {
 		t.Fatalf("resolve after approve: %+v %v", resolved, err)
 	}
 	if meta, _ := s.ListGrantedMeta(ctx, agent); len(meta) != 1 {
@@ -435,12 +437,13 @@ func TestSQLiteSchema_FreshDBHasSecretVaultOriginColumns(t *testing.T) {
 	}
 }
 
-func TestSQLiteSchemaUpgrade_64_to_65_SecretVaultOrigin(t *testing.T) {
+func TestSQLiteSchemaUpgrade_64_to_66_SecretVaultRevisionAndOrigin(t *testing.T) {
 	db := openTestDB(t)
 	if err := EnsureSchema(db); err != nil {
 		t.Fatal(err)
 	}
-	// Rebuild the vault tables in their pre-upgrade shape and keep one row.
+	// Rebuild the vault tables in their v64 shape (no revision, no origin
+	// columns) and keep one row; the upgrade applies both patches in order.
 	mustExec(t, db, `DROP TABLE secret_vault_audit`)
 	mustExec(t, db, `DROP TABLE secret_vault_grants`)
 	mustExec(t, db, `DROP TABLE secret_vault_entries`)
@@ -453,7 +456,7 @@ func TestSQLiteSchemaUpgrade_64_to_65_SecretVaultOrigin(t *testing.T) {
 	}
 	mustExec(t, db, `UPDATE schema_version SET version = 64`)
 	if err := EnsureSchema(db); err != nil {
-		t.Fatalf("v64 to v65: %v", err)
+		t.Fatalf("v64 to v66: %v", err)
 	}
 	var v int
 	if err := db.QueryRow(`SELECT version FROM schema_version LIMIT 1`).Scan(&v); err != nil || v != SchemaVersion {
@@ -461,18 +464,19 @@ func TestSQLiteSchemaUpgrade_64_to_65_SecretVaultOrigin(t *testing.T) {
 	}
 	var status, via string
 	var byAgent sql.NullString
-	if err := db.QueryRow(`SELECT status, created_via, created_by_agent FROM secret_vault_entries WHERE id = ?`, id).
-		Scan(&status, &via, &byAgent); err != nil {
+	var revision int64
+	if err := db.QueryRow(`SELECT status, created_via, created_by_agent, revision FROM secret_vault_entries WHERE id = ?`, id).
+		Scan(&status, &via, &byAgent, &revision); err != nil {
 		t.Fatal(err)
 	}
-	if status != store.SecretVaultStatusActive || via != store.SecretVaultCreatedViaUser || byAgent.Valid {
-		t.Fatalf("existing row after upgrade: %s %s %v", status, via, byAgent)
+	if status != store.SecretVaultStatusActive || via != store.SecretVaultCreatedViaUser || byAgent.Valid || revision != 1 {
+		t.Fatalf("existing row after upgrade: %s %s %v rev=%d", status, via, byAgent, revision)
 	}
 
 	// Re-running the patch on an already-upgraded table is a no-op.
 	mustExec(t, db, `UPDATE schema_version SET version = 64`)
 	if err := EnsureSchema(db); err != nil {
-		t.Fatalf("re-run v64 to v65: %v", err)
+		t.Fatalf("re-run v64 to v66: %v", err)
 	}
 }
 

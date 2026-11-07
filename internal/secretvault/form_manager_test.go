@@ -50,11 +50,11 @@ func (f *formStore) Create(_ context.Context, e *store.SecretVaultEntry, p store
 	return nil
 }
 
-func (f *formStore) ReplaceValue(_ context.Context, id uuid.UUID, p store.SecretVaultPayload) error {
+func (f *formStore) ReplaceValue(_ context.Context, id uuid.UUID, p store.SecretVaultPayload, _ int64) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.values[id] = p
-	return nil
+	return 2, nil
 }
 
 func (f *formStore) List(context.Context) ([]store.SecretVaultEntry, error) {

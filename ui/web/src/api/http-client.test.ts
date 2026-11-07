@@ -45,4 +45,27 @@ describe("HttpClient", () => {
 
     expect(result).toEqual(payload);
   });
+
+  it("sends custom headers on PUT and surfaces a 409 revision conflict code", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: "changed", code: "revision_conflict", current_revision: 5 }), {
+        status: 409,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+
+    const client = createClient();
+    await expect(client.put("/v1/secret-vault/1", { hints: "x" }, { "If-Match": "3" })).rejects.toMatchObject({
+      code: "revision_conflict",
+      status: 409,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://example.com/v1/secret-vault/1",
+      expect.objectContaining({
+        method: "PUT",
+        headers: expect.objectContaining({ "If-Match": "3", "Content-Type": "application/json" }),
+      }),
+    );
+  });
 });

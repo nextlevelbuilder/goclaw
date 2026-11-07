@@ -59,11 +59,11 @@ func TestTenantIsolation_SecretVault(t *testing.T) {
 	})
 
 	t.Run("writes", func(t *testing.T) {
-		if err := s.ReplaceValue(ctxA, entryB.ID, store.SecretVaultPayload{Secret: "hijack"}); !errors.Is(err, store.ErrSecretVaultNotFound) {
+		if _, err := s.ReplaceValue(ctxA, entryB.ID, store.SecretVaultPayload{Secret: "hijack"}, 0); !errors.Is(err, store.ErrSecretVaultNotFound) {
 			t.Fatalf("replace value: %v", err)
 		}
 		hints := "hijacked"
-		if err := s.UpdateMeta(ctxA, entryB.ID, store.SecretVaultMetaUpdate{Hints: &hints}); !errors.Is(err, store.ErrSecretVaultNotFound) {
+		if _, err := s.UpdateMeta(ctxA, entryB.ID, store.SecretVaultMetaUpdate{Hints: &hints}, 0); !errors.Is(err, store.ErrSecretVaultNotFound) {
 			t.Fatalf("update meta: %v", err)
 		}
 		if err := s.SetGrants(ctxA, entryB.ID, []uuid.UUID{agentA}); err == nil {
@@ -124,4 +124,47 @@ func TestTenantIsolation_SecretVault(t *testing.T) {
 		}
 	})
 
+}
+
+// A ciphertext copied from tenant A's row onto tenant B's row must not decrypt
+// there, and a stale revision must not overwrite a newer value.
+func TestTenantIsolation_SecretVaultCiphertextBinding(t *testing.T) {
+	db := testDB(t)
+	tenantA, agentA, tenantB, agentB := seedTwoTenants(t, db)
+	defer cleanupTenant(db, tenantA, agentA)
+	defer cleanupTenant(db, tenantB, agentB)
+
+	s := pg.NewPGSecretVaultStore(db, vaultInvariantKey)
+	ctxA, ctxB := tenantCtx(tenantA), tenantCtx(tenantB)
+
+	a := &store.SecretVaultEntry{Name: "same-name", Kind: store.SecretKindAPIKey, AllowedDomains: []string{"a.example.com"}, CreatedBy: "ua"}
+	b := &store.SecretVaultEntry{Name: "same-name", Kind: store.SecretKindAPIKey, AllowedDomains: []string{"a.example.com"}, CreatedBy: "ub"}
+	if err := s.Create(ctxA, a, store.SecretVaultPayload{Secret: "tenant-a-value"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Create(ctxB, b, store.SecretVaultPayload{Secret: "tenant-b-value"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetGrants(ctxB, b.ID, []uuid.UUID{agentB}); err != nil {
+		t.Fatal(err)
+	}
+
+	var enc string
+	if err := db.QueryRow(`SELECT encrypted_payload FROM secret_vault_entries WHERE id = $1`, a.ID).Scan(&enc); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE secret_vault_entries SET encrypted_payload = $1 WHERE id = $2`, enc, b.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, p, err := s.ResolveForUse(ctxB, agentB, "same-name"); err == nil {
+		t.Fatalf("transplanted ciphertext decrypted to %q", p.Secret)
+	}
+
+	rev, err := s.ReplaceValue(ctxA, a.ID, store.SecretVaultPayload{Secret: "v2"}, 1)
+	if err != nil || rev != 2 {
+		t.Fatalf("replace at rev 1 = %d, %v", rev, err)
+	}
+	if _, err := s.ReplaceValue(ctxA, a.ID, store.SecretVaultPayload{Secret: "stale"}, 1); !errors.Is(err, store.ErrSecretVaultConflict) {
+		t.Fatalf("stale replace: %v", err)
+	}
 }

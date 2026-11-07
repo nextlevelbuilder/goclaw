@@ -16,7 +16,7 @@ var schemaSQL string
 
 // SchemaVersion is the current SQLite schema version.
 // Bump this when adding new migration steps below.
-const SchemaVersion = 65
+const SchemaVersion = 66
 
 // migrations maps version → SQL to apply when upgrading FROM that version.
 // schema.sql always represents the LATEST full schema (for fresh DBs).
@@ -216,6 +216,7 @@ const sqliteSecretVaultTables = `CREATE TABLE IF NOT EXISTS secret_vault_entries
     allowed_domains   TEXT NOT NULL CHECK (json_valid(allowed_domains) AND json_array_length(allowed_domains) > 0),
     require_approval  INTEGER NOT NULL DEFAULT 0,
     hints             TEXT NOT NULL DEFAULT '',
+    revision          INTEGER NOT NULL DEFAULT 1,
     created_by        TEXT NOT NULL DEFAULT '',
     created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -245,16 +246,19 @@ CREATE INDEX IF NOT EXISTS idx_secret_vault_audit_entry ON secret_vault_audit(te
 `
 
 // sqliteSecretVaultOriginIndex is the per-agent pending cap index from PG
-// migration 000104. Safe to re-run.
+// migration 000105. Safe to re-run.
 const sqliteSecretVaultOriginIndex = `CREATE INDEX IF NOT EXISTS idx_secret_vault_entries_pending_agent
     ON secret_vault_entries(tenant_id, created_by_agent) WHERE status = 'pending';
 `
 
 var migrations = map[int]string{
-	// Version 64 → 65: agent-written vault entries (status, created_via,
-	// created_by_agent). Mirrors PG migration 000104. Built at runtime by
+	// Version 65 → 66: agent-written vault entries (status, created_via,
+	// created_by_agent). Mirrors PG migration 000105. Built at runtime by
 	// sqliteSecretVaultOriginMigrationPatch so existing columns are skipped.
-	64: sqliteSecretVaultOriginIndex,
+	65: sqliteSecretVaultOriginIndex,
+	// Version 64 → 65: secret vault revision column (PG migration 000104).
+	// The body is replaced at apply time by sqliteSecretVaultRevisionMigrationPatch.
+	64: "SELECT 1;",
 	// Version 63 → 64: Secret Vault tables. Mirrors PG migration 000103.
 	63: sqliteSecretVaultTables,
 	// Version 61 → 62: per-agent model roles (role → "provider/model").
@@ -1776,6 +1780,12 @@ func EnsureSchema(db *sql.DB) error {
 					patch = `SELECT 1;`
 				}
 			}
+			if v == 64 {
+				patch, err = sqliteSecretVaultRevisionMigrationPatch(db)
+				if err != nil {
+					return fmt.Errorf("inspect secret vault revision column: %w", err)
+				}
+			}
 			if v == 49 {
 				patch, err = sqliteCronProviderMigrationPatch(db)
 				if err != nil {
@@ -1812,7 +1822,7 @@ func EnsureSchema(db *sql.DB) error {
 					return fmt.Errorf("inspect agent model_roles column: %w", err)
 				}
 			}
-			if v == 64 {
+			if v == 65 {
 				patch, err = sqliteSecretVaultOriginMigrationPatch(db)
 				if err != nil {
 					return fmt.Errorf("inspect secret vault origin columns: %w", err)
@@ -1934,6 +1944,17 @@ func sqliteCronProviderMigrationPatch(db *sql.DB) (string, error) {
 	return patch, nil
 }
 
+func sqliteSecretVaultRevisionMigrationPatch(db *sql.DB) (string, error) {
+	hasColumn, err := sqliteColumnExists(db, "secret_vault_entries", "revision")
+	if err != nil {
+		return "", err
+	}
+	if hasColumn {
+		return "SELECT 1;", nil
+	}
+	return "ALTER TABLE secret_vault_entries ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;", nil
+}
+
 func sqliteUsageEventTokenMigrationPatch(db *sql.DB) (string, error) {
 	columns := []struct {
 		table string
@@ -2042,7 +2063,7 @@ func sqliteProviderDeclarationMigrationPatch(db *sql.DB) (string, error) {
 	return patch, nil
 }
 
-// sqliteSecretVaultOriginMigrationPatch builds the v64 → v65 patch. SQLite has
+// sqliteSecretVaultOriginMigrationPatch builds the v65 → v66 patch. SQLite has
 // no ADD COLUMN IF NOT EXISTS, so each column is only added when missing.
 // Existing rows take the defaults: user-created and active.
 func sqliteSecretVaultOriginMigrationPatch(db *sql.DB) (string, error) {

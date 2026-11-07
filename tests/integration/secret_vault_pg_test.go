@@ -154,8 +154,8 @@ func TestSecretVaultPG_AgentCreatedPendingUntilApproved(t *testing.T) {
 		t.Fatalf("second approve: %v", err)
 	}
 	resolved, p, err := s.ResolveForUse(ctxA, agentA, "captured-jwt")
-	if err != nil || p.Secret != "jwt-value" || resolved.AllowedDomains[0] != "final.example.com" {
-		t.Fatalf("resolve after approve: %v", err)
+	if err != nil || p.Secret != "jwt-value" || resolved.AllowedDomains[0] != "final.example.com" || resolved.Revision != 2 {
+		t.Fatalf("resolve after approve: %+v %v", resolved, err)
 	}
 	if n, _ := s.CountPendingByAgent(ctxA, agentA); n != 0 {
 		t.Fatalf("count after approve: %d", n)

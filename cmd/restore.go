@@ -11,6 +11,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/backup"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 )
 
@@ -166,7 +167,7 @@ func loadS3Client(ctx context.Context, cfg *config.Config) (*backup.S3Client, er
 	}
 	defer db.Close()
 
-	encKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
+	encKey := crypto.ActiveKeyFromEnv()
 	secrets := pg.NewPGConfigSecretsStore(db, encKey)
 
 	s3cfg, err := backup.LoadS3Config(ctx, secrets)

@@ -22,7 +22,6 @@
   "card": {
     "apiKeySet": "Đã đặt API key",
     "authenticated": "Đã xác thực",
-    "oauthLinked": "Đã liên kết OAuth",
     "oauthAccount": "Tài khoản OAuth",
     "oauthAlias": "Bí danh: {{name}}",
     "connected": "Đã kết nối",
@@ -65,6 +64,7 @@
     }
   },
   "detail": {
+    "title": "Chi tiết Provider",
     "advanced": "Nâng cao",
     "identity": "Danh tính",
     "identityDesc": "Nhận dạng provider",
@@ -128,7 +128,11 @@
     "poolActivityEmpty": "Chưa có hoạt động",
     "poolActivityEmptyDesc": "Hoạt động pool sẽ xuất hiện ở đây khi agent bắt đầu gửi request qua pool này.",
     "wireApi": "Giao thức truyền tải",
-    "authKind": "Xác thực"
+    "authKind": "Xác thực",
+    "tabs": {
+      "connection": "Kết nối",
+      "usage": "Sử dụng"
+    }
   },
   "form": {
     "createTitle": "Thêm provider",
@@ -406,5 +410,71 @@
     "error": "Không tải được danh sách model: {{message}}",
     "refresh": "Làm mới",
     "refreshing": "Đang làm mới"
+  },
+  "usage": {
+    "tokensPerDay": "Token theo ngày",
+    "range": {
+      "label": "Khoảng thời gian",
+      "last24h": "24 giờ",
+      "last7d": "7 ngày",
+      "last30d": "30 ngày"
+    },
+    "banner": {
+      "since": "{{reason}} từ {{time}}",
+      "resetIn": "Các lệnh gọi tới nhà cung cấp này đang tạm dừng. Dự kiến khôi phục sau khoảng {{minutes}} phút.",
+      "resetSoon": "Các lệnh gọi tới nhà cung cấp này đang tạm dừng. Sắp được khôi phục.",
+      "failures": "Số lần lỗi liên tiếp: {{count}}"
+    },
+    "metrics": {
+      "tokens": "Token",
+      "costEstimated": "Ước tính {{cost}}",
+      "requests": "Yêu cầu",
+      "perDay": "{{value}} mỗi ngày",
+      "errorRate": "Tỷ lệ lỗi",
+      "errorRateDetail": "{{errors}} trên {{calls}} lệnh gọi bị lỗi",
+      "latency": "Độ trễ trung vị",
+      "p95": "p95 {{value}}"
+    },
+    "recentErrors": {
+      "title": "Lỗi gần đây",
+      "empty": "Không có lệnh gọi lỗi trong khoảng này.",
+      "count": "Số lệnh gọi lỗi: {{count}}"
+    },
+    "empty": {
+      "title": "Không có lệnh gọi trong khoảng này",
+      "description": "Nhà cung cấp này chưa xử lý lệnh gọi nào trong khoảng đã chọn. Hãy thử khoảng dài hơn.",
+      "action": "Xem 30 ngày qua"
+    },
+    "error": {
+      "title": "Không thể tải dữ liệu sử dụng",
+      "description": "Gateway trả về lỗi khi đọc dữ liệu sử dụng của nhà cung cấp này. Vui lòng thử lại sau.",
+      "retry": "Thử lại",
+      "tracingUnavailable": "Gateway chưa có kho tracing nên không xem được lỗi và độ trễ theo từng lượt gọi. Dữ liệu sử dụng sẽ hiển thị khi tracing được bật."
+    },
+    "stale": {
+      "title": "Không kết nối được gateway",
+      "description": "Đang hiển thị dữ liệu đã lưu lúc {{time}}. Dữ liệu có thể đã cũ.",
+      "retry": "Thử lại ngay",
+      "refreshFailedTitle": "Không thể làm mới dữ liệu sử dụng"
+    },
+    "offline": {
+      "title": "Không kết nối được gateway",
+      "description": "Kiểm tra kết nối mạng và gateway có đang chạy không, rồi thử lại."
+    },
+    "loading": "Đang tải dữ liệu sử dụng",
+    "errorClass": {
+      "rate_limit": "Giới hạn tốc độ",
+      "overloaded": "Quá tải",
+      "timeout": "Hết thời gian chờ",
+      "auth": "Xác thực thất bại",
+      "auth_permanent": "Thông tin xác thực không hợp lệ",
+      "billing": "Vấn đề thanh toán",
+      "format": "Định dạng yêu cầu không hợp lệ",
+      "model_not_found": "Không tìm thấy mô hình",
+      "content_policy": "Chính sách nội dung",
+      "server_error": "Lỗi máy chủ",
+      "context_overflow": "Ngữ cảnh quá dài",
+      "unknown": "Lỗi không xác định"
+    }
   }
 }

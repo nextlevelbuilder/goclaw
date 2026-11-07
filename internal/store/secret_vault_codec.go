@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
 
@@ -120,9 +121,11 @@ func ValidateSecretVaultPayload(kind string, p SecretVaultPayload) error {
 	return nil
 }
 
-// EncodeSecretPayload encrypts a payload for storage. It fails closed when the
-// key is empty because crypto.Encrypt would otherwise return plaintext.
-func EncodeSecretPayload(p SecretVaultPayload, key string) (string, error) {
+// EncodeSecretPayloadAAD encrypts a payload for storage as a v2 envelope bound
+// to the entry (see SecretPayloadAAD). e must be the entry as it will be
+// stored, including the revision being written. It fails closed when the key
+// is empty.
+func EncodeSecretPayloadAAD(p SecretVaultPayload, key string, e *SecretVaultEntry) (string, error) {
 	if key == "" {
 		return "", ErrSecretVaultNoKey
 	}
@@ -130,26 +133,39 @@ func EncodeSecretPayload(p SecretVaultPayload, key string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("secret vault: encode payload: %w", err)
 	}
-	enc, err := crypto.Encrypt(string(raw), key)
+	enc, err := crypto.EncryptWithAAD(string(raw), key, SecretPayloadAAD(e))
 	if err != nil {
 		return "", fmt.Errorf("secret vault: encrypt payload: %w", err)
-	}
-	if !crypto.IsEncrypted(enc) {
-		return "", ErrSecretVaultNotEncrypted
 	}
 	return enc, nil
 }
 
-// DecodeSecretPayload decrypts a stored payload. A stored value without the
-// encryption prefix is rejected rather than returned as-is.
-func DecodeSecretPayload(stored, key string) (SecretVaultPayload, error) {
+// IsLegacySecretCiphertext reports whether a stored payload is a pre-binding
+// "aes-gcm:" value that has not been rewrapped yet.
+func IsLegacySecretCiphertext(stored string) bool {
+	return crypto.IsEncrypted(stored)
+}
+
+// DecodeSecretPayload decrypts a stored payload for entry e. A v2 value is
+// opened with the entry's AAD, so it only decrypts in the row, tenant, name,
+// kind, policy and revision it was written for. A legacy "aes-gcm:" value is
+// still readable until `goclaw secret-vault rewrap` converts it. A value
+// without either prefix is rejected rather than returned as-is.
+func DecodeSecretPayload(stored, key string, e *SecretVaultEntry) (SecretVaultPayload, error) {
 	if key == "" {
 		return SecretVaultPayload{}, ErrSecretVaultNoKey
 	}
-	if !crypto.IsEncrypted(stored) {
+	var plain string
+	var err error
+	switch {
+	case crypto.IsEncryptedAAD(stored) || crypto.IsEncryptedV3(stored):
+		plain, err = crypto.DecryptWithAAD(stored, key, SecretPayloadAAD(e))
+	case crypto.IsEncrypted(stored):
+		slog.Warn("security.secret_vault.legacy_ciphertext", "entry_id", e.ID)
+		plain, err = crypto.Decrypt(stored, key)
+	default:
 		return SecretVaultPayload{}, ErrSecretVaultNotEncrypted
 	}
-	plain, err := crypto.Decrypt(stored, key)
 	if err != nil {
 		return SecretVaultPayload{}, fmt.Errorf("secret vault: decrypt payload: %w", err)
 	}
@@ -158,4 +174,72 @@ func DecodeSecretPayload(stored, key string) (SecretVaultPayload, error) {
 		return SecretVaultPayload{}, fmt.Errorf("secret vault: decode payload: %w", err)
 	}
 	return SecretVaultPayload{Username: w.Username, Secret: w.Secret}, nil
+}
+
+// SecretRewrapOutcome is the result of examining one stored payload.
+type SecretRewrapOutcome int
+
+const (
+	// SecretRewrapCurrent: already a bound envelope that opens for this entry.
+	SecretRewrapCurrent SecretRewrapOutcome = iota
+	// SecretRewrapUpgrade: a legacy value; the returned ciphertext replaces it.
+	SecretRewrapUpgrade
+	// SecretRewrapUnreadable: cannot be opened with the key for this entry.
+	SecretRewrapUnreadable
+)
+
+// SecretRewrapReport counts the rows a rewrap examined. Unreadable holds entry
+// IDs only; no name, value or ciphertext leaves the store.
+type SecretRewrapReport struct {
+	Total      int
+	Rewrapped  int
+	Current    int
+	Unreadable []uuid.UUID
+}
+
+// RewrapSecretCiphertext decides what to do with one stored payload. A legacy
+// value is decrypted and sealed again bound to entry e at its current
+// revision. A bound value is verified, and sealed again only when it was
+// written under a key other than the active one. Anything else, or a value the key
+// cannot open, is reported unreadable and left untouched.
+func RewrapSecretCiphertext(stored, key string, e *SecretVaultEntry) (string, SecretRewrapOutcome) {
+	switch {
+	case crypto.IsEncryptedAAD(stored) || crypto.IsEncryptedV3(stored):
+		p, err := DecodeSecretPayload(stored, key, e)
+		if err != nil {
+			return "", SecretRewrapUnreadable
+		}
+		if !secretNeedsKeyUpgrade(stored, key) {
+			return "", SecretRewrapCurrent
+		}
+		enc, err := EncodeSecretPayloadAAD(p, key, e)
+		if err != nil {
+			return "", SecretRewrapUnreadable
+		}
+		return enc, SecretRewrapUpgrade
+	case crypto.IsEncrypted(stored):
+		p, err := DecodeSecretPayload(stored, key, e)
+		if err != nil {
+			return "", SecretRewrapUnreadable
+		}
+		enc, err := EncodeSecretPayloadAAD(p, key, e)
+		if err != nil {
+			return "", SecretRewrapUnreadable
+		}
+		return enc, SecretRewrapUpgrade
+	default:
+		return "", SecretRewrapUnreadable
+	}
+}
+
+// secretNeedsKeyUpgrade reports whether a bound value should be sealed again
+// under the active key: a v2 value once a keyring is installed, or a v3 value
+// that names a different key than the active one.
+func secretNeedsKeyUpgrade(stored, activeKey string) bool {
+	activeKID, ok := crypto.ActiveKeyID(activeKey)
+	if !ok {
+		return false // no keyring holds the active key: v2 is what we would write
+	}
+	kid, isV3 := crypto.EnvelopeKeyID(stored)
+	return !isV3 || kid != activeKID
 }

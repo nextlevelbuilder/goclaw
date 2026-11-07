@@ -22,10 +22,11 @@ export class HttpClient {
     });
   }
 
-  async put<T>(path: string, body?: unknown): Promise<T> {
+  async put<T>(path: string, body?: unknown, headers?: Record<string, string>): Promise<T> {
     return this.request<T>(this.buildUrl(path), {
       method: "PUT",
       body: body ? JSON.stringify(body) : undefined,
+      headers,
     });
   }
 
@@ -149,7 +150,9 @@ export class HttpClient {
       if (res.status === 401 || code === "TENANT_ACCESS_REVOKED") {
         this.onAuthFailure?.();
       }
-      throw new ApiError(code, message);
+      const apiErr = new ApiError(code, message);
+      apiErr.status = res.status;
+      throw apiErr;
     }
 
     return this.readJson<T>(res);

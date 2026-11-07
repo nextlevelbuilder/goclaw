@@ -15,6 +15,9 @@ export const ErrorCodes = {
 } as const;
 
 export class ApiError extends Error {
+  /** HTTP status of the failed response; undefined when the gateway was not reached. */
+  status?: number;
+
   constructor(
     public code: string,
     message: string,

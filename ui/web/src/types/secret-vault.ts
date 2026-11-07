@@ -11,6 +11,8 @@ export interface SecretVaultEntry {
   allowed_domains: string[];
   require_approval: boolean;
   hints: string;
+  /** Version of the entry; sent back as If-Match so a stale edit is refused. */
+  revision: number;
   created_by: string;
   status: SecretVaultStatus;
   created_via: "user" | "agent";

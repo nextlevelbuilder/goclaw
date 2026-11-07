@@ -13,9 +13,11 @@ interface TokenAreaChartProps {
   data: SnapshotTimeSeries[];
   loading?: boolean;
   granularity: "hour" | "day";
+  /** Overrides the default "Token usage over time" heading. */
+  title?: string;
 }
 
-export function TokenAreaChart({ data, loading, granularity }: TokenAreaChartProps) {
+export function TokenAreaChart({ data, loading, granularity, title }: TokenAreaChartProps) {
   const { t } = useTranslation("usage");
   const timezone = useUiStore((s) => s.timezone);
 
@@ -32,7 +34,7 @@ export function TokenAreaChart({ data, loading, granularity }: TokenAreaChartPro
 
   return (
     <ChartWrapper
-      title={t("analytics.tokenChart.title")}
+      title={title ?? t("analytics.tokenChart.title")}
       loading={loading}
       empty={isEmpty}
       emptyText={t("analytics.noData")}

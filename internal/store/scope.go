@@ -2,10 +2,15 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 )
+
+// ErrTenantRequired is returned by tenant-scoped queries when the context
+// carries no tenant (fail-closed).
+var ErrTenantRequired = errors.New("tenant_id required")
 
 // QueryScope represents the multi-level isolation scope for database queries.
 // Currently supports tenant-level scoping; designed to be extended with
@@ -20,7 +25,7 @@ type QueryScope struct {
 func ScopeFromContext(ctx context.Context) (QueryScope, error) {
 	tid := TenantIDFromContext(ctx)
 	if tid == uuid.Nil {
-		return QueryScope{}, fmt.Errorf("tenant_id required")
+		return QueryScope{}, ErrTenantRequired
 	}
 	return QueryScope{TenantID: tid}, nil
 }

@@ -310,9 +310,13 @@ func (m *FormManager) save(ctx context.Context, p *pendingRequest, entry *store.
 		if existing.Kind != entry.Kind {
 			return fmt.Errorf("%w: %q exists with a different kind", store.ErrSecretVaultInvalid, entry.Name)
 		}
-		if err = st.ReplaceValue(ctx, existing.ID, payload); err != nil {
-			return err
+		// Pinned to the revision just read: a concurrent edit makes this fail
+		// with a conflict instead of silently overwriting it.
+		newRev, rerr := st.ReplaceValue(ctx, existing.ID, payload, existing.Revision)
+		if rerr != nil {
+			return rerr
 		}
+		existing.Revision = newRev
 		*entry = *existing
 		action = store.SecretAuditUpdated
 	} else if err != nil {

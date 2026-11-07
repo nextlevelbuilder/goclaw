@@ -33,9 +33,9 @@ func (c *cliVault) Create(_ context.Context, e *store.SecretVaultEntry, p store.
 	return nil
 }
 func (c *cliVault) List(context.Context) ([]store.SecretVaultEntry, error) { return c.entries, nil }
-func (c *cliVault) ReplaceValue(_ context.Context, id uuid.UUID, p store.SecretVaultPayload) error {
+func (c *cliVault) ReplaceValue(_ context.Context, id uuid.UUID, p store.SecretVaultPayload, _ int64) (int64, error) {
 	c.values[id] = p.Secret
-	return nil
+	return 2, nil
 }
 func (c *cliVault) AppendAudit(_ context.Context, a *store.SecretVaultAuditEntry) error {
 	c.audit = append(c.audit, a.Action)
@@ -145,5 +145,40 @@ func TestReadSecretLine(t *testing.T) {
 	}
 	if _, err := readSecretLine(strings.NewReader("")); err == nil {
 		t.Error("empty stdin must be an error")
+	}
+}
+
+type rewrapVault struct {
+	store.SecretVaultStore
+	report store.SecretRewrapReport
+	dryRun bool
+}
+
+func (r *rewrapVault) RewrapSecrets(_ context.Context, dryRun bool) (store.SecretRewrapReport, error) {
+	r.dryRun = dryRun
+	return r.report, nil
+}
+
+func TestSecretVaultCLI_RewrapReportsCountsAndFailsOnUnreadable(t *testing.T) {
+	bad := uuid.New()
+	st := &rewrapVault{report: store.SecretRewrapReport{Total: 4, Rewrapped: 2, Current: 1, Unreadable: []uuid.UUID{bad}}}
+	var out strings.Builder
+	err := rewrapSecretVault(context.Background(), st, true, &out)
+	if err == nil {
+		t.Fatal("unreadable secrets must produce a non-zero exit")
+	}
+	if !st.dryRun {
+		t.Error("dry-run flag was not passed to the store")
+	}
+	for _, want := range []string{"Would rewrap 2 of 4", "1 already bound", "unreadable: " + bad.String()} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output %q missing %q", out.String(), want)
+		}
+	}
+
+	st = &rewrapVault{report: store.SecretRewrapReport{Total: 2, Rewrapped: 2}}
+	out.Reset()
+	if err := rewrapSecretVault(context.Background(), st, false, &out); err != nil || !strings.Contains(out.String(), "Rewrapped 2 of 2") {
+		t.Fatalf("clean run = %q, %v", out.String(), err)
 	}
 }

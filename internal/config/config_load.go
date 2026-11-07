@@ -533,13 +533,15 @@ func (c *Config) ApplyEnvOverrides() {
 	c.applyEnvOverrides()
 }
 
-// ExpandHome replaces leading ~ with the user home directory.
+// ExpandHome replaces a leading "~/" or "~\" with the user home directory. The
+// backslash form is what ContractHome produces on Windows; without it the path
+// collapsed to the bare home directory and workspaces escaped the allowed root.
 func ExpandHome(path string) string {
 	if path == "" || path[0] != '~' {
 		return path
 	}
 	home, _ := os.UserHomeDir()
-	if len(path) > 1 && path[1] == '/' {
+	if len(path) > 1 && (path[1] == '/' || path[1] == '\\') {
 		return home + path[1:]
 	}
 	return home

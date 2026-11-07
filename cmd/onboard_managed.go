@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
@@ -44,7 +44,7 @@ var defaultPlaceholderProviders = []store.LLMProviderData{
 func seedOnboardPlaceholders(dsn string) error {
 	storeCfg := store.StoreConfig{
 		PostgresDSN:   dsn,
-		EncryptionKey: os.Getenv("GOCLAW_ENCRYPTION_KEY"),
+		EncryptionKey: crypto.ActiveKeyFromEnv(),
 	}
 	stores, err := pg.NewPGStores(storeCfg)
 	if err != nil {

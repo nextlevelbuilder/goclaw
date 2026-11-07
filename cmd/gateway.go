@@ -19,6 +19,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/browsertakeover"
+	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/secretvault"
 	"github.com/nextlevelbuilder/goclaw/internal/cache"
 	"github.com/nextlevelbuilder/goclaw/internal/channelmemory"
@@ -234,6 +235,10 @@ func runGateway() {
 	}
 	if err := config.ValidateGatewayAuth(cfg.Gateway); err != nil {
 		slog.Error("unsafe gateway auth configuration", "error", err)
+		os.Exit(1)
+	}
+	if err := validateEncryptionEnv(); err != nil {
+		slog.Error("invalid encryption key configuration", "error", err)
 		os.Exit(1)
 	}
 
@@ -943,7 +948,7 @@ func runGateway() {
 		// Bitrix24: factory needs the portal store + encKey injected so each
 		// Channel can resolve its portal on Start(). The encKey here mirrors
 		// the one used by pg.NewPGStores → NewPGBitrixPortalStore.
-		bitrixEncKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
+		bitrixEncKey := crypto.ActiveKeyFromEnv()
 		// Use the MCP-aware factory variant so channels that opt into
 		// lazy per-user credential provisioning (via mcp_server_id — or
 		// the legacy mcp_server_name + mcp_base_url pair — in their
@@ -1004,7 +1009,7 @@ func runGateway() {
 	// Without this, deleting a disabled Bitrix24 channel would orphan the bot
 	// on the portal.
 	if pgStores.BitrixPortals != nil {
-		bitrixEncKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
+		bitrixEncKey := crypto.ActiveKeyFromEnv()
 		orphanCleaner := func(ctx context.Context, tenantID uuid.UUID, cfg []byte) error {
 			return bitrix24.DestroyOrphanBot(ctx, pgStores.BitrixPortals, bitrixEncKey, tenantID, cfg)
 		}
