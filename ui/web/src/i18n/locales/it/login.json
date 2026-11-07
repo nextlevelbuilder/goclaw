@@ -1,0 +1,41 @@
+{
+  "subtitle": "Accedi al pannello di controllo del gateway",
+  "selectTenant": "Seleziona Tenant",
+  "selectTenantDescription": "Scegli un tenant per continuare",
+  "allTenantsOption": "Tutti i tenant",
+  "allTenantsDescription": "Visualizza i dati di tutti i tenant",
+  "noAccess": "Nessun accesso",
+  "noAccessDescription": "Non hai accesso a nessun tenant. Contatta l'amministratore.",
+  "tabs": {
+    "token": "Token",
+    "pairing": "Accoppiamento"
+  },
+  "token": {
+    "userId": "ID utente",
+    "userIdPlaceholder": "tuo-id-utente",
+    "userIdHint": "Usa \"system\" per l'accesso completo al sistema",
+    "gatewayToken": "Token del gateway",
+    "tokenPlaceholder": "Token Bearer",
+    "connect": "Connetti",
+    "connecting": "Connessione in corso...",
+    "errorInvalidCredentials": "Credenziali non valide. Controlla il token e l'ID utente.",
+    "errorServer": "Il server ha restituito {{status}}. Riprova.",
+    "errorCannotConnect": "Impossibile connettersi al gateway. Verifica che il server sia in esecuzione."
+  },
+  "pairing": {
+    "userId": "ID utente",
+    "userIdPlaceholder": "tuo-id-utente",
+    "noTokenNeeded": "Nessun token richiesto. Verrà generato un codice di accoppiamento che un amministratore dovrà approvare.",
+    "requestAccess": "Richiedi accesso",
+    "connecting": "Connessione in corso...",
+    "errorConnectionLost": "Connessione interrotta. Riprova.",
+    "errorCannotConnect": "Impossibile connettersi al gateway.",
+    "askAdmin": "Chiedi a un amministratore di approvare questo codice:",
+    "orRun": "Oppure esegui:",
+    "waitingForApproval": "In attesa di approvazione...",
+    "cancel": "Annulla",
+    "approved": "Accesso approvato! Reindirizzamento..."
+  },
+  "noAccessHint": "Chiedi al tuo amministratore di aggiungerti a un tenant, oppure utilizza un account diverso.",
+  "logout": "Disconnetti"
+}

@@ -1,0 +1,56 @@
+{
+  "title": "Funzionalità dell'agente V3",
+  "subtitle": "I sistemi principali che alimentano l'intelligenza del tuo agente",
+  "note": "Tutte le funzionalità sono sempre attive per gli agenti v3.",
+  "tabs": {
+    "pipeline": "Pipeline",
+    "memory": "Memoria",
+    "knowledge": "Conoscenza",
+    "orchestration": "Orchestrazione"
+  },
+  "pipeline": {
+    "title": "Pipeline di esecuzione a 8 fasi",
+    "description": "Ogni messaggio attraversa 8 fasi strutturate suddivise in 3 fasi principali.",
+    "setup": "Configurazione (Setup)",
+    "setupDesc": "Arricchisce il contesto con la configurazione dell'agente, i metadati dello spazio di lavoro, la cronologia utente e i ricordi inseriti automaticamente dalle sessioni passate.",
+    "iteration": "Ciclo di iterazione",
+    "iterationDesc": "Si ripete fino al completamento dell'attività o fino al raggiungimento del numero massimo di iterazioni.",
+    "think": "Riflessione (Think)",
+    "thinkDesc": "Ragionamento dell'LLM con il contesto completo.",
+    "prune": "Ottimizzazione (Prune)",
+    "pruneDesc": "Gestione dei token e compattazione.",
+    "tools": "Strumenti (Tools)",
+    "toolsDesc": "Esegue le chiamate agli strumenti richieste dall'LLM.",
+    "observe": "Osservazione (Observe)",
+    "observeDesc": "Acquisisce e convalida l'output.",
+    "checkpoint": "Punto di controllo (Checkpoint)",
+    "checkpointDesc": "Salva lo stato intermedio.",
+    "finalize": "Finalizzazione (Finalize)",
+    "finalizeDesc": "Salva i metadati in modo permanente, emette eventi per il consolidamento della memoria e pulisce l'esecuzione."
+  },
+  "memory": {
+    "title": "Sistema di memoria a 3 livelli",
+    "description": "Memoria progressiva che spazia dalla conversazione attiva alla conoscenza a lungo termine.",
+    "l0Title": "Memoria di lavoro L0",
+    "l0Desc": "Cronologia della sessione con compattazione automatica basata sui token. Quando la cronologia supera la soglia della finestra di contesto, i messaggi più vecchi vengono riassunti tramite LLM e troncati. Lo svuotamento della memoria (memory flush) estrae i fatti chiave in file persistenti prima della compattazione.",
+    "l1Title": "Memoria episodica L1",
+    "l1Desc": "Riepiloghi delle sessioni creati dopo ogni esecuzione della conversazione. Ciascuno riceve un estratto L0 (~50 token) per un inserimento rapido. Ricerca ibrida FTS + vettoriale con TTL di 90 giorni. Gli estratti pertinenti vengono inseriti automaticamente nel prompt di sistema a ogni turno.",
+    "l2Title": "Memoria semantica L2",
+    "l2Desc": "Grafo della conoscenza con entità e relazioni estratte tramite LLM (soglia di fiducia 0.75). La deduplicazione automatica unisce le entità simili. Il dreaming consolida oltre 5 voci episodiche in documenti di fatti a lungo termine ricercabili tramite gli strumenti di memoria.",
+    "eventFlow": "Basato su eventi: session.completed attiva la creazione del livello L1, che a sua volta avvia l'estrazione L2 e il dreaming."
+  },
+  "knowledge": {
+    "kgTitle": "Grafo della conoscenza",
+    "kgDesc": "Le entità (persone, progetti, tecnologie) e le loro relazioni vengono estratte dai riepiloghi delle sessioni tramite LLM. Il controllo delle versioni temporali tiene traccia di quando i fatti erano validi. Ricercabile tramite lo strumento knowledge_graph_search con attraversamento multi-hop fino a 5 livelli di profondità.",
+    "vaultTitle": "Knowledge Vault",
+    "vaultDesc": "Registro dei documenti con risoluzione dei [[wikilink]]. La ricerca unificata unisce i documenti del vault (40%), le memorie episodiche (30%) e le entità del grafo della conoscenza (30%) in un unico insieme di risultati classificati. L'hashing SHA-256 rileva le modifiche ai contenuti per l'indicizzazione incrementale.",
+    "dreamingTitle": "Dreaming",
+    "dreamingDesc": "Quando si accumulano più di 5 riepiloghi di sessione, l'LLM sintetizza i fatti a lungo termine: preferenze dell'utente, architettura del progetto, pattern ricorrenti e decisioni chiave con la relativa motivazione. Memorizzati come documenti di memoria ricercabili. Sottoposto a debounce a intervalli di 10 minuti per ciascun agente."
+  },
+  "orchestration": {
+    "delegateTitle": "Delega dell'agente",
+    "delegateDesc": "Gli agenti delegano compiti ad agenti collegati tramite gli agent_links con verifica dei permessi. La modalità sincrona blocca l'esecuzione fino a un timeout configurabile in attesa dei risultati. La modalità asincrona si attiva immediatamente e comunica i risultati tramite il bus dei messaggi una volta completata.",
+    "evolutionTitle": "Auto-evoluzione",
+    "evolutionDesc": "Traccia l'utilizzo degli strumenti e le metriche di recupero su base settimanale. Rileva tre pattern: basso utilizzo del recupero (< 20%), alti tassi di errore degli strumenti (< 10% di successo) e pattern di strumenti ripetuti (> 100 chiamate/settimana). Suggerisce modifiche alla configurazione con applicazione automatica e rollback protetti da guardrail."
+  }
+}

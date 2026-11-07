@@ -1,0 +1,50 @@
+{
+  "title": "Messaggi in attesa",
+  "description": "Messaggi dei canali memorizzati nel buffer in attesa di essere elaborati dall'agente",
+  "emptyTitle": "Nessun messaggio in attesa",
+  "emptyDescription": "Nessun gruppo di messaggi nel buffer trovato. I messaggi appaiono qui quando i canali accumulano i messaggi in entrata prima che l'agente li elabori.",
+  "howItWorks": {
+    "title": "Come funziona",
+    "step1": "I messaggi provenienti dai canali (Telegram, Discord, ecc.) vengono memorizzati temporaneamente qui nel buffer mentre l'agente è occupato o offline.",
+    "step2": "Quando il buffer raggiunge la soglia impostata (predefinita: 50 messaggi), si attiva la compattazione automatica: un LLM riassume i messaggi più vecchi, mantenendo solo i 15 più recenti.",
+    "step3": "Al turno successivo dell'agente, il riepilogo compattato e i messaggi recenti vengono inseriti come contesto, consentendo all'agente di rimettersi in pari senza essere sommerso.",
+    "compactAction": "Compatta — Attiva manualmente il riepilogo tramite LLM in questo momento. Utile quando si desidera che l'agente elabori un riepilogo pulito anziché una marea di messaggi non elaborati.",
+    "clearAction": "Svuota — Elimina permanentemente tutti i messaggi nel buffer per un gruppo. Da utilizzare quando i messaggi non sono più rilevanti."
+  },
+  "columns": {
+    "channel": "Canale",
+    "group": "Gruppo",
+    "messages": "Messaggi",
+    "status": "Stato",
+    "lastActivity": "Ultima attività",
+    "actions": "Azioni"
+  },
+  "status": {
+    "compacted": "Compattato",
+    "raw": "Non elaborato"
+  },
+  "compact": "Compatta",
+  "compacting": "Compattazione in corso…",
+  "clear": "Svuota",
+  "confirmClear": {
+    "title": "Svuotare i messaggi?",
+    "description": "Questo eliminerà permanentemente tutti i messaggi in {{channel}} / {{key}}. Questa azione non può essere annullata.",
+    "cancel": "Annulla",
+    "confirm": "Svuota"
+  },
+  "dialog": {
+    "title": "Messaggi — {{name}}",
+    "noMessages": "Nessun messaggio trovato.",
+    "summary": "Riepilogo"
+  },
+  "toast": {
+    "compacted": "Compattazione completata",
+    "compactedSummarized": "Riassunto in {{count}} messaggi",
+    "compactedDeleted": "Tutti i messaggi sono stati eliminati (nessun provider LLM disponibile)",
+    "compacting": "Compattazione in corso…",
+    "compactingDesc": "Il riepilogo tramite LLM è in esecuzione in background. L'elenco si aggiornerà automaticamente.",
+    "failedCompact": "Compattazione non riuscita",
+    "cleared": "Messaggi svuotati",
+    "failedClear": "Impossibile svuotare i messaggi"
+  }
+}

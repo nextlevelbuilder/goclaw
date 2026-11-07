@@ -1,0 +1,129 @@
+{
+  "title": "Backup e ripristino",
+  "description": "Crea backup di sistema, ripristina da archivi e gestisci lo storage S3",
+  "tabs": {
+    "systemBackup": "Backup di sistema",
+    "systemRestore": "Ripristino di sistema",
+    "s3Config": "Storage S3",
+    "tenantBackup": "Backup del tenant"
+  },
+  "backup": {
+    "preflight": {
+      "title": "Controllo del sistema",
+      "pgDump": "pg_dump disponibile",
+      "diskSpace": "Spazio su disco sufficiente",
+      "dbSize": "Dimensione del database",
+      "dataDir": "Directory dei dati",
+      "workspace": "Workspace",
+      "freeDisk": "Spazio libero su disco",
+      "warnings": "Avvisi",
+      "refresh": "Aggiorna",
+      "pgDumpMissing": "pg_dump non disponibile o non compatibile",
+      "goToPackages": "Vai ai pacchetti"
+    },
+    "options": {
+      "includeDb": "Includi il database",
+      "includeFiles": "Includi i file",
+      "destination": "Destinazione del backup",
+      "local": "Scarica in locale",
+      "s3": "Carica su S3"
+    },
+    "start": "Avvia backup",
+    "running": "Backup in corso...",
+    "complete": "Backup completato",
+    "download": "Scarica backup",
+    "uploadS3": "Carica su S3",
+    "newBackup": "Nuovo backup",
+    "fileSize": "Dimensione del file",
+    "schemaVersion": "Versione dello schema",
+    "s3History": {
+      "title": "Backup su S3",
+      "empty": "Nessun backup trovato su S3",
+      "name": "File",
+      "size": "Dimensione",
+      "date": "Data"
+    },
+    "errorTitle": "Backup non riuscito"
+  },
+  "restore": {
+    "warning": "Il ripristino sovrascriverà i dati esistenti. Questa azione non può essere annullata. Crea prima un backup.",
+    "dropzone": "Trascina qui l'archivio di backup .tar.gz",
+    "dropzoneHint": "oppure fai clic per sfogliare",
+    "options": {
+      "restoreDb": "Ripristina il database",
+      "restoreFiles": "Ripristina i file",
+      "dryRun": "Simulazione (solo anteprima)"
+    },
+    "start": "Ripristina",
+    "confirmTitle": "Conferma ripristino di sistema",
+    "confirmDesc": "Il database e i file attuali verranno sovrascritti con il contenuto del backup. Vuoi continuare?",
+    "running": "Ripristino in corso...",
+    "doNotClose": "Non chiudere questa pagina durante il ripristino",
+    "complete": "Ripristino completato",
+    "dryRunNote": "Questa era una simulazione. Non è stata apportata nessuna modifica.",
+    "dbRestored": "Database ripristinato",
+    "filesExtracted": "File estratti",
+    "bytesExtracted": "Dati ripristinati",
+    "schemaVersion": "Versione dello schema",
+    "warnings": "Avvisi",
+    "newRestore": "Nuovo ripristino",
+    "errorTitle": "Ripristino non riuscito",
+    "tryAgain": "Riprova"
+  },
+  "s3": {
+    "title": "Configurazione dello storage S3",
+    "description": "Configura uno storage compatibile con S3 per i backup remoti",
+    "status": {
+      "configured": "Configurato",
+      "notConfigured": "Non configurato"
+    },
+    "fields": {
+      "accessKeyId": "Access Key ID",
+      "secretAccessKey": "Secret Access Key",
+      "secretPlaceholder": "Inserisci per aggiornare",
+      "bucket": "Bucket",
+      "region": "Regione",
+      "endpoint": "Endpoint (facoltativo)",
+      "endpointHint": "Per servizi compatibili con S3 (MinIO, R2, ecc.)",
+      "prefix": "Prefisso della chiave"
+    },
+    "save": "Salva e verifica la connessione",
+    "saving": "Verifica della connessione...",
+    "saveSuccess": "Configurazione S3 salvata e connessione verificata",
+    "saveError": "Impossibile salvare la configurazione S3"
+  },
+  "tenant": {
+    "title": "Backup e ripristino del tenant",
+    "description": "Esegui il backup o il ripristino dei dati di singoli tenant",
+    "selectTenant": "Seleziona tenant",
+    "selectTenantPlaceholder": "Scegli un tenant...",
+    "backup": {
+      "start": "Esegui backup del tenant",
+      "running": "Backup del tenant in corso...",
+      "complete": "Backup del tenant completato",
+      "download": "Scarica",
+      "tableCounts": "Tabelle sottoposte a backup",
+      "newBackup": "Nuovo backup"
+    },
+    "restore": {
+      "mode": "Modalità di ripristino",
+      "modeUpsert": "Unisci (upsert)",
+      "modeReplace": "Sostituisci tutto",
+      "modeNew": "Nuovo tenant",
+      "newTenantSlug": "Slug del nuovo tenant",
+      "newTenantSlugPlaceholder": "Inserisci uno slug univoco per il nuovo tenant",
+      "dropzone": "Trascina qui l'archivio di backup del tenant",
+      "dryRun": "Simulazione (solo anteprima)",
+      "start": "Ripristina tenant",
+      "confirmTitle": "Conferma ripristino del tenant",
+      "confirmDesc": "I dati del tenant selezionato verranno modificati. Vuoi continuare?",
+      "confirmDescNew": "Verrà creato un nuovo tenant e l'archivio verrà ripristinato al suo interno. Vuoi continuare?",
+      "running": "Ripristino del tenant in corso...",
+      "complete": "Ripristino del tenant completato",
+      "tablesRestored": "Tabelle ripristinate",
+      "filesExtracted": "File estratti",
+      "dryRunNote": "Simulazione: nessuna modifica apportata",
+      "newRestore": "Nuovo ripristino"
+    }
+  }
+}
