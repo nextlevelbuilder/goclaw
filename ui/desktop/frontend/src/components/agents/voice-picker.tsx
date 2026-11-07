@@ -18,6 +18,7 @@ import { Combobox } from '../common/Combobox'
 import { usePortalDropdownClose } from '../../hooks/use-portal-dropdown-close'
 import type { VoiceOption } from '../../api/tts-capabilities'
 import type { TtsProviderId } from '@/data/tts-providers'
+import { Input } from '../ui'
 
 interface Props {
   value: string | null
@@ -51,7 +52,7 @@ function VoiceOption({ voice, selected }: { voice: PortalVoice; selected: boolea
     <span className={['flex items-center gap-1 w-full', selected ? 'text-accent' : ''].join(' ')}>
       <span className="flex-1 truncate" title={voice.name}>{voice.name}</span>
       {labelEntries.slice(0, 1).map((label) => (
-        <span key={label} className="text-2xs px-1 py-0.5 rounded bg-surface-tertiary text-text-muted shrink-0">
+        <span key={label} className="text-caption px-1 py-0.5 rounded bg-surface-hover text-ink-muted shrink-0">
           {label}
         </span>
       ))}
@@ -118,7 +119,7 @@ export function VoicePicker({ value, onChange, disabled, provider }: Props) {
 function EmptyStatePicker() {
   const { t } = useTranslation('tts')
   return (
-    <div className="flex h-8 w-full items-center rounded border border-border bg-surface-secondary px-2 text-xs text-text-muted opacity-60 cursor-not-allowed">
+    <div className="flex h-8 w-full items-center rounded border border-border-subtle bg-surface-base px-2 text-caption text-ink-muted opacity-60 cursor-not-allowed">
       {t('voice_picker.requires_provider')}
     </div>
   )
@@ -160,9 +161,9 @@ function FreeTextVoicePicker({
 }) {
   const { t } = useTranslation('tts')
   return (
-    <input
+    <Input
       type="text"
-      className="flex h-8 w-full rounded border border-border bg-surface-secondary px-2 text-xs text-text-primary disabled:opacity-50 disabled:cursor-not-allowed"
+      className="flex h-8 w-full rounded border border-border-subtle bg-surface-base px-2 text-caption text-ink disabled:opacity-50 disabled:cursor-not-allowed"
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
@@ -235,7 +236,7 @@ export function PortalVoicePicker({
       id={listboxId}
       role="listbox"
       aria-label={t('voice_placeholder')}
-      className="pointer-events-auto z-50 min-w-[220px] rounded border border-border bg-surface-primary text-text-primary shadow-lg"
+      className="pointer-events-auto z-50 min-w-[220px] rounded border border-border-subtle bg-surface-window text-ink shadow-lg"
       style={(() => {
         if (!triggerRef.current) return {}
         const rect = triggerRef.current.getBoundingClientRect()
@@ -247,13 +248,13 @@ export function PortalVoicePicker({
         return { position: 'fixed' as const, top: rect.bottom + 4, left: rect.left, width: rect.width }
       })()}
     >
-      <div className="flex items-center gap-1 border-b border-border px-2 py-1.5">
-        <input
+      <div className="flex items-center gap-1 border-b border-border-subtle px-2 py-1.5">
+        <Input
           autoFocus
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t('voice_placeholder')}
-          className="flex-1 bg-transparent text-xs outline-none focus-visible:ring-1 focus-visible:ring-accent focus-visible:ring-inset rounded placeholder:text-text-muted"
+          className="flex-1 bg-transparent text-caption outline-none focus-visible:ring-1 focus-visible:ring-accent focus-visible:ring-inset rounded placeholder:text-ink-muted"
         />
         {onRefresh && (
           <button
@@ -261,7 +262,7 @@ export function PortalVoicePicker({
             title={t('voice_refresh')}
             disabled={isLoading}
             onClick={(e) => { e.stopPropagation(); onRefresh() }}
-            className="shrink-0 p-1 rounded hover:bg-surface-tertiary transition-colors text-text-muted hover:text-text-primary disabled:opacity-50"
+            className="shrink-0 p-1 rounded hover:bg-surface-hover transition-colors text-ink-muted hover:text-ink disabled:opacity-50"
             aria-label={t('voice_refresh')}
           >
             <svg
@@ -280,9 +281,9 @@ export function PortalVoicePicker({
 
       <div className="max-h-52 overflow-y-auto p-1">
         {isLoading ? (
-          <p className="py-3 text-center text-2xs text-text-muted">{t('voice_loading')}</p>
+          <p className="py-3 text-center text-caption text-ink-muted">{t('voice_loading')}</p>
         ) : filtered.length === 0 ? (
-          <p className="py-3 text-center text-2xs text-text-muted">
+          <p className="py-3 text-center text-caption text-ink-muted">
             {voices.length === 0 ? t('voice_save_config_first') : search ? t('voice_no_voices') : t('voice_loading')}
           </p>
         ) : (
@@ -292,8 +293,8 @@ export function PortalVoicePicker({
               role="option"
               aria-selected={voice.voice_id === value}
               className={[
-                'flex items-center gap-1 rounded px-2 py-1 cursor-pointer text-xs',
-                voice.voice_id === value ? 'bg-surface-tertiary text-accent' : 'hover:bg-surface-secondary',
+                'flex items-center gap-1 rounded px-2 py-1 cursor-pointer text-caption',
+                voice.voice_id === value ? 'bg-surface-hover text-accent' : 'hover:bg-surface-base',
               ].join(' ')}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => handleSelect(voice)}
@@ -316,9 +317,9 @@ export function PortalVoicePicker({
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
         className={[
-          'flex h-8 w-full items-center justify-between gap-1 rounded border border-border bg-surface-secondary px-2 text-xs',
+          'flex h-8 w-full items-center justify-between gap-1 rounded border border-border-subtle bg-surface-base px-2 text-caption',
           'disabled:opacity-50 disabled:cursor-not-allowed',
-          !selected ? 'text-text-muted' : 'text-text-primary',
+          !selected ? 'text-ink-muted' : 'text-ink',
         ].join(' ')}
       >
         <span className="flex-1 truncate text-left">

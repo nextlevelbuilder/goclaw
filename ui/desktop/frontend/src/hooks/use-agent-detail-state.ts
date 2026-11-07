@@ -8,7 +8,7 @@ import { buildContextPruningPayload, isContextPruningEnabled } from '../lib/cont
 export function useAgentDetailState(
   agent: AgentData,
   onSave: (id: string, updates: Partial<AgentData>) => Promise<void>,
-  onClose: () => void,
+  onSaved: () => void,
 ) {
   // --- Identity --- (promoted fields: read top-level, fallback to other_config for legacy data)
   const [emoji, setEmoji] = useState(agent.emoji ?? (agent.other_config?.emoji as string) ?? '🤖')
@@ -122,7 +122,7 @@ export function useAgentDetailState(
         tools_config: toolsEnabled ? toolsConfig : {},
         sandbox_config: sandboxEnabled ? sandboxConfig : null,
       })
-      onClose()
+      onSaved()
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save')
     } finally {
@@ -134,7 +134,7 @@ export function useAgentDetailState(
     provider, model, contextWindow, maxToolIterations, isDefault, status,
     pruningEnabled, pruningConfig, compactionConfig,
     subEnabled, subConfig, toolsEnabled, toolsConfig, sandboxEnabled, sandboxConfig,
-    onSave, onClose,
+    onSave, onSaved,
   ])
 
   return {

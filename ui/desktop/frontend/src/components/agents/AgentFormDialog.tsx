@@ -6,7 +6,9 @@ import { useProviderCapabilities } from '../../hooks/use-provider-capabilities'
 import { isCatalogueStale, modelOptionsFor, providerOptionsFrom } from '../../api/provider-capabilities'
 import { getApiClient } from '../../lib/api'
 import { slugify } from '../../lib/slug'
-import { AgentPresetSelector } from './agent-preset-selector'
+import { Button, Dialog, DialogFooter, Field, Textarea } from '../ui'
+import { IconCheck } from '../common/Icons'
+import { AGENT_PRESETS, AgentPresetSelector, resolvePreset } from './agent-preset-selector'
 import { AgentIdentityFields } from './agent-identity-fields'
 import { agentFormSchema, type AgentFormData } from '../../schemas/agent.schema'
 import type { AgentData, AgentInput } from '../../types/agent'
@@ -15,10 +17,12 @@ interface AgentFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   agent?: AgentData | null
+  /** Key of a preset (AGENT_PRESETS) to fill the form with when the dialog opens. */
+  initialPresetKey?: string | null
   onSubmit: (input: AgentInput) => Promise<AgentData | void>
 }
 
-export function AgentFormDialog({ open, onOpenChange, agent, onSubmit }: AgentFormDialogProps) {
+export function AgentFormDialog({ open, onOpenChange, agent, initialPresetKey, onSubmit }: AgentFormDialogProps) {
   const isEditing = !!agent
   const { t } = useTranslation(['agents', 'desktop', 'common'])
   const { capabilities, isLoading: catalogueLoading, error: catalogueError, refetch: refetchCatalogue } = useProviderCapabilities()
@@ -29,28 +33,31 @@ export function AgentFormDialog({ open, onOpenChange, agent, onSubmit }: AgentFo
     defaultValues: { displayName: '', emoji: '🦊', agentKey: '', providerName: '', model: '', description: '', isDefault: false },
   })
 
-  // UI-only state (not form data)
   const [verifyResult, setVerifyResult] = useState<{ valid: boolean; error?: string } | null>(null)
   const [verifying, setVerifying] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [selectedPresetKey, setSelectedPresetKey] = useState('')
 
-  // Reset form when dialog opens
+  // Reset (and apply the starting template) each time the dialog opens
   useEffect(() => {
     if (!open) return
+    const preset = !agent && initialPresetKey ? AGENT_PRESETS.find((p) => p.key === initialPresetKey) : undefined
+    const resolved = preset ? resolvePreset(t, preset) : null
     reset({
-      displayName: agent?.display_name ?? '',
-      emoji: agent?.emoji ?? (agent?.other_config?.emoji as string) ?? '🦊',
-      agentKey: agent?.agent_key ?? '',
+      displayName: resolved?.displayName ?? agent?.display_name ?? '',
+      emoji: resolved?.emoji ?? agent?.emoji ?? (agent?.other_config?.emoji as string) ?? '🦊',
+      agentKey: resolved?.agentKey ?? agent?.agent_key ?? '',
       providerName: agent?.provider ?? '',
       model: agent?.model ?? '',
-      description: agent?.agent_description ?? (agent?.other_config?.description as string) ?? '',
+      description: resolved?.description ?? agent?.agent_description ?? (agent?.other_config?.description as string) ?? '',
       isDefault: agent?.is_default ?? false,
     })
     setSubmitError('')
-    setSelectedPresetKey('')
+    setSelectedPresetKey(resolved?.agentKey ?? '')
     setVerifyResult(isEditing ? { valid: true } : null)
-  }, [open, agent, isEditing, reset])
+    // t is stable for the open dialog; reset must only run when it opens
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, agent, isEditing, initialPresetKey, reset])
 
   const providerName = watch('providerName')
   const model = watch('model')
@@ -80,7 +87,7 @@ export function AgentFormDialog({ open, onOpenChange, agent, onSubmit }: AgentFo
       const res = await getApiClient().post<{ valid: boolean; error?: string }>(`/v1/providers/${providerRef}/verify`, { model: model.trim() })
       setVerifyResult({ valid: res.valid, error: res.error })
     } catch (err) {
-      setVerifyResult({ valid: false, error: err instanceof Error ? err.message : 'Verification failed' })
+      setVerifyResult({ valid: false, error: err instanceof Error ? err.message : t('desktop:agent.verifyFailed') })
     } finally { setVerifying(false) }
   }
 
@@ -94,95 +101,88 @@ export function AgentFormDialog({ open, onOpenChange, agent, onSubmit }: AgentFo
         model: data.model.trim(),
         agent_type: isEditing ? agent!.agent_type : 'predefined',
         is_default: data.isDefault || undefined,
-        // Promoted fields at top level
         emoji: data.emoji?.trim() || null,
         agent_description: data.description?.trim() || null,
       })
       onOpenChange(false)
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Failed to save agent')
+      setSubmitError(err instanceof Error ? err.message : t('agents:create.failedToCreate'))
     }
   }
-
-  if (!open) return null
 
   const canCreate = isEditing
     ? !!providerName && !!model.trim()
     : !!displayName.trim() && !!providerName && !!model.trim() && verifyResult?.valid && !!watch('description')?.trim()
 
+  const showVerify = !isEditing && providerRef && model.trim() && !verifyResult?.valid
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-surface-secondary border border-border rounded-xl shadow-xl max-w-3xl w-full mx-4 overflow-hidden flex flex-col" style={{ maxHeight: '85vh' }}>
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-5 py-4 shrink-0">
-          <h3 className="text-sm font-semibold text-text-primary">
-            {isEditing ? t('agents:detail.tabs.agent') + ' — ' + t('common:edit') : t('agents:create.title')}
-          </h3>
-          <button aria-label={t('common:close')} onClick={() => onOpenChange(false)} className="p-2 text-text-muted hover:text-text-primary transition-colors">
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 6 6 18" /><path d="m6 6 12 12" />
-            </svg>
-          </button>
-        </div>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      size="xl"
+      title={isEditing ? `${t('agents:detail.tabs.agent')} — ${t('common:edit')}` : t('agents:create.title')}
+      dismissible={!isSubmitting}
+      footer={(
+        <DialogFooter>
+          {submitError && <p role="alert" className="mr-auto text-caption text-danger">{submitError}</p>}
+          <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={isSubmitting}>{t('agents:create.cancel')}</Button>
+          {showVerify && (
+            <Button variant="secondary" onClick={handleVerify} loading={verifying}>
+              {verifying ? t('desktop:agent.verifying') : t('desktop:agent.verifyModel')}
+            </Button>
+          )}
+          <Button
+            variant="primary"
+            onClick={handleSubmit(onValid)}
+            disabled={!canCreate}
+            loading={isSubmitting}
+            icon={!isEditing && verifyResult?.valid ? <IconCheck size={14} /> : undefined}
+          >
+            {isEditing ? t('common:save') : t('desktop:agent.summon')}
+          </Button>
+        </DialogFooter>
+      )}
+    >
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <AgentIdentityFields
+          isEditing={isEditing}
+          register={register}
+          watch={watch}
+          setValue={setValue}
+          errors={errors}
+          providerOptions={providerOptions}
+          modelOptions={modelOptions}
+          modelsLoading={catalogueLoading}
+          catalogueStale={catalogueStale}
+          catalogueError={catalogueError}
+          onRetryCatalogue={() => { void refetchCatalogue() }}
+          verifyResult={verifyResult}
+          onAgentKeyChange={(val) => { setSelectedPresetKey(''); setValue('agentKey', val, { shouldValidate: true }) }}
+        />
 
-        {/* Body — 2 columns */}
-        <div className="flex-1 overflow-y-auto overscroll-contain p-5">
-          <div className="grid grid-cols-2 gap-5">
-            {/* Left column — identity & model */}
-            <AgentIdentityFields
-              isEditing={isEditing}
-              register={register}
-              watch={watch}
-              setValue={setValue}
-              errors={errors}
-              providerOptions={providerOptions}
-              modelOptions={modelOptions}
-              modelsLoading={catalogueLoading}
-              catalogueStale={catalogueStale}
-              catalogueError={catalogueError}
-              onRetryCatalogue={() => { void refetchCatalogue() }}
-              verifyResult={verifyResult}
-              onAgentKeyChange={(val) => { setSelectedPresetKey(''); setValue('agentKey', val, { shouldValidate: true }) }}
+        <div className="flex flex-col gap-2">
+          {!isEditing && (
+            <AgentPresetSelector
+              currentDescription={watch('description') ?? ''}
+              onSelect={({ description, emoji, displayName: presetName, agentKey }) => {
+                setValue('description', description, { shouldValidate: true })
+                setValue('emoji', emoji)
+                setValue('displayName', presetName, { shouldValidate: true })
+                setSelectedPresetKey(agentKey)
+              }}
             />
-
-            {/* Right column — personality */}
-            <div className="space-y-1.5 flex flex-col">
-              <label className="text-xs font-medium text-text-secondary">{t('agents:detail.personality')}</label>
-              {!isEditing && (
-                <AgentPresetSelector
-                  currentDescription={watch('description') ?? ''}
-                  onSelect={({ description, emoji, displayName, agentKey }) => {
-                    setValue('description', description)
-                    setValue('emoji', emoji)
-                    setValue('displayName', displayName)
-                    setSelectedPresetKey(agentKey)
-                  }}
-                />
-              )}
-              <textarea {...register('description')} placeholder={t('agents:create.descriptionPlaceholder')} className="flex-1 min-h-[200px] w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent resize-y" />
-              {errors.description && <p className="text-xs text-error">{errors.description.message}</p>}
-            </div>
-          </div>
-        </div>
-
-        {submitError && <div className="px-5"><p className="text-xs text-error">{submitError}</p></div>}
-
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-border px-5 py-4 shrink-0">
-          <div>{verifyResult && !verifyResult.valid && <span className="text-2xs text-error">{verifyResult.error}</span>}</div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => onOpenChange(false)} className="px-3 py-1.5 text-xs border border-border rounded-lg text-text-secondary hover:bg-surface-tertiary transition-colors">{t('agents:create.cancel')}</button>
-            {!isEditing && providerRef && model.trim() && !verifyResult?.valid && (
-              <button onClick={handleVerify} disabled={verifying} className="border border-border rounded-lg px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-tertiary transition-colors disabled:opacity-50 flex items-center gap-1.5">
-                {verifying ? (<><svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>{t('desktop:agent.verifying')}</>) : t('desktop:agent.verifyModel')}
-              </button>
-            )}
-            <button onClick={handleSubmit(onValid)} disabled={!canCreate || isSubmitting} className="px-4 py-1.5 text-xs bg-accent text-accent-foreground rounded-lg font-medium hover:bg-accent-hover transition-colors disabled:opacity-50 flex items-center gap-1.5">
-              {isSubmitting ? '...' : isEditing ? t('common:save') : (<>{verifyResult?.valid && (<svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>)}{t('desktop:agent.summon')}</>)}
-            </button>
-          </div>
+          )}
+          <Field
+            label={t('agents:detail.personality')}
+            helper={t('agents:create.descriptionHint')}
+            error={errors.description ? t('agents:screen.errors.descriptionRequired') : undefined}
+            className="flex-1"
+          >
+            <Textarea {...register('description')} placeholder={t('agents:create.descriptionPlaceholder')} className="min-h-[200px] flex-1" />
+          </Field>
         </div>
       </div>
-    </div>
+    </Dialog>
   )
 }

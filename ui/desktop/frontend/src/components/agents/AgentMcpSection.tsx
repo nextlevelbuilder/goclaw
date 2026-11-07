@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getApiClient, isApiClientReady } from '../../lib/api'
-import { Switch } from '../common/Switch'
+import { Switch } from '../ui'
 import type { MCPServerData, MCPAgentGrant } from '../../types/mcp'
 
 interface AgentMcpSectionProps {
@@ -68,46 +68,46 @@ export function AgentMcpSection({ agentId }: AgentMcpSectionProps) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-text-primary">{t('title')}</h3>
+        <h3 className="text-ui font-semibold text-ink">{t('title')}</h3>
         {!loading && servers.length > 0 && (
-          <span className="text-2xs text-text-muted">
+          <span className="text-caption text-ink-muted">
             {t('grants.currentGrants')}: {grantedCount}/{servers.length}
           </span>
         )}
       </div>
 
-      {error && <p className="text-xs text-error">{error}</p>}
+      {error && <p className="text-caption text-danger">{error}</p>}
 
       {loading ? (
         <div className="space-y-2">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-9 rounded-lg bg-surface-tertiary/50 animate-pulse" />
+            <div key={i}  />
           ))}
         </div>
       ) : servers.length === 0 ? (
-        <p className="text-xs text-text-muted py-3 text-center">{t('emptyTitle')}</p>
+        <p className="text-caption text-ink-muted py-3 text-center">{t('emptyTitle')}</p>
       ) : (
-        <div className="rounded-lg border border-border divide-y divide-border">
+        <div className="rounded-lg border border-border-subtle divide-y divide-border">
           {servers.map((server) => (
-            <div key={server.id} className="flex items-center justify-between px-3 py-2 hover:bg-surface-tertiary/30 transition-colors">
+            <div key={server.id} className="flex items-center justify-between px-3 py-2 hover:bg-surface-hover transition-colors">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <svg className="h-3.5 w-3.5 text-text-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <svg className="h-3.5 w-3.5 text-ink-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 22v-5" /><path d="M9 8V2" /><path d="M15 8V2" />
                     <path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z" />
                   </svg>
-                  <span className="text-xs font-medium text-text-primary truncate">
+                  <span className="text-caption font-medium text-ink truncate">
                     {server.display_name || server.name}
                   </span>
-                  <span className={`rounded-full px-1.5 py-0.5 text-2xs font-medium ${
+                  <span className={`rounded-full px-1.5 py-0.5 text-caption font-medium ${
                     server.transport === 'sse'
-                      ? 'bg-surface-tertiary text-text-secondary'
-                      : 'border border-border text-text-muted'
+                      ? 'bg-surface-hover text-ink-secondary'
+                      : 'border border-border-subtle text-ink-muted'
                   }`}>
                     {server.transport.toUpperCase()}
                   </span>
                 </div>
-                <p className="text-2xs text-text-muted font-mono ml-5">mcp_{server.name}</p>
+                <p className="text-caption text-ink-muted font-mono ml-5">mcp_{server.name}</p>
               </div>
               <Switch
                 checked={grantedIds.has(server.id)}

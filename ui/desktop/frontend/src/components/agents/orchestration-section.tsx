@@ -5,8 +5,8 @@ interface OrchestrationSectionProps {
 }
 
 const MODE_COLORS: Record<string, string> = {
-  spawn: 'bg-surface-tertiary text-text-muted',
-  delegate: 'bg-accent/10 text-accent',
+  spawn: 'bg-surface-hover text-ink-muted',
+  delegate: 'bg-accent-subtle text-accent',
   team: 'bg-purple-500/10 text-purple-600',
 }
 
@@ -23,19 +23,19 @@ export function OrchestrationSection({ agentId }: OrchestrationSectionProps) {
             <circle cx="12" cy="5" r="3" /><circle cx="5" cy="19" r="3" /><circle cx="19" cy="19" r="3" />
             <path d="M12 8v4M9.5 14.5L6.5 17M14.5 14.5l3 2.5" />
           </svg>
-          <h3 className="text-sm font-semibold text-text-primary">Orchestration</h3>
+          <h3 className="text-ui font-semibold text-ink">Orchestration</h3>
         </div>
-        <span className={`text-2xs px-2 py-0.5 rounded-full font-medium ${MODE_COLORS[mode] ?? MODE_COLORS.spawn}`}>
+        <span className={`text-caption px-2 py-0.5 rounded-full font-medium ${MODE_COLORS[mode] ?? MODE_COLORS.spawn}`}>
           {mode}
         </span>
       </div>
 
       {delegateTargets.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-2xs text-text-muted">Delegate Targets</p>
+          <p className="text-caption text-ink-muted">Delegate Targets</p>
           <div className="flex flex-wrap gap-1.5">
             {delegateTargets.map((dt) => (
-              <span key={dt.agent_key} className="text-2xs px-2 py-0.5 rounded-md bg-surface-tertiary text-text-secondary">
+              <span key={dt.agent_key} className="text-caption px-2 py-0.5 rounded-md bg-surface-hover text-ink-secondary">
                 {dt.display_name || dt.agent_key}
               </span>
             ))}
@@ -45,13 +45,13 @@ export function OrchestrationSection({ agentId }: OrchestrationSectionProps) {
 
       {team && (
         <div className="space-y-1">
-          <p className="text-2xs text-text-muted">Team</p>
-          <span className="text-2xs px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600">{team}</span>
+          <p className="text-caption text-ink-muted">Team</p>
+          <span className="text-caption px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600">{team}</span>
         </div>
       )}
 
       {delegateTargets.length === 0 && !team && mode === 'spawn' && (
-        <p className="text-2xs text-text-muted italic">Standard spawn mode — no delegation configured</p>
+        <p className="text-caption text-ink-muted italic">Standard spawn mode — no delegation configured</p>
       )}
     </div>
   )

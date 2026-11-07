@@ -6,10 +6,12 @@ export function useEvolutionMetrics(agentId: string, timeRange: '7d' | '30d' | '
   const [toolAggs, setToolAggs] = useState<ToolAggregate[]>([])
   const [retrievalAggs, setRetrievalAggs] = useState<RetrievalAggregate[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
 
   const fetchMetrics = useCallback(async () => {
     if (!isApiClientReady()) { setLoading(false); return }
     setLoading(true)
+    setError(false)
     try {
       const since = new Date(Date.now() - parseDays(timeRange) * 86400000).toISOString()
       const res = await getApiClient().getWithParams<AggregatedMetrics>(
@@ -20,6 +22,7 @@ export function useEvolutionMetrics(agentId: string, timeRange: '7d' | '30d' | '
       setRetrievalAggs(res.retrieval_aggregates ?? [])
     } catch (err) {
       console.error('Failed to fetch evolution metrics:', err)
+      setError(true)
     } finally {
       setLoading(false)
     }
@@ -27,7 +30,7 @@ export function useEvolutionMetrics(agentId: string, timeRange: '7d' | '30d' | '
 
   useEffect(() => { fetchMetrics() }, [fetchMetrics])
 
-  return { toolAggs, retrievalAggs, loading }
+  return { toolAggs, retrievalAggs, loading, error, refetch: fetchMetrics }
 }
 
 const RANGE_DAYS: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90 }
