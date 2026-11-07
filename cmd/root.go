@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
@@ -40,9 +41,24 @@ var rootCmd = &cobra.Command{
 	Use:   "goclaw",
 	Short: "GoClaw — AI agent gateway",
 	Long:  "GoClaw: multi-agent AI platform with WebSocket RPC, tool execution, and channel integration. A Go port of OpenClaw with enhanced security and multi-tenant support.",
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		switch cmd.Name() {
+		case "version", "help", "completion":
+			return nil
+		}
+		return validateEncryptionEnv()
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		runGateway()
 	},
+}
+
+// validateEncryptionEnv installs the keyring described by the environment and
+// fails on a malformed configuration, so a bad key list stops the process at
+// startup instead of surfacing as a decrypt error later.
+func validateEncryptionEnv() error {
+	_, err := crypto.ConfigureKeyringFromEnv()
+	return err
 }
 
 func init() {
@@ -61,6 +77,7 @@ func init() {
 	rootCmd.AddCommand(channelsCmd())
 	rootCmd.AddCommand(bitrixPortalCmd())
 	rootCmd.AddCommand(secretVaultCmd())
+	rootCmd.AddCommand(keysCmd())
 	rootCmd.AddCommand(cronCmd())
 	rootCmd.AddCommand(skillsCmd())
 	rootCmd.AddCommand(sessionsCmd())

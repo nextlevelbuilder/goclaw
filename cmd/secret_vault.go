@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
 )
@@ -43,7 +44,7 @@ func openSecretVault(cmd *cobra.Command, tenantID string) (store.SecretVaultStor
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("--tenant-id must be a tenant UUID")
 	}
-	encKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
+	encKey := crypto.ActiveKeyFromEnv()
 	if encKey == "" {
 		return nil, nil, nil, fmt.Errorf("GOCLAW_ENCRYPTION_KEY is not set: the vault refuses to store plaintext")
 	}

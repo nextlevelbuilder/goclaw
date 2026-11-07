@@ -9,6 +9,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/store/pg"
@@ -40,7 +41,7 @@ func setupStoresAndTracing(
 		storeCfg := store.StoreConfig{
 			SQLitePath:       sqlitePath,
 			StorageBackend:   "sqlite",
-			EncryptionKey:    os.Getenv("GOCLAW_ENCRYPTION_KEY"),
+			EncryptionKey:    crypto.ActiveKeyFromEnv(),
 			SkillsStorageDir: filepath.Join(dataDir, "skills-store"),
 		}
 		s, err := sqlitestore.NewSQLiteStores(storeCfg)
@@ -67,7 +68,7 @@ func setupStoresAndTracing(
 		}
 		storeCfg := store.StoreConfig{
 			PostgresDSN:      cfg.Database.PostgresDSN,
-			EncryptionKey:    os.Getenv("GOCLAW_ENCRYPTION_KEY"),
+			EncryptionKey:    crypto.ActiveKeyFromEnv(),
 			SkillsStorageDir: filepath.Join(dataDir, "skills-store"),
 		}
 		s, err := pg.NewPGStores(storeCfg)

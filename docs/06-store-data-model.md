@@ -300,6 +300,8 @@ flowchart LR
     end
 ```
 
+Values are `aes-gcm:` (single key) or `v3:aes-gcm:<kid>:` when a keyring is configured; the kid names the key that sealed the value, which is what lets `goclaw keys rotate` move data to a new key and the old key be removed afterwards. See `docs/09-security.md`, Key rotation.
+
 `GOCLAW_ENCRYPTION_KEY` accepts three formats:
 - **Hex**: 64 characters (decoded to 32 bytes)
 - **Base64**: 44 characters (decoded to 32 bytes)

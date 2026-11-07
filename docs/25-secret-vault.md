@@ -81,6 +81,15 @@ re-run, never prints a value, and exits non-zero listing the IDs of any rows the
 configured key cannot open. Keep the encryption key unchanged until it reports
 no legacy rows.
 
+**Key rotation.** With a keyring configured (see `docs/09-security.md`, Key
+rotation) new and updated secrets are stored as `v3:aes-gcm:<kid>:<base64url>`
+with the same entry binding. `goclaw secret-vault rewrap` upgrades `aes-gcm:`,
+`v2:` and v3 values written under another key to the active key, so it is also
+the per-tenant rotation path; `goclaw keys rotate --to <kid>` runs it for every
+tenant together with the other encrypted columns. A v3 value whose key is no
+longer configured is reported as unreadable by key id, never opened with a
+different key.
+
 **Optimistic concurrency.** Every entry response carries `revision`. `PUT
 /v1/secret-vault/{id}` and `PUT /v1/secret-vault/{id}/value` accept
 `If-Match: <revision>` (quotes and a `W/` prefix are tolerated). A stale

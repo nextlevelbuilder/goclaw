@@ -3,11 +3,11 @@ package cmd
 import (
 	"context"
 	"log/slog"
-	"os"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway/methods"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
@@ -172,7 +172,7 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 
 	// K10: single shared webhookLimiter — one per process enforces per-tenant RPM cap across
 	// both LLM and message endpoints. Two separate instances would double the effective cap.
-	webhookEncKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
+	webhookEncKey := crypto.ActiveKeyFromEnv()
 
 	// K6: refuse to mount any webhook handler when GOCLAW_ENCRYPTION_KEY is unset.
 	// crypto.Encrypt("", "") returns plaintext unchanged, so an empty key would silently

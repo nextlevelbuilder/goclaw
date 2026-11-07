@@ -1,10 +1,10 @@
 package cmd
 
 import (
-	"os"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks"
 	"github.com/nextlevelbuilder/goclaw/internal/hooks/budget"
@@ -29,7 +29,7 @@ var sharedHookHandlers map[hooks.HandlerType]hooks.Handler
 // to pg.NewPGHookBudget so token spend is atomically deducted per tenant.
 // When the DB handle is unavailable, budget falls back to nil (Lite desktop).
 func buildHookHandlers(stores *store.Stores, providerReg *providers.Registry, hooksCfg config.HooksConfig, usageCapSvc *usagecaps.Service) map[hooks.HandlerType]hooks.Handler {
-	encryptKey := os.Getenv("GOCLAW_ENCRYPTION_KEY")
+	encryptKey := crypto.ActiveKeyFromEnv()
 
 	var budgetStore *budget.Store
 	if stores != nil && stores.DB != nil {
