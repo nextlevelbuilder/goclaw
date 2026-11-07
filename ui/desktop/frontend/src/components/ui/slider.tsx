@@ -22,7 +22,7 @@ function Slider({ className, ...props }: SliderProps) {
     >
       <SliderPrimitive.Track
         data-slot="slider-track"
-        className="bg-surface-tertiary relative h-1.5 w-full grow overflow-hidden rounded-full"
+        className="bg-border-subtle relative h-1.5 w-full grow overflow-hidden rounded-full"
       >
         <SliderPrimitive.Range
           data-slot="slider-range"
@@ -31,7 +31,7 @@ function Slider({ className, ...props }: SliderProps) {
       </SliderPrimitive.Track>
       <SliderPrimitive.Thumb
         data-slot="slider-thumb"
-        className="border-accent bg-surface-secondary block size-4 shrink-0 rounded-full border shadow focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 transition-colors"
+        className="border-accent bg-surface-raised block size-4 shrink-0 rounded-full border shadow-panel disabled:pointer-events-none disabled:opacity-50 transition-colors"
       />
     </SliderPrimitive.Root>
   )

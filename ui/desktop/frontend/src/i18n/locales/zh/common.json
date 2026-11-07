@@ -151,5 +151,31 @@
   },
   "errors": {
     "serverError": "出了点问题，请稍后重试。"
+  },
+  "dismiss": "关闭",
+  "tryAgain": "重试",
+  "moreActions": "更多操作",
+  "selectedCount": "已选择 {{count}} 项",
+  "clearSelection": "取消选择",
+  "selectAllRows": "选择所有行",
+  "selectRow": "选择行",
+  "state": {
+    "loading": "加载中",
+    "emptyTitle": "暂无内容",
+    "errorTitle": "出错了",
+    "errorHint": "请确认网关正在运行，然后重试。",
+    "errorCode": "代码：{{code}}",
+    "offlineTitle": "无法连接网关",
+    "offlineSaved": "正在显示已保存的数据。",
+    "offlineRetryIn_other": "{{count}} 秒后自动重试。",
+    "offlineRetrying": "正在重新连接…",
+    "retryNow": "立即重试"
+  },
+  "tone": {
+    "success": "就绪",
+    "warning": "警告",
+    "danger": "失败",
+    "info": "信息",
+    "idle": "空闲"
   }
 }

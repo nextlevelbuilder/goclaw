@@ -151,5 +151,32 @@
   },
   "errors": {
     "serverError": "Something went wrong. Please try again later."
+  },
+  "dismiss": "Dismiss",
+  "tryAgain": "Try again",
+  "moreActions": "More actions",
+  "selectedCount": "{{count}} selected",
+  "clearSelection": "Clear selection",
+  "selectAllRows": "Select all rows",
+  "selectRow": "Select row",
+  "state": {
+    "loading": "Loading",
+    "emptyTitle": "Nothing here yet",
+    "errorTitle": "Something went wrong",
+    "errorHint": "Check that the gateway is running, then try again.",
+    "errorCode": "Code: {{code}}",
+    "offlineTitle": "Can't reach the gateway",
+    "offlineSaved": "Showing saved data.",
+    "offlineRetryIn_one": "Retrying automatically in {{count}} second.",
+    "offlineRetryIn_other": "Retrying automatically in {{count}} seconds.",
+    "offlineRetrying": "Reconnecting…",
+    "retryNow": "Retry now"
+  },
+  "tone": {
+    "success": "Ready",
+    "warning": "Warning",
+    "danger": "Failed",
+    "info": "Info",
+    "idle": "Idle"
   }
 }
