@@ -2,12 +2,15 @@ package teamworkclassify
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/teamconfig"
 )
 
 type fakeEmbedder map[string][]float32
@@ -156,20 +159,12 @@ func TestClassifySelfForCasualOrWeakCloseMessages(t *testing.T) {
 
 func TestClassifyWithLLMUsesLongerDefaultArbiterTimeout(t *testing.T) {
 	provider := &fakeArbiterProvider{content: `{"decision":"self","confidence":0.5,"mode":"team","reason":"direct enough"}`}
-	result := ClassifyWithLLM(context.Background(), Input{
-		Mode:         ModeTeam,
-		Message:      "lập kế hoạch content và chiến lược cho chiến dịch mới",
-		CurrentAgent: Profile{Kind: "agent", Name: "Bảo An", Text: "điều phối chung"},
-		Team:         Profile{Kind: "team", Name: "Growth Team", Text: "content chiến lược"},
-		Members:      []Profile{{Kind: "team_member", Name: "Bảo Ly", Text: "content chiến lược"}},
-		Embedder: fakeEmbedder{
-			"lập kế hoạch": {1, 0},
-			"content":      {1, 0},
-			"điều phối":    {0, 1},
-		},
-	}, provider, "arbiter-model", nil)
+	result := ClassifyWithLLM(context.Background(), ambiguousInput(), provider, "arbiter-model", nil)
 	if result.Decision != DecisionSelf {
 		t.Fatalf("Decision = %q, want %q", result.Decision, DecisionSelf)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("arbiter calls = %d, want 1 for ambiguous evidence", provider.calls)
 	}
 	if provider.deadlineRemaining < 25*time.Second {
 		t.Fatalf("arbiter deadline remaining = %s, want at least 25s", provider.deadlineRemaining)
@@ -178,18 +173,7 @@ func TestClassifyWithLLMUsesLongerDefaultArbiterTimeout(t *testing.T) {
 
 func TestClassifyWithLLMFallsBackToSelfOnArbiterError(t *testing.T) {
 	provider := &fakeArbiterProvider{err: errors.New("provider unavailable")}
-	result := ClassifyWithLLM(context.Background(), Input{
-		Mode:         ModeTeam,
-		Message:      "lập kế hoạch content và chiến lược cho chiến dịch mới",
-		CurrentAgent: Profile{Kind: "agent", Name: "Bảo An", Text: "điều phối chung"},
-		Team:         Profile{Kind: "team", Name: "Growth Team", Text: "content chiến lược"},
-		Members:      []Profile{{Kind: "team_member", Name: "Bảo Ly", Text: "content chiến lược"}},
-		Embedder: fakeEmbedder{
-			"lập kế hoạch": {1, 0},
-			"content":      {1, 0},
-			"điều phối":    {0, 1},
-		},
-	}, provider, "arbiter-model", nil)
+	result := ClassifyWithLLM(context.Background(), ambiguousInput(), provider, "arbiter-model", nil)
 	if result.Decision != DecisionSelf {
 		t.Fatalf("Decision = %q, want %q; result=%+v", result.Decision, DecisionSelf, result)
 	}
@@ -202,10 +186,12 @@ type fakeArbiterProvider struct {
 	content           string
 	err               error
 	req               providers.ChatRequest
+	calls             int
 	deadlineRemaining time.Duration
 }
 
 func (p *fakeArbiterProvider) Chat(ctx context.Context, req providers.ChatRequest) (*providers.ChatResponse, error) {
+	p.calls++
 	p.req = req
 	if deadline, ok := ctx.Deadline(); ok {
 		p.deadlineRemaining = time.Until(deadline)
@@ -214,6 +200,61 @@ func (p *fakeArbiterProvider) Chat(ctx context.Context, req providers.ChatReques
 		return nil, p.err
 	}
 	return &providers.ChatResponse{Content: p.content}, nil
+}
+
+// ambiguousInput produces |collab-self| <= margin (both scores are 1.0), so the
+// embedding evidence is undecided and the arbiter must be consulted.
+func ambiguousInput() Input {
+	return Input{
+		Mode:         ModeTeam,
+		Message:      "lập kế hoạch chiến lược dài cho chiến dịch mới",
+		CurrentAgent: Profile{Kind: "agent", Name: "Bảo An", Text: "điều phối"},
+		Team:         Profile{Kind: "team", Name: "Growth Team", Text: "chiến lược"},
+		Members:      []Profile{{Kind: "team_member", Name: "Bảo Ly", Text: "chiến lược"}},
+		CollaborationTools: []Profile{
+			{Kind: "tool", Name: "team_tasks", Text: "chiến lược"},
+		},
+		Embedder: fakeEmbedder{
+			"lập kế hoạch": {1, 0}, // message
+			"điều phối":    {1, 0}, // self doc — identical vector → selfScore 1.0
+			"chiến lược":   {1, 0}, // collab docs — identical vector → collabScore 1.0
+		},
+	}
+}
+
+// decisiveTeamInput produces diff = 1.0 > margin and collab = 1.0 >= threshold,
+// so the embedding evidence decides "team" without the arbiter.
+func decisiveTeamInput() Input {
+	return Input{
+		Mode:         ModeTeam,
+		Message:      "giao việc lập kế hoạch chiến lược dài cho team",
+		CurrentAgent: Profile{Kind: "agent", Name: "Lead", Text: "điều phối chung"},
+		Team:         Profile{Kind: "team", Name: "Team", Text: "chiến lược"},
+		Members:      []Profile{{Kind: "team_member", Name: "Bảo Ly", Text: "chiến lược"}},
+		CollaborationTools: []Profile{
+			{Kind: "tool", Name: "team_tasks", Text: "assign"},
+		},
+		Embedder: fakeEmbedder{
+			"lập kế hoạch": {1, 0}, // message → collab 1.0
+			"chiến lược":   {1, 0}, // collab docs
+			"điều phối":    {0, 1}, // self doc → self 0.0
+			"assign":       {0, 1},
+		},
+	}
+}
+
+// decisiveSelfInput is the mirror of decisiveTeamInput: the message matches the
+// self doc and the collab docs are orthogonal, so diff = -1.0 (decisively self).
+func decisiveSelfInput() Input {
+	in := decisiveTeamInput()
+	in.Message = "tóm tắt giúp phần này"
+	in.Embedder = fakeEmbedder{
+		"chiến lược": {0, 1},
+		"tóm tắt":    {1, 0}, // message → self 1.0
+		"điều phối":  {1, 0}, // self doc
+		"assign":     {0, 1},
+	}
+	return in
 }
 
 func (p *fakeArbiterProvider) ChatStream(context.Context, providers.ChatRequest, func(providers.StreamChunk)) (*providers.ChatResponse, error) {
@@ -243,25 +284,15 @@ func TestParseArbiterResultAcceptsSelfOrTeamOnly(t *testing.T) {
 
 func TestClassifyWithLLMUsesArbiterDecisionAndEvidence(t *testing.T) {
 	provider := &fakeArbiterProvider{content: `{"decision":"team","confidence":0.86,"mode":"team","required_tool":"team_tasks","reason":"requires content and strategy members"}`}
-	result := ClassifyWithLLM(context.Background(), Input{
-		Mode:         ModeTeam,
-		Message:      "lập kế hoạch content và chiến lược cho chiến dịch mới",
-		CurrentAgent: Profile{Kind: "agent", Name: "Bảo An", Text: "điều phối chung"},
-		Team:         Profile{Kind: "team", Name: "Growth Team", Text: "content chiến lược"},
-		Members: []Profile{
-			{Kind: "team_member", Name: "Bảo Ly Content", Text: "content"},
-			{Kind: "team_member", Name: "Bảo Ly Chiến lược", Text: "chiến lược"},
-		},
-		CollaborationTools: []Profile{{Kind: "tool", Name: "team_tasks", Text: "assign team work"}},
-		Embedder: fakeEmbedder{
-			"lập kế hoạch": {1, 0},
-			"content":      {1, 0},
-			"chiến lược":   {1, 0},
-			"điều phối":    {0, 1},
-		},
-	}, provider, "arbiter-model", nil)
+	in := ambiguousInput()
+	in.TeamRole = "lead"
+	in.CanAssignTeamTasks = true
+	result := ClassifyWithLLM(context.Background(), in, provider, "arbiter-model", nil)
 	if result.Decision != DecisionTeam || result.RequiredTool != "team_tasks" {
 		t.Fatalf("ClassifyWithLLM result = %+v", result)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("arbiter calls = %d, want 1", provider.calls)
 	}
 	if len(provider.req.Messages) < 2 {
 		t.Fatalf("arbiter request messages missing: %+v", provider.req)
@@ -290,6 +321,9 @@ func TestClassifyWithLLMForcesSelfWhenMemberCannotAssignOrRequest(t *testing.T) 
 			"team member":    {0, 1},
 		},
 	}, provider, "arbiter-model", nil)
+	if provider.calls != 0 {
+		t.Fatalf("arbiter calls = %d, want 0 — gate must hold on the no-arbiter path", provider.calls)
+	}
 	if result.Decision != DecisionSelf {
 		t.Fatalf("Decision = %q, want self for member without request permission; result=%+v", result.Decision, result)
 	}
@@ -318,6 +352,9 @@ func TestClassifyWithLLMForcesSelfWhenMemberRequestNeedsLeaderReview(t *testing.
 			"team member":  {0, 1},
 		},
 	}, provider, "arbiter-model", nil)
+	if provider.calls != 0 {
+		t.Fatalf("arbiter calls = %d, want 0 — gate must hold on the no-arbiter path", provider.calls)
+	}
 	if result.Decision != DecisionSelf {
 		t.Fatalf("Decision = %q, want self when member request does not auto-dispatch; result=%+v", result.Decision, result)
 	}
@@ -429,6 +466,201 @@ func TestBuildProfileDocumentsIncludesTeamLinksAndTools(t *testing.T) {
 	for _, want := range []string{"Lead", "web_search", "Team A", "Member A", "Delegate A", "team_tasks"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("profile documents missing %q:\n%s", want, joined)
+		}
+	}
+}
+
+// Zero arbiter calls when embedding evidence decides the outcome.
+func TestClassifyWithLLMSkipsArbiterOnDecisiveTeam(t *testing.T) {
+	provider := &fakeArbiterProvider{content: `{"decision":"self"}`}
+	in := decisiveTeamInput()
+	in.TeamRole = "lead"
+	in.CanAssignTeamTasks = true
+	result := ClassifyWithLLM(context.Background(), in, provider, "arbiter-model", nil)
+	if provider.calls != 0 {
+		t.Fatalf("arbiter calls = %d, want 0 for decisive evidence", provider.calls)
+	}
+	if result.Decision != DecisionTeam || result.RequiredTool != "team_tasks" {
+		t.Fatalf("result = %+v, want team/team_tasks", result)
+	}
+	if result.WorkflowHint == "" {
+		t.Fatal("WorkflowHint empty on decisive-team path")
+	}
+}
+
+func TestClassifyWithLLMSkipsArbiterOnDecisiveSelf(t *testing.T) {
+	provider := &fakeArbiterProvider{content: `{"decision":"team"}`}
+	result := ClassifyWithLLM(context.Background(), decisiveSelfInput(), provider, "arbiter-model", nil)
+	if provider.calls != 0 {
+		t.Fatalf("arbiter calls = %d, want 0", provider.calls)
+	}
+	if result.Decision != DecisionSelf {
+		t.Fatalf("Decision = %q, want self", result.Decision)
+	}
+}
+
+func TestClassifyWithLLMSkipsArbiterOnCasualMessage(t *testing.T) {
+	provider := &fakeArbiterProvider{content: `{"decision":"team"}`}
+	in := decisiveTeamInput()
+	in.Message = "chào em"
+	result := ClassifyWithLLM(context.Background(), in, provider, "arbiter-model", nil)
+	if provider.calls != 0 {
+		t.Fatalf("arbiter calls = %d, want 0 for casual guard", provider.calls)
+	}
+	if result.Decision != DecisionSelf {
+		t.Fatalf("Decision = %q, want self", result.Decision)
+	}
+}
+
+// C1 regression: permission gate applies even when the arbiter is skipped.
+func TestClassifyWithLLMAppliesPermissionGateWithoutArbiter(t *testing.T) {
+	provider := &fakeArbiterProvider{content: `{"decision":"team"}`}
+	in := decisiveTeamInput()
+	in.TeamRole = "member"
+	in.CanAssignTeamTasks = false
+	in.MemberRequestsEnabled = false
+	in.MemberRequestsAutoDispatch = false
+	result := ClassifyWithLLM(context.Background(), in, provider, "arbiter-model", nil)
+	if provider.calls != 0 {
+		t.Fatalf("arbiter calls = %d, want 0", provider.calls)
+	}
+	if result.Decision != DecisionSelf {
+		t.Fatalf("Decision = %q, want self for member without permission", result.Decision)
+	}
+	if result.RequiredTool != "" || result.WorkflowHint != "" {
+		t.Fatalf("gated result leaked tool/hint: %+v", result)
+	}
+	if !strings.Contains(result.Reason, "member lacks team request permission") {
+		t.Fatalf("Reason = %q, want member permission marker", result.Reason)
+	}
+}
+
+// Ambiguous flag is set only on the two undecided branches.
+func TestClassifyMarksAmbiguousOnlyForCloseOrWeakScores(t *testing.T) {
+	cases := []struct {
+		name  string
+		input Input
+		want  bool
+	}{
+		{"spawn mode", Input{Mode: ModeSpawn, Message: "x"}, false},
+		{"empty message", Input{Mode: ModeTeam, Message: "   ", Embedder: fakeEmbedder{}}, false},
+		{"casual guard", func() Input { in := decisiveTeamInput(); in.Message = "ok"; return in }(), false},
+		{"no embedder", Input{Mode: ModeTeam, Message: "phân tích chiến lược"}, false},
+		{"close margin", ambiguousInput(), true},
+		{"decisive team", decisiveTeamInput(), false},
+		{"decisive self", decisiveSelfInput(), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := Classify(context.Background(), tc.input).Ambiguous; got != tc.want {
+				t.Fatalf("Ambiguous = %v, want %v (result=%+v)", got, tc.want, Classify(context.Background(), tc.input))
+			}
+		})
+	}
+}
+
+func TestClassifyRuleMatchWinsOverCasualGuard(t *testing.T) {
+	// Message is short ("ok go") — casual guard would normally claim it, but
+	// the operator rule must win (explicit config beats heuristic).
+	rule := teamconfig.RoutingRule{AgentKey: "coder-agent", Keywords: []string{"go"}}
+	in := decisiveTeamInput()
+	in.Message = "ok go"
+	in.RoutingRules = []teamconfig.RoutingRule{rule}
+	in.TeamRole = "lead"
+	in.CanAssignTeamTasks = true
+	result := Classify(context.Background(), in)
+	if result.Decision != DecisionTeam || result.TargetAgentKey != "coder-agent" {
+		t.Fatalf("rule must win over casual guard, got %+v", result)
+	}
+	if result.RequiredTool != "team_tasks" || !strings.Contains(result.WorkflowHint, "search") || !strings.Contains(result.WorkflowHint, "coder-agent") {
+		t.Fatalf("rule hint wrong: %+v", result)
+	}
+}
+
+func TestClassifyRuleMatchNoEmbedder(t *testing.T) {
+	// Rule-matched messages route even with no embedder (spec success #2).
+	rule := teamconfig.RoutingRule{AgentKey: "coder-agent", FilePatterns: []string{".go"}}
+	in := Input{Mode: ModeTeam, Message: "fix internal/foo.go", RoutingRules: []teamconfig.RoutingRule{rule}}
+	result := Classify(context.Background(), in)
+	if result.Decision != DecisionTeam {
+		t.Fatalf("rule must route without embedder, got %+v", result)
+	}
+}
+
+func TestClassifyRuleStaleMemberIgnored(t *testing.T) {
+	// EffectiveRules already dropped this — but test the classifier contract:
+	// a rule naming a member absent from RoutingRules must not fire.
+	in := decisiveTeamInput()
+	in.Message = "fix internal/foo.go"
+	in.RoutingRules = nil // stale rule removed by EffectiveRules
+	result := Classify(context.Background(), in)
+	if result.TargetAgentKey != "" {
+		t.Fatalf("no routing target expected, got %q", result.TargetAgentKey)
+	}
+}
+
+func TestClassifyWithLLMRuleMatchPermissionGateMember(t *testing.T) {
+	// Rule-driven team decision + member without member_requests → DecisionSelf.
+	provider := &fakeArbiterProvider{content: `{"decision":"team"}`}
+	rule := teamconfig.RoutingRule{AgentKey: "peer-agent", Keywords: []string{"go"}}
+	in := decisiveTeamInput()
+	in.Message = "go fix it"
+	in.RoutingRules = []teamconfig.RoutingRule{rule}
+	in.TeamRole = "member"
+	in.CanAssignTeamTasks = false
+	in.MemberRequestsEnabled = false
+	result := ClassifyWithLLM(context.Background(), in, provider, "m", nil)
+	if provider.calls != 0 {
+		t.Fatalf("no arbiter for rule match, calls=%d", provider.calls)
+	}
+	if result.Decision != DecisionSelf {
+		t.Fatalf("member without permission must be gated to self, got %+v", result)
+	}
+}
+
+func TestClassifyWithLLMRuleMatchLeadZeroArbiter(t *testing.T) {
+	provider := &fakeArbiterProvider{content: `{"decision":"self"}`}
+	rule := teamconfig.RoutingRule{AgentKey: "coder-agent", FilePatterns: []string{".go"}}
+	in := decisiveTeamInput()
+	in.Message = "fix internal/foo.go"
+	in.RoutingRules = []teamconfig.RoutingRule{rule}
+	in.TeamRole = "lead"
+	in.CanAssignTeamTasks = true
+	result := ClassifyWithLLM(context.Background(), in, provider, "m", nil)
+	if provider.calls != 0 {
+		t.Fatalf("rule match must skip arbiter, calls=%d", provider.calls)
+	}
+	if result.Decision != DecisionTeam || result.TargetAgentKey != "coder-agent" {
+		t.Fatalf("rule result wrong: %+v", result)
+	}
+}
+
+// Step 3 fields are inert on the deterministic rule path: a threshold or
+// fallback change must not alter a rule-driven team decision.
+func TestClassifyRuleDecisionIgnoresFallbackAndThreshold(t *testing.T) {
+	settingsFor := func(fallback bool, threshold float64) []teamconfig.RoutingRule {
+		raw := fmt.Sprintf(`{"routing":{"enabled":true,"fallback_to_self":%t,"confidence_threshold":%g,
+			"rules":[{"agent_key":"coder-agent","file_patterns":[".go"]}]}}`, fallback, threshold)
+		r := teamconfig.ParseRouting(json.RawMessage(raw))
+		return teamconfig.EffectiveRules(r, []string{"coder-agent"})
+	}
+	var baseline Result
+	for i, tc := range []struct {
+		fallback  bool
+		threshold float64
+	}{{true, 0.65}, {false, 0.99}, {false, 0.01}} {
+		in := Input{Mode: ModeTeam, Message: "fix internal/foo.go", RoutingRules: settingsFor(tc.fallback, tc.threshold)}
+		got := Classify(context.Background(), in)
+		if got.Decision != DecisionTeam || got.TargetAgentKey != "coder-agent" {
+			t.Fatalf("case %d (fallback=%v threshold=%v): got %+v, want team/coder-agent", i, tc.fallback, tc.threshold, got)
+		}
+		if i == 0 {
+			baseline = got
+			continue
+		}
+		if got.Decision != baseline.Decision || got.TargetAgentKey != baseline.TargetAgentKey ||
+			got.RequiredTool != baseline.RequiredTool || got.WorkflowHint != baseline.WorkflowHint {
+			t.Fatalf("case %d result %+v differs from baseline %+v", i, got, baseline)
 		}
 	}
 }

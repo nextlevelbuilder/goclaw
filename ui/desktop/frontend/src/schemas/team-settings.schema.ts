@@ -13,6 +13,16 @@ export const teamSettingsSchema = z.object({
     new_task: z.boolean(),
   }),
   notifyMode: notifyModeEnum,
+  routingEnabled: z.boolean(),
+  routingFallbackToSelf: z.boolean(),
+  routingConfidenceThreshold: z.number().min(0.01).max(1),
+  routingRules: z.array(z.object({
+    agent_key: z.string().min(1),
+    keywords: z.array(z.string()),
+    file_patterns: z.array(z.string()),
+    criteria: z.string(),
+    enabled: z.boolean(),
+  })),
 })
 
 export type TeamSettingsFormData = z.infer<typeof teamSettingsSchema>

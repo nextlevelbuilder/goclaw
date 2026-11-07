@@ -307,7 +307,21 @@
       "downgradeNote": "Hạ cấp an toàn — dữ liệu V2 được giữ lại nhưng ẩn đi.",
       "betaNote": "Một số tính năng đang ở giai đoạn Beta.",
       "gotIt": "Đã hiểu"
-    }
+    },
+    "routing": "Quy tắc định tuyến",
+    "routingEnabled": "Bật định tuyến cho member",
+    "routingEnabledDesc": "Định tuyến tin nhắn khớp đến member cụ thể trước khi phân loại bằng embedding",
+    "routingFallbackToSelf": "Dự phòng về chính mình",
+    "routingFallbackToSelfDesc": "Định tuyến về chính mình khi không có quy tắc nào khớp (khuyến nghị)",
+    "routingConfidence": "Ngưỡng tin cậy",
+    "routingConfidenceDesc": "Độ tin cậy tối thiểu cho tuyến theo quy tắc (0.01–1.00)",
+    "routingRuleOrderHint": "Quy tắc khớp đầu tiên được áp dụng — thứ tự quy tắc theo vị trí trong danh sách",
+    "routingKeywords": "Từ khóa",
+    "routingKeywordsHint": "Khớp chuỗi con theo ranh giới từ (ví dụ: golang, deploy)",
+    "routingFilePatterns": "Mẫu tệp",
+    "routingFilePatternsHint": "Phần mở rộng như .go, dockerfile, *.ts",
+    "routingCriteria": "Tiêu chí quyết định",
+    "routingCriteriaHint": "Tiêu chí bằng ngôn ngữ tự nhiên cho mô hình quyết định (tùy chọn)"
   },
   "create": {
     "title": "Tạo Team",

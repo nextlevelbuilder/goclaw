@@ -7,6 +7,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/decisionmodel"
 	"github.com/nextlevelbuilder/goclaw/internal/memory"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/scheduler"
@@ -35,6 +36,7 @@ type ConsumerDeps struct {
 	UsageCaps        *usagecaps.Service
 	ProviderReg      *providers.Registry
 	TeamWorkEmbedder memory.EmbeddingProvider
+	DecisionModels   *decisionmodel.Resolver // nil = decision model unavailable
 	BgWg             sync.WaitGroup
 	GetAnnounceMu    func(string) *sync.Mutex
 }

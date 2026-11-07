@@ -6,9 +6,11 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"strings"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bgalert"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/decisionmodel"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -72,6 +74,12 @@ func (h *SystemConfigsHandler) handleSet(w http.ResponseWriter, r *http.Request)
 
 	if !validKeyRe.MatchString(key) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid key format (alphanumeric, dots, hyphens, 1-100 chars)"})
+		return
+	}
+	// decision_model.* writes must pass endpoint SSRF validation and keep the
+	// API key out of this plain-text table; only /v1/decision-model/config does that.
+	if strings.HasPrefix(key, decisionmodel.KeyPrefix) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "use /v1/decision-model/config for decision_model.* keys")})
 		return
 	}
 
