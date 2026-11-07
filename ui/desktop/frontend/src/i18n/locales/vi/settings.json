@@ -1,1 +1,102 @@
-{}
+{
+  "title": "Cài đặt",
+  "description": "Ngôn ngữ, giao diện và cổng kết nối",
+  "nav": {
+    "label": "Các mục cài đặt",
+    "general": "Chung",
+    "appearance": "Giao diện",
+    "gateway": "Cổng kết nối",
+    "security": "Bảo mật",
+    "about": "Giới thiệu"
+  },
+  "general": {
+    "regionTitle": "Ngôn ngữ và khu vực",
+    "language": "Ngôn ngữ",
+    "languageHint": "Dùng cho menu và thông báo.",
+    "timezone": "Múi giờ",
+    "timezoneHint": "Dùng cho lịch chạy và mốc thời gian."
+  },
+  "appearance": {
+    "themeTitle": "Chủ đề",
+    "theme": "Chủ đề",
+    "themeHint": "Hệ thống sẽ theo cài đặt Windows của bạn.",
+    "system": "Hệ thống",
+    "light": "Sáng",
+    "dark": "Tối"
+  },
+  "gateway": {
+    "title": "Cổng kết nối",
+    "status": "Trạng thái",
+    "statusHint": "Cổng kết nối cục bộ có đang phản hồi không.",
+    "online": "Trực tuyến",
+    "connecting": "Đang kết nối",
+    "offline": "Ngoại tuyến",
+    "url": "Địa chỉ",
+    "urlHint": "Chỉ máy tính này kết nối được.",
+    "port": "Cổng",
+    "portHint": "Cổng cục bộ mà gateway đang lắng nghe.",
+    "dataDir": "Thư mục dữ liệu",
+    "dataDirHint": "Nơi lưu cơ sở dữ liệu và tệp của agent.",
+    "openFolder": "Mở thư mục",
+    "errorTitle": "Không đọc được thông tin gateway",
+    "errorBody": "Hãy mở GoClaw từ ứng dụng desktop rồi thử lại."
+  },
+  "security": {
+    "dataTitle": "Dữ liệu cục bộ",
+    "storage": "Lưu trữ khóa",
+    "storageHint": "Khóa API được mã hóa trước khi lưu trên thiết bị này.",
+    "secure": "Đã mã hóa",
+    "dangerTitle": "Vùng nguy hiểm",
+    "reset": {
+      "title": "Đặt lại cơ sở dữ liệu",
+      "description": "Xóa cơ sở dữ liệu và khởi động lại ứng dụng. Toàn bộ agent, phiên, nhà cung cấp và cài đặt sẽ mất vĩnh viễn.",
+      "button": "Đặt lại cơ sở dữ liệu",
+      "confirmTitle": "Đặt lại cơ sở dữ liệu?",
+      "confirmDescription": "Thao tác này xóa toàn bộ dữ liệu và khởi động lại GoClaw từ đầu. Không thể hoàn tác.",
+      "confirm": "Đặt lại và khởi động lại",
+      "failed": "Không đặt lại được cơ sở dữ liệu. Hãy thử lại."
+    }
+  },
+  "about": {
+    "title": "GoClaw Desktop",
+    "subtitle": "Phiên bản {{version}} · Bản Lite",
+    "detailsTitle": "Chi tiết",
+    "version": "Phiên bản",
+    "edition": "Bản phát hành",
+    "editionValue": "Lite (SQLite)",
+    "runtime": "Môi trường chạy",
+    "runtimeValue": "Wails v2",
+    "dataDir": "Thư mục dữ liệu",
+    "updatesTitle": "Cập nhật",
+    "updatesHint": "Kiểm tra xem có phiên bản mới hơn không.",
+    "check": "Kiểm tra cập nhật",
+    "checking": "Đang kiểm tra…",
+    "upToDate": "Bạn đang dùng phiên bản mới nhất.",
+    "available": "Đã có phiên bản {{version}}",
+    "updateNow": "Cập nhật ngay",
+    "downloading": "Đang tải bản cập nhật…",
+    "ready": "Đã cài bản cập nhật. Khởi động lại để áp dụng.",
+    "restart": "Khởi động lại",
+    "checkFailed": "Không kiểm tra được cập nhật.",
+    "updateFailed": "Cập nhật thất bại. Hãy thử lại.",
+    "diagnosticsTitle": "Chẩn đoán",
+    "diagnosticsHint": "Sao chép phiên bản và nền tảng để gửi cho bộ phận hỗ trợ.",
+    "copy": "Sao chép thông tin",
+    "copied": "Đã sao chép",
+    "limitsTitle": "Giới hạn của bản phát hành",
+    "limits": {
+      "agents": "Agent",
+      "agentsValue": "Tối đa 5",
+      "teams": "Nhóm",
+      "teamsValue": "Tối đa 1",
+      "teamMembers": "Thành viên nhóm",
+      "teamMembersValue": "Tối đa 5",
+      "database": "Cơ sở dữ liệu",
+      "databaseValue": "SQLite (cục bộ)",
+      "users": "Người dùng",
+      "usersValue": "Một người dùng"
+    },
+    "github": "GitHub",
+    "builtWith": "Xây dựng bằng Go, React và Wails"
+  }
+}

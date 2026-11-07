@@ -1,1 +1,93 @@
-{}
+{
+  "language": "Ngôn ngữ",
+  "steps": {
+    "label": "Tiến trình thiết lập",
+    "provider": "Nhà cung cấp",
+    "model": "Mô hình",
+    "agent": "Agent đầu tiên"
+  },
+  "back": "Quay lại",
+  "continue": "Tiếp tục",
+  "loadErrorTitle": "Không kiểm tra được thiết lập của bạn",
+  "loadErrorBody": "Hãy kiểm tra gateway đang chạy rồi thử lại.",
+  "provider": {
+    "title": "Kết nối nhà cung cấp",
+    "description": "Agent cần một mô hình để suy nghĩ. Bạn có thể thêm nhà cung cấp khác sau trong mục Nhà cung cấp.",
+    "type": "Nhà cung cấp",
+    "name": "Tên",
+    "apiKey": "Khóa API",
+    "apiKeyHelper": "Được lưu mã hóa trên thiết bị này.",
+    "apiKeyRequired": "Hãy nhập khóa API để tiếp tục.",
+    "apiBase": "URL gốc của API",
+    "noKey": "{{provider}} không cần khóa API.",
+    "save": "Lưu và tiếp tục",
+    "update": "Cập nhật và tiếp tục",
+    "saveFailed": "Không lưu được nhà cung cấp. Hãy kiểm tra thông tin rồi thử lại."
+  },
+  "model": {
+    "title": "Chọn và xác minh mô hình",
+    "description": "Chọn mô hình agent sẽ dùng, rồi kiểm tra kết nối.",
+    "provider": "Nhà cung cấp",
+    "label": "Mô hình",
+    "placeholder": "Nhập hoặc chọn mô hình",
+    "loading": "Đang tải danh sách mô hình…",
+    "noModels": "Nhà cung cấp không trả về mô hình nào. Hãy nhập tên mô hình.",
+    "verify": "Xác minh mô hình",
+    "verifying": "Đang xác minh… ({{seconds}} giây)",
+    "verified": "Đã xác minh",
+    "verifyFailed": "Xác minh thất bại. Hãy kiểm tra tên mô hình và khóa API.",
+    "verifiedTitle": "Đã xác minh mô hình",
+    "verifiedBody": "{{model}} hoạt động với {{provider}}."
+  },
+  "agent": {
+    "title": "Tạo agent đầu tiên",
+    "description": "Đặt tên và tính cách cho agent của bạn.",
+    "provider": "Nhà cung cấp",
+    "model": "Mô hình",
+    "name": "Tên hiển thị",
+    "emoji": "Biểu tượng cảm xúc",
+    "key": "Khóa agent",
+    "personality": "Tính cách",
+    "descriptionLabel": "Mô tả",
+    "descPlaceholder": "Mô tả tính cách của agent…",
+    "create": "Tạo agent",
+    "createFailed": "Không tạo được agent. Hãy thử lại."
+  },
+  "summoning": {
+    "title": "Đang tạo agent của bạn",
+    "weaving": "Đang viết tính cách cho {{name}}…",
+    "completedTitle": "Agent đã sẵn sàng",
+    "ready": "{{name}} đã sẵn sàng.",
+    "failedTitle": "Không tạo được agent",
+    "failed": "Không thể tạo agent.",
+    "waiting": "Đang xử lý… {{time}}",
+    "takingTooLong": "Lâu quá?",
+    "cancel": "Hủy",
+    "cancelling": "Đang hủy…",
+    "retry": "Thử lại",
+    "retrying": "Đang thử lại…",
+    "continue": "Tiếp tục",
+    "done": "Xong",
+    "fileSOUL": "Tính cách cốt lõi",
+    "fileIDENTITY": "Danh tính và kiến thức",
+    "filesLabel": "Các tệp đang được viết"
+  },
+  "start": {
+    "title": "Đang khởi động GoClaw",
+    "subtitle": "Thường mất vài giây.",
+    "steps": {
+      "gateway": "Khởi động gateway",
+      "connect": "Kết nối tới gateway",
+      "setup": "Kiểm tra thiết lập của bạn"
+    },
+    "failed": {
+      "title": "GoClaw không khởi động được",
+      "timeoutBody": "Gateway không phản hồi trong {{seconds}} giây, nên chưa có gì thay đổi.",
+      "connectBody": "Gateway đã khởi động nhưng GoClaw không kết nối được tới nó.",
+      "todo": "Hãy đóng mọi bản GoClaw khác đang chạy rồi thử lại. Nếu vẫn lỗi, hãy khởi động lại máy.",
+      "detail": "Chi tiết",
+      "dataDir": "Dữ liệu của bạn nằm tại",
+      "tryAgain": "Thử lại"
+    }
+  }
+}

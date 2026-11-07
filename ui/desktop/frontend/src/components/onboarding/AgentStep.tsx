@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getApiClient } from '../../lib/api'
+import { cn } from '../../lib/cn'
 import { slugify, isValidSlug } from '../../lib/slug'
 import { agentService } from '../../services/agent-service'
-
+import { Button, Field, Input, Textarea } from '../ui'
+import { StepError, StepShell } from './onboarding-shell'
 import { SummoningModal } from './SummoningModal'
 import type { ProviderData } from '../../types/provider'
 
@@ -26,7 +28,7 @@ interface AgentStepProps {
 }
 
 export function AgentStep({ provider, model, onBack, onComplete }: AgentStepProps) {
-  const { t } = useTranslation(['desktop', 'agents', 'common'])
+  const { t } = useTranslation(['onboarding', 'agents', 'desktop'])
   const [selectedPresetIdx, setSelectedPresetIdx] = useState<number>(0)
   const [description, setDescription] = useState('')
   // Identity is editable state, only *prefilled* from the selected preset. It must
@@ -129,7 +131,7 @@ export function AgentStep({ provider, model, onBack, onComplete }: AgentStepProp
       })
       setCreatedAgent({ id: result.id, name: trimmedName || agentKey })
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('common:failedToCreateAgent'))
+      setError(err instanceof Error && err.message ? err.message : t('agent.createFailed'))
     } finally {
       setLoading(false)
     }
@@ -149,89 +151,64 @@ export function AgentStep({ provider, model, onBack, onComplete }: AgentStepProp
   }
 
   return (
-    <div className="bg-surface-secondary border border-border rounded-xl p-6 space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold text-text-primary">{t('onboarding.agentStep')}</h2>
-        <p className="text-sm text-text-muted">{t('onboarding.agentStepDesc')}</p>
-      </div>
-
-      {/* Provider + model info */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-text-muted">{t('common:provider')}</span>
-          <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-surface-tertiary border border-border text-text-secondary">
-            {providerLabel}
-          </span>
-        </div>
+    <StepShell title={t('agent.title')} description={t('agent.description')}>
+      <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-ui text-ink-secondary">
+        <span className="flex items-center gap-2">
+          {t('agent.provider')}
+          <span className="rounded-pill border border-border-subtle bg-surface-raised px-2 py-0.5 text-caption font-medium text-ink">{providerLabel}</span>
+        </span>
         {model && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-text-muted">{t('common:model')}</span>
-            <span className="text-xs font-mono px-2 py-0.5 rounded-md border border-border text-text-secondary">
-              {model}
-            </span>
-          </div>
+          <span className="flex items-center gap-2">
+            {t('agent.model')}
+            <span className="rounded-pill border border-border-subtle bg-surface-raised px-2 py-0.5 text-code text-ink">{model}</span>
+          </span>
         )}
-      </div>
+      </p>
 
-      {/* Agent identity — editable name + key, prefilled from the preset */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <label htmlFor="onboard-agent-name" className="block text-sm font-medium text-text-secondary">
-            {t('agents:create.displayName')}
-          </label>
-          <div className="flex gap-2">
-            <input
-              id="onboard-agent-emoji"
-              value={emoji}
-              onChange={(e) => setEmoji(e.target.value)}
-              maxLength={2}
-              placeholder="🤖"
-              title={t('agents:create.emojiHint')}
-              className="w-14 shrink-0 text-center w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2.5 text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
-            />
-            <input
-              id="onboard-agent-name"
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="flex gap-2">
+          <Field label={t('agent.emoji')} className="w-16 shrink-0">
+            <Input value={emoji} maxLength={2} placeholder="🤖" className="text-center" onChange={(e) => setEmoji(e.target.value)} />
+          </Field>
+          <Field label={t('agent.name')} className="min-w-0 flex-1" required>
+            <Input
               value={displayName}
-              onChange={(e) => handleDisplayNameChange(e.target.value)}
               placeholder={t('agents:create.displayNamePlaceholder')}
-              className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2.5 text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+              onChange={(e) => handleDisplayNameChange(e.target.value)}
             />
-          </div>
+          </Field>
         </div>
-
-        <div className="space-y-1.5">
-          <label htmlFor="onboard-agent-key" className="block text-sm font-medium text-text-secondary">
-            {t('agents:create.agentKey')}
-          </label>
-          <input
-            id="onboard-agent-key"
+        <Field
+          label={t('agent.key')}
+          helper={t('agents:create.agentKeyHint')}
+          error={agentKey && !keyValid ? t('agents:create.agentKeyHint') : undefined}
+          required
+        >
+          <Input
             value={agentKey}
+            placeholder={t('agents:create.agentKeyPlaceholder')}
+            className="font-mono"
             onChange={(e) => handleAgentKeyChange(e.target.value)}
             onBlur={(e) => setAgentKey(slugify(e.target.value))}
-            placeholder={t('agents:create.agentKeyPlaceholder')}
-            className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2.5 text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
           />
-          <p className={agentKey && !keyValid ? 'text-xs text-error' : 'text-xs text-text-muted'}>
-            {t('agents:create.agentKeyHint')}
-          </p>
-        </div>
+        </Field>
       </div>
 
-      {/* Preset personality buttons */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-text-secondary">{t('agents:detail.personality')}</label>
+      <div className="flex flex-col gap-2">
+        <span className="text-ui text-ink">{t('agent.personality')}</span>
         <div className="flex flex-wrap gap-1.5">
           {PRESET_KEYS.map((preset, idx) => (
             <button
               key={preset.key}
               type="button"
+              aria-pressed={selectedPresetIdx === idx}
               onClick={() => handleSelectPreset(idx)}
-              className={[
-                'cursor-pointer rounded-full border px-3 py-1 text-xs transition-colors',
+              className={cn(
+                'rounded-pill border px-3 py-1 text-caption transition-colors',
                 selectedPresetIdx === idx
-                  ? 'border-accent bg-accent/10 text-accent font-medium'
-                  : 'border-border text-text-secondary hover:bg-surface-tertiary',
-              ].join(' ')}
+                  ? 'border-transparent bg-accent-subtle font-medium text-accent-subtle-ink'
+                  : 'border-border-control text-ink-secondary hover:bg-surface-hover',
+              )}
             >
               {t(`${preset.ns}:presets.${preset.key}.label`)}
             </button>
@@ -239,36 +216,23 @@ export function AgentStep({ provider, model, onBack, onComplete }: AgentStepProp
         </div>
       </div>
 
-      {/* Description textarea */}
-      <div className="space-y-1.5">
-        <label className="block text-sm font-medium text-text-secondary">{t('common:description')}</label>
-        <textarea
+      <Field label={t('agent.descriptionLabel')}>
+        <Textarea
           value={description}
-          onChange={(e) => handleDescriptionChange(e.target.value)}
-          placeholder={t('onboarding.descPlaceholder')}
           rows={4}
-          className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2.5 text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent resize-none"
+          placeholder={t('agent.descPlaceholder')}
+          onChange={(e) => handleDescriptionChange(e.target.value)}
         />
-      </div>
+      </Field>
 
-      {error && <p className="text-sm text-error">{error}</p>}
+      {error && <StepError>{error}</StepError>}
 
-      <div className="flex justify-between gap-2">
-        <button
-          onClick={onBack}
-          className="px-4 py-2.5 border border-border rounded-lg text-sm font-medium text-text-secondary hover:bg-surface-tertiary transition-colors"
-        >
-          &larr; {t('common:back')}
-        </button>
-        <button
-          onClick={handleSubmit}
-          disabled={loading || !canSubmit}
-          className="px-6 py-2.5 bg-accent text-accent-foreground rounded-lg font-medium hover:bg-accent-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
-        >
-          {loading && <div className="w-3.5 h-3.5 border-2 border-accent-foreground border-t-transparent rounded-full animate-spin" />}
-          {t('desktop:agent.summon')}
-        </button>
+      <div className="flex items-center justify-between gap-2">
+        <Button variant="ghost" onClick={onBack}>{t('back')}</Button>
+        <Button variant="primary" onClick={() => { void handleSubmit() }} loading={loading} disabled={!canSubmit}>
+          {t('agent.create')}
+        </Button>
       </div>
-    </div>
+    </StepShell>
   )
 }

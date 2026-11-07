@@ -6,12 +6,13 @@ import { Titlebar } from './components/layout/Titlebar'
 import { useResolvedTheme } from './components/layout/use-resolved-theme'
 import { applyTheme } from './lib/theme'
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard'
-import { wails } from './lib/wails'
-import { initWsClient } from './lib/ws'
-import { initApiClient } from './lib/api'
+import { useGatewayBoot } from './hooks/use-gateway-boot'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
 import { Toaster } from './components/ui/Toast'
-import { SplashScreen } from './components/common/SplashScreen'
+import { SplashScreen, StartFailedScreen } from './components/common/SplashScreen'
+
+/** Shortest time the Starting card stays up, so a fast boot does not flash it. */
+const SPLASH_MIN_MS = 800
 
 function AppReady() {
   return (
@@ -26,64 +27,36 @@ function App() {
   const resolvedTheme = useResolvedTheme()
   const onboarded = useUiStore((s) => s.onboarded)
   const completeOnboarding = useUiStore((s) => s.completeOnboarding)
-  const [ready, setReady] = useState(false)
-  const [splashDone, setSplashDone] = useState(false)
+  const { state, retry } = useGatewayBoot()
+  const [minElapsed, setMinElapsed] = useState(false)
 
   useEffect(() => {
     applyTheme(resolvedTheme)
   }, [resolvedTheme])
 
   useEffect(() => {
-    const splashMin = new Promise((r) => setTimeout(r, 2500))
-
-    const init = async () => {
-      let attempts = 0
-      while (attempts < 30) {
-        try {
-          const isReady = await wails.isGatewayReady()
-          if (isReady) break
-        } catch { /* not ready yet */ }
-        await new Promise((r) => setTimeout(r, 500))
-        attempts++
-      }
-
-      let token = ''
-      try { token = await wails.getGatewayToken() } catch (e) {
-        console.warn('[app] failed to get token:', e)
-      }
-
-      const gatewayUrl = await wails.getGatewayURL()
-      const wsUrl = gatewayUrl.replace(/^http/, 'ws') + '/ws'
-
-      initWsClient(wsUrl, token)
-      const api = initApiClient(gatewayUrl, token)
-      setReady(true)
-
-      // Auto-detect empty DB → reset onboarded flag (handles DB deletion)
-      try {
-        const [pRes, aRes] = await Promise.allSettled([
-          api.get<{ providers?: unknown[] | null }>('/v1/providers'),
-          api.get<{ agents?: unknown[] | null }>('/v1/agents'),
-        ])
-        const hasProviders = pRes.status === 'fulfilled' && (pRes.value.providers?.length ?? 0) > 0
-        const hasAgents = aRes.status === 'fulfilled' && (aRes.value.agents?.length ?? 0) > 0
-        if (!hasProviders && !hasAgents) {
-          useUiStore.getState().resetOnboarding()
-        }
-      } catch { /* ignore — onboarding wizard will handle */ }
-    }
-
-    // Wait for both gateway init AND minimum splash duration
-    Promise.all([init(), splashMin]).then(() => setSplashDone(true))
+    const id = setTimeout(() => setMinElapsed(true), SPLASH_MIN_MS)
+    return () => clearTimeout(id)
   }, [])
 
   // The window is frameless: screens outside the shell still need a drag
   // region and window controls.
-  if (!splashDone) {
+  const bar = <Titlebar minimal className="fixed inset-x-0 top-0 z-50" />
+
+  if (state.status === 'failed') {
     return (
       <>
-        <Titlebar minimal className="fixed inset-x-0 top-0 z-50" />
-        <SplashScreen ready={ready} />
+        {bar}
+        <StartFailedScreen reason={state.reason} detail={state.detail} onRetry={retry} />
+      </>
+    )
+  }
+
+  if (state.status === 'starting' || !minElapsed) {
+    return (
+      <>
+        {bar}
+        <SplashScreen phase={state.status === 'starting' ? state.phase : 'setup'} />
       </>
     )
   }
@@ -91,7 +64,7 @@ function App() {
   if (!onboarded) {
     return (
       <>
-        <Titlebar minimal className="fixed inset-x-0 top-0 z-50" />
+        {bar}
         <OnboardingWizard onComplete={completeOnboarding} />
       </>
     )

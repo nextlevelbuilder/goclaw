@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { motion } from 'framer-motion'
 import { getWsClient } from '../../lib/ws'
 import { agentService } from '../../services/agent-service'
+import { IconAlertTriangle, IconCheckCircle } from '../common/Icons'
+import { Button, Dialog, DialogFooter, Spinner } from '../ui'
 import { SummoningProgressSteps } from './summoning-progress-steps'
 
 const SUMMONING_REQUIRED_FILES = ['SOUL.md', 'IDENTITY.md']
@@ -17,29 +18,19 @@ interface SummoningModalProps {
 const CANCEL_THRESHOLD_SEC = 60
 
 export function SummoningModal({ agentId, agentName, onContinue, onCancel }: SummoningModalProps) {
-  const { t } = useTranslation(['desktop', 'common'])
+  const { t } = useTranslation('onboarding')
   const [generatedFiles, setGeneratedFiles] = useState<string[]>([])
   const [status, setStatus] = useState<'summoning' | 'completed' | 'failed'>('summoning')
   const [errorMsg, setErrorMsg] = useState('')
   const [retrying, setRetrying] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [elapsed, setElapsed] = useState(0)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Elapsed timer — runs while summoning, stops on completion/failure
+  // Elapsed timer — runs only while summoning
   useEffect(() => {
-    if (status === 'summoning') {
-      timerRef.current = setInterval(() => setElapsed((prev) => prev + 1), 1000)
-    } else if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
-    }
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current)
-        timerRef.current = null
-      }
-    }
+    if (status !== 'summoning') return
+    const id = setInterval(() => setElapsed((prev) => prev + 1), 1000)
+    return () => clearInterval(id)
   }, [status])
 
   // Listen to agent.summoning WS events
@@ -49,9 +40,7 @@ export function SummoningModal({ agentId, agentName, onContinue, onCancel }: Sum
       if (data.agent_id !== agentId) return
 
       if (data.type === 'file_generated' && data.file) {
-        setGeneratedFiles((prev) =>
-          prev.includes(data.file) ? prev : [...prev, data.file],
-        )
+        setGeneratedFiles((prev) => (prev.includes(data.file) ? prev : [...prev, data.file]))
       }
       if (data.type === 'completed') {
         setGeneratedFiles((prev) => [...new Set([...prev, ...SUMMONING_REQUIRED_FILES])])
@@ -59,17 +48,15 @@ export function SummoningModal({ agentId, agentName, onContinue, onCancel }: Sum
       }
       if (data.type === 'failed') {
         setStatus('failed')
-        setErrorMsg(data.error || t('desktop:summoning.failed'))
+        setErrorMsg(data.error || t('summoning.failed'))
       }
     },
-    [agentId],
+    [agentId, t],
   )
 
   useEffect(() => {
     try {
-      const ws = getWsClient()
-      const unsub = ws.on('agent.summoning', handleSummoningEvent)
-      return unsub
+      return getWsClient().on('agent.summoning', handleSummoningEvent)
     } catch { /* ws not ready */ }
   }, [handleSummoningEvent])
 
@@ -95,125 +82,58 @@ export function SummoningModal({ agentId, agentName, onContinue, onCancel }: Sum
       await onCancel(agentId)
       // BE emits WS type=failed → listener above switches to failed state
     } catch {
-      // keep modal open
+      // keep dialog open
     } finally {
       setCancelling(false)
     }
   }
 
+  const title = status === 'completed' ? t('summoning.completedTitle') : status === 'failed' ? t('summoning.failedTitle') : t('summoning.title')
+  const time = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`
+
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-surface-secondary border border-border rounded-2xl shadow-xl max-w-md w-full mx-4">
-        {/* Header */}
-        <div className="pt-6 pb-2 text-center">
-          <h2 className="text-lg font-semibold text-text-primary">
-            {status === 'completed'
-              ? t('desktop:summoning.completedTitle')
-              : status === 'failed'
-                ? t('desktop:summoning.failedTitle')
-                : t('desktop:summoning.title')}
-          </h2>
-        </div>
-
-        <div className="flex flex-col items-center gap-6 px-6 py-6">
-          {/* Animated orb — ported from web UI */}
-          <div className="relative flex h-24 w-24 items-center justify-center">
-            {status === 'summoning' && (
-              <>
-                <motion.div
-                  className="absolute inset-0 rounded-full bg-orange-500/20"
-                  animate={{ scale: [1, 1.3, 1], opacity: [0.3, 0.1, 0.3] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-                />
-                <motion.div
-                  className="absolute inset-2 rounded-full bg-orange-500/30"
-                  animate={{ scale: [1, 1.15, 1], opacity: [0.5, 0.2, 0.5] }}
-                  transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut', delay: 0.3 }}
-                />
-              </>
-            )}
-            <motion.div
-              className={`relative z-10 flex h-16 w-16 items-center justify-center rounded-full text-3xl ${
-                status === 'completed'
-                  ? 'bg-emerald-100 dark:bg-emerald-900/30'
-                  : status === 'failed'
-                    ? 'bg-red-100 dark:bg-red-900/30'
-                    : 'bg-orange-100 dark:bg-orange-900/30'
-              }`}
-              animate={
-                status === 'summoning'
-                  ? { rotate: [0, 5, -5, 0] }
-                  : status === 'completed'
-                    ? { scale: [1, 1.2, 1] }
-                    : {}
-              }
-              transition={
-                status === 'summoning'
-                  ? { duration: 3, repeat: Infinity, ease: 'easeInOut' }
-                  : { duration: 0.5 }
-              }
-            >
-              {status === 'completed' ? '✨' : status === 'failed' ? '💨' : '🪄'}
-            </motion.div>
-          </div>
-
-          {/* Agent name */}
-          <p className="text-sm text-text-primary">
-            {status === 'completed' ? (
-              <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                {agentName} is ready!
-              </span>
-            ) : status === 'failed' ? (
-              <span className="font-medium text-red-600 dark:text-red-400">
-                {errorMsg || t('desktop:summoning.failed')}
-              </span>
-            ) : (
-              <>Weaving soul for <span className="font-semibold text-text-primary">{agentName}</span>...</>
-            )}
-          </p>
-
-          {/* File progress */}
-          <SummoningProgressSteps generatedFiles={generatedFiles} />
-
-          {status === 'summoning' && (
-            <p className="text-center text-xs text-text-muted tabular-nums">
-              Please wait... ({Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')})
-            </p>
-          )}
-
+    <Dialog
+      open
+      onOpenChange={() => {}}
+      dismissible={false}
+      hideClose
+      size="sm"
+      title={title}
+      footer={(
+        <DialogFooter>
           {status === 'summoning' && elapsed >= CANCEL_THRESHOLD_SEC && onCancel && (
-            <div className="flex flex-col items-center gap-1">
-              <p className="text-xs text-text-muted">{t('desktop:summoning.takingTooLong')}</p>
-              <button
-                onClick={handleCancel}
-                disabled={cancelling}
-                className="px-3 py-1.5 text-sm text-text-secondary hover:bg-surface-tertiary rounded-md transition-colors disabled:opacity-50"
-              >
-                {cancelling ? t('desktop:summoning.cancelling') : t('desktop:summoning.cancel')}
-              </button>
-            </div>
+            <>
+              <span className="mr-auto self-center text-caption text-ink-muted">{t('summoning.takingTooLong')}</span>
+              <Button onClick={() => { void handleCancel() }} loading={cancelling}>
+                {cancelling ? t('summoning.cancelling') : t('summoning.cancel')}
+              </Button>
+            </>
           )}
-
-          {status === 'completed' && (
-            <button
-              onClick={onContinue}
-              className="px-5 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium hover:bg-accent-hover transition-colors"
-            >
-              Continue →
-            </button>
-          )}
-
+          {status === 'completed' && <Button variant="primary" onClick={onContinue}>{t('summoning.continue')}</Button>}
           {status === 'failed' && (
-            <button
-              onClick={handleRetry}
-              disabled={retrying}
-              className="px-4 py-2 border border-border rounded-lg text-sm text-text-secondary hover:bg-surface-tertiary transition-colors disabled:opacity-50"
-            >
-              {retrying ? t('desktop:summoning.retrying') : t('common:retry')}
-            </button>
+            <Button variant="primary" onClick={() => { void handleRetry() }} loading={retrying}>
+              {retrying ? t('summoning.retrying') : t('summoning.retry')}
+            </Button>
           )}
+        </DialogFooter>
+      )}
+    >
+      <div className="flex flex-col items-center gap-4">
+        <div role="status" className="flex items-center gap-2 text-ui text-ink">
+          {status === 'completed' && <IconCheckCircle size={18} className="text-success" />}
+          {status === 'failed' && <IconAlertTriangle size={18} className="text-danger" />}
+          {status === 'summoning' && <Spinner size={16} className="text-accent" />}
+          <span className={status === 'failed' ? 'text-danger' : undefined}>
+            {status === 'completed'
+              ? t('summoning.ready', { name: agentName })
+              : status === 'failed'
+                ? errorMsg || t('summoning.failed')
+                : t('summoning.weaving', { name: agentName })}
+          </span>
         </div>
+        <SummoningProgressSteps generatedFiles={generatedFiles} />
+        {status === 'summoning' && <p className="text-caption tabular-nums text-ink-muted">{t('summoning.waiting', { time })}</p>}
       </div>
-    </div>
+    </Dialog>
   )
 }
