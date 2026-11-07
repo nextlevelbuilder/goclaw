@@ -29,7 +29,7 @@ interface ChannelAdvancedDialogProps {
 const NETWORK_KEYS = new Set(["api_server", "proxy", "domain", "connection_mode", "webhook_port", "webhook_path", "webhook_url"]);
 const LIMITS_KEYS = new Set(["history_limit", "media_max_mb", "text_chunk_limit"]);
 const STREAMING_KEYS = new Set(["dm_stream", "group_stream", "draft_transport", "reasoning_delivery", "native_stream", "debounce_delay", "thread_ttl"]);
-const BEHAVIOR_KEYS = new Set(["reaction_level", "link_preview", "render_mode", "topic_session_mode"]);
+const BEHAVIOR_KEYS = new Set(["reaction_level", "link_preview", "render_mode", "topic_session_mode", "group_dm_as_direct"]);
 const ACCESS_KEYS = new Set(["allow_from", "group_allow_from"]);
 const TELEGRAM_MANAGEMENT_KEYS = new Set(["telegram_manager.enabled", "telegram_manager.allowed_actions"]);
 

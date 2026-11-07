@@ -518,3 +518,36 @@ func TestLoad_ChannelAutoEnable_Slack(t *testing.T) {
 		t.Error("Slack should be auto-enabled when both tokens are set")
 	}
 }
+
+func TestLoad_ChannelAutoEnable_Mattermost(t *testing.T) {
+	t.Setenv("GOCLAW_MATTERMOST_SERVER_URL", "https://chat.example.com")
+	t.Setenv("GOCLAW_MATTERMOST_BOT_TOKEN", "mm-token")
+
+	cfg, err := Load("/nonexistent/path")
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	mm := cfg.Channels.Mattermost
+	if !mm.Enabled || mm.ServerURL != "https://chat.example.com" || mm.BotToken != "mm-token" {
+		t.Errorf("Mattermost should be auto-enabled from env, got %+v", mm)
+	}
+}
+
+func TestMattermostBotTokenIsSecret(t *testing.T) {
+	cfg := Default()
+	cfg.Channels.Mattermost.BotToken = "mm-token"
+
+	masked := cfg.MaskedCopy()
+	if masked.Channels.Mattermost.BotToken != secretMask {
+		t.Errorf("MaskedCopy bot_token = %q, want mask", masked.Channels.Mattermost.BotToken)
+	}
+	masked.StripMaskedSecrets()
+	if masked.Channels.Mattermost.BotToken != "" {
+		t.Error("StripMaskedSecrets must drop the masked bot_token")
+	}
+
+	cfg.StripSecrets()
+	if cfg.Channels.Mattermost.BotToken != "" {
+		t.Error("StripSecrets must clear bot_token before saving config.json")
+	}
+}

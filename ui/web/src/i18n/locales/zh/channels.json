@@ -353,6 +353,10 @@
       "label": "API 服务器 URL",
       "help": "自定义 Telegram Bot API 服务器用于大文件上传（最大 2GB）。留空使用默认服务器。"
     },
+    "server_url": {
+      "label": "服务器 URL",
+      "help": "Mattermost 服务器的基础 URL。内网服务器（10.x、192.168.x、localhost）需要在网关上设置 GOCLAW_ALLOW_PRIVATE_MATTERMOST_URLS=true。"
+    },
     "proxy": {
       "label": "HTTP 代理",
       "help": "通过 HTTP 代理路由Bot流量"
@@ -461,6 +465,10 @@
     "thread_ttl": {
       "label": "线程参与 TTL（小时）",
       "help": "Bot 停止自动回复已参与线程的小时数。0 = 始终需要 @提及。"
+    },
+    "group_dm_as_direct": {
+      "label": "群组私信按私聊处理",
+      "help": "将群组私信（3–8 人）视为私聊：无需 @提及、不使用线程，回复每条消息。仍适用群组策略，对话保持为一个共享的群组会话。关闭 = 按频道处理。"
     },
     "skills": {
       "label": "Skill过滤",

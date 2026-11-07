@@ -68,7 +68,7 @@ var channelInstanceAllowed = map[string]bool{
 // CHANNEL_TYPES in ui/web/src/constants/channels.ts.
 func isValidChannelType(ct string) bool {
 	switch ct {
-	case "telegram", "discord", "slack", "whatsapp", "zalo_oa", "zalo_personal", "feishu", "facebook", "pancake", "bitrix24":
+	case "telegram", "discord", "slack", "mattermost", "whatsapp", "zalo_oa", "zalo_personal", "feishu", "facebook", "pancake", "bitrix24":
 		return true
 	}
 	return false
@@ -119,7 +119,7 @@ func registerChannelInstancesCRUDTools(srv *mcpserver.MCPServer, insts store.Cha
 		mcpgo.WithDescription("Create a new channel instance."),
 		mcpgo.WithString("name", mcpgo.Required(), mcpgo.Description("Instance name.")),
 		mcpgo.WithString("display_name", mcpgo.Description("Human-readable display name.")),
-		mcpgo.WithString("channel_type", mcpgo.Required(), mcpgo.Description("Channel type (telegram, discord, slack, whatsapp, zalo_oa, zalo_personal, feishu, facebook, pancake, bitrix24).")),
+		mcpgo.WithString("channel_type", mcpgo.Required(), mcpgo.Description("Channel type (telegram, discord, slack, mattermost, whatsapp, zalo_oa, zalo_personal, feishu, facebook, pancake, bitrix24).")),
 		mcpgo.WithString("agent_id", mcpgo.Required(), mcpgo.Description("Owning agent key or UUID.")),
 		mcpgo.WithObject("credentials", mcpgo.Description("Channel credentials object.")),
 		mcpgo.WithObject("config", mcpgo.Description("Channel config object.")),

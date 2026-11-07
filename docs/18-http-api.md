@@ -1182,7 +1182,7 @@ Writer test request:
 
 Response includes `allowed`, `reason`, `instance_id`, `agent_id`, `group_id`, `user_id`, and `writer_count`. Stable reasons: `writer`, `not_writer`, `no_writers_configured`, `invalid_group`.
 
-**Supported channels:** `telegram`, `discord`, `slack`, `whatsapp`, `zalo_oa`, `zalo_personal`, `feishu`
+**Supported channels:** `telegram`, `discord`, `slack`, `mattermost`, `whatsapp`, `zalo_oa`, `zalo_personal`, `feishu`
 
 Credentials are masked in HTTP responses.
 

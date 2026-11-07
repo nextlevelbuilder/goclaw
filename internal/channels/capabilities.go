@@ -31,6 +31,7 @@ const (
 //   - zalo_personal: internal/channels/zalo/personal/send.go:42
 //   - pancake:  internal/channels/pancake/media_handler.go:18
 //   - facebook: internal/channels/facebook/facebook.go:205
+//   - mattermost: internal/channels/mattermost/send.go:46
 //
 // NOT in this list:
 //   - zalo_oa: internal/channels/zalo/zalo.go:115 — Send() does NOT consume msg.Media
@@ -43,6 +44,7 @@ var mediaCapableTypes = map[string]bool{
 	TypeZaloPersonal: true,
 	TypePancake:      true,
 	TypeFacebook:     true,
+	TypeMattermost:   true,
 }
 
 var mediaBatchCapabilities = map[string]MediaBatchCapability{
@@ -60,6 +62,11 @@ var mediaBatchCapabilities = map[string]MediaBatchCapability{
 		Supported:      true,
 		MaxAttachments: 0,
 		Grouping:       MediaBatchGroupingOrdered,
+	},
+	TypeMattermost: {
+		Supported:      true,
+		MaxAttachments: 10,
+		Grouping:       MediaBatchGroupingSingleMessage,
 	},
 }
 
