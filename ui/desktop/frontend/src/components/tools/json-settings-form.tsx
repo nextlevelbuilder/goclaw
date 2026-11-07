@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Button, Textarea } from '../ui'
+import { ToolFormFooter } from './tool-form-footer'
 import type { BuiltinToolData } from '../../types/builtin-tool'
 
 interface JsonSettingsFormProps {
@@ -8,15 +10,18 @@ interface JsonSettingsFormProps {
   onClose: () => void
 }
 
+/** Raw JSON editor for tools without a dedicated form. */
 export function JsonSettingsForm({ tool, onSave, onClose }: JsonSettingsFormProps) {
-  const { t } = useTranslation(['tools', 'common'])
+  const { t } = useTranslation('tools')
   const [value, setValue] = useState('')
   const [error, setError] = useState('')
+  const [saveError, setSaveError] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     setValue(JSON.stringify(tool.settings, null, 2))
     setError('')
+    setSaveError('')
     setSaving(false)
   }, [tool])
 
@@ -44,41 +49,41 @@ export function JsonSettingsForm({ tool, onSave, onClose }: JsonSettingsFormProp
     const parsed = validate(value)
     if (!parsed) return
     setSaving(true)
+    setSaveError('')
     try {
       await onSave(tool.name, parsed)
       onClose()
     } catch (err) {
-      setError((err as Error).message || t('builtin.jsonDialog.invalidJson'))
+      setSaveError((err as Error).message || t('builtin.saveFailed'))
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <>
-      <div className="p-5">
-        <textarea
-          value={value}
-          onChange={(e) => { setValue(e.target.value); setError('') }}
-          spellCheck={false}
-          className="w-full h-64 bg-surface-tertiary border border-border rounded-lg px-3 py-2 font-mono text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent resize-y"
-        />
-        <div className="flex items-center justify-between mt-1 min-h-[20px]">
-          {error ? <span className="text-xs text-error">{error}</span> : <span />}
-          <button type="button" onClick={handleFormat} className="text-2xs text-accent hover:text-accent-hover transition-colors">
-            {t('builtin.jsonDialog.formatJson')}
-          </button>
-        </div>
+    <div>
+      <Textarea
+        aria-label={tool.display_name}
+        aria-invalid={error ? true : undefined}
+        value={value}
+        onChange={(e) => { setValue(e.target.value); setError('') }}
+        spellCheck={false}
+        rows={12}
+        className="font-mono"
+      />
+      {error && <p role="alert" className="mt-1 text-caption text-danger">{error}</p>}
+      <div className="mt-1 flex justify-end">
+        <Button size="sm" variant="ghost" onClick={handleFormat}>{t('builtin.jsonDialog.formatJson')}</Button>
       </div>
-
-      <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
-        <button type="button" onClick={onClose} className="border border-border rounded-lg px-4 py-1.5 text-sm text-text-secondary hover:bg-surface-tertiary transition-colors">
-          {t('builtin.jsonDialog.cancel')}
-        </button>
-        <button type="button" onClick={handleSave} disabled={!!error || saving} className="bg-accent rounded-lg px-4 py-1.5 text-sm text-accent-foreground hover:bg-accent-hover disabled:opacity-50 transition-colors">
-          {saving ? t('builtin.jsonDialog.saving') : t('builtin.jsonDialog.save')}
-        </button>
-      </div>
-    </>
+      <ToolFormFooter
+        cancelLabel={t('builtin.jsonDialog.cancel')}
+        saveLabel={saving ? t('builtin.jsonDialog.saving') : t('builtin.jsonDialog.save')}
+        onCancel={onClose}
+        onSave={() => void handleSave()}
+        saving={saving}
+        saveDisabled={!!error}
+        error={saveError}
+      />
+    </div>
   )
 }

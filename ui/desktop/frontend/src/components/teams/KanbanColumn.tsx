@@ -1,16 +1,8 @@
 import { AnimatePresence, LayoutGroup } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import type { TaskStatus, TeamTaskData, TeamMemberData } from '../../types/team'
 import { STATUS_COLORS } from '../../types/team'
 import { KanbanCard } from './KanbanCard'
-
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  pending: 'Pending',
-  blocked: 'Blocked',
-  in_progress: 'In Progress',
-  completed: 'Completed',
-  failed: 'Failed',
-  cancelled: 'Cancelled',
-}
 
 interface KanbanColumnProps {
   status: TaskStatus
@@ -19,26 +11,23 @@ interface KanbanColumnProps {
   onTaskClick: (task: TeamTaskData) => void
 }
 
+/** One status column of the board. */
 export function KanbanColumn({ status, tasks, members, onTaskClick }: KanbanColumnProps) {
+  const { t } = useTranslation('teams')
   const memberMap = new Map(members.map((m) => [m.agent_id, m]))
+  const label = t(`board.status.${status}`)
 
   return (
-    <div className="flex w-[260px] shrink-0 flex-col rounded-xl border border-border bg-surface-secondary/50 max-h-full self-start">
-      {/* Column header */}
-      <div className="flex items-center gap-2 px-3 py-2.5">
-        <div className={`w-2.5 h-2.5 rounded-full ${STATUS_COLORS[status]}`} />
-        <span className="text-xs font-medium text-text-primary capitalize">{STATUS_LABELS[status]}</span>
-        <span className="ml-auto text-2xs text-text-muted bg-surface-tertiary px-1.5 py-0.5 rounded-full">
-          {tasks.length}
-        </span>
-      </div>
+    <section aria-label={label} className="flex max-h-full w-[260px] shrink-0 flex-col self-start rounded-card border border-border-subtle bg-surface-secondary">
+      <header className="flex items-center gap-2 px-3 py-2.5">
+        <span aria-hidden="true" className={`size-2.5 rounded-pill ${STATUS_COLORS[status]}`} />
+        <h2 className="text-ui font-medium text-ink">{label}</h2>
+        <span className="ml-auto rounded-pill bg-surface-tertiary px-1.5 text-caption text-ink-secondary">{tasks.length}</span>
+      </header>
 
-      {/* Card list */}
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto overscroll-contain px-2 pb-2">
         {tasks.length === 0 ? (
-          <div className="py-3 text-center text-2xs text-text-muted opacity-50">
-            No tasks
-          </div>
+          <p className="py-3 text-center text-caption text-ink-muted">{t('board.columnEmpty')}</p>
         ) : (
           <LayoutGroup>
             <AnimatePresence mode="popLayout">
@@ -58,6 +47,6 @@ export function KanbanColumn({ status, tasks, members, onTaskClick }: KanbanColu
           </LayoutGroup>
         )}
       </div>
-    </div>
+    </section>
   )
 }

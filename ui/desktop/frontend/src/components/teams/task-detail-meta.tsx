@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MarkdownRenderer } from '../chat/MarkdownRenderer'
 import { IconChevronDown, IconDocument, IconCheckCircle } from '../common/Icons'
+import { Badge, StatusChip } from '../ui'
+import { cn } from '../../lib/cn'
 import { getApiClient } from '../../lib/api'
-import { STATUS_BADGE, PRIORITY_BADGE, isTaskLocked, TERMINAL_STATUSES } from '../../types/team'
+import { PRIORITY_BADGE, STATUS_TONE, isTaskLocked, TERMINAL_STATUSES } from '../../types/team'
 import type { TeamTaskData, TeamMemberData, TeamTaskAttachment } from '../../types/team'
 
 /** Human-readable file size */
@@ -17,8 +19,8 @@ export function formatFileSize(bytes: number): string {
 export function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-xs text-text-muted mb-0.5">{label}</dt>
-      <dd className="text-sm font-medium text-text-primary">{children}</dd>
+      <dt className="mb-0.5 text-caption text-ink-muted">{label}</dt>
+      <dd className="text-ui font-medium text-ink">{children}</dd>
     </div>
   )
 }
@@ -29,21 +31,18 @@ export function CollapsibleSection({ title, icon, defaultOpen = true, children }
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="rounded-lg border border-border">
+    <div className="rounded-md border border-border-subtle">
       <button
         type="button"
+        aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 px-4 py-3 text-sm font-medium text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+        className="flex w-full cursor-pointer items-center gap-2 px-4 py-3 text-ui font-medium text-ink-secondary transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-focus-ring"
       >
         {icon}
         <span>{title}</span>
-        <IconChevronDown className={`ml-auto transition-transform ${open ? '' : '-rotate-90'}`} />
+        <IconChevronDown className={cn('ml-auto transition-transform', !open && '-rotate-90')} />
       </button>
-      {open && (
-        <div className="border-t border-border px-4 py-3">
-          {children}
-        </div>
-      )}
+      {open && <div className="border-t border-border-subtle px-4 py-3">{children}</div>}
     </div>
   )
 }
@@ -54,86 +53,71 @@ interface TaskDetailBodyProps {
   attachments: TeamTaskAttachment[]
 }
 
+/** Status, metadata, blockers, description, result and attachments of one task. */
 export function TaskDetailBody({ task, members, attachments }: TaskDetailBodyProps) {
   const { t } = useTranslation('teams')
 
   const prio = PRIORITY_BADGE[task.priority] ?? PRIORITY_BADGE[3]
-  const statusCls = STATUS_BADGE[task.status] ?? ''
   const locked = isTaskLocked(task)
   const isTerminal = TERMINAL_STATUSES.has(task.status)
   const member = task.owner_agent_id ? members.find((m) => m.agent_id === task.owner_agent_id) : undefined
 
   return (
     <>
-      {/* Progress bar */}
       {task.progress_percent != null && task.progress_percent > 0 && !isTerminal && (() => {
         const pct = Math.min(100, Math.max(0, task.progress_percent))
         return (
           <div className="space-y-1">
-            <div className="flex justify-between text-xs text-text-muted">
-              <span>{t('progress', 'Progress')}</span>
+            <div className="flex justify-between text-caption text-ink-muted">
+              <span>{t('progress')}</span>
               <span>{pct}%</span>
             </div>
-            <div className="h-2 w-full rounded-full bg-surface-tertiary overflow-hidden">
-              <div className="h-2 rounded-full bg-accent transition-all duration-500" style={{ width: `${pct}%` }} />
+            <div
+              role="progressbar"
+              aria-valuenow={pct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={t('progress')}
+              className="h-2 w-full overflow-hidden rounded-pill bg-surface-tertiary"
+            >
+              <div className="h-2 rounded-pill bg-accent transition-all duration-500" style={{ width: `${pct}%` }} />
             </div>
-            {task.progress_step && <p className="text-xs text-text-muted">{task.progress_step}</p>}
+            {task.progress_step && <p className="text-caption text-ink-muted">{task.progress_step}</p>}
           </div>
         )
       })()}
 
-      {/* Status badges row */}
-      <div className="flex items-center gap-2">
-        {task.identifier && (
-          <span className="text-xs font-mono text-text-muted bg-surface-tertiary px-2 py-0.5 rounded border border-border">
-            {task.identifier}
-          </span>
-        )}
-        <span className={`text-xs font-medium px-2 py-0.5 rounded capitalize ${statusCls}`}>
-          {task.status.replace(/_/g, ' ')}
-        </span>
-        {locked && (
-          <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-500/15 text-green-600 dark:text-green-400 animate-pulse">
-            Running
-          </span>
-        )}
+      <div className="flex flex-wrap items-center gap-2">
+        {task.identifier && <Badge tone="neutral">{task.identifier}</Badge>}
+        <StatusChip tone={STATUS_TONE[task.status]} label={t(`board.status.${task.status}`)} />
+        {locked && <StatusChip tone="success" label={t('board.running')} />}
       </div>
 
-      {/* Metadata grid */}
-      <dl className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3 rounded-lg bg-surface-tertiary/30 p-4">
-        <MetaItem label={t('priority', 'Priority')}>
-          <span className="inline-flex items-center gap-1.5 capitalize">
-            <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${prio.cls}`}>{prio.label}</span>
-          </span>
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-md bg-surface-secondary p-4 sm:grid-cols-3">
+        <MetaItem label={t('priority')}>
+          <span className={cn('rounded-sm px-1.5 py-0.5 text-caption font-medium', prio.cls)}>{prio.label}</span>
         </MetaItem>
-        <MetaItem label={t('owner', 'Owner')}>
+        <MetaItem label={t('owner')}>
           {member ? (
             <span className="flex items-center gap-1.5">
-              {member.emoji && <span className="text-base">{member.emoji}</span>}
+              {member.emoji && <span aria-hidden="true">{member.emoji}</span>}
               {member.display_name || member.agent_key}
             </span>
           ) : task.owner_agent_key || '—'}
         </MetaItem>
         {task.task_type && task.task_type !== 'general' && (
-          <MetaItem label={t('type', 'Type')}>
-            <span className="text-xs bg-surface-tertiary border border-border px-2 py-0.5 rounded">{task.task_type}</span>
-          </MetaItem>
+          <MetaItem label={t('board.type')}><Badge tone="neutral">{task.task_type}</Badge></MetaItem>
         )}
-        {task.created_at && (
-          <MetaItem label={t('created', 'Created')}>{new Date(task.created_at).toLocaleString()}</MetaItem>
-        )}
-        {task.updated_at && (
-          <MetaItem label={t('updated', 'Updated')}>{new Date(task.updated_at).toLocaleString()}</MetaItem>
-        )}
+        {task.created_at && <MetaItem label={t('created')}>{new Date(task.created_at).toLocaleString()}</MetaItem>}
+        {task.updated_at && <MetaItem label={t('updated')}>{new Date(task.updated_at).toLocaleString()}</MetaItem>}
       </dl>
 
-      {/* Blocked by */}
       {task.blocked_by && task.blocked_by.length > 0 && (
         <div>
-          <span className="text-xs text-text-muted">{t('blockedBy', 'Blocked by')}</span>
+          <span className="text-caption text-ink-muted">{t('blockedBy')}</span>
           <div className="mt-1 flex flex-wrap gap-1.5">
             {task.blocked_by.map((id) => (
-              <span key={id} className="text-xs font-mono bg-amber-500/15 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded border border-amber-500/20">
+              <span key={id} className="rounded-sm bg-warning-subtle px-2 py-0.5 font-mono text-caption text-warning-text">
                 {id.slice(0, 8)}
               </span>
             ))}
@@ -141,55 +125,52 @@ export function TaskDetailBody({ task, members, attachments }: TaskDetailBodyPro
         </div>
       )}
 
-      {/* Description */}
       {task.description && (
-        <CollapsibleSection title={t('description', 'Description')} icon={<IconDocument />}>
-          <div className="text-sm text-text-secondary prose prose-sm dark:prose-invert max-w-none max-h-60 overflow-y-auto">
+        <CollapsibleSection title={t('description')} icon={<IconDocument />}>
+          <div className="prose prose-sm max-h-60 max-w-none overflow-y-auto text-ui text-ink-secondary">
             <MarkdownRenderer content={task.description} />
           </div>
         </CollapsibleSection>
       )}
 
-      {/* Result */}
       {task.result && (
-        <CollapsibleSection title={t('result', 'Result')} icon={<IconCheckCircle />}>
-          <div className="text-sm text-text-secondary prose prose-sm dark:prose-invert max-w-none max-h-[40vh] overflow-y-auto">
+        <CollapsibleSection title={t('result')} icon={<IconCheckCircle />}>
+          <div className="prose prose-sm max-h-[40vh] max-w-none overflow-y-auto text-ui text-ink-secondary">
             <MarkdownRenderer content={task.result} />
           </div>
         </CollapsibleSection>
       )}
 
-      {/* Attachments */}
       {attachments.length > 0 && (
-        <CollapsibleSection title={`${t('attachments', 'Attachments')} (${attachments.length})`} icon={<IconDocument />}>
-          <div className="space-y-2">
+        <CollapsibleSection title={`${t('attachments')} (${attachments.length})`} icon={<IconDocument />}>
+          <ul className="space-y-2">
             {attachments.map((a) => {
               const fileName = a.path?.split('/').pop() || 'file'
               const baseUrl = getApiClient()?.getBaseUrl() || ''
               const fullUrl = a.download_url?.startsWith('http') ? a.download_url : `${baseUrl}${a.download_url}`
               return (
-                <div key={a.id} className="flex items-center gap-3 rounded-lg border border-border bg-surface-tertiary/30 p-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10">
-                    <IconDocument className="text-accent" />
+                <li key={a.id} className="flex items-center gap-3 rounded-md border border-border-subtle bg-surface-secondary p-3">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-accent-subtle">
+                    <IconDocument className="text-accent-subtle-ink" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate text-sm font-medium text-text-primary">{fileName}</p>
-                    {a.file_size > 0 && <p className="text-xs text-text-muted">{formatFileSize(a.file_size)}</p>}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-ui font-medium text-ink">{fileName}</p>
+                    {a.file_size > 0 && <p className="text-caption text-ink-muted">{formatFileSize(a.file_size)}</p>}
                   </div>
                   {a.download_url && (
                     <a
                       href={fullUrl}
                       download
                       onClick={(e) => e.stopPropagation()}
-                      className="shrink-0 text-xs text-accent hover:text-accent/80 px-3 py-1.5 rounded-lg border border-accent/30 hover:bg-accent/10 transition-colors cursor-pointer"
+                      className="shrink-0 rounded-button border border-border-control px-3 py-1.5 text-caption text-ink transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-focus-ring"
                     >
-                      {t('download', 'Download')}
+                      {t('download')}
                     </a>
                   )}
-                </div>
+                </li>
               )
             })}
-          </div>
+          </ul>
         </CollapsibleSection>
       )}
     </>

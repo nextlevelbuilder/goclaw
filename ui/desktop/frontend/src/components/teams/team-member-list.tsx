@@ -1,13 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import { Combobox } from '../common/Combobox'
-import { IconClose, IconPlus, IconUser, IconSpinner } from '../common/Icons'
+import { IconClose, IconPlus, IconUser } from '../common/Icons'
+import { Badge, Button, IconButton } from '../ui'
 import type { TeamMemberData } from '../../types/team'
-
-const ROLE_COLORS: Record<string, string> = {
-  lead: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
-  reviewer: 'bg-orange-500/15 text-orange-600 dark:text-orange-400',
-  member: 'bg-surface-tertiary text-text-muted',
-}
 
 interface TeamMemberListProps {
   members: TeamMemberData[]
@@ -17,65 +12,65 @@ interface TeamMemberListProps {
   addAgent: string
   adding: boolean
   removing: string | null
+  /** Disables writes while the gateway is unreachable. */
+  readOnly?: boolean
   onToggleAdd: () => void
   onAddAgentChange: (id: string) => void
   onAddMember: () => void
   onRemoveMember: (agentId: string) => void
 }
 
+/** Members of a team: role badge, add and remove (the lead and the last member cannot be removed). */
 export function TeamMemberList({
   members, sorted, availableAgents,
-  showAdd, addAgent, adding, removing,
+  showAdd, addAgent, adding, removing, readOnly = false,
   onToggleAdd, onAddAgentChange, onAddMember, onRemoveMember,
 }: TeamMemberListProps) {
   const { t } = useTranslation('teams')
+  const nonLead = members.filter((x) => x.role !== 'lead').length
 
   return (
-    <section className="space-y-3">
+    <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-text-primary">{t('members', 'Members')} ({members.length})</h3>
-        <button onClick={onToggleAdd} className="text-xs text-accent hover:text-accent/80 cursor-pointer flex items-center gap-1">
-          <IconPlus size={12} />{t('settings.addMember', 'Add member')}
-        </button>
+        <h3 className="text-ui font-semibold text-ink">{t('members')} ({members.length})</h3>
+        <Button size="sm" variant="ghost" icon={<IconPlus size={14} />} onClick={onToggleAdd} disabled={readOnly}>
+          {t('settings.addMember')}
+        </Button>
       </div>
 
       {showAdd && (
         <div className="flex gap-2">
-          <div className="flex-1 min-w-0">
-            <Combobox value={addAgent} onChange={onAddAgentChange} options={availableAgents} placeholder={t('settings.searchAgent', 'Search agent...')} allowCustom={false} />
+          <div className="min-w-0 flex-1">
+            <Combobox value={addAgent} onChange={onAddAgentChange} options={availableAgents} placeholder={t('settings.searchAgent')} allowCustom={false} />
           </div>
-          <button
-            onClick={onAddMember}
-            disabled={!addAgent || adding}
-            className="shrink-0 px-3 py-1.5 text-xs font-medium bg-accent text-accent-foreground rounded-lg hover:bg-accent/90 disabled:opacity-50 cursor-pointer"
-          >
-            {adding ? '...' : t('settings.add', 'Add')}
-          </button>
+          <Button variant="secondary" onClick={onAddMember} disabled={!addAgent || readOnly} loading={adding}>
+            {t('settings.add')}
+          </Button>
         </div>
       )}
 
-      <div className="rounded-lg border border-border divide-y divide-border max-h-[200px] overflow-y-auto">
+      <ul className="max-h-52 divide-y divide-border-subtle overflow-y-auto rounded-md border border-border-subtle">
         {sorted.map((m) => (
-          <div key={m.agent_id} className="group flex items-center gap-3 px-3 py-2.5 hover:bg-surface-tertiary/50">
-            {m.emoji ? <span className="text-base shrink-0">{m.emoji}</span> : <IconUser className="text-text-muted shrink-0" />}
-            <span className="text-sm text-text-primary truncate flex-1">{m.display_name || m.agent_key || m.agent_id.slice(0, 8)}</span>
-            <span className={`text-2xs font-medium px-1.5 py-0.5 rounded ${ROLE_COLORS[m.role] ?? ''}`}>{m.role}</span>
-            {m.role !== 'lead' && members.filter((x) => x.role !== 'lead').length > 1 && (
-              <button
+          <li key={m.agent_id} className="flex min-h-row items-center gap-3 px-3">
+            {m.emoji ? <span aria-hidden="true" className="shrink-0 text-body">{m.emoji}</span> : <IconUser className="shrink-0 text-ink-muted" />}
+            <span className="min-w-0 flex-1 truncate text-ui text-ink">{m.display_name || m.agent_key || m.agent_id.slice(0, 8)}</span>
+            <Badge tone={m.role === 'lead' ? 'accent' : 'neutral'}>{m.role}</Badge>
+            {m.role !== 'lead' && nonLead > 1 && (
+              <IconButton
+                size="sm"
                 aria-label={t('common:remove')}
+                icon={<IconClose size={14} />}
                 onClick={() => onRemoveMember(m.agent_id)}
-                disabled={removing === m.agent_id}
-                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-2.5 text-text-muted hover:text-error cursor-pointer transition-opacity disabled:opacity-50"
-              >
-                {removing === m.agent_id ? <IconSpinner size={14} className="border-text-muted" /> : <IconClose size={14} />}
-              </button>
+                loading={removing === m.agent_id}
+                disabled={readOnly}
+              />
             )}
-          </div>
+          </li>
         ))}
         {members.length === 0 && (
-          <div className="px-3 py-4 text-center text-xs text-text-muted">{t('settings.noMembers', 'No members')}</div>
+          <li className="px-3 py-4 text-center text-caption text-ink-muted">{t('settings.noMembers')}</li>
         )}
-      </div>
+      </ul>
     </section>
   )
 }

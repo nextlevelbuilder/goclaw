@@ -47,6 +47,10 @@ export const teamService = {
     return getWsClient().call('teams.update', { teamId, ...params })
   },
 
+  delete(teamId: string): Promise<unknown> {
+    return getWsClient().call('teams.delete', { teamId })
+  },
+
   addMember(teamId: string, agentId: string, role = 'member'): Promise<unknown> {
     return getWsClient().call('teams.members.add', { teamId, agent: agentId, role })
   },

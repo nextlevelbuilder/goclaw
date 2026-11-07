@@ -1,9 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useUiStore } from '../../stores/ui-store'
 import { useTeamTasks } from '../../hooks/use-team-tasks'
-import { RefreshButton } from '../common/RefreshButton'
-import { IconChevronLeft, IconGear, IconChevronDown, IconPlus, IconChat } from '../common/Icons'
+import { IconChat, IconChevronLeft, IconGear, IconPlus, IconRefresh } from '../common/Icons'
+import { useGatewayStatus } from '../layout/use-gateway-status'
+import { cn } from '../../lib/cn'
+import {
+  Button, ConfirmDialog, Dialog, DialogFooter, EmptyState, ErrorState, IconButton, PageHeader, SegmentedControl, Select,
+  SkeletonList, toast,
+} from '../ui'
 import { KanbanColumn } from './KanbanColumn'
 import { TaskDetailModal } from './TaskDetailModal'
 import { TeamSettingsModal } from './TeamSettingsModal'
@@ -12,164 +17,217 @@ import { KANBAN_STATUSES, groupByStatus } from '../../types/team'
 import type { TeamTaskData } from '../../types/team'
 
 type ViewMode = 'kanban' | 'list'
-const FILTER_OPTIONS = [
-  { value: '', label: 'allStatuses' },
-  { value: 'active', label: 'active' },
-  { value: 'completed', label: 'completed' },
-] as const
 
+/** Task board of one team: kanban or list, status filter, task detail and team settings. */
 export function TeamBoard() {
   const { t } = useTranslation('teams')
+  const { disconnected } = useGatewayStatus()
   const activeTeamId = useUiStore((s) => s.activeTeamId)
-  const closeSettings = useUiStore((s) => s.closeSettings)
-  const { teams, tasks, members, loading, fetchTeams, fetchTasks, fetchTaskDetail, assignTask, deleteTask, deleteBulk } = useTeamTasks()
+  const setActiveView = useUiStore((s) => s.setActiveView)
+  const { teams, tasks, members, loading, error, fetchTeams, fetchTasks, fetchTaskDetail, assignTask, deleteTask, deleteBulk } = useTeamTasks()
 
   const [viewMode, setViewMode] = useState<ViewMode>('kanban')
-  const [statusFilter, setStatusFilter] = useState<string>('')
-  const [filterOpen, setFilterOpen] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('')
   const [selectedTask, setSelectedTask] = useState<TeamTaskData | null>(null)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [selected, setSelected] = useState<string[]>([])
+  const [bulkIds, setBulkIds] = useState<string[] | null>(null)
+  const [bulkBusy, setBulkBusy] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
-  const team = teams.find((t) => t.id === activeTeamId)
+  const team = teams.find((x) => x.id === activeTeamId)
+  const leader = team?.lead_display_name || team?.lead_agent_key || ''
 
-  useEffect(() => { fetchTeams() }, [fetchTeams])
-  useEffect(() => {
-    if (activeTeamId) fetchTasks(activeTeamId, statusFilter || undefined)
+  const reload = useCallback(async () => {
+    if (activeTeamId) await fetchTasks(activeTeamId, statusFilter || undefined)
   }, [activeTeamId, statusFilter, fetchTasks])
+
+  useEffect(() => { void fetchTeams() }, [fetchTeams])
+  useEffect(() => { void reload() }, [reload])
 
   const grouped = useMemo(() => groupByStatus(tasks), [tasks])
 
-  // Keep selected task in sync with tasks
+  // Keep the open task in sync with live updates
   useEffect(() => {
-    if (selectedTask) {
-      const updated = tasks.find((t) => t.id === selectedTask.id)
-      if (updated) setSelectedTask(updated)
-    }
+    if (!selectedTask) return
+    const updated = tasks.find((x) => x.id === selectedTask.id)
+    if (updated && updated !== selectedTask) setSelectedTask(updated)
   }, [tasks, selectedTask])
 
-  const handleBulkDelete = async () => {
-    if (selected.size === 0) return
-    await deleteBulk(Array.from(selected))
-    setSelected(new Set())
+  const refresh = async () => {
+    setRefreshing(true)
+    try { await reload() } finally { setRefreshing(false) }
   }
 
-  const currentFilterLabel = FILTER_OPTIONS.find((o) => o.value === statusFilter)?.label || 'allStatuses'
+  const handleAssign = async (taskId: string, agentKey: string) => {
+    try {
+      const res = await assignTask(taskId, agentKey)
+      toast.success(t('board.toast.assigned'))
+      return res
+    } catch (err) {
+      toast.error(t('board.toast.assignFailed'), err instanceof Error ? err.message : undefined)
+      throw err
+    }
+  }
+
+  const handleDelete = async (taskId: string) => {
+    try {
+      await deleteTask(taskId)
+      toast.success(t('board.toast.deleted'))
+    } catch (err) {
+      toast.error(t('board.toast.deleteFailed'), err instanceof Error ? err.message : undefined)
+      throw err
+    }
+  }
+
+  const confirmBulkDelete = async () => {
+    if (!bulkIds) return
+    setBulkBusy(true)
+    try {
+      await deleteBulk(bulkIds)
+      toast.success(t('board.toast.bulkDeleted', { count: bulkIds.length }))
+      setSelected([])
+      setBulkIds(null)
+    } catch (err) {
+      toast.error(t('board.toast.bulkDeleteFailed'), err instanceof Error ? err.message : undefined)
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const goBack = () => setActiveView('teams')
 
   if (!activeTeamId) {
     return (
-      <div className="flex-1 flex items-center justify-center text-text-muted text-sm">
-        {t('selectTeam', 'Select a team from the sidebar')}
+      <div className="flex min-h-0 flex-1 flex-col">
+        <PageHeader title={t('title')} />
+        <EmptyState title={t('board.noTeam')} action={<Button variant="secondary" onClick={goBack}>{t('board.back')}</Button>} />
       </div>
     )
   }
 
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-border shrink-0">
-        <button onClick={closeSettings} className="text-text-muted hover:text-text-primary cursor-pointer" title="Back to chat">
-          <IconChevronLeft size={16} />
-        </button>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-text-primary truncate">{team?.name || t('team', 'Team')}</h2>
-            <button onClick={() => setSettingsOpen(true)} className="text-text-muted hover:text-text-primary cursor-pointer p-1 rounded hover:bg-surface-tertiary" title={t('teamSettings', 'Team Settings')}>
-              <IconGear />
-            </button>
+  const filterOptions = [
+    { value: '', label: t('allStatuses') },
+    { value: 'active', label: t('active') },
+    { value: 'completed', label: t('completed') },
+  ]
+
+  const header = (
+    <PageHeader
+      leading={<IconButton aria-label={t('board.back')} icon={<IconChevronLeft size={16} />} onClick={goBack} />}
+      title={team?.name || t('team')}
+      description={leader ? `${t('leadAgent')}: ${leader}` : undefined}
+      actions={(
+        <>
+          <SegmentedControl<ViewMode>
+            value={viewMode}
+            onValueChange={setViewMode}
+            aria-label={t('board.viewLabel')}
+            options={[
+              { value: 'kanban', label: t('kanban') },
+              { value: 'list', label: t('list') },
+            ]}
+          />
+          <div className="w-36">
+            <Select aria-label={t('board.filterLabel')} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={filterOptions} />
           </div>
-        </div>
+          <IconButton aria-label={t('board.refresh')} icon={<IconRefresh size={16} />} onClick={() => void refresh()} loading={refreshing} />
+          <IconButton aria-label={t('board.settings')} icon={<IconGear size={16} />} onClick={() => setSettingsOpen(true)} />
+          <Button variant="primary" icon={<IconPlus size={16} />} onClick={() => setInfoOpen(true)}>
+            {t('board.newTask')}
+          </Button>
+        </>
+      )}
+    />
+  )
 
-        {/* View toggle */}
-        <div className="flex items-center bg-surface-tertiary rounded-lg p-0.5">
-          <button onClick={() => setViewMode('kanban')} className={`text-2xs px-2 py-1 rounded cursor-pointer ${viewMode === 'kanban' ? 'bg-surface-primary text-text-primary shadow-sm' : 'text-text-muted'}`}>
-            {t('kanban', 'Kanban')}
-          </button>
-          <button onClick={() => setViewMode('list')} className={`text-2xs px-2 py-1 rounded cursor-pointer ${viewMode === 'list' ? 'bg-surface-primary text-text-primary shadow-sm' : 'text-text-muted'}`}>
-            {t('list', 'List')}
-          </button>
-        </div>
-
-        {/* Status filter */}
-        <div className="relative">
-          <button onClick={() => setFilterOpen((v) => !v)} className="flex items-center gap-1.5 text-2xs bg-surface-tertiary border border-border rounded-lg px-2.5 py-1.5 text-text-secondary hover:border-accent/30 transition-colors cursor-pointer">
-            <span>{t(currentFilterLabel)}</span>
-            <IconChevronDown size={10} />
-          </button>
-          {filterOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setFilterOpen(false)} />
-              <div className="absolute right-0 top-full mt-1 z-50 bg-surface-primary border border-border rounded-lg shadow-lg py-1 min-w-[120px]">
-                {FILTER_OPTIONS.map((opt) => (
-                  <button key={opt.value} onClick={() => { setStatusFilter(opt.value); setFilterOpen(false) }}
-                    className={['w-full text-left px-3 py-1.5 text-2xs transition-colors cursor-pointer', statusFilter === opt.value ? 'text-accent bg-accent/10' : 'text-text-secondary hover:bg-surface-tertiary'].join(' ')}
-                  >
-                    {t(opt.label)}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
-        <RefreshButton onRefresh={async () => { if (activeTeamId) fetchTasks(activeTeamId, statusFilter || undefined) }} />
-
-        <button onClick={() => setInfoOpen(true)} className="flex items-center justify-center w-7 h-7 rounded-lg bg-accent/10 text-accent hover:bg-accent/20 cursor-pointer transition-colors" title={t('createTask', 'Create Task')}>
-          <IconPlus />
-        </button>
+  let body
+  if (error && tasks.length === 0) {
+    body = (
+      <ErrorState
+        title={t('board.errorTitle')}
+        description={t('board.errorDescription')}
+        onRetry={() => void refresh()}
+        retrying={refreshing}
+      />
+    )
+  } else if (loading) {
+    body = <SkeletonList rows={4} label={t('board.loadingTasks')} />
+  } else if (viewMode === 'kanban') {
+    body = (
+      <div className="flex h-full gap-3 overflow-x-auto overflow-y-hidden">
+        {KANBAN_STATUSES.map((status) => (
+          <KanbanColumn key={status} status={status} tasks={grouped.get(status) ?? []} members={members} onTaskClick={setSelectedTask} />
+        ))}
       </div>
+    )
+  } else {
+    body = (
+      <TeamTaskListView
+        tasks={tasks}
+        members={members}
+        selected={selected}
+        onSelectChange={setSelected}
+        onTaskClick={setSelectedTask}
+        onBulkDelete={setBulkIds}
+        readOnly={disconnected}
+      />
+    )
+  }
 
-      {/* Kanban view */}
-      {viewMode === 'kanban' ? (
-        <div className="flex-1 overflow-x-auto overflow-y-hidden p-3">
-          <div className="flex gap-3 h-full">
-            {KANBAN_STATUSES.map((status) => (
-              <KanbanColumn key={status} status={status} tasks={grouped.get(status) ?? []} members={members} onTaskClick={setSelectedTask} />
-            ))}
-          </div>
-        </div>
-      ) : (
-        <TeamTaskListView
-          tasks={tasks}
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {header}
+      <div className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-4', disconnected && 'opacity-60')}>{body}</div>
+
+      {selectedTask && (
+        <TaskDetailModal
+          task={selectedTask}
           members={members}
-          loading={loading}
-          selected={selected}
-          onSelectChange={setSelected}
-          onTaskClick={setSelectedTask}
-          onBulkDelete={handleBulkDelete}
+          onClose={() => setSelectedTask(null)}
+          onAssign={handleAssign}
+          onDelete={handleDelete}
+          onFetchDetail={fetchTaskDetail}
+          readOnly={disconnected}
         />
       )}
 
-      {/* Task detail modal */}
-      {selectedTask && (
-        <TaskDetailModal task={selectedTask} members={members} onClose={() => setSelectedTask(null)} onAssign={assignTask} onDelete={deleteTask} onFetchDetail={fetchTaskDetail} />
+      {settingsOpen && (
+        <TeamSettingsModal
+          teamId={activeTeamId}
+          onClose={() => setSettingsOpen(false)}
+          onSaved={() => { void fetchTeams(); void reload() }}
+          onDeleted={() => { setSettingsOpen(false); goBack() }}
+        />
       )}
 
-      {/* Team settings modal */}
-      {settingsOpen && activeTeamId && (
-        <TeamSettingsModal teamId={activeTeamId} onClose={() => setSettingsOpen(false)} onSaved={() => { fetchTeams(); if (activeTeamId) fetchTasks(activeTeamId, statusFilter || undefined) }} />
-      )}
-
-      {/* Task create info modal */}
-      {infoOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setInfoOpen(false)}>
-          <div onClick={(e) => e.stopPropagation()} className="bg-surface-primary border border-border rounded-xl shadow-xl max-w-sm mx-4 p-6 text-center space-y-3">
-            <div className="mx-auto w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
-              <IconChat size={20} className="text-accent" />
-            </div>
-            <h3 className="text-sm font-semibold text-text-primary">{t('taskCreateInfo.title', 'How tasks are created')}</h3>
-            <p className="text-xs text-text-secondary leading-relaxed">
-              {t('taskCreateInfo.body', 'Tasks are created by chatting with the team leader agent. Start a conversation with {{leader}} to create and manage tasks.', {
-                leader: team?.lead_display_name || team?.lead_agent_key || 'the leader',
-              })}
-            </p>
-            <button onClick={() => setInfoOpen(false)} className="mt-2 px-4 py-1.5 text-xs font-medium bg-surface-tertiary text-text-primary rounded-lg hover:bg-surface-tertiary/80 cursor-pointer">
-              {t('settings.ok', 'OK')}
-            </button>
-          </div>
+      <Dialog
+        open={infoOpen}
+        onOpenChange={setInfoOpen}
+        title={t('taskCreateInfo.title')}
+        size="sm"
+        footer={<DialogFooter><Button variant="primary" onClick={() => setInfoOpen(false)}>{t('settings.ok')}</Button></DialogFooter>}
+      >
+        <div className="flex flex-col items-center gap-3 text-center">
+          <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-pill bg-accent-subtle text-accent-subtle-ink">
+            <IconChat size={20} />
+          </span>
+          <p className="text-ui text-ink-secondary">{t('taskCreateInfo.body', { leader: leader || t('team') })}</p>
         </div>
-      )}
+      </Dialog>
+
+      <ConfirmDialog
+        open={bulkIds !== null}
+        onOpenChange={(o) => { if (!o && !bulkBusy) setBulkIds(null) }}
+        title={t('board.deleteBulkTitle', { count: bulkIds?.length ?? 0 })}
+        description={t('board.deleteBulkBody')}
+        confirmLabel={t('delete')}
+        cancelLabel={t('cancel')}
+        variant="destructive"
+        loading={bulkBusy}
+        onConfirm={() => void confirmBulkDelete()}
+      />
     </div>
   )
 }

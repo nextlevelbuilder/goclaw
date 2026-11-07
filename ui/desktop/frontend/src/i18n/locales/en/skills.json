@@ -117,6 +117,30 @@
     "deleteFailed": "Failed to delete skill",
     "rescanUpdated": "{{count}} skill(s) updated",
     "rescanNoChanges": "All skills up to date",
-    "rescanFailed": "Failed to rescan dependencies"
+    "rescanFailed": "Failed to rescan dependencies",
+    "uploaded": "Skill uploaded",
+    "uploadFailed": "Couldn't upload the skill"
+  },
+  "screen": {
+    "summary_one": "{{count}} skill · {{active}} active",
+    "summary_other": "{{count}} skills · {{active}} active",
+    "limit": "Lite includes up to {{max}} skills. Delete one to add another.",
+    "addSkill": "Add skill",
+    "editSkill": "Edit skill",
+    "deleteSkill": "Delete skill",
+    "rowActions": "Actions for {{name}}",
+    "errorTitle": "Couldn't load skills",
+    "errorDescription": "Check that the gateway is running, then try again.",
+    "emptyAction": "Add a skill",
+    "loading": "Loading skills",
+    "addTitle": "Add a skill",
+    "chooseFile": "Choose a .zip file",
+    "chooseAnother": "Choose a different file",
+    "addSubmit": "Upload skill",
+    "enableLabel": "Enable {{name}}",
+    "sourceFile": "Selected file",
+    "editNameRequired": "Enter a skill name.",
+    "tagsHelper": "Separate tags with commas.",
+    "clearSearch": "Clear search"
   }
 }
