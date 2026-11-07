@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 )
 
@@ -196,11 +197,18 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 	}
 
 	// Parse accumulated tool call arguments.
-	// Iterate the map directly (not 0..len(accumulators)-1): providers are not
-	// guaranteed to emit contiguous zero-based tc.Index values in delta.ToolCalls,
-	// so indexing by position can miss populated slots and hit a nil accumulator,
-	// causing a nil-pointer panic (observed with the point-p1/9router provider).
-	for _, acc := range accumulators {
+	// Providers are not guaranteed to emit contiguous zero-based tc.Index
+	// values (point-p1/9router), so walking 0..len-1 can hit a nil slot and
+	// panic. Ranging the map is safe but unordered: parallel calls would run
+	// and be stored in a random order. Sort the indexes that were actually
+	// seen and emit those calls in the order the model assigned.
+	indexes := make([]int, 0, len(accumulators))
+	for idx := range accumulators {
+		indexes = append(indexes, idx)
+	}
+	slices.Sort(indexes)
+	for _, idx := range indexes {
+		acc := accumulators[idx]
 		if acc == nil {
 			continue
 		}
