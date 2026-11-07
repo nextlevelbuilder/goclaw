@@ -38,7 +38,8 @@
       "agentRequired": "Vui lòng chọn agent",
       "typeRequired": "Vui lòng chọn loại kênh",
       "tokenRequired": "Token bot là bắt buộc"
-    }
+    },
+    "tagsPlaceholder": "Mỗi dòng một mục hoặc cách nhau bằng dấu phẩy"
   },
   "detail": {
     "back": "Quay lại",
@@ -67,7 +68,8 @@
       "hint": "Để trống các trường để giữ giá trị hiện tại. Thông tin xác thực được mã hóa.",
       "updateCredentials": "Cập nhật xác thực",
       "saving": "Đang lưu...",
-      "saved": "Đã cập nhật xác thực"
+      "saved": "Đã cập nhật xác thực",
+      "none": "Loại kênh này không cần thông tin xác thực."
     },
     "managers": {
       "description": "Chỉ định người quản lý cho các nhóm kênh. Quản lý có thể điều phối cuộc trò chuyện.",
@@ -96,7 +98,10 @@
           "groupUserRequired": "ID nhóm và User ID là bắt buộc",
           "failedAdd": "Không thể thêm quản lý"
         }
-      }
+      },
+      "loadError": "Không thể tải danh sách quản lý",
+      "removeFailed": "Không thể xóa quản lý",
+      "tableLabel": "Quản lý của {{group}}"
     },
     "advanced": "Nâng cao",
     "advancedTitle": "Cài đặt nâng cao",
@@ -111,7 +116,8 @@
     "accessControl": "Kiểm soát truy cập",
     "accessControlDesc": "Giới hạn danh sách cho phép",
     "saveConfig": "Lưu",
-    "noAdvanced": "Không có cài đặt nâng cao cho loại kênh này."
+    "noAdvanced": "Không có cài đặt nâng cao cho loại kênh này.",
+    "tabsLabel": "Cài đặt kênh"
   },
   "pairing": {
     "title": "Thiết bị đã ghép nối",
@@ -139,7 +145,18 @@
       "title": "Thu hồi thiết bị",
       "description": "Thu hồi {{channel}}:{{senderId}}? Thiết bị sẽ cần ghép nối lại.",
       "confirmLabel": "Thu hồi"
-    }
+    },
+    "columns": {
+      "sender": "Người gửi",
+      "channel": "Kênh",
+      "requested": "Yêu cầu lúc",
+      "paired": "Ghép nối",
+      "by": "Duyệt bởi"
+    },
+    "loadError": "Không thể tải thiết bị đã ghép nối",
+    "pendingTableLabel": "Yêu cầu ghép nối đang chờ",
+    "pairedTableLabel": "Thiết bị đã ghép nối",
+    "refresh": "Làm mới thiết bị đã ghép nối"
   },
   "toast": {
     "created": "Đã tạo kênh",
@@ -147,11 +164,42 @@
     "deleted": "Đã xóa kênh",
     "failedCreate": "Không thể tạo kênh",
     "failedUpdate": "Không thể cập nhật kênh",
-    "failedDelete": "Không thể xóa kênh"
+    "failedDelete": "Không thể xóa kênh",
+    "pairingApproved": "Đã duyệt ghép nối",
+    "pairingDenied": "Đã từ chối ghép nối",
+    "pairingRevoked": "Đã thu hồi thiết bị",
+    "failedPairing": "Không thể cập nhật ghép nối"
   },
   "delete": {
     "title": "Xóa kênh",
     "description": "Xóa {{name}}? Hành động này không thể hoàn tác.",
     "confirmLabel": "Xóa"
+  },
+  "screen": {
+    "description": "{{count}} kênh · {{enabled}} đang bật",
+    "tableLabel": "Kênh",
+    "rowActions": "Thao tác cho {{name}}",
+    "enableChannel": "Bật {{name}}",
+    "loading": "Đang tải kênh",
+    "loadError": "Không thể tải kênh",
+    "loadErrorHint": "Kiểm tra kết nối gateway rồi thử lại.",
+    "columns": {
+      "channel": "Kênh",
+      "agent": "Agent",
+      "status": "Trạng thái",
+      "enabled": "Bật",
+      "actions": "Thao tác"
+    },
+    "menu": {
+      "open": "Mở cài đặt",
+      "delete": "Xóa kênh"
+    },
+    "delete": {
+      "title": "Xóa {{name}}?",
+      "description": "Kênh sẽ ngừng trả lời tin nhắn và các thiết bị đã ghép nối bị gỡ. Nhập tên kênh để xác nhận."
+    },
+    "detail": {
+      "loadError": "Không thể tải kênh này"
+    }
   }
 }

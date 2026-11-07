@@ -38,7 +38,8 @@
       "agentRequired": "Agent is required",
       "typeRequired": "Channel type is required",
       "tokenRequired": "Bot token is required"
-    }
+    },
+    "tagsPlaceholder": "One per line or comma-separated"
   },
   "detail": {
     "back": "Back",
@@ -67,7 +68,8 @@
       "hint": "Leave fields blank to keep current values. Credentials are encrypted at rest.",
       "updateCredentials": "Update Credentials",
       "saving": "Saving...",
-      "saved": "Credentials updated"
+      "saved": "Credentials updated",
+      "none": "No credentials required for this channel type."
     },
     "managers": {
       "description": "Assign users as managers for channel groups. Managers can moderate conversations.",
@@ -96,7 +98,10 @@
           "groupUserRequired": "Group ID and User ID are required",
           "failedAdd": "Failed to add manager"
         }
-      }
+      },
+      "loadError": "Couldn't load managers",
+      "removeFailed": "Failed to remove manager",
+      "tableLabel": "Managers of {{group}}"
     },
     "advanced": "Advanced",
     "advancedTitle": "Advanced Settings",
@@ -111,7 +116,8 @@
     "accessControl": "Access Control",
     "accessControlDesc": "User allowlist restrictions",
     "saveConfig": "Save",
-    "noAdvanced": "No advanced settings available for this channel type."
+    "noAdvanced": "No advanced settings available for this channel type.",
+    "tabsLabel": "Channel settings"
   },
   "pairing": {
     "title": "Paired Devices",
@@ -139,7 +145,18 @@
       "title": "Revoke Device",
       "description": "Revoke {{channel}}:{{senderId}}? The device will need to re-pair.",
       "confirmLabel": "Revoke"
-    }
+    },
+    "columns": {
+      "sender": "Sender",
+      "channel": "Channel",
+      "requested": "Requested",
+      "paired": "Paired",
+      "by": "Approved by"
+    },
+    "loadError": "Couldn't load paired devices",
+    "pendingTableLabel": "Pending pairing requests",
+    "pairedTableLabel": "Paired devices",
+    "refresh": "Refresh paired devices"
   },
   "toast": {
     "created": "Channel created",
@@ -147,11 +164,42 @@
     "deleted": "Channel deleted",
     "failedCreate": "Failed to create channel",
     "failedUpdate": "Failed to update channel",
-    "failedDelete": "Failed to delete channel"
+    "failedDelete": "Failed to delete channel",
+    "pairingApproved": "Pairing approved",
+    "pairingDenied": "Pairing denied",
+    "pairingRevoked": "Device revoked",
+    "failedPairing": "Couldn't update the pairing"
   },
   "delete": {
     "title": "Delete Channel",
     "description": "Delete {{name}}? This cannot be undone.",
     "confirmLabel": "Delete"
+  },
+  "screen": {
+    "description": "{{count}} channels · {{enabled}} on",
+    "tableLabel": "Channels",
+    "rowActions": "Actions for {{name}}",
+    "enableChannel": "Enable {{name}}",
+    "loading": "Loading channels",
+    "loadError": "Couldn't load channels",
+    "loadErrorHint": "Check the gateway connection, then try again.",
+    "columns": {
+      "channel": "Channel",
+      "agent": "Agent",
+      "status": "Status",
+      "enabled": "Enabled",
+      "actions": "Actions"
+    },
+    "menu": {
+      "open": "Open settings",
+      "delete": "Delete channel"
+    },
+    "delete": {
+      "title": "Delete {{name}}?",
+      "description": "The channel stops answering messages and its paired devices are removed. Type the channel name to confirm."
+    },
+    "detail": {
+      "loadError": "Couldn't load this channel"
+    }
   }
 }
