@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ConfigSection } from './config-section'
-import { Switch } from '../common/Switch'
+import { Switch } from '../ui'
 import { numOrUndef } from '../../lib/format'
 import type { ContextPruningConfig } from '../../types/agent'
+import { Input } from '../ui'
 
 interface ContextPruningSectionProps {
   enabled: boolean
@@ -18,15 +19,15 @@ function NumInput({ label, value, hint, step, onChange }: {
 }) {
   return (
     <div className="space-y-1">
-      <label className="text-2xs font-medium text-text-secondary">{label}</label>
-      <input
+      <label className="text-caption font-medium text-ink-secondary">{label}</label>
+      <Input
         type="number"
         value={value ?? ''}
         step={step}
         onChange={(e) => onChange(numOrUndef(e.target.value))}
-        className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-base md:text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
+        className="w-full"
       />
-      {hint && <p className="text-2xs text-text-muted">{hint}</p>}
+      {hint && <p className="text-caption text-ink-muted">{hint}</p>}
     </div>
   )
 }
@@ -52,7 +53,7 @@ export function ContextPruningSection({ enabled, value, onToggle, onChange }: Co
 
       <button
         onClick={() => setShowAdvanced(!showAdvanced)}
-        className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary transition-colors"
+        className="flex items-center gap-1 text-caption text-ink-muted hover:text-ink transition-colors"
       >
         <svg className={`w-3 h-3 transition-transform ${showAdvanced ? 'rotate-90' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
           <polyline points="9 6 15 12 9 18" />
@@ -61,7 +62,7 @@ export function ContextPruningSection({ enabled, value, onToggle, onChange }: Co
       </button>
 
       {showAdvanced && (
-        <div className="space-y-3 border-l-2 border-border pl-3">
+        <div className="space-y-3 border-l-2 border-border-subtle pl-3">
           <div className="grid grid-cols-2 gap-3">
             <NumInput label={t('configSections.contextPruning.softTrimRatio')} value={value.softTrimRatio} step={0.05} onChange={(v) => update({ softTrimRatio: v })} />
             <NumInput label={t('configSections.contextPruning.hardClearRatio')} value={value.hardClearRatio} step={0.05} onChange={(v) => update({ hardClearRatio: v })} />
@@ -71,8 +72,8 @@ export function ContextPruningSection({ enabled, value, onToggle, onChange }: Co
             <NumInput label={t('configSections.contextPruning.headChars')} value={value.softTrim?.headChars} onChange={(v) => update({ softTrim: { ...value.softTrim, headChars: v } })} />
             <NumInput label={t('configSections.contextPruning.tailChars')} value={value.softTrim?.tailChars} onChange={(v) => update({ softTrim: { ...value.softTrim, tailChars: v } })} />
           </div>
-          <div className="flex items-center justify-between rounded-lg border border-border p-2.5">
-            <span className="text-xs text-text-secondary">{t('configSections.contextPruning.hardClear')}</span>
+          <div className="flex items-center justify-between rounded-lg border border-border-subtle p-2.5">
+            <span className="text-caption text-ink-secondary">{t('configSections.contextPruning.hardClear')}</span>
             <Switch
               checked={value.hardClear?.enabled ?? false}
               onCheckedChange={(v) => update({ hardClear: { enabled: v } })}

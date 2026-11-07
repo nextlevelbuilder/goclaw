@@ -1,10 +1,22 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Button, Field, Input } from '../ui'
 import { Combobox } from '../common/Combobox'
 import { CatalogueNotice } from './CatalogueNotice'
+import { SectionCard } from './section-card'
 import { useProviderCapabilities } from '../../hooks/use-provider-capabilities'
 import { isCatalogueStale, modelOptionsFor, providerOptionsFrom } from '../../api/provider-capabilities'
 import { getApiClient } from '../../lib/api'
+
+export const CONTEXT_WINDOW_RANGE = { min: 1000, max: 1_000_000 } as const
+export const MAX_TOOL_ITERATIONS_RANGE = { min: 1, max: 200 } as const
+
+export interface ModelBudgetErrors {
+  provider?: string
+  model?: string
+  contextWindow?: string
+  maxToolIterations?: string
+}
 
 interface ModelBudgetSectionProps {
   provider: string
@@ -13,6 +25,8 @@ interface ModelBudgetSectionProps {
   maxToolIterations: number
   savedProvider: string
   savedModel: string
+  errors?: ModelBudgetErrors
+  readOnly?: boolean
   onProviderChange: (v: string) => void
   onModelChange: (v: string) => void
   onContextWindowChange: (v: number) => void
@@ -22,7 +36,7 @@ interface ModelBudgetSectionProps {
 
 export function ModelBudgetSection({
   provider, model, contextWindow, maxToolIterations,
-  savedProvider, savedModel,
+  savedProvider, savedModel, errors = {}, readOnly = false,
   onProviderChange, onModelChange, onContextWindowChange, onMaxToolIterationsChange,
   onSaveBlockedChange,
 }: ModelBudgetSectionProps) {
@@ -41,8 +55,8 @@ export function ModelBudgetSection({
   const modelOptions = useMemo(() => modelOptionsFor(capability), [capability])
   const stale = isCatalogueStale(capability)
 
-  // Show verify button when provider/model changed from saved
-  const needsVerify = (provider !== savedProvider || model !== savedModel) && provider && model
+  // A changed provider or model must be checked before it can be saved.
+  const needsVerify = Boolean((provider !== savedProvider || model !== savedModel) && provider && model)
   useEffect(() => {
     if (needsVerify) {
       setVerifyResult(null)
@@ -64,83 +78,75 @@ export function ModelBudgetSection({
       setVerifyResult({ valid: res.success, error: res.error })
       onSaveBlockedChange(!res.success)
     } catch (err) {
-      setVerifyResult({ valid: false, error: err instanceof Error ? err.message : 'Verification failed' })
+      setVerifyResult({ valid: false, error: err instanceof Error ? err.message : t('common:verificationFailed', 'Verification failed') })
     } finally {
       setVerifying(false)
     }
   }
 
-  return (
-    <div className="space-y-4">
-      <h3 className="text-sm font-semibold text-text-primary">{t('agents:detail.modelBudget')}</h3>
+  const modelError = errors.model ?? (verifyResult && !verifyResult.valid ? verifyResult.error : undefined)
 
-      {/* Provider + Model */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-text-secondary">{t('common:provider')}</label>
-          <Combobox value={provider} onChange={onProviderChange} options={providerOptions} placeholder={t('agents:create.selectProvider')} />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-text-secondary">{t('common:model')}</label>
-          <Combobox
-            value={model}
-            onChange={onModelChange}
-            options={modelOptions}
-            placeholder={isLoading ? t('common:loading') : t('agents:create.enterOrSelectModel')}
-            loading={isLoading}
-            allowCustom
-          />
-        </div>
+  return (
+    <SectionCard title={t('agents:screen.detail.modelBudget')}>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label={t('common:provider')} required error={errors.provider}>
+          <Combobox value={provider} onChange={onProviderChange} options={providerOptions} placeholder={t('agents:create.selectProvider')} disabled={readOnly} />
+        </Field>
+        <Field label={t('common:model')} required error={modelError}>
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <Combobox
+                value={model}
+                onChange={onModelChange}
+                options={modelOptions}
+                placeholder={isLoading ? t('common:loading') : t('agents:create.enterOrSelectModel')}
+                loading={isLoading}
+                allowCustom
+                disabled={readOnly}
+              />
+            </div>
+            {needsVerify && (
+              <Button onClick={handleVerify} loading={verifying} disabled={readOnly}>
+                {verifying ? t('agents:screen.detail.checking') : t('agents:screen.detail.check')}
+              </Button>
+            )}
+          </div>
+        </Field>
       </div>
 
       <CatalogueNotice stale={stale} error={error} onRetry={() => { void refetch() }} />
 
-      {/* Verify button + result */}
-      {needsVerify && (
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleVerify}
-            disabled={verifying}
-            className="text-xs px-3 py-1.5 border border-accent text-accent rounded-lg hover:bg-accent/10 transition-colors disabled:opacity-50"
-          >
-            {verifying ? t('agents:create.checking') : t('agents:create.check')}
-          </button>
-          {verifyResult && (
-            <span className={`text-xs ${verifyResult.valid ? 'text-success' : 'text-error'}`}>
-              {verifyResult.valid ? t('common:modelVerified') : verifyResult.error}
-            </span>
-          )}
-          {!verifyResult && (
-            <span className="text-2xs text-warning">{t('common:checkAndCreate')}</span>
-          )}
-        </div>
+      {needsVerify && verifyResult?.valid && (
+        <p role="status" className="rounded-md bg-success-subtle px-3 py-2 text-caption text-success">{t('agents:screen.detail.modelVerified')}</p>
+      )}
+      {needsVerify && !verifyResult && (
+        <p className="text-caption text-warning">{t('agents:screen.detail.checkModel')}</p>
       )}
 
-      {/* Context window + Max iterations */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-text-secondary">{t('agents:llmConfig.contextWindow')}</label>
-          <input
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label={t('agents:llmConfig.contextWindow')} helper={t('agents:llmConfig.contextWindowHint')} error={errors.contextWindow}>
+          <Input
             type="number"
+            inputMode="numeric"
             value={contextWindow || ''}
             onChange={(e) => onContextWindowChange(Number(e.target.value) || 0)}
             placeholder="200000"
-            className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+            className="font-mono"
+            disabled={readOnly}
           />
-          <p className="text-2xs text-text-muted">{t('agents:llmConfig.contextWindowHint')}</p>
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-text-secondary">{t('agents:llmConfig.maxToolIterations')}</label>
-          <input
+        </Field>
+        <Field label={t('agents:llmConfig.maxToolIterations')} helper={t('agents:llmConfig.maxToolIterationsHint')} error={errors.maxToolIterations}>
+          <Input
             type="number"
+            inputMode="numeric"
             value={maxToolIterations || ''}
             onChange={(e) => onMaxToolIterationsChange(Number(e.target.value) || 0)}
             placeholder="25"
-            className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+            className="font-mono"
+            disabled={readOnly}
           />
-          <p className="text-2xs text-text-muted">{t('agents:llmConfig.maxToolIterationsHint')}</p>
-        </div>
+        </Field>
       </div>
-    </div>
+    </SectionCard>
   )
 }

@@ -1,91 +1,103 @@
 import { useTranslation } from 'react-i18next'
-import { Switch } from '../common/Switch'
-import { Combobox } from '../common/Combobox'
+import { Field, Input, Switch, Textarea } from '../ui'
+import { SectionCard } from './section-card'
 
-interface PersonalitySectionProps {
+/** Longest personality text the editor accepts. */
+export const DESCRIPTION_MAX = 2000
+
+interface IdentitySectionProps {
   emoji: string
   displayName: string
-  description: string
-  agentKey: string
-  agentType: string
   isDefault: boolean
   status: string
+  displayNameError?: string
+  readOnly?: boolean
   onEmojiChange: (v: string) => void
   onDisplayNameChange: (v: string) => void
-  onDescriptionChange: (v: string) => void
   onIsDefaultChange: (v: boolean) => void
   onStatusChange: (v: string) => void
 }
 
-export function PersonalitySection({
-  emoji, displayName, description, agentKey, agentType, isDefault, status,
-  onEmojiChange, onDisplayNameChange, onDescriptionChange, onIsDefaultChange, onStatusChange,
-}: PersonalitySectionProps) {
+/** Name, emoji, and the enabled and default switches. */
+export function IdentitySection({
+  emoji, displayName, isDefault, status, displayNameError, readOnly = false,
+  onEmojiChange, onDisplayNameChange, onIsDefaultChange, onStatusChange,
+}: IdentitySectionProps) {
   const { t } = useTranslation('agents')
-  const STATUS_OPTIONS = [
-    { value: 'active', label: t('identity.active') },
-    { value: 'idle', label: t('identity.inactive') },
-  ]
+  const statusLocked = status === 'summoning' || status === 'summon_failed'
   return (
-    <div className="space-y-4">
-      <h3 className="text-sm font-semibold text-text-primary">{t('detail.personality')}</h3>
-
-      {/* Emoji + Display name */}
-      <div className="grid grid-cols-[auto_1fr] gap-4 items-start">
-        <div className="space-y-1 text-center">
-          <input
-            value={emoji}
-            onChange={(e) => onEmojiChange(e.target.value.slice(0, 2))}
-            maxLength={2}
-            className="w-12 h-12 rounded-xl bg-accent/10 border border-border text-2xl text-center focus:outline-none focus:ring-1 focus:ring-accent"
-          />
-          <p className="text-2xs text-text-muted">{t('identity.emoji')}</p>
-        </div>
-        <div className="space-y-3">
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-text-secondary">{t('identity.displayName')}</label>
-            <input
-              value={displayName}
-              onChange={(e) => onDisplayNameChange(e.target.value)}
-              placeholder="Agent name"
-              className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-base md:text-sm text-text-primary font-medium placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
-            />
-          </div>
-          {/* Agent key (read-only) */}
-          <div className="flex items-center gap-2">
-            <span className="text-2xs text-text-muted font-mono bg-surface-tertiary/50 px-2 py-1 rounded">{agentKey}</span>
-            <span className="text-2xs px-1.5 py-0.5 rounded bg-surface-tertiary text-text-muted">{agentType}</span>
-          </div>
-        </div>
+    <SectionCard title={t('screen.detail.identity')}>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_120px]">
+        <Field label={t('identity.displayName')} required error={displayNameError}>
+          <Input value={displayName} onChange={(e) => onDisplayNameChange(e.target.value)} placeholder={t('create.displayNamePlaceholder')} disabled={readOnly} />
+        </Field>
+        <Field label={t('identity.emoji')}>
+          <Input value={emoji} onChange={(e) => onEmojiChange(e.target.value.slice(0, 2))} maxLength={2} className="text-center" disabled={readOnly} />
+        </Field>
       </div>
-
-      {/* Description / Expertise */}
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-text-secondary">
-          {agentType === 'predefined' ? t('detail.personality') : t('identity.expertiseSummary')}
-        </label>
-        <textarea
-          value={description}
-          onChange={(e) => onDescriptionChange(e.target.value)}
-          placeholder={agentType === 'predefined' ? t('create.descriptionPlaceholder') : t('identity.expertiseSummaryPlaceholder')}
-          rows={4}
-          className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent resize-none"
+      <div className="flex flex-col gap-3">
+        <SwitchRow
+          label={t('screen.detail.enabled')}
+          hint={t('screen.detail.enabledHint')}
+          checked={status === 'active'}
+          disabled={readOnly || statusLocked}
+          onChange={(v) => onStatusChange(v ? 'active' : 'idle')}
+        />
+        <SwitchRow
+          label={t('screen.detail.defaultAgent')}
+          hint={t('screen.detail.defaultAgentHint')}
+          checked={isDefault}
+          disabled={readOnly}
+          onChange={onIsDefaultChange}
         />
       </div>
+    </SectionCard>
+  )
+}
 
-      {/* Status + Default */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-text-secondary">{t('identity.status')}</label>
-          <Combobox value={status} onChange={onStatusChange} options={STATUS_OPTIONS} placeholder={t('identity.status')} />
-        </div>
-        <div className="flex items-end pb-1">
-          <div className="flex items-center gap-2">
-            <Switch checked={isDefault} onCheckedChange={onIsDefaultChange} />
-            <span className="text-xs text-text-secondary">{t('identity.defaultAgent')}</span>
-          </div>
-        </div>
+function SwitchRow({ label, hint, checked, disabled, onChange }: {
+  label: string; hint: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0">
+        <p className="text-ui text-ink">{label}</p>
+        <p className="text-caption font-normal text-ink-muted">{hint}</p>
       </div>
+      <Switch checked={checked} onCheckedChange={onChange} disabled={disabled} aria-label={label} />
     </div>
+  )
+}
+
+interface PersonalitySectionProps {
+  description: string
+  agentType: string
+  error?: string
+  readOnly?: boolean
+  onDescriptionChange: (v: string) => void
+}
+
+/** Persona text (predefined agents) or expertise summary (open agents). */
+export function PersonalitySection({ description, agentType, error, readOnly = false, onDescriptionChange }: PersonalitySectionProps) {
+  const { t } = useTranslation('agents')
+  const predefined = agentType === 'predefined'
+  return (
+    <SectionCard
+      title={predefined ? t('screen.detail.personality') : t('identity.expertiseSummary')}
+      subtitle={predefined ? t('screen.detail.personalityHint') : t('screen.detail.descriptionHint')}
+    >
+      <Field label={predefined ? t('screen.detail.personality') : t('identity.expertiseSummary')} error={error}>
+        <Textarea
+          value={description}
+          onChange={(e) => onDescriptionChange(e.target.value)}
+          placeholder={predefined ? t('create.descriptionPlaceholder') : t('identity.expertiseSummaryPlaceholder')}
+          rows={6}
+          disabled={readOnly}
+        />
+      </Field>
+      <p className="-mt-2 self-end text-caption font-normal text-ink-muted" aria-live="polite">
+        {t('screen.detail.descriptionCount', { count: description.length, max: DESCRIPTION_MAX })}
+      </p>
+    </SectionCard>
   )
 }

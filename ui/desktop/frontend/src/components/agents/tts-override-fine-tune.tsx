@@ -67,8 +67,8 @@ export function TtsOverrideFineTune({ globalProvider, allCaps, ttsParams, onChan
   }
 
   return (
-    <div className="mt-2 space-y-2 border-t border-border pt-2">
-      <p className="text-xs font-medium text-text-muted uppercase tracking-wide">
+    <div className="mt-2 space-y-2 border-t border-border-subtle pt-2">
+      <p className="text-caption font-medium text-ink-muted uppercase tracking-wide">
         {t('override.params.title')}
       </p>
       <DynamicParamForm

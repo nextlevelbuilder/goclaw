@@ -83,7 +83,7 @@ export function VoicePreviewButton({ previewUrl, voiceName }: Props) {
       type="button"
       title={playing ? t('voice_stop_preview') : t('voice_preview', { name: voiceName })}
       onClick={(e) => { e.stopPropagation(); handlePlay() }}
-      className="shrink-0 p-1 rounded hover:bg-surface-tertiary transition-colors text-text-muted hover:text-text-primary"
+      className="shrink-0 p-1 rounded hover:bg-surface-hover transition-colors text-ink-muted hover:text-ink"
       aria-label={playing ? t('voice_stop_preview') : t('voice_preview', { name: voiceName })}
     >
       {playing ? (

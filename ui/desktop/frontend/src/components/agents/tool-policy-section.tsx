@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { ConfigSection } from './config-section'
 import type { ToolPolicyConfig } from '../../types/agent'
+import { Input, Select } from '../ui'
 
 interface ToolPolicySectionProps {
   enabled: boolean
@@ -31,60 +32,60 @@ export function ToolPolicySection({ enabled, value, onToggle, onChange }: ToolPo
       onToggle={onToggle}
     >
       <div className="space-y-1">
-        <label className="text-2xs font-medium text-text-secondary">{t('configSections.toolPolicy.profile')}</label>
-        <select
+        <label className="text-caption font-medium text-ink-secondary">{t('configSections.toolPolicy.profile')}</label>
+        <Select
           value={value.profile ?? ''}
           onChange={(e) => update({ profile: e.target.value || undefined })}
-          className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-base md:text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
+          className="w-full"
         >
           <option value="">full (default)</option>
           <option value="coding">coding</option>
           <option value="messaging">messaging</option>
           <option value="minimal">minimal</option>
-        </select>
+        </Select>
       </div>
 
       <div className="space-y-1">
-        <label className="text-2xs font-medium text-text-secondary">{t('configSections.toolPolicy.toolCallPrefix')}</label>
-        <input
+        <label className="text-caption font-medium text-ink-secondary">{t('configSections.toolPolicy.toolCallPrefix')}</label>
+        <Input
           type="text"
           value={value.toolCallPrefix ?? ''}
           onChange={(e) => update({ toolCallPrefix: e.target.value || undefined })}
-          className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-base md:text-sm text-text-primary font-mono focus:outline-none focus:ring-1 focus:ring-accent"
+          className="w-full font-mono"
         />
-        <p className="text-2xs text-text-muted">{t('configSections.toolPolicy.toolCallPrefixHint')}</p>
+        <p className="text-caption text-ink-muted">{t('configSections.toolPolicy.toolCallPrefixHint')}</p>
       </div>
 
       <div className="space-y-1">
-        <label className="text-2xs font-medium text-text-secondary">{t('configSections.toolPolicy.allow')}</label>
-        <input
+        <label className="text-caption font-medium text-ink-secondary">{t('configSections.toolPolicy.allow')}</label>
+        <Input
           type="text"
           value={arrayToTags(value.allow)}
           placeholder="Comma-separated tool names"
           onChange={(e) => update({ allow: tagsToArray(e.target.value) })}
-          className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-base md:text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
+          className="w-full"
         />
       </div>
 
       <div className="space-y-1">
-        <label className="text-2xs font-medium text-text-secondary">{t('configSections.toolPolicy.deny')}</label>
-        <input
+        <label className="text-caption font-medium text-ink-secondary">{t('configSections.toolPolicy.deny')}</label>
+        <Input
           type="text"
           value={arrayToTags(value.deny)}
           placeholder="Comma-separated tool names"
           onChange={(e) => update({ deny: tagsToArray(e.target.value) })}
-          className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-base md:text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
+          className="w-full"
         />
       </div>
 
       <div className="space-y-1">
-        <label className="text-2xs font-medium text-text-secondary">{t('configSections.toolPolicy.alsoAllow')}</label>
-        <input
+        <label className="text-caption font-medium text-ink-secondary">{t('configSections.toolPolicy.alsoAllow')}</label>
+        <Input
           type="text"
           value={arrayToTags(value.alsoAllow)}
           placeholder="Comma-separated tool names"
           onChange={(e) => update({ alsoAllow: tagsToArray(e.target.value) })}
-          className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-base md:text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
+          className="w-full"
         />
       </div>
     </ConfigSection>
