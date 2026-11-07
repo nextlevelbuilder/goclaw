@@ -37,6 +37,7 @@ func TestResolveDebianPackageNameAliases(t *testing.T) {
 		"golang":     "golang-go",
 		"ripgrep":    "ripgrep",
 		"libstdc++":  "libstdc++",
+		"node":       "nodejs",
 	}
 	for input, want := range tests {
 		got, err := resolveDebianPackageName(input)
@@ -147,5 +148,19 @@ func TestInstallSystemPackageReportsMissingApt(t *testing.T) {
 	}
 	if !strings.Contains(msg, errSystemPackageMgrUnavailable) {
 		t.Fatalf("msg = %q, want unavailable", msg)
+	}
+}
+
+func TestResolveAlpinePackageNameAliases(t *testing.T) {
+	tests := map[string]string{
+		"node":    "nodejs",
+		"Node":    "nodejs",
+		"nodejs":  "nodejs",
+		"ripgrep": "ripgrep",
+	}
+	for input, want := range tests {
+		if got := resolveAlpinePackageName(input); got != want {
+			t.Fatalf("resolveAlpinePackageName(%q) = %q, want %q", input, got, want)
+		}
 	}
 }
