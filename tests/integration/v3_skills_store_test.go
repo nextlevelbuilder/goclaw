@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/google/uuid"
@@ -592,5 +593,24 @@ func TestStoreSkill_TenantIsolation(t *testing.T) {
 	_, ok := s.GetSkill(ctxB, slugA)
 	if ok {
 		t.Error("GetSkill from tenant B returned true for tenant A's skill")
+	}
+}
+
+func TestStoreSkill_DependencyStateUpdateIsAtomicOnInvalidJSON(t *testing.T) {
+	s := newSkillStore(t)
+	ctx := store.WithTenantID(context.Background(), store.MasterTenantID)
+	id := seedSkill(t, s, ctx, "atomic-deps-"+uuid.NewString()[:8], "Atomic dependencies")
+	if err := s.UpdateSkill(ctx, id, map[string]any{"status": "archived"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.StoreMissingDeps(ctx, id, []string{"pip:old"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateSkill(ctx, id, map[string]any{"status": "active", "deps": "not-valid-json"}); err == nil {
+		t.Fatal("invalid JSONB value unexpectedly succeeded")
+	}
+	got, ok := s.GetSkillByID(ctx, id)
+	if !ok || got.Status != "archived" || !reflect.DeepEqual(got.MissingDeps, []string{"pip:old"}) {
+		t.Fatalf("failed statement partially changed dependency state: %+v", got)
 	}
 }
