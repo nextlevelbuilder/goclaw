@@ -2,6 +2,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { usePendingPairingsCount } from '../../hooks/use-pending-pairings-count'
 import { useSessions } from '../../hooks/use-sessions'
+import { useChatEvents } from '../../hooks/use-chat-events'
 import { cn } from '../../lib/cn'
 import { useUiStore, type AppView } from '../../stores/ui-store'
 import { ErrorBoundary } from '../common/ErrorBoundary'
@@ -64,6 +65,7 @@ export function AppShell() {
   const [overlayOpen, setOverlayOpen] = useState(false)
   const gateway = useGatewayStatus()
   const { deleteSession } = useSessions() // the single instance: loads sessions for the selected agent
+  useChatEvents() // the single agent-event subscription, so replies keep streaming off the chat screen
   const { pendingCount } = usePendingPairingsCount()
   const badges = { channels: pendingCount }
 

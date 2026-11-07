@@ -97,7 +97,8 @@
     "interrupted": {
       "title": "Phản hồi bị gián đoạn.",
       "body": "Lượt chạy dừng trước khi trả lời xong.",
-      "continue": "Tiếp tục"
+      "continue": "Tiếp tục",
+      "continuePrompt": "Hãy tiếp tục câu trả lời trước của bạn."
     },
     "failed": {
       "title": "Lượt chạy thất bại.",

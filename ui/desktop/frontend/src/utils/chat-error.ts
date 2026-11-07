@@ -1,7 +1,8 @@
 import type { ChatErrorKind } from '../stores/chat-activity-store'
 
 const PROVIDER_RE = /429|rate.?limit|cooldown|cooling|overloaded|quota|too many requests|resource.?exhausted/i
-const INTERRUPTED_RE = /interrupt|disconnect|connection|network|socket|stream|eof|timed? ?out|timeout|aborted|reset by peer/i
+// Only genuine transport drops. Refused connections, HTTP/stream errors and timeouts are ordinary failures.
+const INTERRUPTED_RE = /interrupt|disconnect|(?:web)?socket (?:was )?(?:closed|hang up)|\bws\b.*\bclosed|connection (?:was )?(?:lost|closed|reset|dropped)|\beof\b|reset by peer|broken pipe/i
 const DENIED_RE = /denied|not allowed|permission|forbidden|blocked|policy|not permitted|unauthori[sz]ed/i
 
 /** Sorts a `run.failed` error string into the notice the chat shows. */

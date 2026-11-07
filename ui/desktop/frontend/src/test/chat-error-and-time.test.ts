@@ -17,6 +17,26 @@ describe('chat error classification', () => {
   })
 })
 
+describe('interrupted classification is limited to transport drops', () => {
+  it.each([
+    'websocket closed unexpectedly',
+    'connection lost',
+    'connection reset by peer',
+    'unexpected EOF',
+    'run interrupted',
+  ])('treats "%s" as interrupted', (m) => {
+    expect(classifyRunError(m)).toBe('interrupted')
+  })
+  it.each([
+    'dial tcp: connection refused',
+    'stream error: 401 unauthorized',
+    'request timeout after 30s',
+    'invalid api key',
+  ])('treats "%s" as an ordinary failure', (m) => {
+    expect(classifyRunError(m)).toBe('failed')
+  })
+})
+
 describe('chat time helpers', () => {
   const now = new Date(2026, 5, 15, 12, 0, 0).getTime()
   it('groups by calendar day', () => {

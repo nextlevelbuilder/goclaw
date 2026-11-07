@@ -98,7 +98,8 @@
     "interrupted": {
       "title": "Response interrupted.",
       "body": "The run stopped before the reply was finished.",
-      "continue": "Continue"
+      "continue": "Continue",
+      "continuePrompt": "Please continue your previous reply."
     },
     "failed": {
       "title": "The run failed.",

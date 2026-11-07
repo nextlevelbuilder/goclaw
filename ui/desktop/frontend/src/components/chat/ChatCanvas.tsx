@@ -4,7 +4,6 @@ import { useChat } from '../../hooks/use-chat'
 import { useAgents } from '../../hooks/use-agents'
 import { useTeamTasks } from '../../hooks/use-team-tasks'
 import { useSessionStore } from '../../stores/session-store'
-import { useChatActivityStore } from '../../stores/chat-activity-store'
 import { useUiStore } from '../../stores/ui-store'
 import { isToolDenied } from '../../utils/chat-error'
 import { cn } from '../../lib/cn'
@@ -49,13 +48,6 @@ export function ChatCanvas() {
       messagesEndRef.current?.scrollIntoView({ behavior: isRunning ? 'smooth' : 'instant' })
     }
   }, [messages, isRunning, error])
-
-  // The connection dropped mid-reply: the answer is cut short, so say so.
-  useEffect(() => {
-    if (disconnected && useChatActivityStore.getState().isRunning) {
-      useChatActivityStore.getState().setError({ kind: 'interrupted', message: '' })
-    }
-  }, [disconnected])
 
   const handleScroll = useCallback(() => {
     const el = scrollAreaRef.current
@@ -143,6 +135,7 @@ export function ChatCanvas() {
               tone={error.kind === 'provider' ? 'warning' : 'danger'}
               title={t(`notice.${error.kind}.title`)}
               body={error.kind === 'failed' ? error.message : t(`notice.${error.kind}.body`)}
+              detail={error.kind !== 'failed' && error.message ? error.message : undefined}
               actions={noticeActions}
             />
           )}
