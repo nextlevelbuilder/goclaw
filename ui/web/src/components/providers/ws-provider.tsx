@@ -32,13 +32,14 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
         const store = useAuthStore.getState();
         const isConnected = state === "connected";
         if (isConnected && wsRef.current) {
+          // Role first: consumers of `connected` rely on it being known already.
+          store.setRole(wsRef.current.role || "");
           store.setConnected(true, { version: wsRef.current.serverVersion });
         } else {
           store.setConnected(false);
         }
         if (isConnected && wsRef.current) {
           const client = wsRef.current;
-          store.setRole(client.role || "");
           store.setTenant(client.tenantId, client.tenantName, client.tenantSlug, client.isOwner);
           store.setConnectInfo({ isMasterScope: client.isMasterScope, edition: client.edition });
           // Fetch tenant memberships asynchronously
