@@ -1,126 +1,53 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useCallback } from 'react'
+import i18n from '../i18n'
 import { getWsClient } from '../lib/ws'
 import { chatService } from '../services/chat-service'
 import { useChatMessageStore } from '../stores/chat-message-store'
 import { useChatActivityStore } from '../stores/chat-activity-store'
 import { useChatModelStore } from '../stores/chat-model-store'
 import { useSessionStore } from '../stores/session-store'
-import { toFileUrl } from './chat-file-helpers'
-import { useStreamBatcher } from './use-stream-batcher'
-import { mapHistoryMessages } from './chat-history-mapper'
-import { classifyRunError } from '../utils/chat-error'
+import { loadChatHistory } from './use-chat-events'
 import type { AttachedFile } from '../components/chat/InputBar'
 
-/** Sent when the user asks the agent to carry on after an interrupted reply. */
-const CONTINUE_PROMPT = 'Please continue your previous reply.'
+type UploadedMedia = { path: string; filename: string }
 
+/** What the last request carried, so Retry can repeat it with its attachments. */
+interface LastSent {
+  sessionKey: string
+  text: string
+  media?: UploadedMedia[]
+}
+
+/** Module-level so Retry still has the attachments after the chat screen was left and reopened. */
+let lastSent: LastSent | null = null
+
+/**
+ * Chat state and actions for the chat screen. Agent events are consumed once by
+ * `useChatEvents()` in the app shell; this hook reads the stores they fill.
+ */
 export function useChat() {
   const ws = getWsClient()
-  const {
-    messages,
-    addUserMessage, addAssistantMessage, appendChunk, appendThinking,
-    addToolCall, updateToolResult, finalizeMessage, setMessages,
-  } = useChatMessageStore()
-
-  const {
-    isRunning, activity, error,
-    startRun, setActivity, completeRun, failRun,
-  } = useChatActivityStore()
+  const messages = useChatMessageStore((s) => s.messages)
+  const addUserMessage = useChatMessageStore((s) => s.addUserMessage)
+  const isRunning = useChatActivityStore((s) => s.isRunning)
+  const activity = useChatActivityStore((s) => s.activity)
+  const error = useChatActivityStore((s) => s.error)
+  const failRun = useChatActivityStore((s) => s.failRun)
 
   const activeSessionKey = useSessionStore((s) => s.activeSessionKey)
-  const sessionKeyRef = useRef(activeSessionKey)
-  sessionKeyRef.current = activeSessionKey
-  const currentRunIdRef = useRef<string | null>(null)
-
-  const chunkBatcher = useStreamBatcher(
-    useCallback((text: string) => appendChunk(text), [appendChunk]),
-  )
-  const thinkingBatcher = useStreamBatcher(
-    useCallback((text: string) => appendThinking(text), [appendThinking]),
-  )
-
-  // Subscribe to agent events from WS
-  useEffect(() => {
-    if (!ws) return
-
-    const unsub = ws.on('agent', (raw: unknown) => {
-      const event = raw as { type: string; runId: string; sessionKey: string; payload: Record<string, unknown> }
-      if (sessionKeyRef.current && event.sessionKey !== sessionKeyRef.current) return
-      const p = event.payload ?? {}
-
-      switch (event.type) {
-        case 'run.started':
-          currentRunIdRef.current = event.runId
-          addAssistantMessage(event.runId)
-          startRun(event.runId)
-          break
-        case 'chunk':
-          chunkBatcher.append((p.content as string) ?? '')
-          break
-        case 'thinking':
-          thinkingBatcher.append((p.content as string) ?? '')
-          break
-        case 'tool.call':
-          chunkBatcher.flush()
-          addToolCall({ toolId: (p.id as string) ?? '', toolName: (p.name as string) ?? 'unknown', arguments: (p.arguments as Record<string, unknown>) ?? {} })
-          break
-        case 'tool.result': {
-          const isError = p.is_error as boolean
-          updateToolResult((p.id as string) ?? '', isError ? '' : ((p.result as string) ?? ''), isError ? ((p.content as string) ?? (p.result as string) ?? 'Error') : undefined)
-          break
-        }
-        case 'block.reply':
-          chunkBatcher.flush()
-          appendChunk((p.content as string) ?? '')
-          break
-        case 'activity':
-          setActivity({ phase: (p.phase as string) ?? 'thinking', tool: p.tool as string | undefined, iteration: p.iteration as number | undefined })
-          break
-        case 'run.completed': {
-          chunkBatcher.flush()
-          thinkingBatcher.flush()
-          const usage = p.usage as Record<string, number> | undefined
-          finalizeMessage(
-            (p.content as string) ?? '',
-            usage ? { inputTokens: usage.prompt_tokens ?? 0, outputTokens: usage.completion_tokens ?? 0 } : undefined,
-            (p.media as { path?: string; content_type?: string; url?: string; type?: string }[] | undefined)
-              ?.map((m) => ({ type: m.content_type ?? m.type ?? 'file', url: toFileUrl(m.path ?? m.url ?? '') })),
-          )
-          completeRun()
-          currentRunIdRef.current = null
-          break
-        }
-        case 'run.failed':
-          chunkBatcher.flush()
-          thinkingBatcher.flush()
-          {
-            const message = (p.error as string) ?? 'Unknown error'
-            failRun({ kind: classifyRunError(message), message })
-          }
-          currentRunIdRef.current = null
-          break
-        case 'run.cancelled':
-          chunkBatcher.flush()
-          thinkingBatcher.flush()
-          useChatActivityStore.getState().cancelRun()
-          currentRunIdRef.current = null
-          break
-        case 'run.retrying':
-          setActivity({ phase: 'retrying', tool: undefined, iteration: Number(p.attempt) || 0 })
-          break
-      }
-    })
-    return unsub
-  }, [ws, addAssistantMessage, startRun, appendChunk, addToolCall, updateToolResult, setActivity, finalizeMessage, completeRun, failRun, chunkBatcher, thinkingBatcher])
 
   const sendMessage = useCallback(
-    async (text: string, agentId: string, attachedFiles?: AttachedFile[], opts?: { resend?: boolean }) => {
-      if (!ws || (!text.trim() && !attachedFiles?.length)) return
+    async (
+      text: string,
+      agentId: string,
+      attachedFiles?: AttachedFile[],
+      opts?: { resend?: boolean; media?: UploadedMedia[] },
+    ) => {
+      if (!ws || (!text.trim() && !attachedFiles?.length && !opts?.media?.length)) return
 
       let sessionKey = activeSessionKey
       if (!sessionKey) {
         sessionKey = `agent:${agentId}:ws:direct:system:${crypto.randomUUID().slice(0, 8)}`
-        const { useSessionStore } = await import('../stores/session-store')
         useSessionStore.getState().addSession({ key: sessionKey, agentId, title: text.trim().slice(0, 40) || 'New Chat', lastMessageAt: Date.now(), messageCount: 0 })
         useSessionStore.getState().setActiveSession(sessionKey)
       }
@@ -129,8 +56,8 @@ export function useChat() {
       if (!opts?.resend) addUserMessage(text)
       useChatActivityStore.getState().setError(null)
 
-      let media: { path: string; filename: string }[] | undefined
-      if (attachedFiles?.length) {
+      let media: UploadedMedia[] | undefined = opts?.media
+      if (!media && attachedFiles?.length) {
         const uploads = await Promise.all(
           attachedFiles.map(async (af) => {
             if (af.localPath) return { path: af.localPath, filename: af.name }
@@ -141,9 +68,10 @@ export function useChat() {
             } catch (err) { console.error('File upload failed:', af.name, err); return null }
           }),
         )
-        media = uploads.filter((u): u is { path: string; filename: string } => u !== null)
+        media = uploads.filter((u): u is UploadedMedia => u !== null)
         if (media.length === 0) media = undefined
       }
+      lastSent = { sessionKey, text, media }
 
       // Per-request model override from the chat top bar; empty = agent model.
       const modelOverride = useChatModelStore.getState().modelOverride.trim()
@@ -165,61 +93,32 @@ export function useChat() {
     [ws, activeSessionKey, addUserMessage, failRun],
   )
 
-  const loadHistory = useCallback(
-    async (sessionKey: string) => {
-      try {
-        const result = await chatService.history(sessionKey)
-        if (result?.messages) setMessages(mapHistoryMessages(result.messages))
-      } catch (err) { console.error('Failed to load history:', err) }
-    },
-    [setMessages],
-  )
+  const loadHistory = useCallback((sessionKey: string) => loadChatHistory(sessionKey), [])
 
-  /** Sends the last user message again without adding it to the transcript twice. */
+  /** Sends the last request again (text and attachments) without adding it to the transcript twice. */
   const retry = useCallback(async (agentId: string) => {
+    const last = lastSent
+    if (last && last.sessionKey === useSessionStore.getState().activeSessionKey) {
+      await sendMessage(last.text, agentId, undefined, { resend: true, media: last.media })
+      return
+    }
     const lastUser = [...useChatMessageStore.getState().messages].reverse().find((m) => m.role === 'user')
     if (lastUser) await sendMessage(lastUser.content, agentId, undefined, { resend: true })
   }, [sendMessage])
 
   /** Asks the agent to carry on after an interrupted reply. */
-  const continueReply = useCallback((agentId: string) => sendMessage(CONTINUE_PROMPT, agentId), [sendMessage])
+  const continueReply = useCallback(
+    (agentId: string) => sendMessage(i18n.t('chat:notice.interrupted.continuePrompt'), agentId),
+    [sendMessage],
+  )
 
   const dismissError = useCallback(() => useChatActivityStore.getState().setError(null), [])
 
   const abort = useCallback(async () => {
-    const sk = sessionKeyRef.current
+    const sk = useSessionStore.getState().activeSessionKey
     if (!sk) return
     try { await chatService.abort(sk) } catch { /* ignore */ }
   }, [])
-
-  // Reset streaming state + load history when session changes
-  const prevSessionRef = useRef<string | null>(null)
-  useEffect(() => {
-    if (activeSessionKey === prevSessionRef.current) return
-    prevSessionRef.current = activeSessionKey
-
-    chunkBatcher.flush()
-    thinkingBatcher.flush()
-    currentRunIdRef.current = null
-
-    if (!activeSessionKey) {
-      useChatMessageStore.getState().clear()
-      useChatActivityStore.getState().clear()
-      return
-    }
-
-    let cancelled = false
-    loadHistory(activeSessionKey).then(() => { if (cancelled) return })
-
-    chatService.sessionStatus(activeSessionKey)
-      .then((res) => {
-        if (cancelled) return
-        if (res?.isRunning) useChatActivityStore.getState().restoreRunning(res.activity ?? null)
-      })
-      .catch(() => {})
-
-    return () => { cancelled = true }
-  }, [activeSessionKey, loadHistory, chunkBatcher, thinkingBatcher])
 
   return { messages, isRunning, activity, error, sendMessage, loadHistory, abort, retry, continueReply, dismissError }
 }

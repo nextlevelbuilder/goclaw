@@ -97,7 +97,8 @@
     "interrupted": {
       "title": "回复已中断。",
       "body": "运行在回复完成前停止了。",
-      "continue": "继续"
+      "continue": "继续",
+      "continuePrompt": "请继续你上一条回复。"
     },
     "failed": {
       "title": "运行失败。",

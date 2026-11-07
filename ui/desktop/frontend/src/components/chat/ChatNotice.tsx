@@ -8,12 +8,14 @@ export interface ChatNoticeProps {
   title: ReactNode
   /** What it means or what to do. */
   body?: ReactNode
+  /** The raw error text, shown in a smaller line under the sentence. */
+  detail?: ReactNode
   /** Buttons for the recovery actions. */
   actions?: ReactNode
 }
 
 /** Inline notice under the transcript: a blocked tool, a cooling-down provider or an interrupted reply. */
-export function ChatNotice({ tone, title, body, actions }: ChatNoticeProps) {
+export function ChatNotice({ tone, title, body, detail, actions }: ChatNoticeProps) {
   return (
     <div
       role="alert"
@@ -28,6 +30,7 @@ export function ChatNotice({ tone, title, body, actions }: ChatNoticeProps) {
           <span className="font-semibold">{title}</span>
           {body && <span className="ml-1 font-normal text-ink-secondary">{body}</span>}
         </p>
+        {detail && <p className="break-words font-mono text-caption text-ink-muted">{detail}</p>}
         {actions && <div className="mt-1.5 flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
     </div>

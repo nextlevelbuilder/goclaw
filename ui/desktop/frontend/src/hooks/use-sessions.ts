@@ -2,12 +2,23 @@ import { useEffect, useCallback } from 'react'
 import i18n from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { sessionService } from '../services/session-service'
-import { useSessionStore } from '../stores/session-store'
+import { useSessionStore, type Session } from '../stores/session-store'
 import { useAgentStore } from '../stores/agent-store'
 import { useChatMessageStore } from '../stores/chat-message-store'
 import { useChatActivityStore } from '../stores/chat-activity-store'
 import { toast } from '../components/ui'
 import { deleteSessionByKey, renameSessionByKey } from './chat-session-actions'
+
+/** Maps a `sessions.list` reply to store sessions for one agent. */
+export function mapSessionList(agentId: string, result: Awaited<ReturnType<typeof sessionService.list>> | undefined): Session[] {
+  return (result?.sessions || []).map((s) => ({
+    key: s.key,
+    agentId,
+    title: s.label || i18n.t('sessions:untitled'),
+    lastMessageAt: new Date(s.updated || s.created).getTime(),
+    messageCount: s.messageCount || 0,
+  }))
+}
 
 export function useSessions() {
   const { t } = useTranslation('sessions')
@@ -24,19 +35,14 @@ export function useSessions() {
 
   // Fetch the agent's sessions on agent change and whenever `reload()` is called.
   useEffect(() => {
-    if (!selectedAgentId) return
+    // No agent yet: there is nothing to list, so the list is loaded and empty (not loading forever).
+    if (!selectedAgentId) { setSessions([]); return }
     let cancelled = false
     setStatus('loading')
     sessionService.list(selectedAgentId)
       .then((result) => {
         if (cancelled) return
-        setSessions((result?.sessions || []).map((s) => ({
-          key: s.key,
-          agentId: selectedAgentId,
-          title: s.label || i18n.t('sessions:untitled'),
-          lastMessageAt: new Date(s.updated || s.created).getTime(),
-          messageCount: s.messageCount || 0,
-        })))
+        setSessions(mapSessionList(selectedAgentId, result))
       })
       .catch((err: unknown) => {
         if (cancelled) return

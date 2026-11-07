@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSessionStore, type Session } from '../../stores/session-store'
+import type { Session } from '../../stores/session-store'
 import { useAgentStore } from '../../stores/agent-store'
+import { useAgentSessions } from '../../hooks/use-agent-sessions'
 import { deleteSessionByKey, renameSessionByKey } from '../../hooks/chat-session-actions'
 import { dayGroup, relativeTime, type DayGroup } from '../../utils/chat-time'
 import { cn } from '../../lib/cn'
@@ -19,13 +20,12 @@ const GROUPS: DayGroup[] = ['today', 'yesterday', 'earlier']
 /** Sessions: the selected agent's conversations, with a read-only preview and row actions. */
 export function SessionsView() {
   const { t, i18n } = useTranslation('sessions')
-  const sessions = useSessionStore((s) => s.sessions)
-  const status = useSessionStore((s) => s.status)
-  const loadError = useSessionStore((s) => s.error)
-  const reload = useSessionStore((s) => s.reload)
   const agents = useAgentStore((s) => s.agents)
   const selectedAgentId = useAgentStore((s) => s.selectedAgentId)
-  const selectAgent = useAgentStore((s) => s.selectAgent)
+  // The filter belongs to this view; the app-wide agent (and the open chat) stay as they are.
+  const [filterAgentId, setFilterAgentId] = useState<string | null>(null)
+  const agentId = filterAgentId ?? selectedAgentId
+  const { sessions, status, error: loadError, reload, remove, patch } = useAgentSessions(agentId)
   const { disconnected } = useGatewayStatus()
 
   const [query, setQuery] = useState('')
@@ -60,6 +60,7 @@ export function SessionsView() {
     setDeleting(true)
     try {
       await deleteSessionByKey(toDelete.key)
+      remove(toDelete.key)
       if (previewKey === toDelete.key) setPreviewKey(null)
       toast.success(t('toast.deleted'))
       setToDelete(null)
@@ -86,6 +87,7 @@ export function SessionsView() {
     setSaving(true)
     try {
       await renameSessionByKey(toRename.key, label)
+      patch(toRename.key, { title: label })
       toast.success(t('toast.updated'))
       setToRename(null)
     } catch {
@@ -105,8 +107,8 @@ export function SessionsView() {
             <div className="w-44">
               <Select
                 aria-label={t('filterAgent')}
-                value={selectedAgentId ?? ''}
-                onChange={(e) => selectAgent(e.target.value)}
+                value={agentId ?? ''}
+                onChange={(e) => { setFilterAgentId(e.target.value); setPreviewKey(null) }}
                 options={agents.map((a) => ({ value: a.id, label: a.name }))}
               />
             </div>
