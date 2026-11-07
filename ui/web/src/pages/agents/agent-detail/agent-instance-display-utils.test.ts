@@ -75,6 +75,22 @@ describe("agent instance display utils", () => {
     expect(display.label).toBe("Zalo - chat4878");
   });
 
+  it("detects zalo_bot and zalo-bot channel prefixes distinctly from zalo_oa and legacy zalo", () => {
+    const displayUnderscore = buildAgentInstanceDisplay(
+      { user_id: "group:zalo_bot:chat4878" },
+      resolver({}),
+    );
+    expect(displayUnderscore.label).toBe("Zalo Bot - chat4878");
+    expect(displayUnderscore.channelLabel).toBe("Zalo Bot");
+
+    const displayHyphen = buildAgentInstanceDisplay(
+      { user_id: "group:zalo-bot:chat9999" },
+      resolver({}),
+    );
+    expect(displayHyphen.label).toBe("Zalo Bot - chat9999");
+    expect(displayHyphen.channelLabel).toBe("Zalo Bot");
+  });
+
   it("uses raw group ids for contact resolver inputs", () => {
     expect(
       getAgentInstanceResolveIds([

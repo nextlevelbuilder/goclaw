@@ -1,7 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { configSchema } from "./channel-schemas";
+import { configSchema, credentialsSchema } from "./channel-schemas";
 import { deliveryModelKey, isDeliveryModelKey, isDeliveryProviderKey } from "./channel-delivery-provider-fields";
 import { normalizeReasoningDeliveryConfig, resolveReasoningDeliveryValue } from "./reasoning-delivery-config";
+import enChannels from "@/i18n/locales/en/channels.json";
+import viChannels from "@/i18n/locales/vi/channels.json";
+import zhChannels from "@/i18n/locales/zh/channels.json";
+
+interface ChannelLocaleStructure {
+  fieldConfig?: {
+    poll_timeout_sec?: { label?: string; help?: string };
+    zalo_bot?: { token?: { label?: string; help?: string } };
+  };
+}
 
 describe("telegram configSchema", () => {
   const telegramConfig = configSchema["telegram"]!;
@@ -173,5 +183,96 @@ describe("pancake configSchema", () => {
     expect(f).toBeDefined();
     expect(f!.type).toBe("tags");
     expect(f!.showWhen).toEqual({ key: "features.auto_react", value: "true" });
+  });
+});
+
+describe("zalo_bot channel schema", () => {
+  it("defines credentialsSchema for zalo_bot with required token", () => {
+    const creds = credentialsSchema["zalo_bot"]!;
+    expect(creds).toBeDefined();
+    expect(creds).toHaveLength(1);
+
+    const tokenField = creds.find((f) => f.key === "token");
+    expect(tokenField).toBeDefined();
+    expect(tokenField?.type).toBe("password");
+    expect(tokenField?.required).toBe(true);
+    expect(tokenField?.help).toContain("Zalo Bot Creator");
+  });
+
+  it("defines configSchema for zalo_bot with policies, require_mention, poll_timeout_sec, and media_max_mb", () => {
+    const config = configSchema["zalo_bot"]!;
+    expect(config).toBeDefined();
+
+    const dmPolicy = config.find((f) => f.key === "dm_policy");
+    expect(dmPolicy).toBeDefined();
+    expect(dmPolicy?.type).toBe("select");
+    expect(dmPolicy?.defaultValue).toBe("pairing");
+    expect(dmPolicy?.options?.map((o) => o.value)).toEqual([
+      "pairing",
+      "open",
+      "allowlist",
+      "disabled",
+    ]);
+
+    const groupPolicy = config.find((f) => f.key === "group_policy");
+    expect(groupPolicy).toBeDefined();
+    expect(groupPolicy?.type).toBe("select");
+    expect(groupPolicy?.defaultValue).toBe("open");
+    expect(groupPolicy?.options?.map((o) => o.value)).toEqual([
+      "open",
+      "allowlist",
+      "disabled",
+    ]);
+    expect(groupPolicy?.options?.map((o) => o.value)).not.toContain("pairing");
+
+    const requireMention = config.find((f) => f.key === "require_mention");
+    expect(requireMention).toBeDefined();
+    expect(requireMention?.type).toBe("boolean");
+    expect(requireMention?.defaultValue).toBe(true);
+
+    const pollTimeoutSec = config.find((f) => f.key === "poll_timeout_sec");
+    expect(pollTimeoutSec).toBeDefined();
+    expect(pollTimeoutSec?.type).toBe("number");
+    expect(pollTimeoutSec?.defaultValue).toBe(30);
+
+    const mediaMaxMb = config.find((f) => f.key === "media_max_mb");
+    expect(mediaMaxMb).toBeDefined();
+    expect(mediaMaxMb?.type).toBe("number");
+    expect(mediaMaxMb?.defaultValue).toBe(10);
+
+    const allowFrom = config.find((f) => f.key === "allow_from");
+    expect(allowFrom).toBeDefined();
+    expect(allowFrom?.type).toBe("tags");
+
+    const groupAllowFrom = config.find((f) => f.key === "group_allow_from");
+    expect(groupAllowFrom).toBeDefined();
+    expect(groupAllowFrom?.type).toBe("tags");
+
+    const behaviorFields = config.filter((f) => f.key.startsWith("chat_behavior."));
+    expect(behaviorFields.length).toBeGreaterThan(0);
+  });
+});
+
+describe("zalo_bot i18n translations parity", () => {
+  const en = enChannels as ChannelLocaleStructure;
+  const vi = viChannels as ChannelLocaleStructure;
+  const zh = zhChannels as ChannelLocaleStructure;
+
+  it("provides poll_timeout_sec and zalo_bot token translations in en", () => {
+    expect(en.fieldConfig?.poll_timeout_sec?.label).toBe("Poll Timeout (s)");
+    expect(en.fieldConfig?.poll_timeout_sec?.help).toBe("Long polling timeout in seconds");
+    expect(en.fieldConfig?.zalo_bot?.token?.help).toContain("Zalo Bot Creator");
+  });
+
+  it("provides poll_timeout_sec and zalo_bot token translations in vi", () => {
+    expect(vi.fieldConfig?.poll_timeout_sec?.label).toBe("Thời gian chờ Polling (giây)");
+    expect(vi.fieldConfig?.poll_timeout_sec?.help).toContain("long polling");
+    expect(vi.fieldConfig?.zalo_bot?.token?.help).toContain("Zalo Bot Creator");
+  });
+
+  it("provides poll_timeout_sec and zalo_bot token translations in zh", () => {
+    expect(zh.fieldConfig?.poll_timeout_sec?.label).toBe("轮询超时 (秒)");
+    expect(zh.fieldConfig?.poll_timeout_sec?.help).toContain("长轮询");
+    expect(zh.fieldConfig?.zalo_bot?.token?.help).toContain("Zalo Bot Creator");
   });
 });

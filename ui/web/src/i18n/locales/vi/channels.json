@@ -398,6 +398,16 @@
       "label": "Chỉ báo hoạt động",
       "help": "Hiển thị chỉ báo \"agent đang làm việc\" (đang nghĩ/tìm/tạo…) trong lúc agent xử lý. Tạm thời, không phải tin nhắn."
     },
+    "poll_timeout_sec": {
+      "label": "Thời gian chờ Polling (giây)",
+      "help": "Thời gian chờ long polling tính bằng giây"
+    },
+    "zalo_bot": {
+      "token": {
+        "label": "Bot Token",
+        "help": "Bot Token từ Zalo Bot Creator / OA Zalo Bot Manager"
+      }
+    },
     "media_max_mb": {
       "label": "Kích thước media tối đa (MB)"
     },

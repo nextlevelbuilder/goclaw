@@ -16,6 +16,8 @@ export interface AgentInstanceDisplay {
 type ContactResolver = (id: string) => ChannelContact | null;
 
 const CHANNEL_PREFIX_LABELS: Array<[string, string]> = [
+  ["zalo_bot", "Zalo Bot"],
+  ["zalo-bot", "Zalo Bot"],
   ["zalo_personal", "Zalo Personal"],
   ["zalo-personal", "Zalo Personal"],
   ["zalo_oa", "Zalo OA"],

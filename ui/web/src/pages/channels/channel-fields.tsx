@@ -178,9 +178,16 @@ function FieldRenderer({
   onPortalResumeAuthorize?: (portalName: string) => void;
 }) {
   const { t } = useTranslation("channels");
-  // i18n: try "fieldConfig.<key>.label" / "fieldConfig.<key>.help", fall back to hardcoded schema string
-  const label = t(`fieldConfig.${field.key}.label`, { defaultValue: field.label });
-  const help = field.help ? t(`fieldConfig.${field.key}.help`, { defaultValue: field.help }) : "";
+  // i18n: try "fieldConfig.<channelType>.<key>.label" -> "fieldConfig.<key>.label", fall back to hardcoded schema string
+  const label = (channelType ? t(`fieldConfig.${channelType}.${field.key}.label`, { defaultValue: "" }) : "")
+    || t(`fieldConfig.${field.key}.label`, { defaultValue: field.label });
+  const channelHelpKey = channelType ? `fieldConfig.${channelType}.${field.key}.help` : "";
+  const genericHelp = (field.key === "token" && channelType && channelType !== "telegram")
+    ? field.help
+    : t(`fieldConfig.${field.key}.help`, { defaultValue: field.help });
+  const help = field.help
+    ? ((channelHelpKey ? t(channelHelpKey, { defaultValue: "" }) : "") || genericHelp || "")
+    : "";
   const tooltipHelp = isChatBehaviorField(field.key) && help ? help : undefined;
   const inlineHelp = tooltipHelp ? "" : help;
   const resolvedHint = disabledHint ? t(disabledHint, { defaultValue: disabledHint }) : undefined;

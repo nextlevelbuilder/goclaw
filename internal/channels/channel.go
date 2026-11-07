@@ -81,6 +81,7 @@ const (
 	TypeSlack        = "slack"
 	TypeTelegram     = "telegram"
 	TypeWhatsApp     = "whatsapp"
+	TypeZaloBot      = "zalo_bot"
 	TypeZaloOA       = "zalo_oa"
 	TypeZaloPersonal = "zalo_personal"
 )

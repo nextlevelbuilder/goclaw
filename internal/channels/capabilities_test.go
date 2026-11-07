@@ -15,6 +15,7 @@ func TestIsMediaCapable_KnownCapableTypes(t *testing.T) {
 	capable := []string{
 		TypeTelegram, TypeDiscord, TypeWhatsApp, TypeFeishu,
 		TypeSlack, TypeZaloPersonal, TypePancake, TypeFacebook,
+		TypeZaloBot,
 	}
 	for _, ct := range capable {
 		if !IsMediaCapable(ct) {
