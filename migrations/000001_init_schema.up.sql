@@ -1,8 +1,8 @@
 -- GoClaw Multi-Tenant Schema
--- Requires: pgcrypto, pgvector extensions
-
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-CREATE EXTENSION IF NOT EXISTS "vector";
+-- PREREQUISITE: pgcrypto and pgvector extensions must be created by a superuser
+-- before running this migration. Example (as superuser):
+--   CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+--   CREATE EXTENSION IF NOT EXISTS "vector";
 
 -- UUID v7 function (matching backend-go)
 CREATE OR REPLACE FUNCTION uuid_generate_v7() RETURNS uuid AS $$
