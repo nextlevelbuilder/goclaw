@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
@@ -226,6 +227,140 @@ func TestSubagentTaskScopeRejectsOtherRootTree(t *testing.T) {
 	}, "running-a") {
 		t.Fatal("other root tree cancelled task")
 	}
+}
+
+// Two chats of one agent share a tenant and a root tree. list/get/wait/cancel
+// must stay inside the caller's session: the other chat's task text is not
+// enumerable, and cancel id=all must not kill it (#1525).
+func TestSpawnControlsStayInsideCallerSession(t *testing.T) {
+	tenantID := uuid.New()
+	agentID := uuid.New()
+	manager := NewSubagentManager(nil, nil, "", nil, nil, SubagentConfig{})
+	manager.tasks["task-a"] = &SubagentTask{
+		ID: "task-a", Status: TaskStatusRunning, Label: "alpha",
+		Task:        "chat A secret resume text that must not leak",
+		RootAgentID: agentID, RootAgentKey: "agent", OriginTenantID: tenantID,
+		OriginSessionKey: "session-a",
+	}
+	manager.tasks["task-b"] = &SubagentTask{
+		ID: "task-b", Status: TaskStatusRunning, Label: "beta",
+		Task:        "chat B work",
+		RootAgentID: agentID, RootAgentKey: "agent", OriginTenantID: tenantID,
+		OriginSessionKey: "session-b",
+	}
+
+	ctxB := store.WithTenantID(context.Background(), tenantID)
+	ctxB = store.WithAgentID(ctxB, agentID)
+	ctxB = WithToolAgentKey(ctxB, "agent")
+	ctxB = WithToolSessionKey(ctxB, "session-b")
+	ctxA := store.WithTenantID(context.Background(), tenantID)
+	ctxA = store.WithAgentID(ctxA, agentID)
+	ctxA = WithToolAgentKey(ctxA, "agent")
+	ctxA = WithToolSessionKey(ctxA, "session-a")
+	scopeB := subagentScopeFromContext(ctxB)
+	scopeA := subagentScopeFromContext(ctxA)
+
+	if _, ok := manager.GetTask(TaskScope{
+		TenantID: tenantID, RootAgentID: agentID, RootAgentKey: "agent",
+	}, "task-a"); ok {
+		t.Fatal("missing session key matched a session-owned task")
+	}
+	roster := manager.RosterForParent(TaskScope{
+		TenantID: tenantID, RootAgentID: agentID, RootAgentKey: "agent",
+		Administrative: true,
+	})
+	if roster.Total != 2 || roster.Active != 2 {
+		t.Fatalf("administrative roster = %+v, want both sessions", roster)
+	}
+
+	sessionA := "session-a"
+	completionID := uuid.New()
+	manager.taskStore = sessionGetStore{row: &store.SubagentTaskData{
+		BaseModel:  store.BaseModel{ID: completionID},
+		SessionKey: &sessionA,
+		Status:     TaskStatusCompleted,
+		Subject:    "chat A secret resume text that must not leak",
+		Metadata:   map[string]any{asyncCompletionKindKey: asyncCompletionKindSubagent},
+	}}
+
+	if _, ok := manager.GetTask(scopeB, "task-a"); ok {
+		t.Fatal("session B read session A's task by ID")
+	}
+	for _, task := range manager.ListTasks(scopeB, "") {
+		if task.ID == "task-a" || strings.Contains(task.Task, "secret resume") {
+			t.Fatalf("session B listed session A's task: %#v", task)
+		}
+	}
+	listed := manager.ListTasks(scopeB, "")
+	if len(listed) != 1 || listed[0].ID != "task-b" {
+		t.Fatalf("session B list = %#v, want only task-b", listed)
+	}
+
+	tool := NewSpawnTool(manager, "agent", 0)
+	listResult := tool.Execute(ctxB, map[string]any{"action": "list"})
+	if strings.Contains(listResult.ForLLM, "secret resume") || strings.Contains(listResult.ForLLM, "task-a") {
+		t.Fatalf("spawn list leaked the other session:\n%s", listResult.ForLLM)
+	}
+	if !strings.Contains(listResult.ForLLM, "task-b") {
+		t.Fatalf("spawn list hid the caller's own task:\n%s", listResult.ForLLM)
+	}
+	leaked := tool.Execute(ctxB, map[string]any{"action": "get", "completion_id": completionID.String()})
+	if leaked == nil || !leaked.IsError || strings.Contains(leaked.ForLLM, "secret resume") {
+		t.Fatalf("spawn get leaked the other session: %#v", leaked)
+	}
+	ownGet := tool.Execute(ctxA, map[string]any{"action": "get", "completion_id": completionID.String()})
+	if ownGet == nil || ownGet.IsError || !strings.Contains(ownGet.ForLLM, "secret resume") {
+		t.Fatalf("owning session get = %#v", ownGet)
+	}
+
+	if _, err := manager.Steer(context.Background(), scopeB, "task-a", "hijack", nil); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("steer across sessions = %v, want not found", err)
+	}
+	if manager.CancelTask(scopeB, "task-a") {
+		t.Fatal("session B cancelled session A's task by ID")
+	}
+	if !manager.CancelTask(scopeB, "all") {
+		t.Fatal("session B cancel id=all did not cancel its own task")
+	}
+	if manager.tasks["task-a"].Status != TaskStatusRunning {
+		t.Fatal("cancel id=all from session B cancelled session A")
+	}
+	if manager.tasks["task-b"].Status != TaskStatusCancelled {
+		t.Fatalf("session B task status = %s, want cancelled", manager.tasks["task-b"].Status)
+	}
+
+	waitCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	waited, err := manager.WaitForChildren(waitCtx, scopeB, "", 2)
+	if err != nil {
+		t.Fatalf("wait in session B blocked on another session: %v", err)
+	}
+	for _, task := range waited {
+		if task.OriginSessionKey != "session-b" {
+			t.Fatalf("wait returned %s from session %s", task.ID, task.OriginSessionKey)
+		}
+	}
+
+	own, ok := manager.GetTask(scopeA, "task-a")
+	if !ok || own.Status != TaskStatusRunning {
+		t.Fatal("owning session lost its still-running task")
+	}
+	if !manager.CancelTask(scopeA, "all") {
+		t.Fatal("owning session could not cancel its own task")
+	}
+	if manager.tasks["task-a"].Status != TaskStatusCancelled {
+		t.Fatal("owning session cancel id=all left its task running")
+	}
+}
+
+// sessionGetStore answers only Get. Other store methods are unused here.
+type sessionGetStore struct {
+	store.SubagentTaskStore
+	row *store.SubagentTaskData
+}
+
+func (s sessionGetStore) Get(context.Context, uuid.UUID, uuid.UUID) (*store.SubagentTaskData, error) {
+	return s.row, nil
 }
 
 type mediaSubagentProvider struct {

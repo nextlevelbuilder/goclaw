@@ -90,10 +90,19 @@ type SubagentTask struct {
 
 // TaskScope is the authorization boundary for every in-memory task action.
 // A task ID alone never authorizes lookup, cancellation, steering, or cleanup.
+//
+// SessionKey is the caller's origin session. Interactive spawn controls copy
+// it from the tool context and leave Administrative false, so one chat cannot
+// list, wait on, steer, or cancel another chat's tasks. Administrative is the
+// explicit opt-in for lifecycle that covers every session of the root agent
+// (the announce roster). An empty SessionKey matches only tasks that were
+// spawned without one; it is not a wildcard.
 type TaskScope struct {
-	TenantID     uuid.UUID
-	RootAgentID  uuid.UUID
-	RootAgentKey string
+	TenantID       uuid.UUID
+	RootAgentID    uuid.UUID
+	RootAgentKey   string
+	SessionKey     string
+	Administrative bool
 }
 
 // SubagentManager manages the lifecycle of spawned subagents.
