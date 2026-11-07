@@ -21,8 +21,12 @@ func main() {
 		Title:     "GoClaw",
 		Width:     1280,
 		Height:    800,
-		MinWidth:  900,
-		MinHeight: 600,
+		MinWidth:  960,
+		MinHeight: 640,
+		// The frontend draws its own title bar (drag region + window controls).
+		Frameless: true,
+		// Dark surface-window token (oklch 0.14 0.012 45) so no white flash before first paint.
+		BackgroundColour: &options.RGBA{R: 13, G: 8, B: 6, A: 255},
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
