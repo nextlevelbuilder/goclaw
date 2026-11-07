@@ -81,20 +81,20 @@ func TestSecretVault_CRUDAndResolve(t *testing.T) {
 	}
 
 	appr, hints, doms := true, "use for GitHub", []string{"*.example.com"}
-	if err := s.UpdateMeta(ctx, e.ID, store.SecretVaultMetaUpdate{RequireApproval: &appr, Hints: &hints, AllowedDomains: &doms}); err != nil {
+	if _, err := s.UpdateMeta(ctx, e.ID, store.SecretVaultMetaUpdate{RequireApproval: &appr, Hints: &hints, AllowedDomains: &doms}, 0); err != nil {
 		t.Fatal(err)
 	}
 	g, err := s.Get(ctx, e.ID)
 	if err != nil || !g.RequireApproval || g.Hints != hints || g.AllowedDomains[0] != "*.example.com" {
 		t.Fatalf("get after update: %v", err)
 	}
-	if err := s.ReplaceValue(ctx, e.ID, store.SecretVaultPayload{Secret: "tok-456"}); err != nil {
+	if _, err := s.ReplaceValue(ctx, e.ID, store.SecretVaultPayload{Secret: "tok-456"}, 0); err != nil {
 		t.Fatal(err)
 	}
 	if _, p, _ := s.ResolveForUse(ctx, agent, "gh-token"); p.Secret != "tok-456" {
 		t.Fatal("value not replaced")
 	}
-	if err := s.ReplaceValue(ctx, e.ID, store.SecretVaultPayload{Username: "u", Secret: "x"}); !errors.Is(err, store.ErrSecretVaultInvalid) {
+	if _, err := s.ReplaceValue(ctx, e.ID, store.SecretVaultPayload{Username: "u", Secret: "x"}, 0); !errors.Is(err, store.ErrSecretVaultInvalid) {
 		t.Fatalf("api_key with username: %v", err)
 	}
 

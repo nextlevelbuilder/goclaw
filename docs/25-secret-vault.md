@@ -25,6 +25,7 @@ Entries can also be managed with the CLI (PostgreSQL only):
 goclaw secret-vault list   --tenant-id <uuid>
 goclaw secret-vault set    --tenant-id <uuid> --name gh --kind api_key --domains api.github.com   # value read from stdin
 goclaw secret-vault delete --tenant-id <uuid> --name gh
+goclaw secret-vault rewrap --tenant-id <uuid> [--dry-run]   # upgrade legacy ciphertext, see "Encryption binding"
 ```
 
 The CLI needs `GOCLAW_ENCRYPTION_KEY` and a database DSN. The value is read from
@@ -54,10 +55,40 @@ Migration `000103` (PostgreSQL) and `schema.sql` (SQLite) add:
 |---|---|
 | `secret_vault_entries` | Name, kind, allowed domains, approval flag, hints, AES-256-GCM encrypted payload. Unique per tenant and name. |
 | `secret_vault_grants` | Which agents may use an entry. |
-| `secret_vault_audit` | Created, updated, deleted, used and denied events with agent, user, host and outcome. Never holds a value. Survives entry deletion. |
+| `secret_vault_audit` | Created, updated, deleted, used, denied and conflict events with agent, user, host and outcome. Never holds a value. Survives entry deletion. |
 
 No endpoint returns a secret value. The REST API (`/v1/secret-vault`) returns
 metadata only, and every route requires a tenant admin.
+
+## Encryption binding and concurrent edits
+
+Migration `000104` (PostgreSQL) and SQLite schema version 65 add a `revision`
+column to `secret_vault_entries`.
+
+**Entry-bound ciphertext.** New and updated secrets are stored as
+`v2:aes-gcm:<base64url>`. The AES-GCM additional data covers the tenant ID,
+entry ID, name, kind, allowed domains (sorted and lower-cased), approval flag
+and revision. A ciphertext copied onto another entry or tenant, or an entry
+whose allowed domains were widened directly in the database, no longer
+decrypts. Hints are not bound. Changing metadata through the API decrypts with
+the old binding and seals again with the new one.
+
+**Legacy rows.** Values written before this change (`aes-gcm:`) stay readable
+and log `security.secret_vault.legacy_ciphertext`. They are upgraded by the
+next write to that entry, or in bulk with `goclaw secret-vault rewrap`
+(`--dry-run` only counts). Rewrap keeps revisions and timestamps, is safe to
+re-run, never prints a value, and exits non-zero listing the IDs of any rows the
+configured key cannot open. Keep the encryption key unchanged until it reports
+no legacy rows.
+
+**Optimistic concurrency.** Every entry response carries `revision`. `PUT
+/v1/secret-vault/{id}` and `PUT /v1/secret-vault/{id}/value` accept
+`If-Match: <revision>` (quotes and a `W/` prefix are tolerated). A stale
+revision returns `409` with `{"code":"revision_conflict","current_revision":N}`
+and writes a `conflict` audit row; nothing is changed. A malformed header
+returns `400`. Without the header the write is unconditional, as before, and the
+gateway logs `security.secret_vault.unconditional_write` so older clients can be
+found. The web UI always sends the header.
 
 ## Threat model
 

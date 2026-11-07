@@ -23,6 +23,7 @@ const (
 	SecretAuditUsed     = "used"
 	SecretAuditDenied   = "denied"
 	SecretAuditApproved = "approved"
+	SecretAuditConflict = "conflict"
 )
 
 var (
@@ -38,6 +39,9 @@ var (
 	ErrSecretVaultAgentInvalid = errors.New("secret vault: agent not found in tenant")
 	ErrSecretVaultNoTenant     = errors.New("secret vault: tenant required")
 	ErrSecretVaultInvalid      = errors.New("secret vault: invalid input")
+	// ErrSecretVaultConflict is returned by a write whose expected revision no
+	// longer matches the stored one (a concurrent edit won).
+	ErrSecretVaultConflict = errors.New("secret vault: entry was modified by someone else")
 )
 
 // SecretVaultEntry is the non-secret metadata of a stored secret.
@@ -51,9 +55,12 @@ type SecretVaultEntry struct {
 	AllowedDomains  []string  `json:"allowed_domains"`
 	RequireApproval bool      `json:"require_approval" db:"require_approval"`
 	Hints           string    `json:"hints" db:"hints"`
-	CreatedBy       string    `json:"created_by" db:"created_by"`
-	CreatedAt       time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at" db:"updated_at"`
+	// Revision starts at 1 and increases on every value or metadata write. It
+	// is part of the ciphertext binding and the optimistic-concurrency token.
+	Revision  int64     `json:"revision" db:"revision"`
+	CreatedBy string    `json:"created_by" db:"created_by"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // SecretVaultPayload is the secret material. For kind api_key only Secret is
@@ -105,10 +112,16 @@ type SecretVaultResolved struct {
 type SecretVaultStore interface {
 	// Create validates and stores a new entry. e.ID is generated when nil.
 	Create(ctx context.Context, e *SecretVaultEntry, p SecretVaultPayload) error
-	// ReplaceValue overwrites the stored secret value.
-	ReplaceValue(ctx context.Context, id uuid.UUID, p SecretVaultPayload) error
-	// UpdateMeta changes allowed domains, approval flag or hints.
-	UpdateMeta(ctx context.Context, id uuid.UUID, u SecretVaultMetaUpdate) error
+	// ReplaceValue overwrites the stored secret value and returns the new
+	// revision. expectedRev must match the stored revision, otherwise
+	// ErrSecretVaultConflict is returned; pass 0 only from paths that
+	// intentionally bypass the check.
+	ReplaceValue(ctx context.Context, id uuid.UUID, p SecretVaultPayload, expectedRev int64) (int64, error)
+	// UpdateMeta changes allowed domains, approval flag or hints and returns
+	// the new revision. Domains and the approval flag are bound into the
+	// ciphertext, so this re-encrypts the payload. expectedRev has the same
+	// meaning as in ReplaceValue.
+	UpdateMeta(ctx context.Context, id uuid.UUID, u SecretVaultMetaUpdate, expectedRev int64) (int64, error)
 	Get(ctx context.Context, id uuid.UUID) (*SecretVaultEntry, error)
 	List(ctx context.Context) ([]SecretVaultEntry, error)
 	Delete(ctx context.Context, id uuid.UUID) error
@@ -128,6 +141,9 @@ type SecretVaultStore interface {
 	// the redactor with it. Never expose through an API.
 	ListGrantedSecrets(ctx context.Context, agentID uuid.UUID) ([]SecretVaultResolved, error)
 
+	// RewrapSecrets seals legacy ciphertext of the context tenant under the
+	// entry-bound envelope without changing any revision. dryRun only counts.
+	RewrapSecrets(ctx context.Context, dryRun bool) (SecretRewrapReport, error)
 	AppendAudit(ctx context.Context, a *SecretVaultAuditEntry) error
 	ListAudit(ctx context.Context, entryID uuid.UUID, limit int) ([]SecretVaultAuditEntry, error)
 }

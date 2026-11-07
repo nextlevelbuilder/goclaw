@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -62,6 +63,7 @@ type secretVaultEntryView struct {
 	AllowedDomains  []string  `json:"allowed_domains"`
 	RequireApproval bool      `json:"require_approval"`
 	Hints           string    `json:"hints"`
+	Revision        int64     `json:"revision"`
 	CreatedBy       string    `json:"created_by"`
 	CreatedAt       string    `json:"created_at"`
 	UpdatedAt       string    `json:"updated_at"`
@@ -74,7 +76,7 @@ func toSecretVaultView(e store.SecretVaultEntry) secretVaultEntryView {
 	}
 	return secretVaultEntryView{
 		ID: e.ID, Name: e.Name, Kind: e.Kind, AllowedDomains: domains,
-		RequireApproval: e.RequireApproval, Hints: e.Hints, CreatedBy: e.CreatedBy,
+		RequireApproval: e.RequireApproval, Hints: e.Hints, Revision: e.Revision, CreatedBy: e.CreatedBy,
 		CreatedAt: e.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 		UpdatedAt: e.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 	}
@@ -86,6 +88,8 @@ func writeVaultError(w http.ResponseWriter, r *http.Request, op string, err erro
 	switch {
 	case errors.Is(err, store.ErrSecretVaultNotFound):
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": i18n.T(locale, i18n.MsgNotFound, "secret", "")})
+	case errors.Is(err, store.ErrSecretVaultConflict):
+		writeJSON(w, http.StatusConflict, map[string]any{"error": err.Error(), "code": "revision_conflict"})
 	case errors.Is(err, store.ErrSecretVaultNameTaken):
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 	case errors.Is(err, store.ErrSecretVaultInvalid), errors.Is(err, store.ErrSecretVaultAgentInvalid):
@@ -126,6 +130,44 @@ func (h *SecretVaultHandler) audit(r *http.Request, e *store.SecretVaultEntry, a
 	if err != nil {
 		slog.Warn("secret_vault.audit_failed", "action", action)
 	}
+}
+
+// expectedVaultRevision reads the optional If-Match header (a revision number,
+// quoted or weak-prefixed per HTTP). 0 means "not sent": the write proceeds
+// unconditionally so existing clients keep working, and is logged so they can
+// be found and updated.
+func expectedVaultRevision(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	raw := strings.TrimSpace(r.Header.Get("If-Match"))
+	if raw == "" {
+		slog.Warn("security.secret_vault.unconditional_write", "method", r.Method, "path", r.URL.Path)
+		return 0, true
+	}
+	raw = strings.TrimPrefix(raw, "W/")
+	raw = strings.Trim(raw, `"`)
+	rev, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || rev < 1 {
+		locale := store.LocaleFromContext(r.Context())
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": i18n.T(locale, i18n.MsgInvalidRequest, "If-Match")})
+		return 0, false
+	}
+	return rev, true
+}
+
+// writeConflict answers a stale write with the revision the caller must re-read.
+func (h *SecretVaultHandler) writeConflict(w http.ResponseWriter, r *http.Request, id uuid.UUID, current int64) {
+	name := ""
+	if e, err := h.store.Get(r.Context(), id); err == nil {
+		name = e.Name
+	}
+	if err := h.store.AppendAudit(r.Context(), &store.SecretVaultAuditEntry{
+		EntryID: id, EntryName: name, UserID: store.UserIDFromContext(r.Context()),
+		Action: store.SecretAuditConflict, Outcome: "revision_mismatch",
+	}); err != nil {
+		slog.Warn("secret_vault.audit_failed", "action", store.SecretAuditConflict)
+	}
+	writeJSON(w, http.StatusConflict, map[string]any{
+		"error": store.ErrSecretVaultConflict.Error(), "code": "revision_conflict", "current_revision": current,
+	})
 }
 
 func (h *SecretVaultHandler) handleList(w http.ResponseWriter, r *http.Request) {
@@ -193,9 +235,17 @@ func (h *SecretVaultHandler) handleUpdateMeta(w http.ResponseWriter, r *http.Req
 	if !decodeVaultBody(w, r, &req) {
 		return
 	}
-	err := h.store.UpdateMeta(r.Context(), id, store.SecretVaultMetaUpdate{
+	expected, ok := expectedVaultRevision(w, r)
+	if !ok {
+		return
+	}
+	curRev, err := h.store.UpdateMeta(r.Context(), id, store.SecretVaultMetaUpdate{
 		AllowedDomains: req.AllowedDomains, RequireApproval: req.RequireApproval, Hints: req.Hints,
-	})
+	}, expected)
+	if errors.Is(err, store.ErrSecretVaultConflict) {
+		h.writeConflict(w, r, id, curRev)
+		return
+	}
 	if err != nil {
 		writeVaultError(w, r, "update", err)
 		return
@@ -223,7 +273,16 @@ func (h *SecretVaultHandler) handleReplaceValue(w http.ResponseWriter, r *http.R
 	if !decodeVaultBody(w, r, &req) {
 		return
 	}
-	if err := h.store.ReplaceValue(r.Context(), id, store.SecretVaultPayload{Username: req.Username, Secret: req.Secret}); err != nil {
+	expected, ok := expectedVaultRevision(w, r)
+	if !ok {
+		return
+	}
+	curRev, err := h.store.ReplaceValue(r.Context(), id, store.SecretVaultPayload{Username: req.Username, Secret: req.Secret}, expected)
+	if errors.Is(err, store.ErrSecretVaultConflict) {
+		h.writeConflict(w, r, id, curRev)
+		return
+	}
+	if err != nil {
 		writeVaultError(w, r, "update", err)
 		return
 	}

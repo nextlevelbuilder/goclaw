@@ -1,24 +1,33 @@
 package store
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
+
+	"github.com/nextlevelbuilder/goclaw/internal/crypto"
 )
 
 const testVaultKey = "0123456789abcdef0123456789abcdef"
 
 func TestSecretPayloadRoundtrip(t *testing.T) {
 	in := SecretVaultPayload{Username: "alice", Secret: "s3cr3t-value"}
-	enc, err := EncodeSecretPayload(in, testVaultKey)
+	e := aadTestEntry()
+	enc, err := EncodeSecretPayloadAAD(in, testVaultKey, e)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(enc, "s3cr3t-value") || strings.Contains(enc, "alice") {
 		t.Fatal("encoded payload leaks plaintext")
 	}
-	out, err := DecodeSecretPayload(enc, testVaultKey)
+	if !strings.HasPrefix(enc, "v2:aes-gcm:") {
+		t.Fatalf("new writes must use the v2 envelope, got %q", enc[:12])
+	}
+	out, err := DecodeSecretPayload(enc, testVaultKey, e)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,18 +37,59 @@ func TestSecretPayloadRoundtrip(t *testing.T) {
 }
 
 func TestSecretPayloadFailsClosed(t *testing.T) {
-	if _, err := EncodeSecretPayload(SecretVaultPayload{Secret: "x"}, ""); !errors.Is(err, ErrSecretVaultNoKey) {
+	e := aadTestEntry()
+	if _, err := EncodeSecretPayloadAAD(SecretVaultPayload{Secret: "x"}, "", e); !errors.Is(err, ErrSecretVaultNoKey) {
 		t.Fatalf("empty key on encode: %v", err)
 	}
-	if _, err := DecodeSecretPayload("whatever", ""); !errors.Is(err, ErrSecretVaultNoKey) {
+	if _, err := DecodeSecretPayload("whatever", "", e); !errors.Is(err, ErrSecretVaultNoKey) {
 		t.Fatalf("empty key on decode: %v", err)
 	}
-	if _, err := DecodeSecretPayload(`{"s":"plain"}`, testVaultKey); !errors.Is(err, ErrSecretVaultNotEncrypted) {
+	if _, err := DecodeSecretPayload(`{"s":"plain"}`, testVaultKey, e); !errors.Is(err, ErrSecretVaultNotEncrypted) {
 		t.Fatalf("unencrypted stored value must be rejected: %v", err)
 	}
-	enc, _ := EncodeSecretPayload(SecretVaultPayload{Secret: "x"}, testVaultKey)
-	if _, err := DecodeSecretPayload(enc, "fedcba9876543210fedcba9876543210"); err == nil {
+	enc, _ := EncodeSecretPayloadAAD(SecretVaultPayload{Secret: "x"}, testVaultKey, e)
+	if _, err := DecodeSecretPayload(enc, "fedcba9876543210fedcba9876543210", e); err == nil {
 		t.Fatal("wrong key must fail")
+	}
+}
+
+// A ciphertext only opens for the entry state it was written for.
+func TestSecretPayloadBoundToEntry(t *testing.T) {
+	in := SecretVaultPayload{Secret: "s3cr3t-value"}
+	e := aadTestEntry()
+	enc, err := EncodeSecretPayloadAAD(in, testVaultKey, e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutations := map[string]func(*SecretVaultEntry){
+		"other tenant":   func(x *SecretVaultEntry) { x.TenantID = uuid.New() },
+		"other entry":    func(x *SecretVaultEntry) { x.ID = uuid.New() },
+		"widened domain": func(x *SecretVaultEntry) { x.AllowedDomains = append(x.AllowedDomains, "attacker.example") },
+		"newer revision": func(x *SecretVaultEntry) { x.Revision++ },
+	}
+	for name, mutate := range mutations {
+		moved := *e
+		moved.AllowedDomains = append([]string(nil), e.AllowedDomains...)
+		mutate(&moved)
+		if _, err := DecodeSecretPayload(enc, testVaultKey, &moved); err == nil {
+			t.Errorf("%s: ciphertext must not decrypt", name)
+		}
+	}
+}
+
+func TestSecretPayloadLegacyStillReadable(t *testing.T) {
+	e := aadTestEntry()
+	raw, _ := json.Marshal(payloadWire{Secret: "old-secret"})
+	legacy, err := crypto.Encrypt(string(raw), testVaultKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !IsLegacySecretCiphertext(legacy) {
+		t.Fatal("legacy value not recognised")
+	}
+	out, err := DecodeSecretPayload(legacy, testVaultKey, e)
+	if err != nil || out.Secret != "old-secret" {
+		t.Fatalf("legacy decode = %+v, %v", out, err)
 	}
 }
 

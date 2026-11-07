@@ -2497,6 +2497,7 @@ CREATE TABLE IF NOT EXISTS secret_vault_entries (
     allowed_domains   TEXT NOT NULL CHECK (json_valid(allowed_domains) AND json_array_length(allowed_domains) > 0),
     require_approval  INTEGER NOT NULL DEFAULT 0,
     hints             TEXT NOT NULL DEFAULT '',
+    revision          INTEGER NOT NULL DEFAULT 1,
     created_by        TEXT NOT NULL DEFAULT '',
     created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),

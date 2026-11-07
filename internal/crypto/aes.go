@@ -14,6 +14,15 @@ import (
 
 const prefix = "aes-gcm:"
 
+// aadPrefixV2 marks values sealed with additional authenticated data. They are
+// produced only by EncryptWithAAD and must be opened with DecryptWithAAD.
+const aadPrefixV2 = "v2:aes-gcm:"
+
+// ErrAADRequired is returned by Decrypt for a value that was sealed with AAD.
+// Without this guard such a value would fall through the "no aes-gcm: prefix"
+// branch and be returned verbatim as if it were plaintext.
+var ErrAADRequired = errors.New("crypto: value uses AAD envelope, use DecryptWithAAD")
+
 // Encrypt encrypts plaintext using AES-256-GCM.
 // Returns "aes-gcm:" + base64(nonce + ciphertext + tag).
 // If key is empty, returns plaintext unchanged.
@@ -53,6 +62,10 @@ func Encrypt(plaintext, key string) (string, error) {
 func Decrypt(ciphertext, key string) (string, error) {
 	if key == "" || ciphertext == "" {
 		return ciphertext, nil
+	}
+
+	if IsEncryptedAAD(ciphertext) {
+		return "", ErrAADRequired
 	}
 
 	if !IsEncrypted(ciphertext) {
@@ -100,6 +113,71 @@ func Decrypt(ciphertext, key string) (string, error) {
 // IsEncrypted returns true if the value has the "aes-gcm:" encryption prefix.
 func IsEncrypted(value string) bool {
 	return strings.HasPrefix(value, prefix)
+}
+
+// IsEncryptedAAD returns true if the value carries the "v2:aes-gcm:" prefix.
+func IsEncryptedAAD(value string) bool {
+	return strings.HasPrefix(value, aadPrefixV2)
+}
+
+func newGCM(key string) (cipher.AEAD, error) {
+	keyBytes, err := DeriveKey(key)
+	if err != nil {
+		return nil, err
+	}
+	block, err := aes.NewCipher(keyBytes)
+	if err != nil {
+		return nil, err
+	}
+	return cipher.NewGCM(block)
+}
+
+// EncryptWithAAD encrypts plaintext with AES-256-GCM, authenticating aad.
+// Returns "v2:aes-gcm:" + base64url-no-pad(nonce || ciphertext || tag).
+// Unlike Encrypt it never passes plaintext through: an empty key is an error,
+// because callers use it for values that must never be stored in clear.
+func EncryptWithAAD(plaintext, key string, aad []byte) (string, error) {
+	if key == "" {
+		return "", errors.New("crypto: encryption key required")
+	}
+	gcm, err := newGCM(key)
+	if err != nil {
+		return "", err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return "", err
+	}
+	sealed := gcm.Seal(nonce, nonce, []byte(plaintext), aad)
+	return aadPrefixV2 + base64.RawURLEncoding.EncodeToString(sealed), nil
+}
+
+// DecryptWithAAD opens a value produced by EncryptWithAAD. The same aad must
+// be supplied; any difference fails authentication.
+func DecryptWithAAD(ciphertext, key string, aad []byte) (string, error) {
+	if !IsEncryptedAAD(ciphertext) {
+		return "", errors.New("crypto: value is not an AAD envelope")
+	}
+	if key == "" {
+		return "", errors.New("crypto: encryption key required")
+	}
+	gcm, err := newGCM(key)
+	if err != nil {
+		return "", err
+	}
+	data, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(ciphertext, aadPrefixV2))
+	if err != nil {
+		return "", errors.New("crypto: invalid AAD envelope encoding")
+	}
+	nonceSize := gcm.NonceSize()
+	if len(data) < nonceSize+gcm.Overhead() {
+		return "", errors.New("crypto: AAD envelope too short")
+	}
+	plaintext, err := gcm.Open(nil, data[:nonceSize], data[nonceSize:], aad)
+	if err != nil {
+		return "", errors.New("decrypt failed: invalid key, wrong binding or corrupted data")
+	}
+	return string(plaintext), nil
 }
 
 // DeriveKey converts the input string to a 32-byte AES key.

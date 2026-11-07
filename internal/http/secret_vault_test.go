@@ -45,7 +45,7 @@ func (m *memVault) Create(_ context.Context, e *store.SecretVaultEntry, p store.
 		}
 	}
 	e.ID = uuid.New()
-	e.CreatedAt, e.UpdatedAt = time.Now(), time.Now()
+	e.CreatedAt, e.UpdatedAt, e.Revision = time.Now(), time.Now(), 1
 	cp := *e
 	m.entries[e.ID], m.values[e.ID] = &cp, p
 	return nil
@@ -68,15 +68,18 @@ func (m *memVault) List(context.Context) ([]store.SecretVaultEntry, error) {
 	return out, nil
 }
 
-func (m *memVault) UpdateMeta(_ context.Context, id uuid.UUID, u store.SecretVaultMetaUpdate) error {
+func (m *memVault) UpdateMeta(_ context.Context, id uuid.UUID, u store.SecretVaultMetaUpdate, expectedRev int64) (int64, error) {
 	e, ok := m.entries[id]
 	if !ok {
-		return store.ErrSecretVaultNotFound
+		return 0, store.ErrSecretVaultNotFound
+	}
+	if expectedRev != 0 && e.Revision != expectedRev {
+		return e.Revision, store.ErrSecretVaultConflict
 	}
 	if u.AllowedDomains != nil {
 		d, err := store.NormalizeSecretDomains(*u.AllowedDomains)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		e.AllowedDomains = d
 	}
@@ -86,19 +89,24 @@ func (m *memVault) UpdateMeta(_ context.Context, id uuid.UUID, u store.SecretVau
 	if u.Hints != nil {
 		e.Hints = *u.Hints
 	}
-	return nil
+	e.Revision++
+	return e.Revision, nil
 }
 
-func (m *memVault) ReplaceValue(_ context.Context, id uuid.UUID, p store.SecretVaultPayload) error {
+func (m *memVault) ReplaceValue(_ context.Context, id uuid.UUID, p store.SecretVaultPayload, expectedRev int64) (int64, error) {
 	e, ok := m.entries[id]
 	if !ok {
-		return store.ErrSecretVaultNotFound
+		return 0, store.ErrSecretVaultNotFound
+	}
+	if expectedRev != 0 && e.Revision != expectedRev {
+		return e.Revision, store.ErrSecretVaultConflict
 	}
 	if err := store.ValidateSecretVaultPayload(e.Kind, p); err != nil {
-		return err
+		return 0, err
 	}
 	m.values[id] = p
-	return nil
+	e.Revision++
+	return e.Revision, nil
 }
 
 func (m *memVault) Delete(_ context.Context, id uuid.UUID) error {
@@ -178,7 +186,7 @@ func TestSecretVault_NeverReturnsTheValue(t *testing.T) {
 		t.Errorf("login must default to require_approval=true: %v", created)
 	}
 	// The response shape is part of the contract: metadata keys only.
-	want := []string{"allowed_domains", "created_at", "created_by", "hints", "id", "kind", "name", "require_approval", "updated_at"}
+	want := []string{"allowed_domains", "created_at", "created_by", "hints", "id", "kind", "name", "require_approval", "revision", "updated_at"}
 	var got []string
 	for k := range created {
 		got = append(got, k)
@@ -254,5 +262,76 @@ func TestSecretVault_UnauthenticatedAndBadInput(t *testing.T) {
 		t.Errorf("duplicate name = %d", rec.Code)
 	} else if strings.Contains(rec.Body.String(), vaultTestSecret) {
 		t.Error("conflict response echoes the value")
+	}
+}
+
+func vaultCallIfMatch(mux *http.ServeMux, method, path, ifMatch string, body any) *httptest.ResponseRecorder {
+	buf := &bytes.Buffer{}
+	if body != nil {
+		_ = json.NewEncoder(buf).Encode(body)
+	}
+	req := httptest.NewRequest(method, path, buf)
+	req.Header.Set("Authorization", "Bearer test-admin-token")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("If-Match", ifMatch)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	return rec
+}
+
+func TestSecretVault_IfMatchRevisionGuardsWrites(t *testing.T) {
+	mux, mv := vaultMux(t, oauthAdminTS{})
+	rec := vaultCall(mux, "POST", "/v1/secret-vault", map[string]any{
+		"name": "k", "kind": "api_key", "allowed_domains": []string{"a.com"}, "secret": vaultTestSecret,
+	})
+	var created map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &created)
+	id, path := created["id"].(string), "/v1/secret-vault/"+created["id"].(string)
+	if created["revision"] != float64(1) {
+		t.Fatalf("new entry revision = %v, want 1", created["revision"])
+	}
+
+	// Each accepted write moves the revision; the header may be quoted or weak.
+	for i, header := range []string{`1`, `"2"`, `W/"3"`} {
+		rec = vaultCallIfMatch(mux, "PUT", path, header, map[string]any{"hints": "h"})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("write %d with If-Match %s = %d %s", i, header, rec.Code, rec.Body)
+		}
+	}
+	rec = vaultCallIfMatch(mux, "PUT", path+"/value", "4", map[string]any{"secret": vaultTestSecret + "-v2"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("value write = %d %s", rec.Code, rec.Body)
+	}
+
+	// A stale revision is refused with 409, the current revision, and an audit row.
+	for _, p := range []string{path, path + "/value"} {
+		before := len(mv.audit)
+		rec = vaultCallIfMatch(mux, "PUT", p, "1", map[string]any{"hints": "stale", "secret": "stale-value"})
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("stale write to %s = %d, want 409", p, rec.Code)
+		}
+		var body map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &body)
+		if body["code"] != "revision_conflict" || body["current_revision"] != float64(5) {
+			t.Fatalf("conflict body = %v", body)
+		}
+		if len(mv.audit) != before+1 || mv.audit[len(mv.audit)-1].Action != store.SecretAuditConflict {
+			t.Fatalf("conflict was not audited: %v", mv.audit)
+		}
+	}
+	if mv.entries[uuid.MustParse(id)].Hints == "stale" {
+		t.Fatal("a refused write was applied")
+	}
+
+	// A malformed header is a client error, not a silent unconditional write.
+	for _, bad := range []string{"abc", "0", "-3"} {
+		if rec = vaultCallIfMatch(mux, "PUT", path, bad, map[string]any{"hints": "x"}); rec.Code != http.StatusBadRequest {
+			t.Errorf("If-Match %q = %d, want 400", bad, rec.Code)
+		}
+	}
+
+	// No header keeps the previous behaviour so existing clients are not broken.
+	if rec = vaultCall(mux, "PUT", path, map[string]any{"hints": "legacy client"}); rec.Code != http.StatusOK {
+		t.Errorf("write without If-Match = %d %s", rec.Code, rec.Body)
 	}
 }

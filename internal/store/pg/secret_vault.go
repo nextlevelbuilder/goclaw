@@ -42,7 +42,7 @@ func newPGSecretVaultStoreOrNil(db *sql.DB, encryptionKey string) store.SecretVa
 	return nil
 }
 
-const secretVaultCols = `id, tenant_id, name, kind, allowed_domains, require_approval, hints, created_by, created_at, updated_at`
+const secretVaultCols = `id, tenant_id, name, kind, allowed_domains, require_approval, hints, revision, created_by, created_at, updated_at`
 
 func secretVaultTenant(ctx context.Context) (uuid.UUID, error) {
 	tid := store.TenantIDFromContext(ctx)
@@ -62,7 +62,7 @@ func scanSecretVaultEntry(r rowScanner) (*store.SecretVaultEntry, error) {
 	var e store.SecretVaultEntry
 	var domains []byte
 	if err := r.Scan(&e.ID, &e.TenantID, &e.Name, &e.Kind, &domains, &e.RequireApproval,
-		&e.Hints, &e.CreatedBy, &e.CreatedAt, &e.UpdatedAt); err != nil {
+		&e.Hints, &e.Revision, &e.CreatedBy, &e.CreatedAt, &e.UpdatedAt); err != nil {
 		return nil, err
 	}
 	if err := json.Unmarshal(domains, &e.AllowedDomains); err != nil {
@@ -82,7 +82,12 @@ func (s *PGSecretVaultStore) Create(ctx context.Context, e *store.SecretVaultEnt
 	if err := store.ValidateSecretVaultPayload(e.Kind, p); err != nil {
 		return err
 	}
-	enc, err := store.EncodeSecretPayload(p, s.encKey)
+	if e.ID == uuid.Nil {
+		e.ID = store.GenNewID()
+	}
+	now := time.Now().UTC()
+	e.TenantID, e.CreatedAt, e.UpdatedAt, e.Revision = tid, now, now, 1
+	enc, err := store.EncodeSecretPayloadAAD(p, s.encKey, e)
 	if err != nil {
 		return err
 	}
@@ -90,82 +95,130 @@ func (s *PGSecretVaultStore) Create(ctx context.Context, e *store.SecretVaultEnt
 	if err != nil {
 		return err
 	}
-	if e.ID == uuid.Nil {
-		e.ID = store.GenNewID()
-	}
-	now := time.Now().UTC()
-	e.TenantID, e.CreatedAt, e.UpdatedAt = tid, now, now
 
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO secret_vault_entries (id, tenant_id, name, kind, encrypted_payload, allowed_domains,
-		 require_approval, hints, created_by, created_at, updated_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-		e.ID, tid, e.Name, e.Kind, enc, domains, e.RequireApproval, e.Hints, e.CreatedBy, now, now)
+		 require_approval, hints, revision, created_by, created_at, updated_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+		e.ID, tid, e.Name, e.Kind, enc, domains, e.RequireApproval, e.Hints, e.Revision, e.CreatedBy, now, now)
 	if isUniqueViolation(err) {
 		return store.ErrSecretVaultNameTaken
 	}
 	return err
 }
 
-func (s *PGSecretVaultStore) ReplaceValue(ctx context.Context, id uuid.UUID, p store.SecretVaultPayload) error {
-	tid, err := secretVaultTenant(ctx)
-	if err != nil {
-		return err
-	}
-	var kind string
-	err = s.db.QueryRowContext(ctx,
-		`SELECT kind FROM secret_vault_entries WHERE id = $1 AND tenant_id = $2`, id, tid).Scan(&kind)
+// lockSecretVaultEntry reads one entry and its stored ciphertext inside tx and
+// locks the row, so a concurrent writer cannot interleave a read-modify-write.
+func lockSecretVaultEntry(ctx context.Context, tx *sql.Tx, id, tid uuid.UUID) (*store.SecretVaultEntry, string, error) {
+	var e store.SecretVaultEntry
+	var domains []byte
+	var enc string
+	err := tx.QueryRowContext(ctx,
+		`SELECT `+secretVaultCols+`, encrypted_payload FROM secret_vault_entries WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+		id, tid).Scan(&e.ID, &e.TenantID, &e.Name, &e.Kind, &domains, &e.RequireApproval,
+		&e.Hints, &e.Revision, &e.CreatedBy, &e.CreatedAt, &e.UpdatedAt, &enc)
 	if errors.Is(err, sql.ErrNoRows) {
-		return store.ErrSecretVaultNotFound
+		return nil, "", store.ErrSecretVaultNotFound
 	}
 	if err != nil {
-		return err
+		return nil, "", err
 	}
-	if err := store.ValidateSecretVaultPayload(kind, p); err != nil {
-		return err
+	if err := json.Unmarshal(domains, &e.AllowedDomains); err != nil {
+		return nil, "", fmt.Errorf("secret vault: decode allowed_domains: %w", err)
 	}
-	enc, err := store.EncodeSecretPayload(p, s.encKey)
-	if err != nil {
-		return err
-	}
-	res, err := s.db.ExecContext(ctx,
-		`UPDATE secret_vault_entries SET encrypted_payload = $1, updated_at = $2 WHERE id = $3 AND tenant_id = $4`,
-		enc, time.Now().UTC(), id, tid)
-	return expectOneRow(res, err)
+	return &e, enc, nil
 }
 
-func (s *PGSecretVaultStore) UpdateMeta(ctx context.Context, id uuid.UUID, u store.SecretVaultMetaUpdate) error {
+func (s *PGSecretVaultStore) ReplaceValue(ctx context.Context, id uuid.UUID, p store.SecretVaultPayload, expectedRev int64) (int64, error) {
 	tid, err := secretVaultTenant(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	sets := []string{"updated_at = $1"}
-	args := []any{time.Now().UTC()}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	e, _, err := lockSecretVaultEntry(ctx, tx, id, tid)
+	if err != nil {
+		return 0, err
+	}
+	if expectedRev != 0 && e.Revision != expectedRev {
+		return e.Revision, store.ErrSecretVaultConflict
+	}
+	if err := store.ValidateSecretVaultPayload(e.Kind, p); err != nil {
+		return 0, err
+	}
+	e.Revision++
+	enc, err := store.EncodeSecretPayloadAAD(p, s.encKey, e)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE secret_vault_entries SET encrypted_payload = $1, revision = $2, updated_at = $3 WHERE id = $4 AND tenant_id = $5`,
+		enc, e.Revision, time.Now().UTC(), id, tid); err != nil {
+		return 0, err
+	}
+	return e.Revision, tx.Commit()
+}
+
+func (s *PGSecretVaultStore) UpdateMeta(ctx context.Context, id uuid.UUID, u store.SecretVaultMetaUpdate, expectedRev int64) (int64, error) {
+	tid, err := secretVaultTenant(ctx)
+	if err != nil {
+		return 0, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	e, stored, err := lockSecretVaultEntry(ctx, tx, id, tid)
+	if err != nil {
+		return 0, err
+	}
+	if expectedRev != 0 && e.Revision != expectedRev {
+		return e.Revision, store.ErrSecretVaultConflict
+	}
+	// The payload is bound to the metadata being changed, so it is decrypted
+	// with the old binding and sealed again with the new one.
+	payload, err := store.DecodeSecretPayload(stored, s.encKey, e)
+	if err != nil {
+		return 0, err
+	}
 	if u.AllowedDomains != nil {
 		domains, err := store.NormalizeSecretDomains(*u.AllowedDomains)
 		if err != nil {
-			return err
+			return 0, err
 		}
-		raw, _ := json.Marshal(domains)
-		args = append(args, raw)
-		sets = append(sets, fmt.Sprintf("allowed_domains = $%d", len(args)))
+		e.AllowedDomains = domains
 	}
 	if u.RequireApproval != nil {
-		args = append(args, *u.RequireApproval)
-		sets = append(sets, fmt.Sprintf("require_approval = $%d", len(args)))
+		e.RequireApproval = *u.RequireApproval
 	}
 	if u.Hints != nil {
 		if err := store.ValidateSecretHints(*u.Hints); err != nil {
-			return err
+			return 0, err
 		}
-		args = append(args, *u.Hints)
-		sets = append(sets, fmt.Sprintf("hints = $%d", len(args)))
+		e.Hints = *u.Hints
 	}
-	args = append(args, id, tid)
-	q := fmt.Sprintf(`UPDATE secret_vault_entries SET %s WHERE id = $%d AND tenant_id = $%d`,
-		strings.Join(sets, ", "), len(args)-1, len(args))
-	res, err := s.db.ExecContext(ctx, q, args...)
-	return expectOneRow(res, err)
+	e.Revision++
+	enc, err := store.EncodeSecretPayloadAAD(payload, s.encKey, e)
+	if err != nil {
+		return 0, err
+	}
+	raw, err := json.Marshal(e.AllowedDomains)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE secret_vault_entries SET allowed_domains = $1, require_approval = $2, hints = $3,
+		 encrypted_payload = $4, revision = $5, updated_at = $6 WHERE id = $7 AND tenant_id = $8`,
+		raw, e.RequireApproval, e.Hints, enc, e.Revision, time.Now().UTC(), id, tid); err != nil {
+		return 0, err
+	}
+	return e.Revision, tx.Commit()
 }
 
 func expectOneRow(res sql.Result, err error) error {
@@ -308,7 +361,7 @@ func (s *PGSecretVaultStore) ListGrantedMeta(ctx context.Context, agentID uuid.U
 		return nil, err
 	}
 	return s.queryEntries(ctx,
-		`SELECT e.id, e.tenant_id, e.name, e.kind, e.allowed_domains, e.require_approval, e.hints,
+		`SELECT e.id, e.tenant_id, e.name, e.kind, e.allowed_domains, e.require_approval, e.hints, e.revision,
 		        e.created_by, e.created_at, e.updated_at
 		 FROM secret_vault_entries e
 		 JOIN secret_vault_grants g ON g.entry_id = e.id AND g.tenant_id = e.tenant_id
@@ -325,13 +378,13 @@ func (s *PGSecretVaultStore) ResolveForUse(ctx context.Context, agentID uuid.UUI
 	var enc string
 	var granted bool
 	err = s.db.QueryRowContext(ctx,
-		`SELECT e.id, e.tenant_id, e.name, e.kind, e.allowed_domains, e.require_approval, e.hints,
+		`SELECT e.id, e.tenant_id, e.name, e.kind, e.allowed_domains, e.require_approval, e.hints, e.revision,
 		        e.created_by, e.created_at, e.updated_at, e.encrypted_payload,
 		        EXISTS(SELECT 1 FROM secret_vault_grants g
 		               WHERE g.entry_id = e.id AND g.agent_id = $3 AND g.tenant_id = e.tenant_id)
 		 FROM secret_vault_entries e WHERE e.tenant_id = $1 AND e.name = $2`,
 		tid, name, agentID).Scan(&e.ID, &e.TenantID, &e.Name, &e.Kind, &domains, &e.RequireApproval,
-		&e.Hints, &e.CreatedBy, &e.CreatedAt, &e.UpdatedAt, &enc, &granted)
+		&e.Hints, &e.Revision, &e.CreatedBy, &e.CreatedAt, &e.UpdatedAt, &enc, &granted)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.SecretVaultPayload{}, store.ErrSecretVaultNotFound
 	}
@@ -344,7 +397,7 @@ func (s *PGSecretVaultStore) ResolveForUse(ctx context.Context, agentID uuid.UUI
 	if err := json.Unmarshal(domains, &e.AllowedDomains); err != nil {
 		return nil, store.SecretVaultPayload{}, fmt.Errorf("secret vault: decode allowed_domains: %w", err)
 	}
-	p, err := store.DecodeSecretPayload(enc, s.encKey)
+	p, err := store.DecodeSecretPayload(enc, s.encKey, &e)
 	if err != nil {
 		return nil, store.SecretVaultPayload{}, err
 	}
@@ -357,7 +410,7 @@ func (s *PGSecretVaultStore) ListGrantedSecrets(ctx context.Context, agentID uui
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT e.id, e.tenant_id, e.name, e.kind, e.allowed_domains, e.require_approval, e.hints,
+		`SELECT e.id, e.tenant_id, e.name, e.kind, e.allowed_domains, e.require_approval, e.hints, e.revision,
 		        e.created_by, e.created_at, e.updated_at, e.encrypted_payload
 		 FROM secret_vault_entries e
 		 JOIN secret_vault_grants g ON g.entry_id = e.id AND g.tenant_id = e.tenant_id
@@ -373,13 +426,13 @@ func (s *PGSecretVaultStore) ListGrantedSecrets(ctx context.Context, agentID uui
 		var enc string
 		e := &r.Entry
 		if err := rows.Scan(&e.ID, &e.TenantID, &e.Name, &e.Kind, &domains, &e.RequireApproval,
-			&e.Hints, &e.CreatedBy, &e.CreatedAt, &e.UpdatedAt, &enc); err != nil {
+			&e.Hints, &e.Revision, &e.CreatedBy, &e.CreatedAt, &e.UpdatedAt, &enc); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(domains, &e.AllowedDomains); err != nil {
 			return nil, fmt.Errorf("secret vault: decode allowed_domains: %w", err)
 		}
-		if r.Payload, err = store.DecodeSecretPayload(enc, s.encKey); err != nil {
+		if r.Payload, err = store.DecodeSecretPayload(enc, s.encKey, e); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -430,4 +483,71 @@ func (s *PGSecretVaultStore) ListAudit(ctx context.Context, entryID uuid.UUID, l
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+func (s *PGSecretVaultStore) RewrapSecrets(ctx context.Context, dryRun bool) (store.SecretRewrapReport, error) {
+	var rep store.SecretRewrapReport
+	tid, err := secretVaultTenant(ctx)
+	if err != nil {
+		return rep, err
+	}
+	type row struct {
+		e   *store.SecretVaultEntry
+		enc string
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+secretVaultCols+`, encrypted_payload FROM secret_vault_entries WHERE tenant_id = $1 ORDER BY name`, tid)
+	if err != nil {
+		return rep, err
+	}
+	var all []row
+	for rows.Next() {
+		var e store.SecretVaultEntry
+		var domains []byte
+		var enc string
+		if err := rows.Scan(&e.ID, &e.TenantID, &e.Name, &e.Kind, &domains, &e.RequireApproval,
+			&e.Hints, &e.Revision, &e.CreatedBy, &e.CreatedAt, &e.UpdatedAt, &enc); err != nil {
+			rows.Close()
+			return rep, err
+		}
+		if err := json.Unmarshal(domains, &e.AllowedDomains); err != nil {
+			rows.Close()
+			return rep, fmt.Errorf("secret vault: decode allowed_domains: %w", err)
+		}
+		all = append(all, row{&e, enc})
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return rep, err
+	}
+	rows.Close()
+
+	for _, r := range all {
+		rep.Total++
+		newEnc, outcome := store.RewrapSecretCiphertext(r.enc, s.encKey, r.e)
+		switch outcome {
+		case store.SecretRewrapCurrent:
+			rep.Current++
+		case store.SecretRewrapUnreadable:
+			rep.Unreadable = append(rep.Unreadable, r.e.ID)
+		case store.SecretRewrapUpgrade:
+			if dryRun {
+				rep.Rewrapped++
+				continue
+			}
+			// Guarded on the ciphertext just read: a concurrent writer wins and
+			// the row is picked up by the next run.
+			res, err := s.db.ExecContext(ctx,
+				`UPDATE secret_vault_entries SET encrypted_payload = $1
+				 WHERE id = $2 AND tenant_id = $3 AND encrypted_payload = $4 AND revision = $5`,
+				newEnc, r.e.ID, tid, r.enc, r.e.Revision)
+			if err != nil {
+				return rep, err
+			}
+			if n, _ := res.RowsAffected(); n == 1 {
+				rep.Rewrapped++
+			}
+		}
+	}
+	return rep, nil
 }
