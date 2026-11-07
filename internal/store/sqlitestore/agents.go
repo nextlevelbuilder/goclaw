@@ -232,8 +232,8 @@ func (s *SQLiteAgentStore) List(ctx context.Context, ownerID string) ([]store.Ag
 	if !store.IsCrossTenant(ctx) {
 		tid := store.TenantIDFromContext(ctx)
 		if tid == uuid.Nil {
-			slog.Warn("agents.List: tenant context missing, returning empty (fail-closed)")
-			return nil, nil
+			slog.Warn("agents.List: tenant context missing (fail-closed)")
+			return nil, fmt.Errorf("agents.List: %w", store.ErrTenantRequired)
 		}
 		q += " AND tenant_id = ?"
 		args = append(args, tid)
