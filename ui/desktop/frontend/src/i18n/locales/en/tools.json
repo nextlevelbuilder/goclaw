@@ -224,6 +224,16 @@
       "cancel": "Cancel",
       "save": "Save",
       "saving": "Saving..."
-    }
+    },
+    "errorTitle": "Couldn't load tools",
+    "errorDescription": "Check that the gateway is running, then try again.",
+    "toggleFailed": "Couldn't change the tool",
+    "saveFailed": "Couldn't save the settings",
+    "clearSearch": "Clear search",
+    "enableLabel": "Enable {{name}}",
+    "settingsLabel": "Settings for {{name}}",
+    "loading": "Loading tools",
+    "summary": "{{tools}} · {{categories}}",
+    "notConfigured": "Needs setup"
   }
 }

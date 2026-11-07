@@ -1,94 +1,92 @@
 import { useTranslation } from 'react-i18next'
-import { TERMINAL_STATUSES } from '../../types/team'
+import { IconTrash } from '../common/Icons'
+import { Button, DataTable, EmptyState, StatusChip, type DataTableColumn } from '../ui'
+import { PRIORITY_BADGE, STATUS_TONE, TERMINAL_STATUSES } from '../../types/team'
+import { cn } from '../../lib/cn'
 import type { TeamTaskData, TeamMemberData } from '../../types/team'
 
 interface TeamTaskListViewProps {
   tasks: TeamTaskData[]
   members: TeamMemberData[]
-  loading: boolean
-  selected: Set<string>
-  onSelectChange: (next: Set<string>) => void
+  selected: string[]
+  onSelectChange: (ids: string[]) => void
   onTaskClick: (task: TeamTaskData) => void
-  onBulkDelete: () => void
+  onBulkDelete: (ids: string[]) => void
+  readOnly?: boolean
 }
 
+/** Tasks as a table. Only finished tasks can be deleted, so bulk delete acts on those. */
 export function TeamTaskListView({
-  tasks, members, loading, selected, onSelectChange, onTaskClick, onBulkDelete,
+  tasks, members, selected, onSelectChange, onTaskClick, onBulkDelete, readOnly = false,
 }: TeamTaskListViewProps) {
   const { t } = useTranslation('teams')
+  const memberById = new Map(members.map((m) => [m.agent_id, m]))
+  const deletable = new Set(tasks.filter((x) => TERMINAL_STATUSES.has(x.status)).map((x) => x.id))
+
+  const columns: DataTableColumn<TeamTaskData>[] = [
+    {
+      id: 'id',
+      header: t('id'),
+      className: 'w-24',
+      cell: (task) => <span className="font-mono text-caption text-ink-muted">{task.identifier || task.task_number}</span>,
+    },
+    {
+      id: 'subject',
+      header: t('subject'),
+      className: 'min-w-[220px]',
+      cell: (task) => <span className="block max-w-md truncate text-ui font-medium text-ink">{task.subject}</span>,
+    },
+    {
+      id: 'status',
+      header: t('status'),
+      className: 'w-40',
+      cell: (task) => <StatusChip tone={STATUS_TONE[task.status]} label={t(`board.status.${task.status}`)} />,
+    },
+    {
+      id: 'owner',
+      header: t('owner'),
+      className: 'w-44',
+      cell: (task) => {
+        const m = task.owner_agent_id ? memberById.get(task.owner_agent_id) : undefined
+        return <span className="block truncate text-ui text-ink-secondary">{m?.display_name || task.owner_agent_key || '—'}</span>
+      },
+    },
+    {
+      id: 'priority',
+      header: t('priority'),
+      className: 'w-24',
+      cell: (task) => {
+        const prio = PRIORITY_BADGE[task.priority] ?? PRIORITY_BADGE[3]
+        return <span className={cn('rounded-sm px-1.5 font-mono text-caption', prio.cls)}>{prio.label}</span>
+      },
+    },
+  ]
 
   return (
-    <div className="flex-1 overflow-auto p-3">
-      {selected.size > 0 && (
-        <div className="flex items-center gap-2 mb-2 px-2">
-          <span className="text-xs text-text-muted">{selected.size} selected</span>
-          <button onClick={onBulkDelete} className="text-xs text-error hover:underline cursor-pointer">
-            {t('deleteSelected', 'Delete selected')}
-          </button>
-        </div>
-      )}
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs min-w-[600px]">
-          <thead>
-            <tr className="text-text-muted text-left border-b border-border">
-              <th className="pb-2 pr-2 w-8">
-                <input
-                  type="checkbox"
-                  checked={selected.size > 0 && selected.size === tasks.filter((t) => TERMINAL_STATUSES.has(t.status)).length}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      onSelectChange(new Set(tasks.filter((t) => TERMINAL_STATUSES.has(t.status)).map((t) => t.id)))
-                    } else {
-                      onSelectChange(new Set())
-                    }
-                  }}
-                />
-              </th>
-              <th className="pb-2 pr-2 font-medium">{t('id', 'ID')}</th>
-              <th className="pb-2 pr-2 font-medium">{t('subject', 'Subject')}</th>
-              <th className="pb-2 pr-2 font-medium">{t('status', 'Status')}</th>
-              <th className="pb-2 pr-2 font-medium">{t('owner', 'Owner')}</th>
-              <th className="pb-2 font-medium">{t('priority', 'Priority')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tasks.map((task) => {
-              const member = task.owner_agent_id ? members.find((m) => m.agent_id === task.owner_agent_id) : undefined
-              const canSelect = TERMINAL_STATUSES.has(task.status)
-              return (
-                <tr
-                  key={task.id}
-                  onClick={() => onTaskClick(task)}
-                  className="border-b border-border/50 hover:bg-surface-tertiary/50 cursor-pointer transition-colors"
-                >
-                  <td className="py-2 pr-2" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      disabled={!canSelect}
-                      checked={selected.has(task.id)}
-                      onChange={(e) => {
-                        const next = new Set(selected)
-                        e.target.checked ? next.add(task.id) : next.delete(task.id)
-                        onSelectChange(next)
-                      }}
-                    />
-                  </td>
-                  <td className="py-2 pr-2 font-mono text-text-muted">{task.identifier || task.task_number}</td>
-                  <td className="py-2 pr-2 text-text-primary truncate max-w-[250px]">{task.subject}</td>
-                  <td className="py-2 pr-2">
-                    <span className="capitalize text-text-secondary">{task.status.replace('_', ' ')}</span>
-                  </td>
-                  <td className="py-2 pr-2 text-text-secondary">{member?.display_name || task.owner_agent_key || '—'}</td>
-                  <td className="py-2 text-text-secondary">P-{task.priority}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-      {tasks.length === 0 && !loading && (
-        <div className="text-center py-8 text-text-muted text-xs">{t('noTasks', 'No tasks yet')}</div>
-      )}
-    </div>
+    <DataTable
+      aria-label={t('title')}
+      columns={columns}
+      rows={tasks}
+      getRowId={(x) => x.id}
+      onRowClick={onTaskClick}
+      selectable={!readOnly}
+      selectedIds={selected}
+      onSelectionChange={onSelectChange}
+      empty={<EmptyState title={t('board.listEmptyTitle')} description={t('board.listEmptyBody')} />}
+      bulkActions={(ids) => {
+        const doomed = ids.filter((id) => deletable.has(id))
+        return (
+          <Button
+            variant="danger"
+            size="sm"
+            icon={<IconTrash size={14} />}
+            disabled={doomed.length === 0}
+            onClick={() => onBulkDelete(doomed)}
+          >
+            {t('deleteSelected')}
+          </Button>
+        )
+      }}
+    />
   )
 }

@@ -107,5 +107,110 @@
     "poolProvider": "Pool Provider",
     "secureCli": "Secure CLI",
     "tenantUsers": "Tenant & User Management"
+  },
+  "screen": {
+    "summary": "{{count}} of {{max}} teams",
+    "newTeam": "New team",
+    "limitReached": "Lite includes {{max}} team. Delete it to create another.",
+    "colTeam": "Team",
+    "colLead": "Lead",
+    "colMembers": "Members",
+    "colStatus": "Status",
+    "membersCount_one": "{{count}} member",
+    "membersCount_other": "{{count}} members",
+    "status": {
+      "active": "Active",
+      "archived": "Archived"
+    },
+    "openBoard": "Open board",
+    "editTeam": "Edit team",
+    "deleteTeam": "Delete team",
+    "rowActions": "Actions for {{name}}",
+    "loading": "Loading teams",
+    "emptyTitle": "No teams yet",
+    "emptyDescription": "A team is a lead agent and members who share one task board.",
+    "emptyAction": "Create a team",
+    "errorTitle": "Couldn't load teams",
+    "errorDescription": "Check that the gateway is running, then try again.",
+    "create": {
+      "title": "New team",
+      "description": "Choose a lead and the agents who work with them.",
+      "name": "Name",
+      "namePlaceholder": "Research crew",
+      "nameRequired": "Enter a team name.",
+      "lead": "Lead agent",
+      "leadPlaceholder": "Choose an agent",
+      "leadRequired": "Choose a lead agent.",
+      "members": "Members",
+      "membersRequired": "Choose at least one member.",
+      "noOtherAgents": "Create another agent first to add members.",
+      "submit": "Create team",
+      "cancel": "Cancel"
+    },
+    "edit": {
+      "title": "Edit team",
+      "save": "Save changes",
+      "cancel": "Cancel",
+      "loadFailed": "Couldn't load this team."
+    },
+    "delete": {
+      "title": "Delete {{name}}?",
+      "body": "The team, its members and its task board are removed. The agents are kept. This can't be undone.",
+      "confirm": "Delete team"
+    },
+    "toast": {
+      "created": "Team created",
+      "createFailed": "Couldn't create the team",
+      "updated": "Team updated",
+      "updateFailed": "Couldn't update the team",
+      "deleted": "Team deleted",
+      "deleteFailed": "Couldn't delete the team",
+      "memberAdded": "Member added",
+      "memberRemoved": "Member removed",
+      "memberFailed": "Couldn't change the member"
+    }
+  },
+  "board": {
+    "back": "Back to teams",
+    "settings": "Team settings",
+    "refresh": "Refresh",
+    "newTask": "New task",
+    "viewLabel": "Board layout",
+    "filterLabel": "Filter by status",
+    "running": "Running",
+    "unassigned": "Unassigned",
+    "columnEmpty": "No tasks",
+    "selected_one": "{{count}} selected",
+    "selected_other": "{{count}} selected",
+    "loadingTasks": "Loading tasks",
+    "errorTitle": "Couldn't load tasks",
+    "errorDescription": "Check that the gateway is running, then try again.",
+    "listEmptyTitle": "No tasks yet",
+    "listEmptyBody": "Ask the team lead to create tasks in chat and they will appear here.",
+    "deleteTaskTitle": "Delete this task?",
+    "deleteTaskBody": "The task and its attachments are removed. This cannot be undone.",
+    "deleteBulkTitle_one": "Delete {{count}} task?",
+    "deleteBulkTitle_other": "Delete {{count}} tasks?",
+    "deleteBulkBody": "Finished tasks are removed for good. This cannot be undone.",
+    "assignPlaceholder": "Assign to…",
+    "close": "Close",
+    "noTeam": "Team not found.",
+    "status": {
+      "pending": "Pending",
+      "blocked": "Blocked",
+      "in_progress": "In progress",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "toast": {
+      "assigned": "Task assigned",
+      "assignFailed": "Couldn't assign the task",
+      "deleted": "Task deleted",
+      "deleteFailed": "Couldn't delete the task",
+      "bulkDeleted_one": "{{count}} task deleted",
+      "bulkDeleted_other": "{{count}} tasks deleted",
+      "bulkDeleteFailed": "Couldn't delete the tasks"
+    }
   }
 }

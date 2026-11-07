@@ -107,5 +107,109 @@
     "poolProvider": "Pool Provider",
     "secureCli": "Secure CLI",
     "tenantUsers": "Quản lý Tenant & Users"
+  },
+  "screen": {
+    "summary": "{{count}}/{{max}} nhóm",
+    "newTeam": "Nhóm mới",
+    "limitReached": "Bản Lite có {{max}} nhóm. Hãy xóa nhóm hiện có để tạo nhóm khác.",
+    "colTeam": "Nhóm",
+    "colLead": "Trưởng nhóm",
+    "colMembers": "Thành viên",
+    "colStatus": "Trạng thái",
+    "membersCount_other": "{{count}} thành viên",
+    "status": {
+      "active": "Đang hoạt động",
+      "archived": "Đã lưu trữ"
+    },
+    "openBoard": "Mở bảng công việc",
+    "editTeam": "Sửa nhóm",
+    "deleteTeam": "Xóa nhóm",
+    "rowActions": "Thao tác cho {{name}}",
+    "loading": "Đang tải nhóm",
+    "emptyTitle": "Chưa có nhóm nào",
+    "emptyDescription": "Nhóm gồm một agent trưởng nhóm và các thành viên dùng chung một bảng công việc.",
+    "emptyAction": "Tạo nhóm",
+    "errorTitle": "Không tải được danh sách nhóm",
+    "errorDescription": "Hãy kiểm tra gateway đang chạy rồi thử lại.",
+    "create": {
+      "title": "Nhóm mới",
+      "description": "Chọn trưởng nhóm và các agent làm việc cùng.",
+      "name": "Tên",
+      "namePlaceholder": "Nhóm nghiên cứu",
+      "nameRequired": "Nhập tên nhóm.",
+      "lead": "Agent trưởng nhóm",
+      "leadPlaceholder": "Chọn một agent",
+      "leadRequired": "Chọn agent trưởng nhóm.",
+      "members": "Thành viên",
+      "membersRequired": "Chọn ít nhất một thành viên.",
+      "noOtherAgents": "Hãy tạo thêm một agent để có thành viên.",
+      "submit": "Tạo nhóm",
+      "cancel": "Hủy"
+    },
+    "edit": {
+      "title": "Sửa nhóm",
+      "save": "Lưu thay đổi",
+      "cancel": "Hủy",
+      "loadFailed": "Không tải được nhóm này."
+    },
+    "delete": {
+      "title": "Xóa {{name}}?",
+      "body": "Nhóm, thành viên và bảng công việc sẽ bị xóa. Các agent được giữ lại. Không thể hoàn tác.",
+      "confirm": "Xóa nhóm"
+    },
+    "toast": {
+      "created": "Đã tạo nhóm",
+      "createFailed": "Không tạo được nhóm",
+      "updated": "Đã cập nhật nhóm",
+      "updateFailed": "Không cập nhật được nhóm",
+      "deleted": "Đã xóa nhóm",
+      "deleteFailed": "Không xóa được nhóm",
+      "memberAdded": "Đã thêm thành viên",
+      "memberRemoved": "Đã xóa thành viên",
+      "memberFailed": "Không thay đổi được thành viên"
+    }
+  },
+  "board": {
+    "back": "Quay lại danh sách nhóm",
+    "settings": "Cài đặt nhóm",
+    "refresh": "Làm mới",
+    "newTask": "Tác vụ mới",
+    "viewLabel": "Kiểu bảng",
+    "filterLabel": "Lọc theo trạng thái",
+    "running": "Đang chạy",
+    "unassigned": "Chưa giao",
+    "columnEmpty": "Không có tác vụ",
+    "selected_one": "Đã chọn {{count}}",
+    "selected_other": "Đã chọn {{count}}",
+    "loadingTasks": "Đang tải tác vụ",
+    "errorTitle": "Không tải được tác vụ",
+    "errorDescription": "Kiểm tra gateway đang chạy rồi thử lại.",
+    "listEmptyTitle": "Chưa có tác vụ",
+    "listEmptyBody": "Nhờ trưởng nhóm tạo tác vụ trong cuộc trò chuyện, chúng sẽ hiện ở đây.",
+    "deleteTaskTitle": "Xóa tác vụ này?",
+    "deleteTaskBody": "Tác vụ và tệp đính kèm sẽ bị xóa. Không thể hoàn tác.",
+    "deleteBulkTitle_one": "Xóa {{count}} tác vụ?",
+    "deleteBulkTitle_other": "Xóa {{count}} tác vụ?",
+    "deleteBulkBody": "Các tác vụ đã kết thúc sẽ bị xóa vĩnh viễn. Không thể hoàn tác.",
+    "assignPlaceholder": "Giao cho…",
+    "close": "Đóng",
+    "noTeam": "Không tìm thấy nhóm.",
+    "status": {
+      "pending": "Chờ xử lý",
+      "blocked": "Bị chặn",
+      "in_progress": "Đang thực hiện",
+      "completed": "Hoàn thành",
+      "failed": "Thất bại",
+      "cancelled": "Đã hủy"
+    },
+    "toast": {
+      "assigned": "Đã giao tác vụ",
+      "assignFailed": "Không giao được tác vụ",
+      "deleted": "Đã xóa tác vụ",
+      "deleteFailed": "Không xóa được tác vụ",
+      "bulkDeleted_one": "Đã xóa {{count}} tác vụ",
+      "bulkDeleted_other": "Đã xóa {{count}} tác vụ",
+      "bulkDeleteFailed": "Không xóa được các tác vụ"
+    }
   }
 }

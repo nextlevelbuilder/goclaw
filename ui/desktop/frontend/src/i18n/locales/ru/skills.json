@@ -117,6 +117,32 @@
     "deleteFailed": "Не удалось удалить навык",
     "rescanUpdated": "Обновлено навыков: {{count}}",
     "rescanNoChanges": "Все навыки актуальны",
-    "rescanFailed": "Не удалось пересканировать зависимости"
+    "rescanFailed": "Не удалось пересканировать зависимости",
+    "uploaded": "Навык загружен",
+    "uploadFailed": "Не удалось загрузить навык"
+  },
+  "screen": {
+    "summary_one": "{{count}} навык · активно: {{active}}",
+    "summary_few": "{{count}} навыка · активно: {{active}}",
+    "summary_many": "{{count}} навыков · активно: {{active}}",
+    "summary_other": "{{count}} навыка · активно: {{active}}",
+    "limit": "В версии Lite доступно до {{max}} навыков. Удалите один, чтобы добавить другой.",
+    "addSkill": "Добавить навык",
+    "editSkill": "Изменить навык",
+    "deleteSkill": "Удалить навык",
+    "rowActions": "Действия для {{name}}",
+    "errorTitle": "Не удалось загрузить навыки",
+    "errorDescription": "Убедитесь, что шлюз запущен, и повторите попытку.",
+    "emptyAction": "Добавить навык",
+    "loading": "Загрузка навыков",
+    "addTitle": "Добавить навык",
+    "chooseFile": "Выберите файл .zip",
+    "chooseAnother": "Выбрать другой файл",
+    "addSubmit": "Загрузить навык",
+    "enableLabel": "Включить «{{name}}»",
+    "sourceFile": "Выбранный файл",
+    "editNameRequired": "Введите название навыка.",
+    "tagsHelper": "Разделяйте теги запятыми.",
+    "clearSearch": "Сбросить поиск"
   }
 }

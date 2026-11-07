@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Switch } from '../common/Switch'
+import { Badge, Field, Input, Switch } from '../ui'
+import { ToolFormFooter } from './tool-form-footer'
 import type { BuiltinToolData } from '../../types/builtin-tool'
 
 interface ExtractorEntry {
@@ -22,6 +23,7 @@ interface ExtractorChainFormProps {
   onClose: () => void
 }
 
+/** Ordered content extractors for web_fetch: enable each and tune its endpoint, retries and timeout. */
 export function ExtractorChainForm({ tool, onSave, onClose }: ExtractorChainFormProps) {
   const { t } = useTranslation(['tools', 'common'])
   const [extractors, setExtractors] = useState<ExtractorEntry[]>([])
@@ -46,76 +48,78 @@ export function ExtractorChainForm({ tool, onSave, onClose }: ExtractorChainForm
       await onSave(tool.name, { extractors })
       onClose()
     } catch (err) {
-      setError((err as Error).message || 'Failed to save')
+      setError((err as Error).message || t('tools:builtin.saveFailed'))
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <>
-      <div className="max-h-[60vh] overflow-y-auto p-5 space-y-3">
-        {extractors.map((ext, i) => (
-          <div key={ext.name} className="rounded-lg border border-border p-3 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-2xs font-mono text-text-muted bg-surface-tertiary rounded px-1.5 py-0.5">#{i + 1}</span>
-                <span className="text-sm font-medium text-text-primary">{EXTRACTOR_DISPLAY[ext.name] ?? ext.name}</span>
-              </div>
-              <Switch checked={ext.enabled} onCheckedChange={(v) => updateExtractor(i, { enabled: v })} />
-            </div>
-
-            {ext.name === 'defuddle' && (
-              <>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-text-secondary">{t('builtin.extractorChain.baseUrl')}</label>
-                  <input
-                    value={ext.base_url ?? ''}
-                    onChange={(e) => updateExtractor(i, { base_url: e.target.value })}
-                    placeholder="https://fetch.goclaw.sh/"
-                    className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-1.5 font-mono text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
-                  />
+    <div>
+      <div className="flex flex-col gap-3">
+        {extractors.map((ext, i) => {
+          const title = EXTRACTOR_DISPLAY[ext.name] ?? ext.name
+          return (
+            <section key={ext.name} aria-label={title} className="flex flex-col gap-3 rounded-md border border-border-subtle p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Badge tone="neutral">#{i + 1}</Badge>
+                  <span id={`extractor-${ext.name}`} className="text-ui font-medium text-ink">{title}</span>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-text-secondary">{t('builtin.mediaChain.retries')}</label>
-                  <input
-                    type="number" min={0} max={10}
-                    value={ext.max_retries ?? 2}
-                    onChange={(e) => updateExtractor(i, { max_retries: Math.max(0, Number(e.target.value)) })}
-                    className="w-20 bg-surface-tertiary border border-border rounded-lg px-3 py-1.5 text-base md:text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
-                  />
-                </div>
-              </>
-            )}
-
-            {(ext.name === 'defuddle' || (ext.timeout && ext.timeout > 0)) && (
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-text-secondary">{t('builtin.extractorChain.timeout')}</label>
-                <input
-                  type="number" min={0} max={600}
-                  value={ext.timeout ?? 0}
-                  onChange={(e) => updateExtractor(i, { timeout: Math.max(0, Number(e.target.value)) })}
-                  className="w-20 bg-surface-tertiary border border-border rounded-lg px-3 py-1.5 text-base md:text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
+                <Switch
+                  checked={ext.enabled}
+                  onCheckedChange={(v) => updateExtractor(i, { enabled: v })}
+                  aria-labelledby={`extractor-${ext.name}`}
                 />
-                <p className="text-2xs text-text-muted">0 = {t('common:default')}</p>
               </div>
-            )}
-          </div>
-        ))}
+
+              {ext.name === 'defuddle' && (
+                <>
+                  <Field label={t('tools:builtin.extractorChain.baseUrl')}>
+                    <Input
+                      value={ext.base_url ?? ''}
+                      onChange={(e) => updateExtractor(i, { base_url: e.target.value })}
+                      placeholder="https://fetch.goclaw.sh/"
+                      className="font-mono"
+                    />
+                  </Field>
+                  <Field label={t('tools:builtin.mediaChain.retries')}>
+                    <Input
+                      type="number" min={0} max={10}
+                      value={ext.max_retries ?? 2}
+                      onChange={(e) => updateExtractor(i, { max_retries: Math.max(0, Number(e.target.value)) })}
+                      className="w-24"
+                    />
+                  </Field>
+                </>
+              )}
+
+              {(ext.name === 'defuddle' || (ext.timeout && ext.timeout > 0)) && (
+                <Field label={t('tools:builtin.extractorChain.timeout')} helper={`0 = ${t('common:default')}`}>
+                  <Input
+                    type="number" min={0} max={600}
+                    value={ext.timeout ?? 0}
+                    onChange={(e) => updateExtractor(i, { timeout: Math.max(0, Number(e.target.value)) })}
+                    className="w-24"
+                  />
+                </Field>
+              )}
+            </section>
+          )
+        })}
         {extractors.length === 0 && (
-          <p className="text-xs text-text-muted text-center py-4">{t('builtin.mediaChain.noProviders')}</p>
+          <p className="py-4 text-center text-caption text-ink-muted">{t('tools:builtin.mediaChain.noProviders')}</p>
         )}
       </div>
 
-      {error && <div className="px-5"><p className="text-xs text-error">{error}</p></div>}
-      <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
-        <button type="button" onClick={onClose} className="border border-border rounded-lg px-4 py-1.5 text-sm text-text-secondary hover:bg-surface-tertiary transition-colors">
-          {t('builtin.settingsDialog.cancel')}
-        </button>
-        <button type="button" onClick={handleSave} disabled={saving} className="bg-accent rounded-lg px-4 py-1.5 text-sm text-accent-foreground hover:bg-accent-hover disabled:opacity-50 transition-colors">
-          {saving ? t('builtin.settingsDialog.saving') : t('builtin.settingsDialog.save')}
-        </button>
-      </div>
-    </>
+      <ToolFormFooter
+        cancelLabel={t('tools:builtin.settingsDialog.cancel')}
+        saveLabel={saving ? t('tools:builtin.settingsDialog.saving') : t('tools:builtin.settingsDialog.save')}
+        onCancel={onClose}
+        onSave={() => void handleSave()}
+        saving={saving}
+        error={error}
+      />
+    </div>
   )
 }
