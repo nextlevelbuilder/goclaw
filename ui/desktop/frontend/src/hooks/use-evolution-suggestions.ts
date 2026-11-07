@@ -1,14 +1,17 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getApiClient, isApiClientReady } from '../lib/api'
 import { toast } from '../stores/toast-store'
+import i18n from '../i18n'
 import type { EvolutionSuggestion } from '../types/evolution'
 
 export function useEvolutionSuggestions(agentId: string) {
   const [suggestions, setSuggestions] = useState<EvolutionSuggestion[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
 
   const fetchSuggestions = useCallback(async () => {
     if (!isApiClientReady()) { setLoading(false); return }
+    setError(false)
     try {
       const res = await getApiClient().getWithParams<{ suggestions: EvolutionSuggestion[] | null }>(
         `/v1/agents/${agentId}/evolution/suggestions`,
@@ -17,6 +20,7 @@ export function useEvolutionSuggestions(agentId: string) {
       setSuggestions(res.suggestions ?? [])
     } catch (err) {
       console.error('Failed to fetch evolution suggestions:', err)
+      setError(true)
     } finally {
       setLoading(false)
     }
@@ -30,9 +34,9 @@ export function useEvolutionSuggestions(agentId: string) {
       setSuggestions((prev) => prev.map((s) => s.id === suggestionId ? { ...s, status } : s))
     } catch (err) {
       console.error('Failed to update suggestion:', err)
-      toast.error('Failed to update suggestion', (err as Error).message)
+      toast.error(i18n.t('agents:screen.evolution.updateFailed'), (err as Error).message)
     }
   }, [agentId])
 
-  return { suggestions, loading, updateStatus }
+  return { suggestions, loading, error, refetch: fetchSuggestions, updateStatus }
 }
