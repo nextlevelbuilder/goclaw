@@ -24,13 +24,14 @@ const PANELS: Record<Section, () => React.JSX.Element> = {
 export function SettingsView() {
   const { t } = useTranslation('settings')
   const storedTab = useUiStore((s) => s.settingsTab)
+  const settingsNonce = useUiStore((s) => s.settingsNonce)
   const setSettingsTab = useUiStore((s) => s.setSettingsTab)
   const [section, setSection] = useState<Section>(storedTab === 'about' ? 'about' : 'appearance')
 
   // openSettings('about') from elsewhere switches the section while this view is mounted.
   useEffect(() => {
     if (storedTab === 'about' || storedTab === 'appearance') setSection(storedTab)
-  }, [storedTab])
+  }, [storedTab, settingsNonce])
 
   const choose = (next: Section) => {
     setSection(next)

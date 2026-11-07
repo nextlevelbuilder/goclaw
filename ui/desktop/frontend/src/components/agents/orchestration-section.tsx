@@ -7,7 +7,7 @@ interface OrchestrationSectionProps {
 const MODE_COLORS: Record<string, string> = {
   spawn: 'bg-surface-hover text-ink-muted',
   delegate: 'bg-accent-subtle text-accent',
-  team: 'bg-purple-500/10 text-purple-600',
+  team: 'bg-info-subtle text-info',
 }
 
 export function OrchestrationSection({ agentId }: OrchestrationSectionProps) {
@@ -19,7 +19,7 @@ export function OrchestrationSection({ agentId }: OrchestrationSectionProps) {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <svg className="w-4 h-4 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-4 h-4 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
             <circle cx="12" cy="5" r="3" /><circle cx="5" cy="19" r="3" /><circle cx="19" cy="19" r="3" />
             <path d="M12 8v4M9.5 14.5L6.5 17M14.5 14.5l3 2.5" />
           </svg>
@@ -46,7 +46,7 @@ export function OrchestrationSection({ agentId }: OrchestrationSectionProps) {
       {team && (
         <div className="space-y-1">
           <p className="text-caption text-ink-muted">Team</p>
-          <span className="text-caption px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600">{team}</span>
+          <span className="text-caption px-2 py-0.5 rounded-md bg-info-subtle text-info">{team}</span>
         </div>
       )}
 

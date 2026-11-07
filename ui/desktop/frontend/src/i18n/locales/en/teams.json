@@ -171,6 +171,7 @@
     }
   },
   "board": {
+    "type": "Type",
     "back": "Back to teams",
     "settings": "Team settings",
     "refresh": "Refresh",

@@ -170,6 +170,7 @@
     }
   },
   "board": {
+    "type": "类型",
     "back": "返回团队列表",
     "settings": "团队设置",
     "refresh": "刷新",

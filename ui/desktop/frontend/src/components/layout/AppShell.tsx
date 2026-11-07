@@ -89,6 +89,7 @@ export function AppShell() {
         return
       }
       if (ui.commandPaletteOpen) return
+      if (dialogOpen() && (key === 'b' || key === 'n' || e.key === ',')) return
       if (mod && key === 'b') { e.preventDefault(); toggleNav(); return }
       if (mod && key === 'n') { e.preventDefault(); startNewChat(); setOverlayOpen(false); return }
       if (mod && e.key === ',') { e.preventDefault(); ui.openSettings('appearance'); return }

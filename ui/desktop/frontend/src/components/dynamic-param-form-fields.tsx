@@ -1,7 +1,7 @@
 import * as React from "react"
 import type { ParamSchema, ParamType } from "@/api/tts-capabilities"
 import { Slider } from "@/components/ui/slider"
-import { Switch } from "@/components/common/Switch"
+import { Switch } from "@/components/ui"
 
 export type ParamValue = string | number | boolean
 

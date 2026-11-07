@@ -49,6 +49,8 @@ interface UiState {
   onboarded: boolean
   activeView: AppView
   settingsTab: SettingsTab
+  /** Bumped by every openSettings call so a mounted Settings view can re-select its section. */
+  settingsNonce: number
   activeTeamId: string | null
   commandPaletteOpen: boolean
   setTheme: (theme: ThemePreference) => void
@@ -92,6 +94,7 @@ export const useUiStore = create<UiState>()(
       activeView: 'chat',
       activeTeamId: null,
       settingsTab: 'appearance',
+      settingsNonce: 0,
       commandPaletteOpen: false,
       setTheme: (theme) => set({ theme }),
       toggleTheme: () =>
@@ -116,7 +119,7 @@ export const useUiStore = create<UiState>()(
       setSettingsTab: (tab) =>
         set((s) => settingsTarget(tab, s.settingsTab)),
       openSettings: (tab) =>
-        set((s) => settingsTarget(tab ?? s.settingsTab, s.settingsTab)),
+        set((s) => ({ ...settingsTarget(tab ?? s.settingsTab, s.settingsTab), settingsNonce: s.settingsNonce + 1 })),
       closeSettings: () =>
         set({ activeView: 'chat' }),
       openTeamBoard: (teamId) =>

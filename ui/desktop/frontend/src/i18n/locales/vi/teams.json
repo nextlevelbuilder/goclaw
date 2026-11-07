@@ -170,6 +170,7 @@
     }
   },
   "board": {
+    "type": "Loại",
     "back": "Quay lại danh sách nhóm",
     "settings": "Cài đặt nhóm",
     "refresh": "Làm mới",
