@@ -36,7 +36,7 @@
     "teamWorkClassify": "Team Work Classification",
     "teamWorkClassifyHint": "Classify new requests as direct handling or team/delegate workflow.",
     "teamWorkClassifyInfo": "When a request exceeds the current agent's scope or should be split, the system uses embeddings as evidence and asks the model to decide between direct handling and team/delegate workflow. The system also checks lead/member permissions; members can only create help requests when the team has enabled member requests and auto-dispatch.",
-    "teamWorkClassifyEmbeddingRequired": "Configure embeddings before enabling Team Work Classification."
+    "teamWorkClassifyEmbeddingRequired": "Configure embeddings or at least one team routing rule before enabling Team Work Classification."
   },
   "kg": {
     "title": "Knowledge Graph",
@@ -103,5 +103,26 @@
       "model_not_found": "Model not found (invalid model name or not available)",
       "unknown": "Unknown provider error"
     }
+  },
+  "decisionModel": {
+    "title": "Decision Model (System One)",
+    "description": "Fast, typed decision model for resolving ambiguous team routing in place of the LLM arbiter.",
+    "enabled": "Enable Decision Model",
+    "egressWarningTitle": "Third-Party Data Egress",
+    "egressWarningBody": "When enabled, raw user message text (truncated to the limit below) and team roles are sent to the configured endpoint to decide which member should take ambiguous work. Conversation history, attached media, and system prompts are never sent.",
+    "endpoint": "Endpoint URL",
+    "endpointHint": "Must be an https:// URL. Validated against SSRF (private/metadata ranges blocked).",
+    "model": "Model ID",
+    "modelHint": "Pinned versioned ID (e.g. jev-1.13.0) recommended; vendor aliases move on release.",
+    "apiKey": "API Key",
+    "apiKeyPlaceholder": "Enter API key",
+    "apiKeyHint": "Stored encrypted with AES-256-GCM. Never logged or exposed.",
+    "timeout": "Timeout (ms)",
+    "timeoutHint": "Single-attempt hard timeout (100–5000 ms). No retry on failure.",
+    "maxStateChars": "Max Message Length (runes)",
+    "maxStateCharsHint": "Hard cap on message characters sent in the request (200–20000).",
+    "verify": "Test Connection",
+    "verifySuccess": "Success: chose {{choice}} ({{confidence}}% confidence, {{latency}}ms)",
+    "verifyFailed": "Verification failed"
   }
 }

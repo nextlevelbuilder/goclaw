@@ -12,21 +12,37 @@ import type { FeatureSwitchItem } from "@/components/shared/feature-switch-group
 import { ProviderModelSelect } from "@/components/shared/provider-model-select";
 import { useProviderVerify } from "@/pages/providers/hooks/use-provider-verify";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
-import { useHttp } from "@/hooks/use-ws";
+import { Methods } from "@/api/protocol";
+import { useHttp, useWs } from "@/hooks/use-ws";
 import { toast } from "@/stores/use-toast-store";
 import { EMBEDDING_MODELS, DEFAULT_EMBEDDING_MODELS, DEFAULTS, parseBool, type InitState } from "./system-settings-constants";
 import { SystemSettingsEmbeddingCard } from "./system-settings-embedding-card";
 import { SystemSettingsCompactionCard } from "./system-settings-compaction-card";
 import { SystemSettingsSkillsCard } from "./system-settings-skills-card";
+import {
+  SystemSettingsDecisionModelCard,
+  DECISION_MODEL_DEFAULTS,
+  type DecisionModelConfigState,
+} from "./system-settings-decision-model-card";
 
 interface SystemSettingsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
+interface RoutingSettings {
+  enabled?: boolean;
+  rules?: { agent_key?: string; enabled?: boolean; keywords?: unknown[]; file_patterns?: unknown[] }[];
+}
+
+interface TeamsListResponse {
+  teams: { settings?: { routing?: RoutingSettings } | null }[];
+}
+
 export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalProps) {
   const { t } = useTranslation("system-settings");
   const http = useHttp();
+  const ws = useWs();
   const { providers } = useProviders();
 
   const [loading, setLoading] = useState(false);
@@ -43,6 +59,11 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
   // UX Behavior
   const [intentClassify, setIntentClassify] = useState(true);
   const [teamWorkClassify, setTeamWorkClassify] = useState(false);
+  const [hasTeamRoutingRules, setHasTeamRoutingRules] = useState(false);
+  // Decision Model (System One)
+  const [decisionModel, setDecisionModel] = useState<DecisionModelConfigState>(DECISION_MODEL_DEFAULTS);
+  const [initDecisionModel, setInitDecisionModel] = useState<DecisionModelConfigState>(DECISION_MODEL_DEFAULTS);
+
 
   // Compaction
   const [compProvider, setCompProvider] = useState("");
@@ -112,11 +133,22 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
       http.get<{ settings?: Record<string, unknown> }>("/v1/tools/builtin/knowledge_graph_search")
         .then((r) => r.settings as { extraction_provider?: string; extraction_model?: string; min_confidence?: number } | undefined)
         .catch(() => undefined),
+      ws.call<TeamsListResponse>(Methods.TEAMS_LIST, {}).catch((): TeamsListResponse => ({ teams: [] })),
+      http.get<DecisionModelConfigState>("/v1/decision-model/config").catch((): DecisionModelConfigState => DECISION_MODEL_DEFAULTS),
     ])
-      .then(([configs, kgSettings]) => applyConfigs(configs, kgSettings))
+      .then(([configs, kgSettings, teamsRes, dmCfg]) => {
+        applyConfigs(configs, kgSettings);
+        setDecisionModel(dmCfg);
+        setInitDecisionModel(dmCfg);
+        setHasTeamRoutingRules((teamsRes.teams ?? []).some(({ settings }) => {
+          const routing = settings?.routing;
+          return routing?.enabled !== false
+            && !!routing?.rules?.some((r) => r.agent_key && r.enabled !== false && (r.keywords?.length || r.file_patterns?.length));
+        }));
+      })
       .catch((err) => toast.error(err instanceof Error ? err.message : t("loadFailed")))
       .finally(() => setLoading(false));
-  }, [open, http, applyConfigs, t]);
+  }, [open, http, ws, applyConfigs, t]);
 
   useEffect(() => { resetEmb(); }, [embProvider, embModel, resetEmb]);
 
@@ -156,14 +188,20 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
           settings: { extraction_provider: kgProvider, extraction_model: kgModel, min_confidence: Number(kgMinConfidence) || 0.75, extract_on_memory_write: !!(kgProvider && kgModel) },
         });
       }
+      const dmChanged = JSON.stringify(decisionModel) !== JSON.stringify(initDecisionModel);
+      if (dmChanged) {
+        await http.post("/v1/decision-model/config", decisionModel);
+      }
       toast.success(t("saved")); onOpenChange(false);
     } catch (err) { toast.error(err instanceof Error ? err.message : t("saveFailed")); }
     finally { setSaving(false); }
   };
 
+  const teamWorkAvailable = !!embProvider || hasTeamRoutingRules;
+
   const uxItems: FeatureSwitchItem[] = [
     { icon: Brain, iconClass: "text-orange-500", label: t("ux.intentClassify"), hint: t("ux.intentClassifyHint"), checked: intentClassify, onCheckedChange: setIntentClassify, infoWhenOn: t("ux.intentClassifyInfo"), infoClass: "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/30 dark:text-orange-300" },
-    { icon: UsersRound, iconClass: "text-blue-500", label: t("ux.teamWorkClassify"), hint: t("ux.teamWorkClassifyHint"), checked: teamWorkClassify && !!embProvider, onCheckedChange: setTeamWorkClassify, disabled: !embProvider, disabledHint: t("ux.teamWorkClassifyEmbeddingRequired"), infoWhenOn: t("ux.teamWorkClassifyInfo"), infoClass: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300" },
+    { icon: UsersRound, iconClass: "text-blue-500", label: t("ux.teamWorkClassify"), hint: t("ux.teamWorkClassifyHint"), checked: teamWorkClassify && teamWorkAvailable, onCheckedChange: setTeamWorkClassify, disabled: !teamWorkAvailable, disabledHint: t("ux.teamWorkClassifyEmbeddingRequired"), infoWhenOn: t("ux.teamWorkClassifyInfo"), infoClass: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300" },
   ];
 
   return (
@@ -229,6 +267,11 @@ export function SystemSettingsModal({ open, onOpenChange }: SystemSettingsModalP
             </Card>
 
             <FeatureSwitchGroup title={t("ux.title")} description={t("ux.description")} items={uxItems} />
+
+            <SystemSettingsDecisionModelCard
+              value={decisionModel}
+              onChange={(patch) => setDecisionModel((prev) => ({ ...prev, ...patch }))}
+            />
 
             <SystemSettingsSkillsCard
               uploadMaxSize={skillUploadMaxSize}

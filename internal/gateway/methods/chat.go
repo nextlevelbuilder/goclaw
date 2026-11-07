@@ -13,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/media"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
+	"github.com/nextlevelbuilder/goclaw/internal/decisionmodel"
 	"github.com/nextlevelbuilder/goclaw/internal/gateway"
 	httpapi "github.com/nextlevelbuilder/goclaw/internal/http"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
@@ -41,6 +42,7 @@ type ChatMethods struct {
 	teamStore        store.TeamStore
 	linkStore        store.AgentLinkStore
 	teamWorkEmbedder memory.EmbeddingProvider
+	decisionModels   *decisionmodel.Resolver // nil = decision model unavailable
 }
 
 func NewChatMethods(agents *agent.Router, sess store.SessionStore, cfg *config.Config, rl *gateway.RateLimiter, eventBus bus.EventPublisher) *ChatMethods {
@@ -63,6 +65,12 @@ func (m *ChatMethods) SetTeamWorkClassification(agentStore store.AgentStore, tea
 	m.teamStore = teamStore
 	m.linkStore = linkStore
 	m.teamWorkEmbedder = embedder
+}
+
+// SetDecisionModelResolver wires per-tenant decision-model lookup for the
+// team-work gate. nil keeps the LLM arbiter as the only ambiguous-case path.
+func (m *ChatMethods) SetDecisionModelResolver(r *decisionmodel.Resolver) {
+	m.decisionModels = r
 }
 
 // SetPostTurnProcessor sets the post-turn processor for team task dispatch.
@@ -293,12 +301,14 @@ func (m *ChatMethods) applyTeamWorkGate(ctx context.Context, params chatSendPara
 		AgentID:  agentUUID,
 		Embedder: m.teamWorkEmbedder,
 	})
+	input.Decider = m.decisionModels.Resolve(ctx)
 	result := teamworkclassify.ClassifyWithLLM(ctx, input, loop.Provider(), loop.Model(), m.usageCaps)
-	slog.Info("team_work_classify: ws decision", "session", sessionKey, "agent", params.AgentID, "mode", mode, "decision", result.Decision, "self_score", result.SelfScore, "collaboration_score", result.CollaborationScore, "reason", result.Reason)
+	source := result.Source()
+	slog.Info("team_work_classify: ws decision", "session", sessionKey, "agent", params.AgentID, "mode", mode, "decision", result.Decision, "source", source, "self_score", result.SelfScore, "collaboration_score", result.CollaborationScore, "reason", result.Reason)
 	if result.Decision == teamworkclassify.DecisionTeam {
 		out.directive = &agent.TeamWorkDirective{
 			Mode:            string(result.Mode),
-			Source:          "llm",
+			Source:          source,
 			Reason:          result.Reason,
 			OriginalMessage: params.Message,
 			RequiredTool:    result.RequiredTool,
