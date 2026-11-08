@@ -54,25 +54,24 @@ func minimaxModels() []ModelInfo {
 	}
 }
 
-// zaiModels returns a hardcoded list of Z.AI GLM models.
+// zaiModels returns a hardcoded list of Z.AI GLM models, shared by the
+// pay-per-use API (zai) and the GLM Coding Plan (zai-coding).
 // Z.AI supports OpenAI-compatible chat completions, but /models availability is
 // not required for GoClaw's model picker.
+//
+// Only the current GLM-5.3 family is listed. The Coding Plan routes legacy IDs
+// (GLM-5.2/5.1 -> GLM-5.3, GLM-4.7 -> GLM-5.3-Flash); older IDs still sold on the
+// pay-per-use API can be entered as a custom model in the picker. FlashX variants
+// may not be granted on every plan yet; such requests fail upstream and the user
+// can pick another model.
+//
+// GLM-5.3-Flash is the default because it accepts image input; GLM-5.3 is text-only.
 func zaiModels() []ModelInfo {
 	return []ModelInfo{
-		{ID: store.ZaiDefaultModel, Name: "GLM 5.2"},
-		{ID: "glm-5.1", Name: "GLM 5.1"},
-		{ID: "glm-5-turbo", Name: "GLM 5 Turbo"},
-		{ID: "glm-5", Name: "GLM 5"},
-		{ID: "glm-4.7", Name: "GLM 4.7"},
-		{ID: "glm-4.7-flash", Name: "GLM 4.7 Flash"},
-		{ID: "glm-4.7-flashx", Name: "GLM 4.7 FlashX"},
-		{ID: "glm-4.6", Name: "GLM 4.6"},
-		{ID: "glm-4.5", Name: "GLM 4.5"},
-		{ID: "glm-4.5-air", Name: "GLM 4.5 Air"},
-		{ID: "glm-4.5-x", Name: "GLM 4.5 X"},
-		{ID: "glm-4.5-airx", Name: "GLM 4.5 AirX"},
-		{ID: "glm-4.5-flash", Name: "GLM 4.5 Flash"},
-		{ID: "glm-4-32b-0414-128k", Name: "GLM 4 32B 0414 128K"},
+		{ID: store.ZaiDefaultModel, Name: "GLM 5.3 Flash"},
+		{ID: "glm-5.3", Name: "GLM 5.3"},
+		{ID: "glm-5.3-flashx", Name: "GLM 5.3 FlashX"},
+		{ID: "glm-5.3-flashx-legal", Name: "GLM 5.3 FlashX Legal"},
 	}
 }
 

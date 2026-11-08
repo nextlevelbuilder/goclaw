@@ -27,8 +27,8 @@ func TestRegisterProvidersUsesCurrentMiniMaxAndZaiDefaults(t *testing.T) {
 
 	assertProviderDefault(t, registry, providers.MasterTenantID, "atlascloud", "qwen/qwen3.5-flash", "https://api.atlascloud.ai/v1")
 	assertProviderDefault(t, registry, providers.MasterTenantID, "minimax", "MiniMax-M3", "https://api.minimax.io/v1")
-	assertProviderDefault(t, registry, providers.MasterTenantID, "zai", "glm-5.2", "https://api.z.ai/api/paas/v4")
-	assertProviderDefault(t, registry, providers.MasterTenantID, "zai-coding", "glm-5.2", "https://api.z.ai/api/coding/paas/v4")
+	assertProviderDefault(t, registry, providers.MasterTenantID, "zai", "glm-5.3-flash", "https://api.z.ai/api/paas/v4")
+	assertProviderDefault(t, registry, providers.MasterTenantID, "zai-coding", "glm-5.3-flash", "https://api.z.ai/api/coding/paas/v4")
 }
 
 func TestRegisterProvidersMiniMaxUsesOpenAIChatCompletionsPath(t *testing.T) {
@@ -121,8 +121,8 @@ func TestRegisterProvidersFromDBUsesCurrentMiniMaxAndZaiDefaults(t *testing.T) {
 	assertProviderDefault(t, registry, tenantID, "db-aimlapi", providers.AIMLAPIDefaultModel, providers.AIMLAPIDefaultAPIBase)
 	assertProviderDefault(t, registry, tenantID, "db-atlascloud", "qwen/qwen3.5-flash", "https://api.atlascloud.ai/v1")
 	assertProviderDefault(t, registry, tenantID, "db-minimax", "MiniMax-M3", "https://api.minimax.io/v1")
-	assertProviderDefault(t, registry, tenantID, "db-zai", "glm-5.2", "https://api.z.ai/api/paas/v4")
-	assertProviderDefault(t, registry, tenantID, "db-zai-coding", "glm-5.2", "https://api.z.ai/api/coding/paas/v4")
+	assertProviderDefault(t, registry, tenantID, "db-zai", "glm-5.3-flash", "https://api.z.ai/api/paas/v4")
+	assertProviderDefault(t, registry, tenantID, "db-zai-coding", "glm-5.3-flash", "https://api.z.ai/api/coding/paas/v4")
 }
 
 func assertProviderDefault(t *testing.T, registry *providers.Registry, tenantID uuid.UUID, name, wantModel, wantBase string) {
