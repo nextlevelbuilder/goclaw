@@ -1,16 +1,9 @@
 import { motion } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import { IconBlocked, IconChat, IconPaperclip } from '../common/Icons'
-import { isTaskLocked, TERMINAL_STATUSES } from '../../types/team'
+import { cn } from '../../lib/cn'
+import { PRIORITY_BADGE, isTaskLocked, TERMINAL_STATUSES } from '../../types/team'
 import type { TeamTaskData } from '../../types/team'
-
-/** Priority: plain text color, matching web kanban-card.tsx */
-const PRIORITY_STYLE: Record<number, { label: string; color: string }> = {
-  0: { label: 'P-0', color: 'text-slate-400' },
-  1: { label: 'P-1', color: 'text-blue-500' },
-  2: { label: 'P-2', color: 'text-amber-500' },
-  3: { label: 'P-3', color: 'text-red-500' },
-}
-
 
 interface KanbanCardProps {
   task: TeamTaskData
@@ -19,85 +12,76 @@ interface KanbanCardProps {
   onClick: () => void
 }
 
+/** One task on the board: identifier, priority, subject, owner and progress. */
 export function KanbanCard({ task, ownerName, ownerEmoji, onClick }: KanbanCardProps) {
+  const { t } = useTranslation('teams')
   const locked = isTaskLocked(task)
   const blocked = task.status === 'blocked'
-  const prio = PRIORITY_STYLE[task.priority] ?? PRIORITY_STYLE[0]
-  const hasBlockers = task.blocked_by && task.blocked_by.length > 0
+  const prio = PRIORITY_BADGE[task.priority] ?? PRIORITY_BADGE[3]
+  const hasBlockers = !!task.blocked_by && task.blocked_by.length > 0
   const isTerminal = TERMINAL_STATUSES.has(task.status)
 
   return (
     <motion.button
+      type="button"
       layoutId={task.id}
       layout
       initial={false}
       transition={{ type: 'spring', stiffness: 350, damping: 30 }}
       onClick={onClick}
-      className={[
-        'w-full text-left rounded-lg border bg-surface-primary p-3 transition-colors hover:bg-accent/5 cursor-pointer group',
-        locked ? 'border-l-2 border-l-green-500' : blocked ? 'border-l-2 border-l-amber-500' : 'border-border',
-      ].join(' ')}
+      className={cn(
+        'w-full cursor-pointer rounded-md border bg-surface-raised p-3 text-left transition-colors hover:bg-surface-hover',
+        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring',
+        locked ? 'border-success' : blocked ? 'border-warning' : 'border-border-subtle',
+      )}
     >
-      {/* Top row: identifier + priority + running */}
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-1.5">
-          <span className="font-mono text-2xs text-text-muted">
-            {task.identifier || `#${task.task_number ?? ''}`}
-          </span>
-          <span className={`font-mono text-2xs font-medium ${prio.color}`}>
-            {prio.label}
-          </span>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-caption text-ink-muted">{task.identifier || `#${task.task_number ?? ''}`}</span>
+          <span className={cn('rounded-sm px-1.5 font-mono text-caption', prio.cls)}>{prio.label}</span>
         </div>
         {locked && (
-          <span className="flex items-center gap-1 text-2xs text-green-600 dark:text-green-400">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
-            Running
+          <span className="flex items-center gap-1 text-caption text-success">
+            <span aria-hidden="true" className="size-1.5 animate-pulse rounded-pill bg-success" />
+            {t('board.running')}
           </span>
         )}
       </div>
 
-      {/* Subject */}
-      <p className="text-xs font-medium text-text-primary leading-snug line-clamp-2">
-        {task.subject}
-      </p>
+      <p className="line-clamp-2 text-ui font-medium text-ink">{task.subject}</p>
 
-      {/* Blocked indicator */}
       {hasBlockers && (
-        <p className="mt-1 flex items-center gap-1 text-2xs text-amber-600 dark:text-amber-400">
-          <IconBlocked size={10} className="shrink-0" />
-          <span className="truncate">
-            {task.blocked_by!.map((id) => id.slice(0, 8)).join(', ')}
-          </span>
+        <p className="mt-1 flex items-center gap-1 text-caption text-warning">
+          <IconBlocked size={12} className="shrink-0" />
+          <span className="truncate">{task.blocked_by!.map((id) => id.slice(0, 8)).join(', ')}</span>
         </p>
       )}
 
-      {/* Bottom: owner + counts */}
-      <div className="mt-2 flex items-center gap-1.5">
-        {ownerEmoji && <span className="text-sm leading-none">{ownerEmoji}</span>}
-        <span className="truncate text-xs text-text-muted flex-1">
-          {ownerName || task.owner_agent_key || 'Unassigned'}
+      <div className="mt-2 flex items-center gap-2">
+        {ownerEmoji && <span aria-hidden="true" className="text-body leading-none">{ownerEmoji}</span>}
+        <span className="flex-1 truncate text-caption text-ink-muted">
+          {ownerName || task.owner_agent_key || t('board.unassigned')}
         </span>
         {(task.comment_count ?? 0) > 0 && (
-          <span className="flex items-center gap-0.5 text-2xs text-text-muted shrink-0">
-            <IconChat size={10} />
+          <span className="flex shrink-0 items-center gap-0.5 text-caption text-ink-muted">
+            <IconChat size={12} />
             {task.comment_count}
           </span>
         )}
         {(task.attachment_count ?? 0) > 0 && (
-          <span className="flex items-center gap-0.5 text-2xs text-text-muted shrink-0">
-            <IconPaperclip size={10} />
+          <span className="flex shrink-0 items-center gap-0.5 text-caption text-ink-muted">
+            <IconPaperclip size={12} />
             {task.attachment_count}
           </span>
         )}
       </div>
 
-      {/* Progress bar */}
       {task.progress_percent != null && task.progress_percent > 0 && !isTerminal && (
-        <div className="mt-2 flex items-center gap-1.5">
-          <div className="h-1.5 flex-1 rounded-full bg-surface-tertiary overflow-hidden">
-            <div className="h-full rounded-full bg-accent transition-all duration-500" style={{ width: `${Math.min(task.progress_percent, 100)}%` }} />
+        <div className="mt-2 flex items-center gap-2">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-pill bg-surface-hover">
+            <div className="h-full rounded-pill bg-accent transition-all duration-500" style={{ width: `${Math.min(task.progress_percent, 100)}%` }} />
           </div>
-          <span className="text-2xs text-text-muted">{task.progress_percent}%</span>
+          <span className="text-caption text-ink-muted">{task.progress_percent}%</span>
         </div>
       )}
     </motion.button>

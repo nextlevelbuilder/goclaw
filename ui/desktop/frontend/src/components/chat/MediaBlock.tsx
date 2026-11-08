@@ -19,13 +19,13 @@ function cleanFilename(url: string): string {
 // Audio/video with authenticated blob URL
 function AuthAudio({ src }: { src: string }) {
   const blobUrl = useMediaUrl(src)
-  if (!blobUrl) return <div className="h-10 w-48 bg-surface-tertiary/50 animate-pulse rounded-lg" />
+  if (!blobUrl) return <div className="h-10 w-48 bg-surface-hover animate-pulse rounded-lg" />
   return <audio src={blobUrl} controls className="max-w-xs" />
 }
 
 function AuthVideo({ src }: { src: string }) {
   const blobUrl = useMediaUrl(src)
-  if (!blobUrl) return <div className="h-40 w-64 bg-surface-tertiary/50 animate-pulse rounded-lg" />
+  if (!blobUrl) return <div className="h-40 w-64 bg-surface-hover animate-pulse rounded-lg" />
   return <video src={blobUrl} controls className="max-w-sm rounded-lg" />
 }
 
@@ -49,10 +49,10 @@ export function MediaBlock({ items }: MediaBlockProps) {
               type="button"
               aria-label={t('viewImage')}
               onClick={() => setLightboxIndex(i)}
-              className="group relative overflow-hidden rounded-lg border border-border cursor-pointer"
+              className="group relative overflow-hidden rounded-lg border border-border-subtle cursor-pointer"
             >
               <AuthImage src={item.url} alt="" className="max-h-72 w-full object-contain" />
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/40 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
             </button>
           ))}
         </div>

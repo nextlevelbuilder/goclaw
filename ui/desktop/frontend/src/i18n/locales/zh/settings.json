@@ -1,0 +1,102 @@
+{
+  "title": "设置",
+  "description": "语言、外观和网关",
+  "nav": {
+    "label": "设置分区",
+    "general": "通用",
+    "appearance": "外观",
+    "gateway": "网关",
+    "security": "安全",
+    "about": "关于"
+  },
+  "general": {
+    "regionTitle": "语言和区域",
+    "language": "语言",
+    "languageHint": "用于菜单和消息。",
+    "timezone": "时区",
+    "timezoneHint": "用于计划任务和时间戳。"
+  },
+  "appearance": {
+    "themeTitle": "主题",
+    "theme": "主题",
+    "themeHint": "“跟随系统”会使用你的 Windows 设置。",
+    "system": "跟随系统",
+    "light": "浅色",
+    "dark": "深色"
+  },
+  "gateway": {
+    "title": "网关",
+    "status": "状态",
+    "statusHint": "本地网关是否在响应。",
+    "online": "在线",
+    "connecting": "正在连接",
+    "offline": "离线",
+    "url": "地址",
+    "urlHint": "只有这台电脑可以连接。",
+    "port": "端口",
+    "portHint": "网关监听的本地端口。",
+    "dataDir": "数据文件夹",
+    "dataDirHint": "数据库和智能体文件所在的位置。",
+    "openFolder": "打开文件夹",
+    "errorTitle": "无法读取网关信息",
+    "errorBody": "请从桌面应用打开 GoClaw，然后重试。"
+  },
+  "security": {
+    "dataTitle": "本地数据",
+    "storage": "密钥存储",
+    "storageHint": "API 密钥在保存到此设备前会被加密。",
+    "secure": "已加密",
+    "dangerTitle": "危险操作",
+    "reset": {
+      "title": "重置数据库",
+      "description": "删除数据库并重启应用。所有智能体、会话、提供商和设置都会永久丢失。",
+      "button": "重置数据库",
+      "confirmTitle": "重置数据库？",
+      "confirmDescription": "这会删除你的所有数据，并让 GoClaw 从头重新开始。此操作无法撤销。",
+      "confirm": "重置并重启",
+      "failed": "无法重置数据库，请重试。"
+    }
+  },
+  "about": {
+    "title": "GoClaw Desktop",
+    "subtitle": "版本 {{version}} · Lite 版",
+    "detailsTitle": "详细信息",
+    "version": "版本",
+    "edition": "版本类型",
+    "editionValue": "Lite (SQLite)",
+    "runtime": "运行时",
+    "runtimeValue": "Wails v2",
+    "dataDir": "数据文件夹",
+    "updatesTitle": "更新",
+    "updatesHint": "检查是否有新版本。",
+    "check": "检查更新",
+    "checking": "正在检查…",
+    "upToDate": "你使用的已是最新版本。",
+    "available": "有新版本 {{version}}",
+    "updateNow": "立即更新",
+    "downloading": "正在下载更新…",
+    "ready": "更新已安装。重启后生效。",
+    "restart": "立即重启",
+    "checkFailed": "无法检查更新。",
+    "updateFailed": "更新失败，请重试。",
+    "diagnosticsTitle": "诊断信息",
+    "diagnosticsHint": "复制版本和平台信息，发给支持人员。",
+    "copy": "复制详细信息",
+    "copied": "已复制",
+    "limitsTitle": "版本限制",
+    "limits": {
+      "agents": "智能体",
+      "agentsValue": "最多 5 个",
+      "teams": "团队",
+      "teamsValue": "最多 1 个",
+      "teamMembers": "团队成员",
+      "teamMembersValue": "最多 5 人",
+      "database": "数据库",
+      "databaseValue": "SQLite（本地）",
+      "users": "用户",
+      "usersValue": "单用户"
+    },
+    "github": "GitHub",
+    "builtWith": "基于 Go、React 和 Wails 构建"
+  }
+}

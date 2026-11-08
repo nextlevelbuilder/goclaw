@@ -107,5 +107,110 @@
     "poolProvider": "Pool Provider",
     "secureCli": "安全 CLI",
     "tenantUsers": "租户与用户管理"
+  },
+  "screen": {
+    "summary": "{{count}}/{{max}} 个团队",
+    "newTeam": "新建团队",
+    "limitReached": "Lite 版包含 {{max}} 个团队。删除现有团队后才能创建新团队。",
+    "colTeam": "团队",
+    "colLead": "负责人",
+    "colMembers": "成员",
+    "colStatus": "状态",
+    "membersCount_other": "{{count}} 位成员",
+    "status": {
+      "active": "运行中",
+      "archived": "已归档"
+    },
+    "openBoard": "打开任务看板",
+    "editTeam": "编辑团队",
+    "deleteTeam": "删除团队",
+    "rowActions": "{{name}} 的操作",
+    "loading": "正在加载团队",
+    "emptyTitle": "还没有团队",
+    "emptyDescription": "团队由一名负责人 Agent 和共用同一个任务看板的成员组成。",
+    "emptyAction": "创建团队",
+    "errorTitle": "无法加载团队",
+    "errorDescription": "请确认网关正在运行，然后重试。",
+    "create": {
+      "title": "新建团队",
+      "description": "选择负责人以及与其协作的 Agent。",
+      "name": "名称",
+      "namePlaceholder": "研究小组",
+      "nameRequired": "请输入团队名称。",
+      "lead": "负责人 Agent",
+      "leadPlaceholder": "选择一个 Agent",
+      "leadRequired": "请选择负责人 Agent。",
+      "members": "成员",
+      "membersRequired": "请至少选择一位成员。",
+      "noOtherAgents": "请先再创建一个 Agent 作为成员。",
+      "submit": "创建团队",
+      "cancel": "取消"
+    },
+    "edit": {
+      "title": "编辑团队",
+      "save": "保存更改",
+      "cancel": "取消",
+      "loadFailed": "无法加载此团队。"
+    },
+    "delete": {
+      "title": "删除 {{name}}？",
+      "body": "团队、成员及其任务看板将被移除，Agent 会保留。此操作无法撤销。",
+      "confirm": "删除团队"
+    },
+    "toast": {
+      "created": "团队已创建",
+      "createFailed": "无法创建团队",
+      "updated": "团队已更新",
+      "updateFailed": "无法更新团队",
+      "deleted": "团队已删除",
+      "deleteFailed": "无法删除团队",
+      "memberAdded": "已添加成员",
+      "memberRemoved": "已移除成员",
+      "memberFailed": "无法更改成员"
+    }
+  },
+  "board": {
+    "type": "类型",
+    "back": "返回团队列表",
+    "settings": "团队设置",
+    "refresh": "刷新",
+    "newTask": "新建任务",
+    "viewLabel": "看板布局",
+    "filterLabel": "按状态筛选",
+    "running": "运行中",
+    "unassigned": "未分配",
+    "columnEmpty": "暂无任务",
+    "selected_one": "已选 {{count}} 项",
+    "selected_other": "已选 {{count}} 项",
+    "loadingTasks": "正在加载任务",
+    "errorTitle": "无法加载任务",
+    "errorDescription": "请确认网关正在运行，然后重试。",
+    "listEmptyTitle": "还没有任务",
+    "listEmptyBody": "让团队负责人在聊天中创建任务，任务会显示在这里。",
+    "deleteTaskTitle": "删除此任务？",
+    "deleteTaskBody": "任务及其附件将被删除，无法撤销。",
+    "deleteBulkTitle_one": "删除 {{count}} 个任务？",
+    "deleteBulkTitle_other": "删除 {{count}} 个任务？",
+    "deleteBulkBody": "已结束的任务将被永久删除，无法撤销。",
+    "assignPlaceholder": "分配给…",
+    "close": "关闭",
+    "noTeam": "未找到该团队。",
+    "status": {
+      "pending": "待处理",
+      "blocked": "已阻塞",
+      "in_progress": "进行中",
+      "completed": "已完成",
+      "failed": "失败",
+      "cancelled": "已取消"
+    },
+    "toast": {
+      "assigned": "任务已分配",
+      "assignFailed": "无法分配任务",
+      "deleted": "任务已删除",
+      "deleteFailed": "无法删除任务",
+      "bulkDeleted_one": "已删除 {{count}} 个任务",
+      "bulkDeleted_other": "已删除 {{count}} 个任务",
+      "bulkDeleteFailed": "无法删除这些任务"
+    }
   }
 }

@@ -6,17 +6,27 @@ export interface Activity {
   iteration?: number
 }
 
+export type ChatErrorKind = 'provider' | 'interrupted' | 'failed'
+
+/** The last run problem the chat shows as a notice under the transcript. */
+export interface ChatRunError {
+  kind: ChatErrorKind
+  message: string
+}
+
 interface ChatActivityState {
   isRunning: boolean
   activity: Activity | null
   currentRunId: string | null
+  error: ChatRunError | null
 
   startRun: (runId: string) => void
   setActivity: (activity: Activity | null) => void
   completeRun: () => void
-  failRun: () => void
+  failRun: (error?: ChatRunError) => void
   cancelRun: () => void
   restoreRunning: (activity?: Activity | null) => void
+  setError: (error: ChatRunError | null) => void
   clear: () => void
 }
 
@@ -24,19 +34,22 @@ export const useChatActivityStore = create<ChatActivityState>((set) => ({
   isRunning: false,
   activity: null,
   currentRunId: null,
+  error: null,
 
-  startRun: (runId) => set({ isRunning: true, currentRunId: runId, activity: { phase: 'thinking' } }),
+  startRun: (runId) => set({ isRunning: true, currentRunId: runId, activity: { phase: 'thinking' }, error: null }),
 
   setActivity: (activity) => set({ activity }),
 
-  completeRun: () => set({ isRunning: false, activity: null, currentRunId: null }),
+  completeRun: () => set({ isRunning: false, activity: null, currentRunId: null, error: null }),
 
-  failRun: () => set({ isRunning: false, activity: null, currentRunId: null }),
+  failRun: (error) => set({ isRunning: false, activity: null, currentRunId: null, error: error ?? null }),
 
   cancelRun: () => set({ isRunning: false, activity: null, currentRunId: null }),
 
   // Restore running state on session switch (without creating a new assistant message).
   restoreRunning: (activity) => set({ isRunning: true, activity: activity ?? null }),
 
-  clear: () => set({ isRunning: false, activity: null, currentRunId: null }),
+  setError: (error) => set({ error }),
+
+  clear: () => set({ isRunning: false, activity: null, currentRunId: null, error: null }),
 }))

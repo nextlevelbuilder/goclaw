@@ -32,7 +32,7 @@ export function PromptModeSection({ mode, onModeChange }: PromptModeSectionProps
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold text-text-primary">System Prompt Mode</h3>
+      <h3 className="text-ui font-semibold text-ink">System Prompt Mode</h3>
 
       {/* 2x2 mode grid */}
       <div className="grid grid-cols-2 gap-2">
@@ -44,17 +44,17 @@ export function PromptModeSection({ mode, onModeChange }: PromptModeSectionProps
               'flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors',
               mode === m
                 ? 'ring-2 ring-accent border-accent bg-accent/5'
-                : 'border-border hover:bg-surface-tertiary',
+                : 'border-border-subtle hover:bg-surface-hover',
             ].join(' ')}
           >
             <div className="flex items-center gap-1.5">
               <span className="text-base">{MODE_ICONS[m]}</span>
-              <span className="text-xs font-medium text-text-primary capitalize">{m}</span>
-              <span className="text-2xs px-1 py-0.5 rounded bg-surface-tertiary text-text-muted ml-auto">
+              <span className="text-caption font-medium text-ink capitalize">{m}</span>
+              <span className="text-caption px-1 py-0.5 rounded bg-surface-hover text-ink-muted ml-auto">
                 {MODE_TOKENS[m]}
               </span>
             </div>
-            <p className="text-2xs text-text-muted leading-tight">{MODE_DESC[m]}</p>
+            <p className="text-caption text-ink-muted leading-tight">{MODE_DESC[m]}</p>
           </button>
         ))}
       </div>
@@ -63,7 +63,7 @@ export function PromptModeSection({ mode, onModeChange }: PromptModeSectionProps
       {sections.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {sections.map((s) => (
-            <span key={s} className="rounded bg-surface-tertiary px-1.5 py-0.5 text-2xs text-text-muted">
+            <span key={s} className="rounded bg-surface-hover px-1.5 py-0.5 text-caption text-ink-muted">
               {s}
             </span>
           ))}

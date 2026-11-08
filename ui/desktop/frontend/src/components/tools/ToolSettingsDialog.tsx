@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { Dialog } from '../ui'
 import { MediaProviderChainForm } from './MediaProviderChainForm'
 import { ExtractorChainForm } from './extractor-chain-form'
 import { JsonSettingsForm } from './json-settings-form'
@@ -17,44 +18,32 @@ interface ToolSettingsDialogProps {
   onSave: (name: string, settings: Record<string, unknown>) => Promise<void>
 }
 
+/** Settings of one built-in tool; routes to the form that matches the tool. Each form brings its own Cancel / Save row. */
 export function ToolSettingsDialog({ open, onOpenChange, tool, onSave }: ToolSettingsDialogProps) {
-  const { t } = useTranslation(['tools', 'common'])
-  if (!open) return null
-
+  const { t } = useTranslation('tools')
   const handleClose = () => onOpenChange(false)
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
-      <div className="relative w-full max-w-2xl mx-4 bg-surface-secondary rounded-xl border border-border overflow-hidden flex flex-col" style={{ maxHeight: '85vh' }}>
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <div>
-            <h3 className="text-sm font-semibold text-text-primary">{t('builtin.settingsDialog.title', { name: tool.display_name })}</h3>
-            <p className="font-mono text-2xs text-text-muted mt-0.5">{tool.name}</p>
-          </div>
-          <button aria-label={t('common:close')} onClick={handleClose} className="p-2 text-text-muted hover:text-text-primary transition-colors">
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 6 6 18" /><path d="m6 6 12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Route to specialized form */}
-        {tool.name === 'web_fetch' ? (
-          <ExtractorChainForm tool={tool} onSave={onSave} onClose={handleClose} />
-        ) : MEDIA_TOOLS.has(tool.name) ? (
-          <MediaProviderChainForm tool={tool} onSave={onSave} onClose={handleClose} />
-        ) : tool.name === 'stt' ? (
-          <SttProviderForm
-            initialSettings={(tool.settings ?? {}) as Record<string, unknown>}
-            onSave={(settings) => onSave(tool.name, settings)}
-            onCancel={handleClose}
-          />
-        ) : (
-          <JsonSettingsForm tool={tool} onSave={onSave} onClose={handleClose} />
-        )}
-      </div>
-    </div>
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t('builtin.settingsDialog.title', { name: tool.display_name })}
+      description={<span className="font-mono">{tool.name}</span>}
+      size="lg"
+    >
+      {tool.name === 'web_fetch' ? (
+        <ExtractorChainForm tool={tool} onSave={onSave} onClose={handleClose} />
+      ) : MEDIA_TOOLS.has(tool.name) ? (
+        <MediaProviderChainForm tool={tool} onSave={onSave} onClose={handleClose} />
+      ) : tool.name === 'stt' ? (
+        <SttProviderForm
+          initialSettings={(tool.settings ?? {}) as Record<string, unknown>}
+          onSave={(settings) => onSave(tool.name, settings)}
+          onCancel={handleClose}
+        />
+      ) : (
+        <JsonSettingsForm tool={tool} onSave={onSave} onClose={handleClose} />
+      )}
+    </Dialog>
   )
 }

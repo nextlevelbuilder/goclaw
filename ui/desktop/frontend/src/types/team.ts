@@ -77,30 +77,30 @@ export const KANBAN_STATUSES: TaskStatus[] = [
 
 /** Status dot color classes */
 export const STATUS_COLORS: Record<TaskStatus, string> = {
-  pending: 'bg-slate-400',
-  blocked: 'bg-amber-500',
-  in_progress: 'bg-blue-500',
-  completed: 'bg-green-500',
-  failed: 'bg-red-500',
-  cancelled: 'bg-gray-400',
+  pending: 'bg-ink-muted',
+  blocked: 'bg-warning',
+  in_progress: 'bg-info',
+  completed: 'bg-success',
+  failed: 'bg-danger',
+  cancelled: 'bg-ink-muted',
 }
 
-/** Status badge classes (bg + text) */
-export const STATUS_BADGE: Record<TaskStatus, string> = {
-  pending: 'bg-slate-500/15 text-slate-600 dark:text-slate-400',
-  blocked: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
-  in_progress: 'bg-blue-500/15 text-blue-600 dark:text-blue-400',
-  completed: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
-  failed: 'bg-red-500/15 text-red-600 dark:text-red-400',
-  cancelled: 'bg-gray-500/15 text-gray-500 dark:text-gray-400',
+/** Tone of the status chip for each task status. */
+export const STATUS_TONE: Record<TaskStatus, 'success' | 'warning' | 'danger' | 'info' | 'idle'> = {
+  pending: 'idle',
+  blocked: 'warning',
+  in_progress: 'info',
+  completed: 'success',
+  failed: 'danger',
+  cancelled: 'idle',
 }
 
 /** Priority badge classes */
 export const PRIORITY_BADGE: Record<number, { label: string; cls: string }> = {
-  0: { label: 'P-0', cls: 'bg-red-500/15 text-red-600 dark:text-red-400' },
-  1: { label: 'P-1', cls: 'bg-amber-500/15 text-amber-600 dark:text-amber-400' },
-  2: { label: 'P-2', cls: 'bg-blue-500/15 text-blue-600 dark:text-blue-400' },
-  3: { label: 'P-3', cls: 'bg-slate-500/15 text-slate-600 dark:text-slate-400' },
+  0: { label: 'P-0', cls: 'bg-danger-subtle text-danger' },
+  1: { label: 'P-1', cls: 'bg-warning-subtle text-warning' },
+  2: { label: 'P-2', cls: 'bg-info-subtle text-info' },
+  3: { label: 'P-3', cls: 'bg-surface-hover text-ink-secondary' },
 }
 
 /** Terminal task statuses (no further state transitions) */

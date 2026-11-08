@@ -10,6 +10,19 @@ import {
 
 export type { FrameType, RequestFrame, ResponseFrame, EventFrame, Frame, EventHandler } from './ws-types'
 
+/** Connection lifecycle as seen by the UI. */
+export type WsConnectionStatus = 'connecting' | 'online' | 'offline'
+
+export interface WsConnectionState {
+  status: WsConnectionStatus
+  /** Epoch ms of the next automatic reconnect attempt while offline, else null. */
+  nextRetryAt: number | null
+  /** The connection failed or dropped and has not come back yet (stays true through reconnect attempts). */
+  lost: boolean
+}
+
+export type WsConnectionListener = (state: WsConnectionState) => void
+
 export class WsClient {
   private ws: WebSocket | null = null
   private url: string
@@ -20,7 +33,8 @@ export class WsClient {
   private eventHandlers = new Map<string, Set<EventHandler>>()
   private reconnectDelay = RECONNECT_BASE_MS
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  private connectionChangeHandler?: (connected: boolean) => void
+  private connectionListeners = new Set<WsConnectionListener>()
+  private state: WsConnectionState = { status: 'connecting', nextRetryAt: null, lost: false }
   private closed = false
   private queuedCalls: Array<() => void> = []
   private connectRequestId: string | null = null
@@ -118,19 +132,16 @@ export class WsClient {
     console.info('[ws] session connected')
     this.connected = true
     this.reconnectDelay = RECONNECT_BASE_MS
-    this.connectionChangeHandler?.(true)
+    this.setState({ status: 'online', nextRetryAt: null, lost: false })
 
     const queued = this.queuedCalls.splice(0)
     for (const fn of queued) fn()
   }
 
   private handleClose(e: CloseEvent): void {
-    const wasConnected = this.connected
     this.connected = false
     this.connecting = false
     this.ws = null
-
-    if (wasConnected) this.connectionChangeHandler?.(false)
 
     for (const [, pending] of this.pendingRequests) {
       clearTimeout(pending.timer)
@@ -141,6 +152,8 @@ export class WsClient {
     if (!this.closed) {
       console.info(`[ws] closed (code=${e.code}), reconnecting in ${this.reconnectDelay}ms`)
       this.scheduleReconnect()
+    } else {
+      this.setState({ status: 'offline', nextRetryAt: null, lost: true })
     }
   }
 
@@ -191,8 +204,40 @@ export class WsClient {
     }
   }
 
-  onConnectionChange(handler: (connected: boolean) => void): void {
-    this.connectionChangeHandler = handler
+  /** Legacy boolean listener. Returns an unsubscribe function. */
+  onConnectionChange(handler: (connected: boolean) => void): () => void {
+    return this.subscribeConnection((s) => handler(s.status === 'online'))
+  }
+
+  /** Listen for connection state changes. Returns an unsubscribe function. */
+  subscribeConnection(listener: WsConnectionListener): () => void {
+    this.connectionListeners.add(listener)
+    return () => { this.connectionListeners.delete(listener) }
+  }
+
+  get connectionState(): WsConnectionState {
+    return this.state
+  }
+
+  /** Skip the backoff wait and reconnect immediately (no-op when online or closed). */
+  retryNow(): void {
+    if (this.closed || this.connected || this.connecting) return
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    this.reconnectTimer = null
+    this.setState({ status: 'connecting', nextRetryAt: null, lost: true })
+    this.connect()
+  }
+
+  private setState(next: WsConnectionState): void {
+    if (next.status === this.state.status && next.nextRetryAt === this.state.nextRetryAt && next.lost === this.state.lost) return
+    this.state = next
+    for (const listener of this.connectionListeners) {
+      try {
+        listener(next)
+      } catch (err) {
+        console.error('[ws] connection listener error', err)
+      }
+    }
   }
 
   close(): void {
@@ -202,8 +247,12 @@ export class WsClient {
   }
 
   private scheduleReconnect(): void {
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    this.setState({ status: 'offline', nextRetryAt: Date.now() + this.reconnectDelay, lost: true })
     this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
       this.reconnectDelay = Math.min(this.reconnectDelay * 2, RECONNECT_MAX_MS)
+      this.setState({ status: 'connecting', nextRetryAt: null, lost: true })
       this.connect()
     }, this.reconnectDelay)
   }

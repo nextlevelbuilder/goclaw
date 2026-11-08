@@ -1,82 +1,70 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAgents } from '../../../hooks/use-agents'
-import { useUiStore } from '../../../stores/ui-store'
-import { AgentAvatar } from '../../agents/AgentAvatar'
-import { EditionCompareModal } from '../../common/EditionCompareModal'
 import { wails } from '../../../lib/wails'
+import { useUiStore } from '../../../stores/ui-store'
+import { EditionCompareModal } from '../../common/EditionCompareModal'
+import { IconBot, IconCheck, IconChevronsUpDown, IconInfo, IconPanelLeft } from '../../common/Icons'
+import { IconButton, Menu, type MenuEntry } from '../../ui'
+import { chatWithAgent } from '../shell-actions'
 
-const MAX_AGENTS_LITE = 5
+export interface SidebarHeaderProps {
+  /** Collapse handler for the top-right button (to the rail, or close the overlay). */
+  onCollapse: () => void
+  collapseLabel: string
+}
 
-export function SidebarHeader() {
-  const { t } = useTranslation('agents')
-  const { agents, selectedAgent, selectAgent } = useAgents()
-  const openSettings = useUiStore((s) => s.openSettings)
-  const closeSettings = useUiStore((s) => s.closeSettings)
+/**
+ * Workspace row: app mark and the current chat agent. Opens a menu to switch
+ * agent, manage agents or compare editions.
+ */
+export function SidebarHeader({ onCollapse, collapseLabel }: SidebarHeaderProps) {
+  const { t } = useTranslation('desktop')
+  const { agents, selectedAgent } = useAgents()
+  const setActiveView = useUiStore((s) => s.setActiveView)
   const [editionOpen, setEditionOpen] = useState(false)
   const [version, setVersion] = useState('')
 
   useEffect(() => {
-    wails.getVersion().then(setVersion).catch(() => {})
+    wails.getVersion().then(setVersion).catch(() => { /* not running inside Wails */ })
   }, [])
 
-  const atLimit = agents.length >= MAX_AGENTS_LITE
+  const items: MenuEntry[] = [
+    ...agents.map((a) => ({
+      label: a.name,
+      icon: selectedAgent?.id === a.id
+        ? <IconCheck size={14} />
+        : <span aria-hidden="true" className="text-caption font-semibold">{a.emoji || a.name.charAt(0).toUpperCase()}</span>,
+      onSelect: () => chatWithAgent(a.id),
+    })),
+    ...(agents.length > 0 ? ['separator' as const] : []),
+    { label: t('nav.manageAgents'), icon: <IconBot size={16} />, onSelect: () => setActiveView('agents') },
+    { label: `${t('nav.compareEditions')} · Lite${version ? ` v${version}` : ''}`, icon: <IconInfo size={16} />, onSelect: () => setEditionOpen(true) },
+  ]
 
   return (
-    <div className="pt-6 px-3 pb-2 space-y-2">
-      {/* Logo + version */}
-      <div className="flex items-center gap-2.5 px-1">
-        <img src="/goclaw-icon.svg" alt="GoClaw" className="h-7 w-7" />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className="text-base font-semibold text-text-primary">GoClaw</span>
-            <button
-              onClick={() => setEditionOpen(true)}
-              className="text-2xs font-medium bg-accent/15 text-accent px-1.5 py-0.5 rounded hover:bg-accent/25 transition-colors cursor-pointer"
-            >
-              Lite{version ? ` - v${version}` : ''}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Section title + add button */}
-      <div className="flex items-center justify-between px-1 pt-1">
-        <span className="text-2xs text-text-muted font-medium tracking-wide">
-          {t('title', 'Agents')} ({agents.length}/{MAX_AGENTS_LITE})
-        </span>
-        <button
-          onClick={() => openSettings('agents')}
-          disabled={atLimit}
-          className="w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-accent hover:bg-surface-tertiary transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-          title={atLimit ? t('limitReached', 'Agent limit reached ({{max}})', { max: MAX_AGENTS_LITE }) : t('createAgent', 'New agent')}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
-            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Agent list */}
-      <div className="space-y-1">
-        {agents.map((agent) => (
+    <div className="flex items-center gap-1">
+      <Menu
+        align="start"
+        items={items}
+        trigger={(
           <button
-            key={agent.id}
-            onClick={() => { selectAgent(agent.id); closeSettings() }}
-            className={[
-              'w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-colors',
-              selectedAgent?.id === agent.id
-                ? 'bg-accent/10 text-accent'
-                : 'text-text-secondary hover:bg-surface-tertiary hover:text-text-primary',
-            ].join(' ')}
+            type="button"
+            aria-label={t('nav.switchAgent')}
+            className="flex h-control min-w-0 flex-1 items-center gap-2 rounded-sm px-1.5 text-left transition-colors hover:bg-surface-hover"
           >
-            <AgentAvatar name={agent.name} status={agent.status} size="sm" emoji={agent.emoji} />
-            <span className="truncate flex-1 text-xs font-medium">{agent.name}</span>
+            <span aria-hidden="true" className="flex size-5 shrink-0 items-center justify-center rounded-sm bg-accent text-[11px] font-bold text-on-accent">
+              G
+            </span>
+            <span className="min-w-0 flex-1 truncate text-ui font-semibold text-ink">
+              GoClaw
+              <span className="font-normal text-ink-muted"> · {selectedAgent?.name ?? t('nav.noAgent')}</span>
+            </span>
+            <IconChevronsUpDown size={14} className="shrink-0 text-ink-muted" />
           </button>
-        ))}
-      </div>
-
-      {/* Edition comparison modal */}
+        )}
+      />
+      <IconButton aria-label={collapseLabel} icon={<IconPanelLeft size={16} />} size="sm" onClick={onCollapse} tooltipSide="right" />
       <EditionCompareModal open={editionOpen} onClose={() => setEditionOpen(false)} />
     </div>
   )

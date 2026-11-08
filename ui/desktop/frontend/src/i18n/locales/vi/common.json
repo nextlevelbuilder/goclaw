@@ -151,5 +151,31 @@
   },
   "errors": {
     "serverError": "Đã xảy ra lỗi. Vui lòng thử lại sau."
+  },
+  "dismiss": "Bỏ qua",
+  "tryAgain": "Thử lại",
+  "moreActions": "Thao tác khác",
+  "selectedCount": "Đã chọn {{count}}",
+  "clearSelection": "Bỏ chọn",
+  "selectAllRows": "Chọn tất cả các hàng",
+  "selectRow": "Chọn hàng",
+  "state": {
+    "loading": "Đang tải",
+    "emptyTitle": "Chưa có gì ở đây",
+    "errorTitle": "Đã xảy ra lỗi",
+    "errorHint": "Kiểm tra gateway đang chạy rồi thử lại.",
+    "errorCode": "Mã: {{code}}",
+    "offlineTitle": "Không kết nối được gateway",
+    "offlineSaved": "Đang hiển thị dữ liệu đã lưu.",
+    "offlineRetryIn_other": "Tự động thử lại sau {{count}} giây.",
+    "offlineRetrying": "Đang kết nối lại…",
+    "retryNow": "Thử lại ngay"
+  },
+  "tone": {
+    "success": "Sẵn sàng",
+    "warning": "Cảnh báo",
+    "danger": "Lỗi",
+    "info": "Thông tin",
+    "idle": "Rảnh"
   }
 }

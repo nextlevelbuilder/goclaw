@@ -18,7 +18,7 @@ interface ImageLightboxProps {
 }
 
 const btnClass =
-  'rounded-full bg-white/90 dark:bg-neutral-800/90 p-2.5 text-neutral-700 dark:text-neutral-200 shadow-md ring-1 ring-black/10 dark:ring-white/10 hover:bg-white dark:hover:bg-neutral-700 transition-colors cursor-pointer'
+  'cursor-pointer rounded-pill border border-border-subtle bg-surface-raised p-2.5 text-ink-secondary shadow-popover transition-colors hover:bg-surface-hover hover:text-ink'
 
 export function ImageLightbox(props: ImageLightboxProps) {
   const { t } = useTranslation('common')
@@ -46,7 +46,7 @@ export function ImageLightbox(props: ImageLightboxProps) {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-surface-window/70"
       onClick={onClose}
     >
       {/* Close + Download toolbar */}
@@ -109,7 +109,7 @@ export function ImageLightbox(props: ImageLightboxProps) {
       {/* Gallery counter */}
       {isGallery && (
         <div
-          className="mt-3 rounded-full bg-black/60 px-4 py-1.5 text-sm text-white/90 tabular-nums"
+          className="mt-3 rounded-pill border border-border-subtle bg-surface-raised px-4 py-1.5 text-ui text-ink-secondary tabular-nums"
           onClick={(e) => e.stopPropagation()}
         >
           {currentIndex + 1} / {images.length}

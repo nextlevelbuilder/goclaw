@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { Switch } from '../common/Switch'
+import { Switch } from '../ui'
 
 interface ConfigSectionProps {
   title: string
@@ -16,15 +16,15 @@ export function ConfigSection({ title, description, enabled, onToggle, children 
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="space-y-0.5">
-          <h4 className="text-xs font-semibold text-text-primary">{title}</h4>
-          <p className="text-2xs text-text-muted">{description}</p>
+          <h4 className="text-caption font-semibold text-ink">{title}</h4>
+          <p className="text-caption text-ink-muted">{description}</p>
         </div>
         <Switch checked={enabled} onCheckedChange={onToggle} />
       </div>
       {enabled ? (
         <div className="space-y-3 pl-1">{children}</div>
       ) : (
-        <p className="text-2xs text-text-muted italic">{t('config.usingGlobalDefaults')}</p>
+        <p className="text-caption text-ink-muted italic">{t('config.usingGlobalDefaults')}</p>
       )}
     </div>
   )

@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import { AUTH_KIND_LABEL_KEYS, MODEL_SOURCE_LABEL_KEYS, WIRE_API_LABEL_KEYS } from '../../constants/providers'
 import { isCatalogueStale } from '../../api/provider-capabilities'
+import { Badge } from '../ui'
+import { IconAlertTriangle } from '../common/Icons'
 import type { ProviderData } from '../../types/provider'
 
 /** Localized label for a gateway enum value, falling back to the raw value. */
@@ -12,7 +14,7 @@ function valueLabel(t: (key: string) => string, keys: Record<string, string>, va
 /**
  * Read-only chips for the provider subsystem metadata: `wire_api`, `auth_kind`,
  * `model_source` — plus a warning when the model catalogue is stale.
- * Rendered everywhere a provider is described (list rows, edit dialog).
+ * Rendered everywhere a provider is described (detail, edit dialog).
  */
 export function ProviderMetaChips({ provider }: { provider: ProviderData }) {
   const { t } = useTranslation('providers')
@@ -31,23 +33,15 @@ export function ProviderMetaChips({ provider }: { provider: ProviderData }) {
   if (chips.length === 0 && !stale) return null
 
   return (
-    <div className="flex flex-wrap items-center gap-1 mt-1">
+    <div className="flex flex-wrap items-center gap-1">
       {chips.map((c) => (
-        <span
-          key={c.key}
-          title={`${c.title}: ${c.label}`}
-          className="text-2xs px-1.5 py-0.5 rounded bg-surface-tertiary text-text-muted shrink-0"
-        >
-          {c.label}
-        </span>
+        <Badge key={c.key} title={`${c.title}: ${c.label}`}>{c.label}</Badge>
       ))}
       {stale && (
-        <span
-          title={t('meta.staleCatalogue')}
-          className="text-2xs px-1.5 py-0.5 rounded bg-warning/10 text-warning shrink-0"
-        >
+        <Badge tone="warning" title={t('meta.staleCatalogue')} className="gap-1">
+          <IconAlertTriangle size={12} />
           {t('meta.staleCatalogue')}
-        </span>
+        </Badge>
       )}
     </div>
   )

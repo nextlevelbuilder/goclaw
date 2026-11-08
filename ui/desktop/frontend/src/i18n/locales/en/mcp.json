@@ -27,15 +27,15 @@
   "form": {
     "createTitle": "Add MCP Server",
     "editTitle": "Edit MCP Server",
-    "name": "Name *",
+    "name": "Name",
     "nameHint": "Lowercase letters, numbers, and hyphens only",
     "displayName": "Display Name",
     "displayNamePlaceholder": "My MCP Server",
-    "transport": "Transport *",
-    "command": "Command *",
+    "transport": "Transport",
+    "command": "Command",
     "args": "Args (space-separated)",
     "argsPlaceholder": "--flag1 --flag2=\"value with spaces\"",
-    "url": "URL *",
+    "url": "URL",
     "headers": "Headers",
     "headerKeyPlaceholder": "Header name",
     "headerValuePlaceholder": "Header value",
@@ -63,7 +63,8 @@
       "connectionFailed": "Connection failed"
     },
     "requireUserCredentials": "Require User Credentials",
-    "requireUserCredentialsHint": "Each user must configure their own credentials. Server is disabled for users without personal credentials."
+    "requireUserCredentialsHint": "Each user must configure their own credentials. Server is disabled for users without personal credentials.",
+    "toolPrefixAuto": "auto"
   },
   "grants": {
     "title": "Agent Grants - {{name}}",
@@ -101,7 +102,9 @@
     "deleted": "MCP server deleted",
     "failedCreate": "Failed to create MCP server",
     "failedUpdate": "Failed to update MCP server",
-    "failedDelete": "Failed to delete MCP server"
+    "failedDelete": "Failed to delete MCP server",
+    "reconnected": "Connection reset",
+    "failedReconnect": "Couldn't reconnect the server"
   },
   "userCredentials": {
     "title": "My Credentials",
@@ -128,5 +131,42 @@
     "addEnv": "Add Variable",
     "saveFailed": "Failed to save credentials",
     "deleteFailed": "Failed to delete credentials"
+  },
+  "screen": {
+    "list": {
+      "description": "{{count}} servers · {{enabled}} on",
+      "colStatus": "Status",
+      "statusOn": "On",
+      "statusOff": "Off",
+      "tableLabel": "MCP servers",
+      "rowActions": "Actions for {{name}}",
+      "enableServer": "Enable {{name}}",
+      "loading": "Loading MCP servers",
+      "loadError": "Couldn't load MCP servers",
+      "loadErrorHint": "Check the gateway connection, then try again.",
+      "clearSearch": "Clear search",
+      "limitReached": "You can add up to {{max}} servers in this edition. Remove one to add another."
+    },
+    "menu": {
+      "edit": "Edit",
+      "delete": "Delete server"
+    },
+    "transport": {
+      "stdio": "Local process",
+      "sse": "Remote (SSE)",
+      "http": "Remote (HTTP)"
+    },
+    "delete": {
+      "title": "Delete {{name}}?",
+      "description": "This removes the server and every agent grant. Type the server name to confirm."
+    },
+    "grants": {
+      "description": "Agents allowed to use this server's tools.",
+      "loadError": "Couldn't load grants"
+    },
+    "tools": {
+      "count_one": "{{count}} tool",
+      "count_other": "{{count}} tools"
+    }
   }
 }

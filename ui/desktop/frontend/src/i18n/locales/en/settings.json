@@ -1,0 +1,102 @@
+{
+  "title": "Settings",
+  "description": "Language, appearance and gateway",
+  "nav": {
+    "label": "Settings sections",
+    "general": "General",
+    "appearance": "Appearance",
+    "gateway": "Gateway",
+    "security": "Security",
+    "about": "About"
+  },
+  "general": {
+    "regionTitle": "Language and region",
+    "language": "Language",
+    "languageHint": "Used for menus and messages.",
+    "timezone": "Time zone",
+    "timezoneHint": "Used for schedules and timestamps."
+  },
+  "appearance": {
+    "themeTitle": "Theme",
+    "theme": "Theme",
+    "themeHint": "System follows your Windows setting.",
+    "system": "System",
+    "light": "Light",
+    "dark": "Dark"
+  },
+  "gateway": {
+    "title": "Gateway",
+    "status": "Status",
+    "statusHint": "Whether the local gateway is answering.",
+    "online": "Online",
+    "connecting": "Connecting",
+    "offline": "Offline",
+    "url": "Address",
+    "urlHint": "Only this computer can connect.",
+    "port": "Port",
+    "portHint": "The local port the gateway listens on.",
+    "dataDir": "Data folder",
+    "dataDirHint": "Where the database and agent files live.",
+    "openFolder": "Open folder",
+    "errorTitle": "Couldn't read the gateway details",
+    "errorBody": "Open GoClaw from its desktop app, then try again."
+  },
+  "security": {
+    "dataTitle": "Local data",
+    "storage": "Key storage",
+    "storageHint": "API keys are encrypted before they are stored on this device.",
+    "secure": "Encrypted",
+    "dangerTitle": "Danger zone",
+    "reset": {
+      "title": "Reset database",
+      "description": "Delete the database and restart the app. All agents, sessions, providers and settings are lost for good.",
+      "button": "Reset database",
+      "confirmTitle": "Reset the database?",
+      "confirmDescription": "This deletes all your data and restarts GoClaw from scratch. It can't be undone.",
+      "confirm": "Reset and restart",
+      "failed": "Couldn't reset the database. Try again."
+    }
+  },
+  "about": {
+    "title": "GoClaw Desktop",
+    "subtitle": "Version {{version}} · Lite edition",
+    "detailsTitle": "Details",
+    "version": "Version",
+    "edition": "Edition",
+    "editionValue": "Lite (SQLite)",
+    "runtime": "Runtime",
+    "runtimeValue": "Wails v2",
+    "dataDir": "Data folder",
+    "updatesTitle": "Updates",
+    "updatesHint": "Check whether a newer version is available.",
+    "check": "Check for updates",
+    "checking": "Checking…",
+    "upToDate": "You're on the latest version.",
+    "available": "Version {{version}} is available",
+    "updateNow": "Update now",
+    "downloading": "Downloading the update…",
+    "ready": "Update installed. Restart to apply it.",
+    "restart": "Restart now",
+    "checkFailed": "Couldn't check for updates.",
+    "updateFailed": "The update failed. Try again.",
+    "diagnosticsTitle": "Diagnostics",
+    "diagnosticsHint": "Copy the version and platform to share with support.",
+    "copy": "Copy details",
+    "copied": "Copied",
+    "limitsTitle": "Edition limits",
+    "limits": {
+      "agents": "Agents",
+      "agentsValue": "5 max",
+      "teams": "Teams",
+      "teamsValue": "1 max",
+      "teamMembers": "Team members",
+      "teamMembersValue": "5 max",
+      "database": "Database",
+      "databaseValue": "SQLite (local)",
+      "users": "Users",
+      "usersValue": "Single user"
+    },
+    "github": "GitHub",
+    "builtWith": "Built with Go, React and Wails"
+  }
+}

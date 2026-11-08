@@ -160,7 +160,17 @@
       "cancel": "取消",
       "save": "保存",
       "saving": "保存中..."
-    }
+    },
+    "errorTitle": "无法加载工具",
+    "errorDescription": "请确认网关正在运行，然后重试。",
+    "toggleFailed": "无法更改工具",
+    "saveFailed": "无法保存设置",
+    "clearSearch": "清除搜索",
+    "enableLabel": "启用 {{name}}",
+    "settingsLabel": "{{name}} 的设置",
+    "loading": "正在加载工具",
+    "summary": "{{tools}} · {{categories}}",
+    "notConfigured": "需要设置"
   },
   "custom": {
     "columns": {

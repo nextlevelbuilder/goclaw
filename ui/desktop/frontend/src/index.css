@@ -1,131 +1,222 @@
 @import "tailwindcss";
 
-@theme {
-  /* GoClaw Brand — OKLCH values from web dashboard */
+/*
+ * GoClaw Desktop design tokens.
+ *
+ * Colour values come from the design system `tokens.json`. Light values are the
+ * @theme defaults (emitted on :root); dark values override them under `.dark`
+ * (the class is toggled on <html>). Components must use these utilities
+ * (bg-surface-base, text-ink-muted, border-border-subtle, bg-accent-subtle, ...)
+ * and never hard-code a colour.
+ */
 
-  /* Dark mode defaults (primary build) */
-  --color-surface-primary: oklch(0.15 0.02 45);
-  --color-surface-secondary: oklch(0.20 0.02 45);
-  --color-surface-tertiary: oklch(0.25 0.02 45);
-  --color-text-primary: oklch(0.94 0.01 80);
-  --color-text-secondary: oklch(0.78 0.015 50);
-  --color-text-muted: oklch(0.65 0.015 50);
-  --color-accent: oklch(0.68 0.18 38);
-  --color-accent-hover: oklch(0.72 0.18 38);
-  --color-accent-foreground: oklch(0.15 0.02 45);
-  --color-error-foreground: oklch(0.15 0.02 45);
-  --color-border: oklch(0.30 0.02 45);
-  --color-user-bubble: oklch(0.50 0.17 38);
-  --color-agent-bubble: oklch(0.20 0.02 45);
-  --color-success: oklch(0.45 0.15 145);
-  --color-success-text: oklch(0.78 0.12 145);
-  --color-success-subtle: oklch(0.28 0.05 145);
-  --color-warning: oklch(0.65 0.15 75);
-  --color-warning-text: oklch(0.82 0.12 75);
-  --color-warning-subtle: oklch(0.28 0.05 75);
-  --color-error: oklch(0.65 0.23 25);
-  --color-error-text: oklch(0.80 0.12 27);
-  --color-error-subtle: oklch(0.28 0.06 27);
-  --color-info: oklch(0.62 0.14 250);
-  --color-info-text: oklch(0.80 0.12 250);
-  --color-info-subtle: oklch(0.28 0.05 250);
-  --color-idle: oklch(0.52 0.02 50);
-
-  /* Typography */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
-  --text-2xs: 0.6875rem;
-
-  /* Radii — matches web (0.75rem) */
-  --radius-card: 12px;
-  --radius-button: 8px;
-  --radius-input: 6px;
-  --radius-2xs: 2px;
+/* Bundled fonts so the app renders identically offline. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./assets/fonts/InterVariable.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/JetBrainsMono-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./assets/fonts/JetBrainsMono-Medium.woff2') format('woff2');
 }
 
-/* Light mode */
-:root:not(.dark) {
-  --color-surface-primary: oklch(0.97 0.005 80);
-  --color-surface-secondary: oklch(1 0 0);
-  --color-surface-tertiary: oklch(0.94 0.01 80);
-  --color-text-primary: oklch(0.17 0.02 55);
-  --color-text-secondary: oklch(0.35 0.02 50);
-  --color-text-muted: oklch(0.45 0.02 50);
-  --color-accent: oklch(0.56 0.19 38);
-  --color-accent-hover: oklch(0.52 0.19 38);
-  --color-accent-foreground: oklch(1 0 0);
-  --color-error-foreground: oklch(1 0 0);
-  --color-border: oklch(0.90 0.01 70);
-  --color-user-bubble: oklch(0.40 0.14 38);
-  --color-agent-bubble: oklch(0.94 0.01 80);
-  --color-success: oklch(0.55 0.2 145);
-  --color-success-text: oklch(0.42 0.14 145);
-  --color-success-subtle: oklch(0.94 0.04 145);
-  --color-warning: oklch(0.52 0.16 75);
-  --color-warning-text: oklch(0.45 0.14 75);
-  --color-warning-subtle: oklch(0.94 0.04 75);
-  --color-error: oklch(0.55 0.245 27.325);
-  --color-error-text: oklch(0.42 0.16 27);
-  --color-error-subtle: oklch(0.95 0.04 27);
-  --color-info: oklch(0.50 0.16 250);
-  --color-info-text: oklch(0.42 0.14 250);
-  --color-info-subtle: oklch(0.94 0.04 250);
-  --color-idle: oklch(0.52 0.02 50);
+@theme static {
+  /* ── Colour tokens (light) ─────────────────────────────────────────── */
+  --color-surface-window: oklch(0.94 0.008 80);
+  --color-surface-base: oklch(0.985 0.004 80);
+  --color-surface-raised: oklch(1 0 0);
+  --color-surface-hover: oklch(0.955 0.006 75);
+  --color-border-subtle: oklch(0.90 0.008 70);
+  --color-border-control: oklch(0.62 0.015 60);
+  --color-ink: oklch(0.20 0.02 50);
+  --color-ink-secondary: oklch(0.38 0.02 50);
+  --color-ink-muted: oklch(0.48 0.02 50);
+  --color-accent: oklch(0.54 0.19 38);
+  --color-accent-hover: oklch(0.49 0.19 38);
+  --color-on-accent: oklch(1 0 0);
+  --color-accent-subtle: oklch(0.955 0.025 45);
+  --color-accent-subtle-ink: oklch(0.38 0.12 38);
+  --color-bubble-user: oklch(0.94 0.015 60);
+  --color-focus-ring: oklch(0.50 0.17 250);
+  --color-success: oklch(0.42 0.12 150);
+  --color-success-subtle: oklch(0.94 0.04 150);
+  --color-warning: oklch(0.45 0.11 75);
+  --color-warning-subtle: oklch(0.95 0.05 80);
+  --color-danger: oklch(0.47 0.18 27);
+  --color-danger-subtle: oklch(0.95 0.03 25);
+  --color-info: oklch(0.45 0.14 250);
+  --color-info-subtle: oklch(0.94 0.03 250);
+
+
+  /* ── Typography ────────────────────────────────────────────────────── */
+  --font-sans: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+
+  --text-display: 28px;
+  --text-display--line-height: 36px;
+  --text-display--font-weight: 600;
+  --text-display--letter-spacing: -0.02em;
+  --text-title-lg: 20px;
+  --text-title-lg--line-height: 28px;
+  --text-title-lg--font-weight: 600;
+  --text-title-lg--letter-spacing: -0.01em;
+  --text-title: 16px;
+  --text-title--line-height: 24px;
+  --text-title--font-weight: 600;
+  --text-body: 14px;
+  --text-body--line-height: 22px;
+  --text-body--font-weight: 400;
+  --text-ui: 13px;
+  --text-ui--line-height: 20px;
+  --text-ui--font-weight: 500;
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+  --text-caption--font-weight: 400;
+  /* Legacy size used by older screens. */
+  --text-2xs: 0.6875rem;
+
+  /* ── Radius ────────────────────────────────────────────────────────── */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+  /* Legacy radius names. */
+  --radius-card: var(--radius-lg);
+  --radius-button: var(--radius-md);
+  --radius-input: var(--radius-sm);
+  --radius-2xs: 2px;
+
+  /* ── Layout sizes as utilities: h-titlebar, w-sidebar, w-rail, h-control,
+   *    h-row, max-w-reading ──────────────────────────────────────────── */
+  --spacing-titlebar: var(--titlebar-h);
+  --spacing-sidebar: var(--sidebar-w);
+  --spacing-rail: var(--rail-w);
+  --spacing-control: var(--control-h);
+  --spacing-row: var(--row-h);
+  --container-reading: var(--reading-w);
+}
+
+:root {
+  color-scheme: light;
+
+  /* Spacing (4px grid). Tailwind's p-1..p-12 already match these steps. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Window geometry. */
+  --titlebar-h: 36px;
+  --sidebar-w: 264px;
+  --rail-w: 56px;
+  --control-h: 32px;
+  --row-h: 36px;
+  --reading-w: 720px;
+
+  /* Elevation (theme dependent, see .dark). */
+  --shadow-panel: 0 2px 16px rgba(60, 40, 20, 0.08);
+  --shadow-popover: 0 8px 28px rgba(60, 40, 20, 0.16);
 }
 
 .dark {
   color-scheme: dark;
-  --color-surface-primary: oklch(0.15 0.02 45);
-  --color-surface-secondary: oklch(0.20 0.02 45);
-  --color-surface-tertiary: oklch(0.25 0.02 45);
-  --color-text-primary: oklch(0.94 0.01 80);
-  --color-text-secondary: oklch(0.78 0.015 50);
-  --color-text-muted: oklch(0.65 0.015 50);
+
+  --color-surface-window: oklch(0.14 0.012 45);
+  --color-surface-base: oklch(0.18 0.014 45);
+  --color-surface-raised: oklch(0.22 0.015 45);
+  --color-surface-hover: oklch(0.25 0.016 45);
+  --color-border-subtle: oklch(0.27 0.014 45);
+  --color-border-control: oklch(0.54 0.015 50);
+  --color-ink: oklch(0.95 0.01 80);
+  --color-ink-secondary: oklch(0.80 0.012 60);
+  --color-ink-muted: oklch(0.68 0.012 55);
   --color-accent: oklch(0.68 0.18 38);
-  --color-accent-hover: oklch(0.72 0.18 38);
-  --color-accent-foreground: oklch(0.15 0.02 45);
-  --color-error-foreground: oklch(0.15 0.02 45);
-  --color-border: oklch(0.30 0.02 45);
-  --color-user-bubble: oklch(0.50 0.17 38);
-  --color-agent-bubble: oklch(0.20 0.02 45);
-  --color-success: oklch(0.45 0.15 145);
-  --color-success-text: oklch(0.78 0.12 145);
-  --color-success-subtle: oklch(0.28 0.05 145);
-  --color-warning: oklch(0.65 0.15 75);
-  --color-warning-text: oklch(0.82 0.12 75);
-  --color-warning-subtle: oklch(0.28 0.05 75);
-  --color-error: oklch(0.65 0.23 25);
-  --color-error-text: oklch(0.80 0.12 27);
-  --color-error-subtle: oklch(0.28 0.06 27);
-  --color-info: oklch(0.62 0.14 250);
-  --color-info-text: oklch(0.80 0.12 250);
-  --color-info-subtle: oklch(0.28 0.05 250);
-  --color-idle: oklch(0.52 0.02 50);
+  --color-accent-hover: oklch(0.73 0.17 40);
+  --color-on-accent: oklch(0.16 0.02 45);
+  --color-accent-subtle: oklch(0.25 0.035 40);
+  --color-accent-subtle-ink: oklch(0.84 0.11 45);
+  --color-bubble-user: oklch(0.26 0.03 45);
+  --color-focus-ring: oklch(0.80 0.12 240);
+  --color-success: oklch(0.78 0.14 150);
+  --color-success-subtle: oklch(0.27 0.05 150);
+  --color-warning: oklch(0.80 0.14 80);
+  --color-warning-subtle: oklch(0.28 0.05 80);
+  --color-danger: oklch(0.72 0.17 25);
+  --color-danger-subtle: oklch(0.28 0.06 25);
+  --color-info: oklch(0.76 0.11 250);
+  --color-info-subtle: oklch(0.27 0.05 250);
+
+  --shadow-panel: 0 2px 20px rgba(0, 0, 0, 0.35);
+  --shadow-popover: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
-/* Floating panel design system */
-.canvas-dots {
-  background-image: radial-gradient(circle, oklch(0.22 0.01 45) 0.5px, transparent 0.5px);
-  background-size: 36px 36px;
+/* Elevation utilities read the theme-dependent variables above. */
+@utility shadow-panel {
+  box-shadow: var(--shadow-panel);
 }
-:root:not(.dark) .canvas-dots {
-  background-image: radial-gradient(circle, oklch(0.90 0.005 70) 0.5px, transparent 0.5px);
+@utility shadow-popover {
+  box-shadow: var(--shadow-popover);
 }
+
+/* Text styles that need more than size/leading/weight. */
+@utility text-overline {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+@utility text-code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 400;
+}
+
+/* Floating panel used by older screens; same recipe as the shell panels. */
 .floating-panel {
-  background: var(--color-surface-secondary);
-  border-radius: 16px;
-  box-shadow: 0 2px 20px oklch(0 0 0 / 0.2);
-  border: 1px solid var(--color-border);
+  background: var(--color-surface-base);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-panel);
+  border: 1px solid var(--color-border-subtle);
+}
+/* Legacy dotted canvas, now a flat surface. */
+.canvas-dots {
+  background: var(--color-surface-base);
 }
 
 /* Base styles */
 body {
   margin: 0;
-  background: var(--color-surface-primary);
-  color: var(--color-text-primary);
+  background: var(--color-surface-window);
+  color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
+}
+
+/* Keyboard focus ring on every interactive element. Never remove it. */
+:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
 }
 
 /* All interactive elements get pointer cursor */
@@ -142,31 +233,31 @@ button:disabled {
   scrollbar-color: transparent transparent;
 }
 *:hover {
-  scrollbar-color: var(--color-surface-tertiary) transparent;
+  scrollbar-color: var(--color-border-subtle) transparent;
 }
 ::-webkit-scrollbar {
-  width: 3px;
-  height: 3px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: transparent;
-  border-radius: 1.5px;
+  border-radius: 3px;
 }
 *:hover > ::-webkit-scrollbar-thumb,
 *:hover::-webkit-scrollbar-thumb {
-  background: var(--color-surface-tertiary);
+  background: var(--color-border-subtle);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-muted);
+  background: var(--color-ink-muted);
 }
 
 /* Selection */
 ::selection {
-  background: var(--color-accent);
-  color: white;
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-subtle-ink);
 }
 
 /* Wails drag region for frameless window */
@@ -181,6 +272,32 @@ button:disabled {
 @keyframes toast-slide-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Popover / dialog entrance */
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-pop-in {
+  animation: pop-in 160ms ease-out;
+}
+
+/* Skeleton shimmer — slow sweep, not a spinner */
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.skeleton-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--color-border-subtle), transparent);
+  animation: shimmer 1.6s infinite;
 }
 
 /* Wobble animation for active tool calls — gentler than spin */
@@ -222,5 +339,8 @@ button:disabled {
   }
   .animate-wobble {
     animation-duration: 2s !important;
+  }
+  .skeleton-shimmer::after {
+    animation: none !important;
   }
 }

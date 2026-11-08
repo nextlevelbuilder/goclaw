@@ -1,16 +1,17 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GoClaw</title>
   <script>
-    // Apply persisted theme before first paint to prevent flash
+    // Paint the saved theme (or the OS setting for "system") before first paint
+    // so neither theme flashes the other.
     try {
       const stored = JSON.parse(localStorage.getItem('goclaw-ui') || '{}')
-      if (stored.state?.theme === 'light') {
-        document.documentElement.classList.remove('dark')
-      }
+      const pref = stored.state && stored.state.theme
+      const dark = pref === 'dark' || (pref !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+      document.documentElement.classList.toggle('dark', dark)
     } catch {}
   </script>
 </head>

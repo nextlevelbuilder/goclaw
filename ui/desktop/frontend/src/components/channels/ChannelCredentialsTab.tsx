@@ -38,12 +38,12 @@ export function ChannelCredentialsTab({ instance, onUpdate }: ChannelCredentials
   }
 
   if (fields.length === 0) {
-    return <p className="text-sm text-text-muted py-4">No credentials required for this channel type.</p>
+    return <p className="text-ui text-ink-muted py-4">No credentials required for this channel type.</p>
   }
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-text-muted">{t('detail.credentials.hint')}</p>
+      <p className="text-caption text-ink-muted">{t('detail.credentials.hint')}</p>
 
       <ChannelFields
         fields={fields}
@@ -56,7 +56,7 @@ export function ChannelCredentialsTab({ instance, onUpdate }: ChannelCredentials
       <button
         onClick={handleSave}
         disabled={saving}
-        className="px-4 py-1.5 text-xs bg-accent text-accent-foreground rounded-lg font-medium hover:bg-accent-hover transition-colors disabled:opacity-50 cursor-pointer"
+        className="px-4 py-1.5 text-caption bg-accent text-on-accent rounded-lg font-medium hover:bg-accent-hover transition-colors disabled:opacity-50 cursor-pointer"
       >
         {saving ? t('detail.credentials.saving') : t('detail.credentials.updateCredentials')}
       </button>

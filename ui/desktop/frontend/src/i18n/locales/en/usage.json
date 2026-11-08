@@ -1,0 +1,40 @@
+{
+  "title": "Usage",
+  "description": "Requests, tokens and cost across all providers",
+  "range": {
+    "label": "Time range",
+    "24h": "24h",
+    "7d": "7 days",
+    "30d": "30 days"
+  },
+  "units": {
+    "seconds": "s",
+    "milliseconds": "ms"
+  },
+  "kpi": {
+    "requests": "Requests",
+    "tokens": "Tokens",
+    "cost": "Estimated cost",
+    "users": "Active users"
+  },
+  "vsPrevious": "{{change}} vs previous period",
+  "chart": {
+    "title": "Tokens per day",
+    "input": "Input",
+    "output": "Output",
+    "barLabel": "{{date}}: {{input}} input, {{output}} output"
+  },
+  "detail": {
+    "llmCalls": "LLM calls",
+    "toolCalls": "Tool calls",
+    "errorRate": "Error rate",
+    "avgDuration": "Average duration"
+  },
+  "emptyTitle": "No usage in this range",
+  "emptyDescription": "Usage appears here once agents start handling requests.",
+  "startChat": "Start a chat",
+  "states": {
+    "errorTitle": "Couldn't load usage",
+    "errorBody": "The gateway did not return usage data. Check the connection and try again."
+  }
+}

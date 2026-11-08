@@ -20,8 +20,8 @@ export function ThinkingSection({ reasoningMode, thinkingLevel, onReasoningModeC
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold text-text-primary">{t('configSections.thinking.title')}</h3>
-      <p className="text-2xs text-text-muted">{t('configSections.thinking.description')}</p>
+      <h3 className="text-ui font-semibold text-ink">{t('configSections.thinking.title')}</h3>
+      <p className="text-caption text-ink-muted">{t('configSections.thinking.description')}</p>
 
       {/* Inherit / Custom toggle */}
       <div className="flex gap-2">
@@ -30,10 +30,10 @@ export function ThinkingSection({ reasoningMode, thinkingLevel, onReasoningModeC
             key={m}
             onClick={() => onReasoningModeChange(m)}
             className={[
-              'px-3 py-1.5 text-xs rounded-lg border transition-colors',
+              'px-3 py-1.5 text-caption rounded-lg border transition-colors',
               reasoningMode === m
-                ? 'bg-accent text-accent-foreground border-accent'
-                : 'border-border text-text-secondary hover:bg-surface-tertiary',
+                ? 'bg-accent text-on-accent border-accent'
+                : 'border-border-subtle text-ink-secondary hover:bg-surface-hover',
             ].join(' ')}
           >
             {m === 'inherit' ? 'Inherit' : 'Custom'}
@@ -43,29 +43,29 @@ export function ThinkingSection({ reasoningMode, thinkingLevel, onReasoningModeC
 
       {reasoningMode === 'custom' ? (
         <div className="space-y-2">
-          <label className="text-xs font-medium text-text-secondary">{t('configSections.thinking.thinkingLevel')}</label>
+          <label className="text-caption font-medium text-ink-secondary">{t('configSections.thinking.thinkingLevel')}</label>
           <div className="flex gap-1.5">
             {LEVELS.map((lv) => (
               <button
                 key={lv.key}
                 onClick={() => onThinkingLevelChange(lv.key)}
                 className={[
-                  'flex-1 px-2 py-1.5 text-xs rounded-lg border transition-colors text-center',
+                  'flex-1 px-2 py-1.5 text-caption rounded-lg border transition-colors text-center',
                   thinkingLevel === lv.key
-                    ? 'bg-accent text-accent-foreground border-accent'
-                    : 'border-border text-text-secondary hover:bg-surface-tertiary',
+                    ? 'bg-accent text-on-accent border-accent'
+                    : 'border-border-subtle text-ink-secondary hover:bg-surface-hover',
                 ].join(' ')}
               >
                 {lv.label}
               </button>
             ))}
           </div>
-          <p className="text-2xs text-text-muted">
+          <p className="text-caption text-ink-muted">
             {LEVELS.find((l) => l.key === thinkingLevel)?.desc}
           </p>
         </div>
       ) : (
-        <p className="text-2xs text-text-muted italic">Using provider defaults</p>
+        <p className="text-caption text-ink-muted italic">Using provider defaults</p>
       )}
     </div>
   )

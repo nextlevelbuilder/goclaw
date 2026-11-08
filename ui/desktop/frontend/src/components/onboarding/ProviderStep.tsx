@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { getApiClient } from '../../lib/api'
 import { PROVIDER_TYPES } from '../../constants/providers'
 import { slugify } from '../../lib/slug'
-import { Combobox } from '../common/Combobox'
+import { Button, Field, Input, Select } from '../ui'
+import { StepError, StepShell } from './onboarding-shell'
 import type { ProviderData } from '../../types/provider'
 
 interface ProviderStepProps {
@@ -11,8 +12,10 @@ interface ProviderStepProps {
   onComplete: (provider: ProviderData) => void
 }
 
+const TYPE_OPTIONS = PROVIDER_TYPES.map((p) => ({ value: p.value, label: p.label }))
+
 export function ProviderStep({ existingProvider, onComplete }: ProviderStepProps) {
-  const { t } = useTranslation(['desktop', 'common'])
+  const { t } = useTranslation('onboarding')
   const isEditing = !!existingProvider
 
   const [providerType, setProviderType] = useState(existingProvider?.provider_type ?? 'openrouter')
@@ -23,22 +26,24 @@ export function ProviderStep({ existingProvider, onComplete }: ProviderStepProps
   )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [keyError, setKeyError] = useState('')
 
-  const preset = PROVIDER_TYPES.find((t) => t.value === providerType)
+  const preset = PROVIDER_TYPES.find((p) => p.value === providerType)
   const needsKey = preset?.needsKey ?? true
 
   const handleTypeChange = (value: string) => {
     setProviderType(value)
-    const p = PROVIDER_TYPES.find((t) => t.value === value)
+    const p = PROVIDER_TYPES.find((x) => x.value === value)
     setName(slugify(value))
     setApiBase(p?.apiBase || '')
     setApiKey('')
     setError('')
+    setKeyError('')
   }
 
   const handleSubmit = async () => {
     if (!isEditing && needsKey && !apiKey.trim()) {
-      setError(t('common:apiKeyRequired'))
+      setKeyError(t('provider.apiKeyRequired'))
       return
     }
     setLoading(true)
@@ -75,88 +80,49 @@ export function ProviderStep({ existingProvider, onComplete }: ProviderStepProps
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('common:failedToCreateProvider'))
+      setError(err instanceof Error && err.message ? err.message : t('provider.saveFailed'))
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="bg-surface-secondary border border-border rounded-xl p-6 space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold text-text-primary">{t('desktop:onboarding.providerStep')}</h2>
-        <p className="text-sm text-text-muted">{t('desktop:onboarding.providerStepDesc')}</p>
-      </div>
-
+    <StepShell title={t('provider.title')} description={t('provider.description')}>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {/* Provider type select */}
-        <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-text-secondary">{t('common:providerType')}</label>
-          <Combobox
-            value={providerType}
-            onChange={handleTypeChange}
-            options={PROVIDER_TYPES.map((t) => ({ value: t.value, label: t.label }))}
-            placeholder={t('common:searchProviders')}
-            allowCustom={false}
-          />
-        </div>
-
-        {/* Name (slug) */}
-        <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-text-secondary">{t('common:name')}</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(slugify(e.target.value))}
-            className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2.5 text-base md:text-sm text-text-primary font-mono focus:outline-none focus:ring-1 focus:ring-accent"
-          />
-        </div>
+        <Field label={t('provider.type')}>
+          <Select value={providerType} options={TYPE_OPTIONS} onChange={(e) => handleTypeChange(e.target.value)} />
+        </Field>
+        <Field label={t('provider.name')}>
+          <Input value={name} onChange={(e) => setName(slugify(e.target.value))} className="font-mono" />
+        </Field>
       </div>
 
-      {/* API Key */}
-      {needsKey && (
-        <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-text-secondary">{t('common:apiKey')}</label>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => { setApiKey(e.target.value); setError('') }}
-            placeholder="sk-..."
-            className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2.5 text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
-          />
-        </div>
+      {needsKey ? (
+        <>
+          <Field label={t('provider.apiKey')} helper={t('provider.apiKeyHelper')} error={keyError} required>
+            <Input
+              type="password"
+              value={apiKey}
+              autoComplete="off"
+              placeholder="sk-..."
+              onChange={(e) => { setApiKey(e.target.value); setError(''); setKeyError('') }}
+            />
+          </Field>
+          <Field label={t('provider.apiBase')}>
+            <Input value={apiBase} placeholder="https://api.example.com/v1" onChange={(e) => setApiBase(e.target.value)} />
+          </Field>
+        </>
+      ) : (
+        <p className="text-ui text-ink-secondary">{t('provider.noKey', { provider: preset?.label })}</p>
       )}
 
-      {/* API Base */}
-      {needsKey && (
-        <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-text-secondary">{t('common:apiBaseUrl')}</label>
-          <input
-            type="text"
-            value={apiBase}
-            onChange={(e) => setApiBase(e.target.value)}
-            placeholder="https://api.example.com/v1"
-            className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2.5 text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
-          />
-        </div>
-      )}
-
-      {!needsKey && (
-        <p className="text-sm text-text-muted">{t('common:noApiKeyRequired', { provider: preset?.label })}</p>
-      )}
-
-      {error && <p className="text-sm text-error">{error}</p>}
+      {error && <StepError>{error}</StepError>}
 
       <div className="flex justify-end">
-        <button
-          onClick={handleSubmit}
-          disabled={loading || (!isEditing && needsKey && !apiKey.trim())}
-          className="px-6 py-2.5 bg-accent text-accent-foreground rounded-lg font-medium hover:bg-accent-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
-        >
-          {loading && <div className="w-3.5 h-3.5 border-2 border-accent-foreground border-t-transparent rounded-full animate-spin" />}
-          {isEditing ? t('common:update') : t('desktop:onboarding.createProvider')}
-        </button>
+        <Button variant="primary" onClick={() => { void handleSubmit() }} loading={loading}>
+          {isEditing ? t('provider.update') : t('provider.save')}
+        </Button>
       </div>
-    </div>
+    </StepShell>
   )
 }

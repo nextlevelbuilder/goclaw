@@ -1,0 +1,93 @@
+{
+  "language": "Language",
+  "steps": {
+    "label": "Setup progress",
+    "provider": "Provider",
+    "model": "Model",
+    "agent": "First agent"
+  },
+  "back": "Back",
+  "continue": "Continue",
+  "loadErrorTitle": "Couldn't check your setup",
+  "loadErrorBody": "Check that the gateway is running, then try again.",
+  "provider": {
+    "title": "Connect a provider",
+    "description": "Agents need a model to think with. You can add more later in Providers.",
+    "type": "Provider",
+    "name": "Name",
+    "apiKey": "API key",
+    "apiKeyHelper": "Stored encrypted on this device.",
+    "apiKeyRequired": "Enter an API key to continue.",
+    "apiBase": "API base URL",
+    "noKey": "{{provider}} needs no API key.",
+    "save": "Save and continue",
+    "update": "Update and continue",
+    "saveFailed": "Couldn't save the provider. Check the details and try again."
+  },
+  "model": {
+    "title": "Choose and verify a model",
+    "description": "Pick the model your agent will use, then test the connection.",
+    "provider": "Provider",
+    "label": "Model",
+    "placeholder": "Enter or pick a model",
+    "loading": "Loading models…",
+    "noModels": "The provider returned no models. Type a model name instead.",
+    "verify": "Verify model",
+    "verifying": "Verifying… ({{seconds}}s)",
+    "verified": "Verified",
+    "verifyFailed": "Verification failed. Check the model name and your API key.",
+    "verifiedTitle": "Model verified",
+    "verifiedBody": "{{model}} works with {{provider}}."
+  },
+  "agent": {
+    "title": "Create your first agent",
+    "description": "Give your agent a name and a personality.",
+    "provider": "Provider",
+    "model": "Model",
+    "name": "Display name",
+    "emoji": "Emoji",
+    "key": "Agent key",
+    "personality": "Personality",
+    "descriptionLabel": "Description",
+    "descPlaceholder": "Describe your agent's personality…",
+    "create": "Create agent",
+    "createFailed": "Couldn't create the agent. Try again."
+  },
+  "summoning": {
+    "title": "Creating your agent",
+    "weaving": "Writing the personality for {{name}}…",
+    "completedTitle": "Agent ready",
+    "ready": "{{name}} is ready.",
+    "failedTitle": "Couldn't create the agent",
+    "failed": "The agent couldn't be created.",
+    "waiting": "Working… {{time}}",
+    "takingTooLong": "Taking too long?",
+    "cancel": "Cancel",
+    "cancelling": "Cancelling…",
+    "retry": "Try again",
+    "retrying": "Retrying…",
+    "continue": "Continue",
+    "done": "Done",
+    "fileSOUL": "Core personality",
+    "fileIDENTITY": "Identity and knowledge",
+    "filesLabel": "Files being written"
+  },
+  "start": {
+    "title": "Starting GoClaw",
+    "subtitle": "This usually takes a few seconds.",
+    "steps": {
+      "gateway": "Starting the gateway",
+      "connect": "Connecting to the gateway",
+      "setup": "Checking your setup"
+    },
+    "failed": {
+      "title": "GoClaw couldn't start",
+      "timeoutBody": "The gateway did not answer within {{seconds}} seconds, so nothing has changed.",
+      "connectBody": "The gateway started, but GoClaw couldn't connect to it.",
+      "todo": "Close any other copy of GoClaw, then try again. If it keeps failing, restart your computer.",
+      "detail": "Details",
+      "dataDir": "Your data is in",
+      "tryAgain": "Try again"
+    }
+  }
+}

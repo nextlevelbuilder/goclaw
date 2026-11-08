@@ -28,5 +28,92 @@
   },
   "error": {
     "notConnected": "Chưa kết nối. Vui lòng chờ kết nối được thiết lập."
+  },
+  "home": {
+    "greeting": "Hôm nay các agent của bạn nên làm gì?",
+    "placeholder": "Nhắn cho một agent",
+    "recent": "Cuộc trò chuyện gần đây",
+    "agents": "Agent",
+    "messages_other": "{{count}} tin nhắn"
+  },
+  "header": {
+    "running": "Đang chạy",
+    "selectAgent": "Chọn một agent để bắt đầu trò chuyện",
+    "agentModel": "{{agent}} · {{model}}",
+    "newChat": "Cuộc trò chuyện mới"
+  },
+  "composer": {
+    "placeholder": "Nhắn cho {{agent}}",
+    "placeholderNoAgent": "Chọn một agent để bắt đầu trò chuyện",
+    "attach": "Đính kèm tệp",
+    "send": "Gửi tin nhắn",
+    "stop": "Dừng tạo phản hồi",
+    "dropFiles": "Thả tệp để đính kèm",
+    "removeFile": "Xóa {{name}}"
+  },
+  "model": {
+    "search": "Tìm mô hình",
+    "noMatch": "Không có mô hình phù hợp",
+    "useCustom": "Dùng \"{{value}}\"",
+    "agentDefault": "Mặc định của agent",
+    "retry": "Tải lại mô hình"
+  },
+  "thread": {
+    "thinking": "Đang suy nghĩ…",
+    "thought": "Đã suy nghĩ",
+    "toolRunning": "Đang chạy",
+    "toolDone": "Xong",
+    "toolFailed": "Thất bại",
+    "toolDenied": "Bị từ chối",
+    "skill": "skill: {{name}}",
+    "arguments": "Tham số",
+    "result": "Kết quả",
+    "tokens": "{{count}} token",
+    "expand": "Xem chi tiết",
+    "collapse": "Ẩn chi tiết"
+  },
+  "activity": {
+    "thinking": "Đang suy nghĩ…",
+    "runningTool": "Đang chạy {{tool}}…",
+    "executingTool": "Đang chạy một công cụ…",
+    "compacting": "Đang nén cuộc trò chuyện…",
+    "streaming": "Đang viết…",
+    "retrying": "Đang thử lại…",
+    "retryingAttempt": "Đang thử lại, lần {{n}}…",
+    "processing": "Đang điều phối nhóm…",
+    "step": "bước {{n}}"
+  },
+  "notice": {
+    "toolDenied": {
+      "title": "Bị chặn bởi cài đặt công cụ của bạn.",
+      "body": "Agent cần bạn cho phép để chạy {{tool}}.",
+      "action": "Mở Công cụ"
+    },
+    "provider": {
+      "title": "Nhà cung cấp đang giới hạn tốc độ hoặc tạm nghỉ.",
+      "body": "Hãy đợi một lúc rồi thử lại, hoặc chọn mô hình khác cho cuộc trò chuyện này.",
+      "action": "Mở Nhà cung cấp"
+    },
+    "interrupted": {
+      "title": "Phản hồi bị gián đoạn.",
+      "body": "Lượt chạy dừng trước khi trả lời xong.",
+      "continue": "Tiếp tục",
+      "continuePrompt": "Hãy tiếp tục câu trả lời trước của bạn."
+    },
+    "failed": {
+      "title": "Lượt chạy thất bại.",
+      "body": "{{error}}"
+    },
+    "retrying": {
+      "title": "Đang thử lại yêu cầu.",
+      "body": "Lần thử {{n}}. Bạn có thể dừng nếu mất quá lâu."
+    },
+    "retry": "Thử lại"
+  },
+  "state": {
+    "loadingAgents": "Đang tải agent…",
+    "noAgents": "Chưa có agent nào",
+    "noAgentsHint": "Hãy tạo một agent trước, rồi quay lại để trò chuyện.",
+    "openAgents": "Mở Agent"
   }
 }

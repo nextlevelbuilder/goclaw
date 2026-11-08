@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getWsClient } from '../lib/ws'
 import { teamService } from '../services/team-service'
-import { toast } from '../stores/toast-store'
 import { useTaskDebouncer } from './team-task-debouncer'
 import type { TeamData, TeamTaskData, TeamMemberData } from '../types/team'
 
@@ -10,6 +9,7 @@ export function useTeamTasks() {
   const [tasks, setTasks] = useState<TeamTaskData[]>([])
   const [members, setMembers] = useState<TeamMemberData[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const activeTeamRef = useRef<string | null>(null)
 
   const fetchOneTask = useCallback(async (taskId: string) => {
@@ -51,64 +51,42 @@ export function useTeamTasks() {
       setTasks(res.tasks ?? [])
       if (res.members) setMembers(res.members)
       activeTeamRef.current = teamId
+      setError(false)
     } catch (err) {
       console.error('Failed to fetch tasks:', err)
+      setError(true)
     } finally {
       setLoading(false)
     }
   }, [])
 
   const createTask = useCallback(async (teamId: string, params: { subject: string; description?: string; priority?: number; assignee?: string }) => {
-    try {
-      const task = await teamService.createTask(teamId, params)
-      setTasks((prev) => [task, ...prev])
-      toast.success('Task created', params.subject)
-      return task
-    } catch (err) {
-      toast.error('Failed to create task', (err as Error).message)
-      throw err
-    }
+    const task = await teamService.createTask(teamId, params)
+    setTasks((prev) => [task, ...prev])
+    return task
   }, [])
 
   const assignTask = useCallback(async (taskId: string, agentKey: string) => {
     const teamId = activeTeamRef.current
     if (!teamId) return
-    try {
-      const task = await teamService.assignTask(teamId, taskId, agentKey)
-      setTasks((prev) => prev.map((t) => t.id === taskId ? task : t))
-      toast.success('Task assigned')
-      return task
-    } catch (err) {
-      toast.error('Failed to assign task', (err as Error).message)
-      throw err
-    }
+    const task = await teamService.assignTask(teamId, taskId, agentKey)
+    setTasks((prev) => prev.map((t) => t.id === taskId ? task : t))
+    return task
   }, [])
 
   const deleteTask = useCallback(async (taskId: string) => {
     const teamId = activeTeamRef.current
     if (!teamId) return
-    try {
-      await teamService.deleteTask(teamId, taskId)
-      setTasks((prev) => prev.filter((t) => t.id !== taskId))
-      toast.success('Task deleted')
-    } catch (err) {
-      toast.error('Failed to delete task', (err as Error).message)
-      throw err
-    }
+    await teamService.deleteTask(teamId, taskId)
+    setTasks((prev) => prev.filter((t) => t.id !== taskId))
   }, [])
 
   const deleteBulk = useCallback(async (taskIds: string[]) => {
     const teamId = activeTeamRef.current
     if (!teamId) return
-    try {
-      await teamService.deleteBulkTasks(teamId, taskIds)
-      const idSet = new Set(taskIds)
-      setTasks((prev) => prev.filter((t) => !idSet.has(t.id)))
-      toast.success(`${taskIds.length} tasks deleted`)
-    } catch (err) {
-      toast.error('Failed to delete tasks', (err as Error).message)
-      throw err
-    }
+    await teamService.deleteBulkTasks(teamId, taskIds)
+    const idSet = new Set(taskIds)
+    setTasks((prev) => prev.filter((t) => !idSet.has(t.id)))
   }, [])
 
   // Real-time WS event subscriptions — use getWsClient() directly (.on not .call)
@@ -140,5 +118,5 @@ export function useTeamTasks() {
     }
   }, [])
 
-  return { teams, tasks, members, loading, fetchTeams, fetchTasks, fetchTaskDetail, createTask, assignTask, deleteTask, deleteBulk }
+  return { teams, tasks, members, loading, error, fetchTeams, fetchTasks, fetchTaskDetail, createTask, assignTask, deleteTask, deleteBulk }
 }

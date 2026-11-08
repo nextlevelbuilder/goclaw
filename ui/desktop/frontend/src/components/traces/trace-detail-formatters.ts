@@ -25,23 +25,36 @@ export function formatTokens(count: number | null | undefined): string {
   return count.toString()
 }
 
-export function statusClass(status: string): string {
+export type TraceTone = 'success' | 'warning' | 'danger' | 'info' | 'idle'
+
+/** Maps a gateway trace or span status to a status chip tone. */
+export function statusTone(status: string): TraceTone {
   const s = status.toLowerCase()
-  if (s === 'completed' || s === 'ok' || s === 'success') {
-    return 'bg-emerald-500/15 text-emerald-700 border-emerald-500/25 dark:text-emerald-400'
-  }
-  if (s === 'error' || s === 'failed') {
-    return 'bg-red-500/15 text-red-700 border-red-500/25 dark:text-red-400'
-  }
-  return 'bg-blue-500/15 text-blue-700 border-blue-500/25 dark:text-blue-400'
+  if (s === 'completed' || s === 'ok' || s === 'success') return 'success'
+  if (s === 'error' || s === 'failed') return 'danger'
+  if (s === 'running') return 'info'
+  return 'idle'
 }
 
-export function spanTypeIcon(spanType: string): string {
-  switch (spanType) {
-    case 'llm_call': return '🤖'
-    case 'tool_call': return '🔧'
-    case 'agent': return '👤'
-    case 'embedding': return '📊'
-    default: return '📌'
-  }
+/** Known statuses have an i18n label (`status.<key>`); anything else shows the raw value. */
+export function statusLabelKey(status: string): string | null {
+  const s = status.toLowerCase()
+  if (s === 'completed' || s === 'ok' || s === 'success') return 'status.completed'
+  if (s === 'error' || s === 'failed') return 'status.failed'
+  if (s === 'running') return 'status.running'
+  return null
+}
+
+/** "2 hours ago" in the UI language; falls back to the date for old entries. */
+export function formatRelative(dateStr: string, locale: string, now: number = Date.now()): string {
+  const then = new Date(dateStr).getTime()
+  if (Number.isNaN(then)) return '—'
+  const diffSec = Math.round((then - now) / 1000)
+  const abs = Math.abs(diffSec)
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
+  if (abs < 60) return rtf.format(Math.round(diffSec / 1) , 'second')
+  if (abs < 3600) return rtf.format(Math.round(diffSec / 60), 'minute')
+  if (abs < 86400) return rtf.format(Math.round(diffSec / 3600), 'hour')
+  if (abs < 86400 * 30) return rtf.format(Math.round(diffSec / 86400), 'day')
+  return new Date(then).toLocaleDateString(locale)
 }

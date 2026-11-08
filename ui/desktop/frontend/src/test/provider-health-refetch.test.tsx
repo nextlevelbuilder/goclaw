@@ -10,7 +10,7 @@ vi.mock('../lib/api', async (importOriginal) => ({
 
 import i18n from '../i18n'
 import { cooldownRecheckDelay, useProviderHealth } from '../hooks/use-provider-health'
-import { ProviderRow } from '../components/providers/ProviderRow'
+import { ProviderNameCell } from '../components/providers/ProviderNameCell'
 import { CooldownBanner } from '../components/providers/provider-usage-widgets'
 import type { ProviderData } from '../types/provider'
 
@@ -193,23 +193,29 @@ describe('provider usage plural strings', () => {
   })
 })
 
-describe('ProviderRow', () => {
+describe('ProviderNameCell', () => {
   const provider: ProviderData = { id: 'p1', name: 'dashscope', display_name: 'DashScope', provider_type: 'dashscope', enabled: true }
 
-  it('opens the detail from a dedicated name button, not an interactive row', async () => {
+  it('opens the detail from a dedicated name button and shows the type label', async () => {
     await i18n.changeLanguage('en')
     const onOpen = vi.fn()
-    const onEdit = vi.fn()
-    const { container } = render(<ProviderRow provider={provider} onOpen={onOpen} onEdit={onEdit} onDelete={() => {}} />)
+    const onRowClick = vi.fn()
+    const { container } = render(
+      <div onClick={onRowClick}>
+        <ProviderNameCell provider={provider} onOpen={onOpen} />
+      </div>,
+    )
 
+    // Only the name button is interactive inside the cell.
+    expect(container.querySelectorAll('button')).toHaveLength(1)
     expect(container.querySelector('[role="button"]')).toBeNull()
     expect(container.querySelector('[tabindex]')).toBeNull()
+    expect(screen.getByText('DashScope (Qwen)')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Open details for DashScope' }))
     expect(onOpen).toHaveBeenCalledTimes(1)
-
-    fireEvent.click(screen.getByTitle('Edit'))
-    expect(onEdit).toHaveBeenCalledTimes(1)
-    expect(onOpen).toHaveBeenCalledTimes(1)
+    expect(onOpen).toHaveBeenCalledWith(provider)
+    // The click must not bubble to the row, which would open the detail twice.
+    expect(onRowClick).not.toHaveBeenCalled()
   })
 })

@@ -224,6 +224,16 @@
       "cancel": "Hủy",
       "save": "Lưu",
       "saving": "Đang lưu..."
-    }
+    },
+    "errorTitle": "Không tải được công cụ",
+    "errorDescription": "Hãy kiểm tra gateway đang chạy rồi thử lại.",
+    "toggleFailed": "Không thay đổi được công cụ",
+    "saveFailed": "Không lưu được cài đặt",
+    "clearSearch": "Xóa tìm kiếm",
+    "enableLabel": "Bật {{name}}",
+    "settingsLabel": "Cài đặt cho {{name}}",
+    "loading": "Đang tải công cụ",
+    "summary": "{{tools}} · {{categories}}",
+    "notConfigured": "Cần thiết lập"
   }
 }

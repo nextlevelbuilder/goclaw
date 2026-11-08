@@ -28,5 +28,92 @@
   },
   "error": {
     "notConnected": "未连接。请等待连接建立。"
+  },
+  "home": {
+    "greeting": "今天让你的智能体做什么？",
+    "placeholder": "给智能体发消息",
+    "recent": "最近的对话",
+    "agents": "智能体",
+    "messages_other": "{{count}} 条消息"
+  },
+  "header": {
+    "running": "运行中",
+    "selectAgent": "选择一个智能体开始对话",
+    "agentModel": "{{agent}} · {{model}}",
+    "newChat": "新对话"
+  },
+  "composer": {
+    "placeholder": "给 {{agent}} 发消息",
+    "placeholderNoAgent": "选择一个智能体开始对话",
+    "attach": "添加附件",
+    "send": "发送消息",
+    "stop": "停止生成",
+    "dropFiles": "拖放文件以添加附件",
+    "removeFile": "移除 {{name}}"
+  },
+  "model": {
+    "search": "搜索模型",
+    "noMatch": "没有匹配的模型",
+    "useCustom": "使用“{{value}}”",
+    "agentDefault": "智能体默认",
+    "retry": "重新加载模型"
+  },
+  "thread": {
+    "thinking": "思考中…",
+    "thought": "已思考",
+    "toolRunning": "运行中",
+    "toolDone": "完成",
+    "toolFailed": "失败",
+    "toolDenied": "已拒绝",
+    "skill": "技能：{{name}}",
+    "arguments": "参数",
+    "result": "结果",
+    "tokens": "{{count}} 个 token",
+    "expand": "显示详情",
+    "collapse": "隐藏详情"
+  },
+  "activity": {
+    "thinking": "思考中…",
+    "runningTool": "正在运行 {{tool}}…",
+    "executingTool": "正在运行工具…",
+    "compacting": "正在压缩对话…",
+    "streaming": "正在撰写…",
+    "retrying": "正在重试…",
+    "retryingAttempt": "正在重试，第 {{n}} 次…",
+    "processing": "正在协调团队…",
+    "step": "第 {{n}} 步"
+  },
+  "notice": {
+    "toolDenied": {
+      "title": "已被你的工具设置拦截。",
+      "body": "智能体需要你允许才能运行 {{tool}}。",
+      "action": "打开工具"
+    },
+    "provider": {
+      "title": "提供商被限流或正在冷却。",
+      "body": "请稍等后重试，或为此对话选择其他模型。",
+      "action": "打开提供商"
+    },
+    "interrupted": {
+      "title": "回复已中断。",
+      "body": "运行在回复完成前停止了。",
+      "continue": "继续",
+      "continuePrompt": "请继续你上一条回复。"
+    },
+    "failed": {
+      "title": "运行失败。",
+      "body": "{{error}}"
+    },
+    "retrying": {
+      "title": "正在重试请求。",
+      "body": "第 {{n}} 次尝试。如果耗时过长，可以停止运行。"
+    },
+    "retry": "重试"
+  },
+  "state": {
+    "loadingAgents": "正在加载智能体…",
+    "noAgents": "还没有智能体",
+    "noAgentsHint": "请先创建一个智能体，再回来与它对话。",
+    "openAgents": "打开智能体"
   }
 }

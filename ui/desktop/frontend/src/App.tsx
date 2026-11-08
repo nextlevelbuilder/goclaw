@@ -2,113 +2,72 @@ import './i18n'
 import { useEffect, useState } from 'react'
 import { useUiStore } from './stores/ui-store'
 import { AppShell } from './components/layout/AppShell'
-import { ChatCanvas } from './components/chat/ChatCanvas'
+import { Titlebar } from './components/layout/Titlebar'
+import { useResolvedTheme } from './components/layout/use-resolved-theme'
+import { applyTheme } from './lib/theme'
 import { OnboardingWizard } from './components/onboarding/OnboardingWizard'
-import { wails } from './lib/wails'
-import { initWsClient } from './lib/ws'
-import { initApiClient } from './lib/api'
-import { useSessionStore } from './stores/session-store'
-import { useChatMessageStore } from './stores/chat-message-store'
-import { useChatActivityStore } from './stores/chat-activity-store'
+import { useGatewayBoot } from './hooks/use-gateway-boot'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
-import { Toaster } from './components/common/Toaster'
-import { SplashScreen } from './components/common/SplashScreen'
+import { Toaster } from './components/ui/Toast'
+import { SplashScreen, StartFailedScreen } from './components/common/SplashScreen'
+
+/** Shortest time the Starting card stays up, so a fast boot does not flash it. */
+const SPLASH_MIN_MS = 800
 
 function AppReady() {
-  const toggleSidebar = useUiStore((s) => s.toggleSidebar)
-  const openSettings = useUiStore((s) => s.openSettings)
-  const closeSettings = useUiStore((s) => s.closeSettings)
-  const activeView = useUiStore((s) => s.activeView)
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey
-      if (mod && e.key === 'b') { e.preventDefault(); toggleSidebar() }
-      if (mod && e.key === 'n') {
-        e.preventDefault()
-        // "New Chat" — clear session + chat directly (avoids duplicate useSessions instance)
-        useSessionStore.getState().setActiveSession(null)
-        useChatMessageStore.getState().clear()
-        useChatActivityStore.getState().clear()
-      }
-      if (mod && e.key === ',') { e.preventDefault(); openSettings() }
-      if (e.key === 'Escape' && activeView === 'settings') { closeSettings() }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [toggleSidebar, openSettings, closeSettings, activeView])
-
   return (
     <>
-      <AppShell>
-        <ChatCanvas />
-      </AppShell>
+      <AppShell />
       <Toaster />
     </>
   )
 }
 
 function App() {
-  const theme = useUiStore((s) => s.theme)
+  const resolvedTheme = useResolvedTheme()
   const onboarded = useUiStore((s) => s.onboarded)
   const completeOnboarding = useUiStore((s) => s.completeOnboarding)
-  const [ready, setReady] = useState(false)
-  const [splashDone, setSplashDone] = useState(false)
+  const { state, retry } = useGatewayBoot()
+  const [minElapsed, setMinElapsed] = useState(false)
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark')
-  }, [theme])
+    applyTheme(resolvedTheme)
+  }, [resolvedTheme])
 
   useEffect(() => {
-    const splashMin = new Promise((r) => setTimeout(r, 2500))
-
-    const init = async () => {
-      let attempts = 0
-      while (attempts < 30) {
-        try {
-          const isReady = await wails.isGatewayReady()
-          if (isReady) break
-        } catch { /* not ready yet */ }
-        await new Promise((r) => setTimeout(r, 500))
-        attempts++
-      }
-
-      let token = ''
-      try { token = await wails.getGatewayToken() } catch (e) {
-        console.warn('[app] failed to get token:', e)
-      }
-
-      const gatewayUrl = await wails.getGatewayURL()
-      const wsUrl = gatewayUrl.replace(/^http/, 'ws') + '/ws'
-
-      initWsClient(wsUrl, token)
-      const api = initApiClient(gatewayUrl, token)
-      setReady(true)
-
-      // Auto-detect empty DB → reset onboarded flag (handles DB deletion)
-      try {
-        const [pRes, aRes] = await Promise.allSettled([
-          api.get<{ providers?: unknown[] | null }>('/v1/providers'),
-          api.get<{ agents?: unknown[] | null }>('/v1/agents'),
-        ])
-        const hasProviders = pRes.status === 'fulfilled' && (pRes.value.providers?.length ?? 0) > 0
-        const hasAgents = aRes.status === 'fulfilled' && (aRes.value.agents?.length ?? 0) > 0
-        if (!hasProviders && !hasAgents) {
-          useUiStore.getState().resetOnboarding()
-        }
-      } catch { /* ignore — onboarding wizard will handle */ }
-    }
-
-    // Wait for both gateway init AND minimum splash duration
-    Promise.all([init(), splashMin]).then(() => setSplashDone(true))
+    const id = setTimeout(() => setMinElapsed(true), SPLASH_MIN_MS)
+    return () => clearTimeout(id)
   }, [])
 
-  if (!splashDone) {
-    return <SplashScreen ready={ready} />
+  // The window is frameless: screens outside the shell still need a drag
+  // region and window controls.
+  const bar = <Titlebar minimal className="fixed inset-x-0 top-0 z-50" />
+
+  if (state.status === 'failed') {
+    return (
+      <>
+        {bar}
+        <StartFailedScreen reason={state.reason} detail={state.detail} onRetry={retry} />
+      </>
+    )
+  }
+
+  if (state.status === 'starting' || !minElapsed) {
+    return (
+      <>
+        {bar}
+        <SplashScreen phase={state.status === 'starting' ? state.phase : 'setup'} />
+      </>
+    )
   }
 
   if (!onboarded) {
-    return <OnboardingWizard onComplete={completeOnboarding} />
+    return (
+      <>
+        {bar}
+        <OnboardingWizard onComplete={completeOnboarding} />
+      </>
+    )
   }
 
   return (

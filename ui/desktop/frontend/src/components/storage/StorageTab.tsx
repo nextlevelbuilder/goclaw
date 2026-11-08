@@ -7,8 +7,11 @@ import { useStorage, useStorageSize } from '../../hooks/use-storage'
 import { buildTree, mergeSubtree, setNodeLoading, formatSize, isTextFile } from '../../lib/file-helpers'
 import { getApiClient } from '../../lib/api'
 import { wails } from '../../lib/wails'
-import { ConfirmDialog } from '../common/ConfirmDialog'
-import { RefreshButton } from '../common/RefreshButton'
+import { useGatewayStatus } from '../layout/use-gateway-status'
+import { ApiError } from '../../lib/api'
+import { cn } from '../../lib/cn'
+import { IconDownload, IconRefresh } from '../common/Icons'
+import { Button, ConfirmDialog, ErrorState, IconButton, PageHeader } from '../ui'
 import { StorageFileBrowser } from './StorageFileBrowser'
 import { StorageUploadDialog } from './StorageUploadDialog'
 
@@ -16,10 +19,11 @@ export function StorageTab() {
   const { t } = useTranslation('storage')
   const { t: tc } = useTranslation('common')
   const {
-    files, baseDir, loading,
+    files, baseDir, loading, error,
     listFiles, loadSubtree, readFile, deleteFile, uploadFile, moveFile, fetchRawBlob,
   } = useStorage()
   const { totalSize, loading: sizeLoading, refreshSize } = useStorageSize()
+  const { disconnected } = useGatewayStatus()
 
   const [tree, setTree] = useState(buildTree(files))
   const [activePath, setActivePath] = useState<string | null>(null)
@@ -140,47 +144,49 @@ export function StorageTab() {
   const deleteName = deleteTarget?.path.split('/').pop() ?? ''
 
   return (
-    <div className="flex flex-col h-full space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-semibold text-text-primary">{t('title')}</h2>
-          <p className="text-2xs text-text-muted mt-0.5">
-            {baseDir ? t('descriptionWithPath', { path: baseDir, size: sizeStr }) : t('description')}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => { setUploadFolder(activeFolder); setUploadOpen(true) }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-border rounded-lg text-text-secondary hover:bg-surface-tertiary transition-colors"
-          >
-            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
-            {tc('uploadLabel', 'Upload')}
-          </button>
-          <RefreshButton onRefresh={handleRefresh} />
-        </div>
-      </div>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PageHeader
+        title={t('title')}
+        description={baseDir ? t('descriptionWithPath', { path: baseDir, size: sizeStr }) : t('description')}
+        actions={(
+          <>
+            <Button
+              variant="secondary"
+              icon={<IconDownload size={16} className="rotate-180" />}
+              disabled={disconnected}
+              onClick={() => { setUploadFolder(activeFolder); setUploadOpen(true) }}
+            >
+              {tc('uploadLabel', 'Upload')}
+            </Button>
+            <IconButton aria-label={tc('refresh')} icon={<IconRefresh size={16} />} onClick={() => { void handleRefresh() }} disabled={loading} />
+          </>
+        )}
+      />
 
-      {/* File browser */}
-      <div className="flex-1 flex flex-col min-h-0">
-        <StorageFileBrowser
-          tree={tree}
-          filesLoading={loading}
-          activePath={activePath}
-          onSelect={handleSelect}
-          contentLoading={contentLoading}
-          fileContent={fileContent}
-          onDelete={handleDeleteRequest}
-          onLoadMore={handleLoadMore}
-          onMove={handleMove}
-          onDownload={handleDownload}
-          fetchBlob={handleFetchBlob}
-          showSize
-        />
+      <div className={cn('flex min-h-0 flex-1 flex-col px-6 pb-4', disconnected && 'opacity-60')}>
+        {error && files.length === 0 && !loading ? (
+          <ErrorState
+            title={t('states.errorTitle')}
+            description={t('states.errorBody')}
+            code={error instanceof ApiError ? String(error.status) : undefined}
+            onRetry={() => { void handleRefresh() }}
+          />
+        ) : (
+          <StorageFileBrowser
+            tree={tree}
+            filesLoading={loading}
+            activePath={activePath}
+            onSelect={handleSelect}
+            contentLoading={contentLoading}
+            fileContent={fileContent}
+            onDelete={disconnected ? undefined : handleDeleteRequest}
+            onLoadMore={handleLoadMore}
+            onMove={disconnected ? undefined : handleMove}
+            onDownload={handleDownload}
+            fetchBlob={handleFetchBlob}
+            showSize
+          />
+        )}
       </div>
 
       {/* Upload dialog */}

@@ -117,6 +117,29 @@
     "deleteFailed": "Không thể xóa skill",
     "rescanUpdated": "Đã cập nhật {{count}} skill",
     "rescanNoChanges": "Tất cả skill đã cập nhật",
-    "rescanFailed": "Không thể quét lại dependencies"
+    "rescanFailed": "Không thể quét lại dependencies",
+    "uploaded": "Đã tải kỹ năng lên",
+    "uploadFailed": "Không tải được kỹ năng lên"
+  },
+  "screen": {
+    "summary_other": "{{count}} kỹ năng · {{active}} đang bật",
+    "limit": "Bản Lite có tối đa {{max}} kỹ năng. Hãy xóa một kỹ năng để thêm kỹ năng khác.",
+    "addSkill": "Thêm kỹ năng",
+    "editSkill": "Sửa kỹ năng",
+    "deleteSkill": "Xóa kỹ năng",
+    "rowActions": "Thao tác cho {{name}}",
+    "errorTitle": "Không tải được kỹ năng",
+    "errorDescription": "Hãy kiểm tra gateway đang chạy rồi thử lại.",
+    "emptyAction": "Thêm kỹ năng",
+    "loading": "Đang tải kỹ năng",
+    "addTitle": "Thêm kỹ năng",
+    "chooseFile": "Chọn tệp .zip",
+    "chooseAnother": "Chọn tệp khác",
+    "addSubmit": "Tải kỹ năng lên",
+    "enableLabel": "Bật {{name}}",
+    "sourceFile": "Tệp đã chọn",
+    "editNameRequired": "Nhập tên kỹ năng.",
+    "tagsHelper": "Phân tách các thẻ bằng dấu phẩy.",
+    "clearSearch": "Xóa tìm kiếm"
   }
 }

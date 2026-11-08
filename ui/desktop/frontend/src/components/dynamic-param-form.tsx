@@ -91,7 +91,7 @@ function ParamFieldRow({
         {param.label}
       </label>
       {param.description && (
-        <p className="text-xs text-text-secondary">{param.description}</p>
+        <p className="text-xs text-ink-secondary">{param.description}</p>
       )}
       <Renderer
         schema={param}
@@ -152,7 +152,7 @@ export function DynamicParamForm({
           <button
             type="button"
             onClick={() => setAdvancedOpen((prev) => !prev)}
-            className="flex w-full items-center gap-1.5 text-sm text-text-secondary hover:text-text transition-colors py-1"
+            className="flex w-full items-center gap-1.5 text-sm text-ink-secondary hover:text-text transition-colors py-1"
             aria-expanded={advancedOpen}
           >
             {/* ChevronRight inline SVG — rotates to ChevronDown when open */}
@@ -173,7 +173,7 @@ export function DynamicParamForm({
             </svg>
             <span>{t("advanced.title")}</span>
             {visibleAdvancedCount > 0 && (
-              <span className="ml-1 text-xs text-text-secondary">
+              <span className="ml-1 text-xs text-ink-secondary">
                 ({t("advanced.count", { count: visibleAdvancedCount })})
               </span>
             )}

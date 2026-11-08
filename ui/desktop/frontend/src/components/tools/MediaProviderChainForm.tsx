@@ -16,6 +16,9 @@ import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable'
 import { getApiClient } from '../../lib/api'
+import { IconPlus } from '../common/Icons'
+import { Button } from '../ui'
+import { ToolFormFooter } from './tool-form-footer'
 import { SortableProviderCard, type ProviderEntry } from './sortable-provider-card'
 import type { BuiltinToolData } from '../../types/builtin-tool'
 
@@ -109,7 +112,7 @@ export function MediaProviderChainForm({ tool, onSave, onClose }: MediaProviderC
       await onSave(tool.name, { providers: serialized })
       onClose()
     } catch (err) {
-      setError((err as Error).message || 'Failed to save')
+      setError((err as Error).message || t('builtin.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -135,8 +138,8 @@ export function MediaProviderChainForm({ tool, onSave, onClose }: MediaProviderC
   const hasIncomplete = chain.some((e) => !e.provider || !e.model)
 
   return (
-    <>
-      <div className="max-h-[60vh] overflow-y-auto p-5 space-y-3">
+    <div>
+      <div className="flex flex-col gap-3">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={chain.map((e) => e.id)} strategy={verticalListSortingStrategy}>
             {chain.map((entry, i) => {
@@ -160,23 +163,22 @@ export function MediaProviderChainForm({ tool, onSave, onClose }: MediaProviderC
           </SortableContext>
         </DndContext>
 
-        <button onClick={addEntry} className="text-xs text-accent hover:text-accent-hover flex items-center gap-1 transition-colors">
-          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 12h14" /><path d="M12 5v14" />
-          </svg>
-          {t('builtin.mediaChain.addProvider')}
-        </button>
+        <div>
+          <Button size="sm" variant="ghost" icon={<IconPlus size={14} />} onClick={addEntry}>
+            {t('builtin.mediaChain.addProvider')}
+          </Button>
+        </div>
       </div>
 
-      {error && <div className="px-5"><p className="text-xs text-error">{error}</p></div>}
-      <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-4">
-        <button type="button" onClick={onClose} className="border border-border rounded-lg px-4 py-1.5 text-sm text-text-secondary hover:bg-surface-tertiary transition-colors">
-          {t('builtin.mediaChain.cancel')}
-        </button>
-        <button type="button" onClick={handleSave} disabled={saving || hasIncomplete} className="bg-accent rounded-lg px-4 py-1.5 text-sm text-accent-foreground hover:bg-accent-hover disabled:opacity-50 transition-colors">
-          {saving ? t('builtin.mediaChain.saving') : t('builtin.mediaChain.save')}
-        </button>
-      </div>
-    </>
+      <ToolFormFooter
+        cancelLabel={t('builtin.mediaChain.cancel')}
+        saveLabel={saving ? t('builtin.mediaChain.saving') : t('builtin.mediaChain.save')}
+        onCancel={onClose}
+        onSave={() => void handleSave()}
+        saving={saving}
+        saveDisabled={hasIncomplete}
+        error={error}
+      />
+    </div>
   )
 }

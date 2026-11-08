@@ -17,7 +17,7 @@ export function CatalogueNotice({ stale, error, onRetry }: CatalogueNoticeProps)
   if (!stale && !error) return null
 
   return (
-    <div className="flex items-center gap-2 text-2xs text-warning">
+    <div className="flex items-center gap-2 text-caption text-warning">
       <span className="truncate" title={error ?? undefined}>
         {error ? t('catalogue.loadFailed') : t('catalogue.stale')}
       </span>

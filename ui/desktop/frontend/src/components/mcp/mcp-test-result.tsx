@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { IconCheck, IconClose } from '../common/Icons'
 import type { MCPTestResult } from '../../types/mcp'
 
 interface McpTestResultProps {
@@ -6,26 +7,23 @@ interface McpTestResultProps {
   result: MCPTestResult | null
 }
 
+/** Outcome of "Test connection": tools found, or the reason it failed. */
 export function McpTestResult({ state, result }: McpTestResultProps) {
   const { t } = useTranslation('mcp')
 
   if (state === 'success' && result) {
     return (
-      <p className="text-2xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-        <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M20 6 9 17l-5-5" />
-        </svg>
-        {t('form.toolsFound', { count: result.tool_count })}
+      <p role="status" className="flex items-center gap-1.5 text-caption text-success">
+        <IconCheck size={14} className="shrink-0" />
+        {t('form.toolsFound', { count: result.tool_count ?? 0 })}
       </p>
     )
   }
 
   if (state === 'error' && result) {
     return (
-      <p className="text-2xs text-error flex items-center gap-1">
-        <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M18 6 6 18" /><path d="m6 6 12 12" />
-        </svg>
+      <p role="alert" className="flex items-start gap-1.5 text-caption text-danger">
+        <IconClose size={14} className="mt-0.5 shrink-0" />
         <span className="break-all">{result.error || t('form.errors.connectionFailed')}</span>
       </p>
     )

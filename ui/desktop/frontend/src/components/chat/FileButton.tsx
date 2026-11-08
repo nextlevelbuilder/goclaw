@@ -42,25 +42,25 @@ export function FileButton({ url, filename, mimeType, size }: FileButtonProps) {
 
   return (
     <>
-      <span className="inline-flex items-center gap-2 border border-border rounded-lg px-3 py-2 hover:bg-surface-tertiary/30 transition-colors text-sm max-w-xs">
+      <span className="inline-flex max-w-xs items-center gap-2 rounded-md border border-border-subtle bg-surface-raised px-3 py-2 text-ui transition-colors hover:bg-surface-hover">
         <button
           type="button"
           onClick={() => setPreviewOpen(true)}
           className="inline-flex items-center gap-2 min-w-0 cursor-pointer"
         >
           <span className="text-base leading-none">{fileIcon(displayName)}</span>
-          <span className="text-text-primary truncate text-left">
+          <span className="text-ink truncate text-left">
             {truncateName(displayName)}
           </span>
           {size !== undefined && (
-            <span className="text-text-muted text-xs shrink-0">{formatFileSize(size)}</span>
+            <span className="shrink-0 text-caption text-ink-muted">{formatFileSize(size)}</span>
           )}
         </button>
         <button
           type="button"
           title={t('download')}
           onClick={() => downloadFile(url, displayName)}
-          className="text-text-muted hover:text-text-primary transition-colors shrink-0 cursor-pointer"
+          className="text-ink-muted hover:text-ink transition-colors shrink-0 cursor-pointer"
         >
           <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />

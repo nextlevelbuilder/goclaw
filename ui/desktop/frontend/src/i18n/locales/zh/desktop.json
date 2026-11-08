@@ -51,7 +51,7 @@
     "light": "Light",
     "language": "Language",
     "timezone": "Timezone",
-    "timezonePlaceholder": "Timezone selection coming soon."
+    "timezoneHint": "可通过顶部栏的时钟图标更改时区。"
   },
   "sidebar": {
     "newChat": "新建对话",
@@ -161,6 +161,90 @@
     "ready": "更新已安装！重启以应用。",
     "restart": "立即重启",
     "failed": "更新失败。",
-    "retry": "重试"
+    "retry": "重试",
+    "later": "稍后"
+  },
+  "nav": {
+    "label": "主导航",
+    "newChat": "新对话",
+    "recent": "最近",
+    "groups": {
+      "chat": "对话",
+      "configure": "配置",
+      "monitor": "监控"
+    },
+    "views": {
+      "chat": "首页",
+      "sessions": "会话",
+      "teams": "团队",
+      "team-board": "团队看板",
+      "agents": "智能体",
+      "skills": "技能",
+      "tools": "工具",
+      "providers": "提供商",
+      "mcp": "MCP",
+      "channels": "渠道",
+      "storage": "存储",
+      "traces": "追踪",
+      "usage": "用量",
+      "cron": "定时任务",
+      "settings": "设置"
+    },
+    "expand": "展开侧边栏",
+    "collapse": "收起侧边栏",
+    "show": "显示侧边栏",
+    "hide": "隐藏侧边栏",
+    "switchAgent": "切换智能体",
+    "noAgent": "未选择智能体",
+    "manageAgents": "管理智能体",
+    "compareEditions": "比较版本",
+    "pendingPairings_other": "{{count}} 个待处理的配对请求",
+    "noSessions": "暂无对话",
+    "deleteSession": "删除对话",
+    "deleteSessionTitle": "删除对话\"{{title}}\"？",
+    "deleteSessionDesc": "这会删除该对话及其消息，且无法撤销。"
+  },
+  "titlebar": {
+    "search": "搜索或运行命令",
+    "shortcut": "Ctrl K",
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restore": "还原",
+    "close": "关闭",
+    "breadcrumb": "位置"
+  },
+  "palette": {
+    "label": "命令面板",
+    "placeholder": "搜索页面、智能体、会话和操作",
+    "groups": {
+      "actions": "操作",
+      "views": "前往",
+      "agents": "智能体",
+      "sessions": "会话"
+    },
+    "actions": {
+      "newChat": "新对话",
+      "toggleTheme": "切换浅色或深色主题",
+      "openSettings": "打开设置"
+    },
+    "open": "打开",
+    "noResults": "没有与\"{{query}}\"匹配的结果",
+    "hintMove": "↑↓ 移动",
+    "hintOpen": "Enter 打开",
+    "hintClose": "Esc 关闭"
+  },
+  "gateway": {
+    "online": "网关在线",
+    "offline": "网关离线",
+    "connecting": "正在连接网关"
+  },
+  "stub": {
+    "sessionsDesc": "与所选智能体的对话。",
+    "sessionsEmpty": "与智能体的对话会保存在这里。",
+    "teamsDesc": "将智能体编组以共享任务。",
+    "teamsEmpty": "创建团队，让智能体共享任务。",
+    "usageDesc": "各提供商的令牌用量和费用。",
+    "usageEmpty": "每个提供商的用量位于其\"用量\"标签页。",
+    "openProviders": "打开提供商"
   }
 }

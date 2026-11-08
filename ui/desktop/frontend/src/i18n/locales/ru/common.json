@@ -151,5 +151,34 @@
   },
   "errors": {
     "serverError": "Что-то пошло не так. Пожалуйста, повторите попытку позже."
+  },
+  "dismiss": "Скрыть",
+  "tryAgain": "Повторить",
+  "moreActions": "Другие действия",
+  "selectedCount": "Выбрано: {{count}}",
+  "clearSelection": "Снять выделение",
+  "selectAllRows": "Выбрать все строки",
+  "selectRow": "Выбрать строку",
+  "state": {
+    "loading": "Загрузка",
+    "emptyTitle": "Здесь пока пусто",
+    "errorTitle": "Что-то пошло не так",
+    "errorHint": "Убедитесь, что шлюз запущен, и повторите попытку.",
+    "errorCode": "Код: {{code}}",
+    "offlineTitle": "Нет связи со шлюзом",
+    "offlineSaved": "Показаны сохранённые данные.",
+    "offlineRetryIn_one": "Повторная попытка через {{count}} секунду.",
+    "offlineRetryIn_few": "Повторная попытка через {{count}} секунды.",
+    "offlineRetryIn_many": "Повторная попытка через {{count}} секунд.",
+    "offlineRetryIn_other": "Повторная попытка через {{count}} секунды.",
+    "offlineRetrying": "Переподключение…",
+    "retryNow": "Повторить сейчас"
+  },
+  "tone": {
+    "success": "Готов",
+    "warning": "Внимание",
+    "danger": "Ошибка",
+    "info": "Инфо",
+    "idle": "Простой"
   }
 }

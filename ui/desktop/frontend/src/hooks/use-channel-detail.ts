@@ -1,20 +1,24 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getApiClient } from '../lib/api'
 import { toast } from '../stores/toast-store'
+import i18n from '../i18n'
 import type { ChannelInstanceData, GroupManagerGroupInfo, GroupManagerData, ChannelContact } from '../types/channel'
 
 export function useChannelDetail(instanceId: string | null) {
   const [instance, setInstance] = useState<ChannelInstanceData | null>(null)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(false)
 
   const fetchInstance = useCallback(async () => {
     if (!instanceId) return
     setLoading(true)
+    setError(false)
     try {
       const res = await getApiClient().get<ChannelInstanceData>(`/v1/channels/instances/${instanceId}`)
       setInstance(res)
     } catch (err) {
       console.error('Failed to fetch channel detail:', err)
+      setError(true)
     } finally {
       setLoading(false)
     }
@@ -27,9 +31,9 @@ export function useChannelDetail(instanceId: string | null) {
     try {
       await getApiClient().put(`/v1/channels/instances/${instanceId}`, updates)
       await fetchInstance()
-      toast.success('Channel updated')
+      toast.success(i18n.t('channels:toast.updated'))
     } catch (err) {
-      toast.error('Failed to update channel', (err as Error).message)
+      toast.error(i18n.t('channels:toast.failedUpdate'), (err as Error).message)
       throw err
     }
   }, [instanceId, fetchInstance])
@@ -69,7 +73,7 @@ export function useChannelDetail(instanceId: string | null) {
   }, [])
 
   return {
-    instance, loading, updateInstance, refresh: fetchInstance,
+    instance, loading, error, updateInstance, refresh: fetchInstance,
     listManagerGroups, listManagers, addManager, removeManager, listContacts,
   }
 }

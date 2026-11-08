@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { useAgentSkills } from '../../hooks/use-agent-skills'
+import { Select, Skeleton } from '../ui'
 
 const MAX_PINNED = 10
 
@@ -20,14 +21,14 @@ export function PinnedSkillsSection({ agentId, pinned, onPinnedChange }: PinnedS
     return found?.name ?? slug
   }
 
-  if (loading) return <div className="h-10 animate-pulse rounded-lg bg-surface-tertiary" />
+  if (loading) return <Skeleton className="h-16 w-full" />
 
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <span className="text-sm">📌</span>
-        <h3 className="text-sm font-semibold text-text-primary">{t('detail.pinnedSkills.title')}</h3>
-        <span className="text-2xs text-text-muted">({pinned.length}/{MAX_PINNED})</span>
+        <span className="text-ui">📌</span>
+        <h3 className="text-ui font-semibold text-ink">{t('detail.pinnedSkills.title')}</h3>
+        <span className="text-caption text-ink-muted">({pinned.length}/{MAX_PINNED})</span>
       </div>
 
       {pinned.length > 0 && (
@@ -36,7 +37,7 @@ export function PinnedSkillsSection({ agentId, pinned, onPinnedChange }: PinnedS
             <span
               key={slug}
               onClick={() => onPinnedChange(pinned.filter((s) => s !== slug))}
-              className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md bg-surface-tertiary text-text-secondary cursor-pointer hover:bg-error/10 hover:text-error transition-colors"
+              className="inline-flex items-center gap-1 px-2 py-0.5 text-caption rounded-md bg-surface-hover text-ink-secondary cursor-pointer hover:bg-danger/10 hover:text-danger transition-colors"
             >
               {skillName(slug)}
               <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -48,22 +49,22 @@ export function PinnedSkillsSection({ agentId, pinned, onPinnedChange }: PinnedS
       )}
 
       {pinned.length < MAX_PINNED && availableSkills.length > 0 && (
-        <select
+        <Select
           value=""
           onChange={(e) => {
             if (e.target.value) onPinnedChange([...pinned, e.target.value])
             e.target.value = ''
           }}
-          className="w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-base md:text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
+          className="w-full"
         >
           <option value="">{t('detail.pinnedSkills.addPlaceholder')}</option>
           {availableSkills.map((s) => (
             <option key={s.slug} value={s.slug}>{s.name}</option>
           ))}
-        </select>
+        </Select>
       )}
 
-      <p className="text-2xs text-text-muted">{t('detail.pinnedSkills.hint')}</p>
+      <p className="text-caption text-ink-muted">{t('detail.pinnedSkills.hint')}</p>
     </div>
   )
 }

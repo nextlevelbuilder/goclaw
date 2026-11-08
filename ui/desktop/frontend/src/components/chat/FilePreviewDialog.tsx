@@ -57,21 +57,21 @@ export function FilePreviewDialog({ url, filename: rawFilename, mimeType, onClos
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-surface-window/70"
       onClick={onClose}
     >
       <div
-        className="relative bg-surface-primary border border-border rounded-xl shadow-2xl w-full max-w-5xl mx-4 overflow-hidden"
+        className="relative bg-surface-base border border-border-subtle rounded-xl shadow-popover w-full max-w-5xl mx-4 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-surface-secondary">
-          <span className="flex-1 text-sm font-medium text-text-primary truncate">{displayName}</span>
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-border-subtle bg-surface-raised">
+          <span className="flex-1 truncate text-ui font-semibold text-ink">{displayName}</span>
           <button
             type="button"
             onClick={() => downloadFile(url, displayName)}
             title={t('download')}
-            className="p-1.5 rounded text-text-muted hover:text-text-primary hover:bg-surface-tertiary transition-colors"
+            className="p-1.5 rounded text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -83,7 +83,7 @@ export function FilePreviewDialog({ url, filename: rawFilename, mimeType, onClos
             type="button"
             title={t('close')}
             onClick={onClose}
-            className="p-1.5 rounded text-text-muted hover:text-text-primary hover:bg-surface-tertiary transition-colors"
+            className="p-1.5 rounded text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" />

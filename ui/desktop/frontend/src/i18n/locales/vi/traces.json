@@ -38,7 +38,10 @@
     "llmCalls": "LLM",
     "toolCalls": "công cụ",
     "export": "Xuất trace",
-    "stopRun": "Dừng chạy"
+    "stopRun": "Dừng chạy",
+    "exported": "Đã xuất trace",
+    "exportFailed": "Xuất trace thất bại",
+    "tokensInOut": "{{input}} vào / {{output}} ra"
   },
   "span": {
     "model": "Model:",
@@ -52,12 +55,32 @@
     "cacheRead": "đọc",
     "cacheWrite": "ghi",
     "thinking": "suy nghĩ",
-    "cached": "đã cache"
+    "cached": "đã cache",
+    "copied": "Đã sao chép"
   },
   "toast": {
     "failedLoad": "Không thể tải dữ liệu theo dõi",
     "abortSent": "Đã dừng chạy",
     "abortFailed": "Không thể dừng chạy",
     "abortNotFound": "Lệnh đã hoàn tất hoặc không tìm thấy"
+  },
+  "delegated": "Được ủy quyền",
+  "status": {
+    "completed": "Hoàn tất",
+    "failed": "Thất bại",
+    "running": "Đang chạy"
+  },
+  "noMatchTitle": "Không có trace cho agent này",
+  "noMatchDescription": "Thử agent khác hoặc xóa bộ lọc.",
+  "clearFilter": "Xóa bộ lọc",
+  "startChat": "Bắt đầu trò chuyện",
+  "openAgents": "Mở agent",
+  "loadMore": "Tải thêm ({{shown}}/{{total}})",
+  "summary_other": "{{count}} trace",
+  "filterByAgent": "Lọc theo agent",
+  "states": {
+    "errorTitle": "Không tải được trace",
+    "errorBody": "Gateway không trả về trace nào. Kiểm tra kết nối rồi thử lại.",
+    "detailErrorTitle": "Không tải được trace này"
   }
 }

@@ -38,7 +38,8 @@
       "agentRequired": "请选择代理",
       "typeRequired": "请选择频道类型",
       "tokenRequired": "机器人令牌为必填项"
-    }
+    },
+    "tagsPlaceholder": "每行一个，或用逗号分隔"
   },
   "detail": {
     "back": "返回",
@@ -67,7 +68,8 @@
       "hint": "留空字段以保持当前值。凭据已加密存储。",
       "updateCredentials": "更新凭据",
       "saving": "保存中...",
-      "saved": "凭据已更新"
+      "saved": "凭据已更新",
+      "none": "此渠道类型无需凭据。"
     },
     "managers": {
       "description": "为频道群组分配管理员。管理员可以管理对话。",
@@ -96,7 +98,10 @@
           "groupUserRequired": "群组ID和用户ID为必填项",
           "failedAdd": "添加管理员失败"
         }
-      }
+      },
+      "loadError": "无法加载管理员",
+      "removeFailed": "移除管理员失败",
+      "tableLabel": "{{group}} 的管理员"
     },
     "advanced": "高级",
     "advancedTitle": "高级设置",
@@ -111,7 +116,8 @@
     "accessControl": "访问控制",
     "accessControlDesc": "用户白名单限制",
     "saveConfig": "保存",
-    "noAdvanced": "此频道类型没有高级设置。"
+    "noAdvanced": "此频道类型没有高级设置。",
+    "tabsLabel": "渠道设置"
   },
   "pairing": {
     "title": "已配对设备",
@@ -139,7 +145,18 @@
       "title": "撤销设备",
       "description": "撤销 {{channel}}:{{senderId}}？该设备需要重新配对。",
       "confirmLabel": "撤销"
-    }
+    },
+    "columns": {
+      "sender": "发送者",
+      "channel": "渠道",
+      "requested": "请求时间",
+      "paired": "配对时间",
+      "by": "批准人"
+    },
+    "loadError": "无法加载已配对设备",
+    "pendingTableLabel": "待处理的配对请求",
+    "pairedTableLabel": "已配对设备",
+    "refresh": "刷新已配对设备"
   },
   "toast": {
     "created": "频道已创建",
@@ -147,11 +164,42 @@
     "deleted": "频道已删除",
     "failedCreate": "创建频道失败",
     "failedUpdate": "更新频道失败",
-    "failedDelete": "删除频道失败"
+    "failedDelete": "删除频道失败",
+    "pairingApproved": "已批准配对",
+    "pairingDenied": "已拒绝配对",
+    "pairingRevoked": "设备已撤销",
+    "failedPairing": "无法更新配对"
   },
   "delete": {
     "title": "删除频道",
     "description": "删除 {{name}}？此操作无法撤销。",
     "confirmLabel": "删除"
+  },
+  "screen": {
+    "description": "{{count}} 个渠道 · {{enabled}} 个已启用",
+    "tableLabel": "渠道",
+    "rowActions": "{{name}} 的操作",
+    "enableChannel": "启用 {{name}}",
+    "loading": "正在加载渠道",
+    "loadError": "无法加载渠道",
+    "loadErrorHint": "请检查网关连接后重试。",
+    "columns": {
+      "channel": "渠道",
+      "agent": "智能体",
+      "status": "状态",
+      "enabled": "启用",
+      "actions": "操作"
+    },
+    "menu": {
+      "open": "打开设置",
+      "delete": "删除渠道"
+    },
+    "delete": {
+      "title": "删除 {{name}}？",
+      "description": "该渠道将停止回复消息，已配对的设备也会被移除。请输入渠道名称以确认。"
+    },
+    "detail": {
+      "loadError": "无法加载此渠道"
+    }
   }
 }

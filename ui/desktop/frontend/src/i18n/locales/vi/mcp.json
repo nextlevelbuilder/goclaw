@@ -27,15 +27,15 @@
   "form": {
     "createTitle": "Thêm MCP Server",
     "editTitle": "Chỉnh sửa MCP Server",
-    "name": "Tên *",
+    "name": "Tên",
     "nameHint": "Chỉ dùng chữ thường, số và dấu gạch ngang",
     "displayName": "Tên hiển thị",
     "displayNamePlaceholder": "Máy chủ MCP của tôi",
-    "transport": "Giao thức *",
-    "command": "Lệnh *",
+    "transport": "Kiểu kết nối",
+    "command": "Lệnh",
     "args": "Tham số (phân cách bằng dấu cách)",
     "argsPlaceholder": "--flag1 --flag2=\"giá trị có dấu cách\"",
-    "url": "URL *",
+    "url": "URL",
     "headers": "Headers",
     "headerKeyPlaceholder": "Tên header",
     "headerValuePlaceholder": "Giá trị header",
@@ -63,7 +63,8 @@
       "connectionFailed": "Kết nối thất bại"
     },
     "requireUserCredentials": "Yêu cầu Credentials riêng",
-    "requireUserCredentialsHint": "Mỗi user phải cấu hình credentials riêng. Server bị vô hiệu cho user chưa có credentials."
+    "requireUserCredentialsHint": "Mỗi user phải cấu hình credentials riêng. Server bị vô hiệu cho user chưa có credentials.",
+    "toolPrefixAuto": "tự động"
   },
   "grants": {
     "title": "Quyền agent - {{name}}",
@@ -101,7 +102,9 @@
     "deleted": "Đã xóa MCP server",
     "failedCreate": "Không thể tạo MCP server",
     "failedUpdate": "Không thể cập nhật MCP server",
-    "failedDelete": "Không thể xóa MCP server"
+    "failedDelete": "Không thể xóa MCP server",
+    "reconnected": "Đã đặt lại kết nối",
+    "failedReconnect": "Không thể kết nối lại máy chủ"
   },
   "userCredentials": {
     "title": "Thông tin xác thực",
@@ -128,5 +131,41 @@
     "addEnv": "Thêm biến",
     "saveFailed": "Lưu credentials thất bại",
     "deleteFailed": "Xóa credentials thất bại"
+  },
+  "screen": {
+    "list": {
+      "description": "{{count}} máy chủ · {{enabled}} đang bật",
+      "colStatus": "Trạng thái",
+      "statusOn": "Bật",
+      "statusOff": "Tắt",
+      "tableLabel": "Máy chủ MCP",
+      "rowActions": "Thao tác cho {{name}}",
+      "enableServer": "Bật {{name}}",
+      "loading": "Đang tải máy chủ MCP",
+      "loadError": "Không thể tải máy chủ MCP",
+      "loadErrorHint": "Kiểm tra kết nối gateway rồi thử lại.",
+      "clearSearch": "Xóa tìm kiếm",
+      "limitReached": "Phiên bản này cho phép tối đa {{max}} máy chủ. Hãy xóa một máy chủ để thêm mới."
+    },
+    "menu": {
+      "edit": "Sửa",
+      "delete": "Xóa máy chủ"
+    },
+    "transport": {
+      "stdio": "Tiến trình cục bộ",
+      "sse": "Từ xa (SSE)",
+      "http": "Từ xa (HTTP)"
+    },
+    "delete": {
+      "title": "Xóa {{name}}?",
+      "description": "Thao tác này xóa máy chủ và mọi quyền của agent. Nhập tên máy chủ để xác nhận."
+    },
+    "grants": {
+      "description": "Các agent được phép dùng công cụ của máy chủ này.",
+      "loadError": "Không thể tải danh sách quyền"
+    },
+    "tools": {
+      "count_other": "{{count}} công cụ"
+    }
   }
 }

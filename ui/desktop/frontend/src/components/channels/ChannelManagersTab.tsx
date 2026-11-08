@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Button, EmptyState, ErrorState, Field, Input, SkeletonList } from '../ui'
 import { Combobox } from '../common/Combobox'
 import { ManagerGroupCard } from './manager-group-card'
 import type { GroupManagerGroupInfo, GroupManagerData, ChannelContact } from '../../types/channel'
 
 interface ChannelManagersTabProps {
+  /** Disables add and remove while the gateway is unreachable. */
+  readOnly?: boolean
   listManagerGroups: () => Promise<GroupManagerGroupInfo[]>
   listManagers: (groupId: string) => Promise<GroupManagerData[]>
   addManager: (groupId: string, userId: string, displayName?: string, username?: string) => Promise<void>
@@ -13,10 +16,12 @@ interface ChannelManagersTabProps {
 }
 
 export function ChannelManagersTab({
-  listManagerGroups, listManagers, addManager, removeManager, listContacts,
+  readOnly = false, listManagerGroups, listManagers, addManager, removeManager, listContacts,
 }: ChannelManagersTabProps) {
   const { t } = useTranslation('channels')
   const [groups, setGroups] = useState<GroupManagerGroupInfo[]>([])
+  const [groupsLoading, setGroupsLoading] = useState(true)
+  const [groupsFailed, setGroupsFailed] = useState(false)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [managersMap, setManagersMap] = useState<Record<string, GroupManagerData[]>>({})
   const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({})
@@ -28,10 +33,18 @@ export function ChannelManagersTab({
   const [error, setError] = useState('')
 
   const loadGroups = useCallback(async () => {
-    try { setGroups(await listManagerGroups()) } catch { setGroups([]) }
+    setGroupsFailed(false)
+    try {
+      setGroups(await listManagerGroups())
+    } catch {
+      setGroups([])
+      setGroupsFailed(true)
+    } finally {
+      setGroupsLoading(false)
+    }
   }, [listManagerGroups])
 
-  useEffect(() => { loadGroups() }, [loadGroups])
+  useEffect(() => { void loadGroups() }, [loadGroups])
 
   const handleToggle = async (groupId: string) => {
     const next = !expanded[groupId]
@@ -42,6 +55,8 @@ export function ChannelManagersTab({
         setManagersMap((prev) => ({ ...prev, [groupId]: [] }))
         const data = await listManagers(groupId)
         setManagersMap((prev) => ({ ...prev, [groupId]: data }))
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t('detail.managers.loadError'))
       } finally {
         setLoadingMap((prev) => ({ ...prev, [groupId]: false }))
       }
@@ -86,7 +101,7 @@ export function ChannelManagersTab({
       }))
       await loadGroups()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove')
+      setError(err instanceof Error ? err.message : t('detail.managers.removeFailed'))
     }
   }
 
@@ -111,71 +126,82 @@ export function ChannelManagersTab({
     }
   }
 
-  const inputClass = 'w-full bg-surface-tertiary border border-border rounded-lg px-3 py-2 text-base md:text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent'
+  let groupsBody
+  if (groupsLoading) {
+    groupsBody = <SkeletonList rows={2} avatar={false} label={t('detail.managers.loadingManagers')} />
+  } else if (groupsFailed) {
+    groupsBody = <ErrorState title={t('detail.managers.loadError')} description={t('screen.loadErrorHint')} onRetry={() => { void loadGroups() }} className="py-8" />
+  } else if (groups.length === 0) {
+    groupsBody = <EmptyState title={t('detail.managers.noManagerGroups')} description={t('detail.managers.noManagerGroupsHint')} className="py-8" />
+  } else {
+    groupsBody = (
+      <div className="flex flex-col gap-2">
+        {groups.map((g) => (
+          <ManagerGroupCard
+            key={g.group_id}
+            groupId={g.group_id}
+            writerCount={g.writer_count}
+            expanded={!!expanded[g.group_id]}
+            loading={!!loadingMap[g.group_id]}
+            managers={managersMap[g.group_id] ?? []}
+            adding={!!addingMap[g.group_id]}
+            inlineUserId={inlineUserId[g.group_id] ?? ''}
+            contactOptions={contactOptions}
+            readOnly={readOnly}
+            onToggle={() => { void handleToggle(g.group_id) }}
+            onInlineUserIdChange={(v) => setInlineUserId((prev) => ({ ...prev, [g.group_id]: v }))}
+            onContactSearch={handleContactSearch}
+            onInlineAdd={() => { void handleInlineAdd(g.group_id) }}
+            onRemove={(userId) => { void handleRemove(g.group_id, userId) }}
+          />
+        ))}
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-4">
-      <p className="text-xs text-text-muted">{t('detail.managers.description')}</p>
-      {error && <p className="text-xs text-error">{error}</p>}
+    <div className="flex flex-col gap-4">
+      <p className="text-caption text-ink-muted">{t('detail.managers.description')}</p>
+      {error && <p role="alert" className="text-caption text-danger">{error}</p>}
 
-      {groups.length === 0 ? (
-        <div className="py-6 text-center">
-          <p className="text-xs text-text-muted">{t('detail.managers.noManagerGroups')}</p>
-          <p className="text-2xs text-text-muted/70 mt-1">{t('detail.managers.noManagerGroupsHint')}</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {groups.map((g) => (
-            <ManagerGroupCard
-              key={g.group_id}
-              groupId={g.group_id}
-              writerCount={g.writer_count}
-              expanded={!!expanded[g.group_id]}
-              loading={!!loadingMap[g.group_id]}
-              managers={managersMap[g.group_id] ?? []}
-              adding={!!addingMap[g.group_id]}
-              inlineUserId={inlineUserId[g.group_id] ?? ''}
-              contactOptions={contactOptions}
-              onToggle={() => handleToggle(g.group_id)}
-              onInlineUserIdChange={(v) => setInlineUserId((prev) => ({ ...prev, [g.group_id]: v }))}
-              onContactSearch={handleContactSearch}
-              onInlineAdd={() => handleInlineAdd(g.group_id)}
-              onRemove={(userId) => handleRemove(g.group_id, userId)}
-            />
-          ))}
-        </div>
-      )}
+      {groupsBody}
 
       {/* Standalone add form for new groups */}
-      <div className="border border-border rounded-lg p-4 space-y-3">
-        <p className="text-xs font-medium text-text-secondary">{t('detail.managers.addForm.title')}</p>
-        <p className="text-2xs text-text-muted">{t('detail.managers.addForm.hint')}</p>
-        <div className="space-y-2">
-          <input
+      <fieldset disabled={readOnly} className="m-0 flex min-w-0 flex-col gap-3 rounded-lg border border-border-subtle bg-surface-base p-4">
+        <legend className="sr-only">{t('detail.managers.addForm.title')}</legend>
+        <div>
+          <h3 className="text-ui font-medium text-ink">{t('detail.managers.addForm.title')}</h3>
+          <p className="text-caption text-ink-muted">{t('detail.managers.addForm.hint')}</p>
+        </div>
+        <Field label={t('detail.managers.addForm.groupId')}>
+          <Input
             value={newGroupId}
             onChange={(e) => setNewGroupId(e.target.value)}
             placeholder={t('detail.managers.addForm.groupIdPlaceholder')}
-            className={inputClass}
           />
-          <div className="flex gap-2">
-            <div className="flex-1">
+        </Field>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-ui text-ink">{t('detail.managers.addForm.userId')}</span>
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
               <Combobox
                 value={newUserId}
-                onChange={(v) => { setNewUserId(v); handleContactSearch(v) }}
+                onChange={(v) => { setNewUserId(v); void handleContactSearch(v) }}
                 options={contactOptions}
                 placeholder={t('detail.managers.addForm.userIdPlaceholder')}
+                disabled={readOnly}
               />
             </div>
-            <button
-              onClick={handleStandaloneAdd}
-              disabled={addingMap['_new'] || !newGroupId.trim() || !newUserId.trim()}
-              className="px-3 py-1.5 bg-accent text-accent-foreground text-xs rounded-lg disabled:opacity-50 cursor-pointer hover:bg-accent-hover transition-colors shrink-0"
+            <Button
+              onClick={() => { void handleStandaloneAdd() }}
+              loading={!!addingMap['_new']}
+              disabled={readOnly || !newGroupId.trim() || !newUserId.trim()}
             >
               {t('detail.managers.addForm.addManager')}
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
+      </fieldset>
     </div>
   )
 }

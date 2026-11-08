@@ -10,7 +10,9 @@
     "schedule": "计划",
     "message": "消息",
     "agent": "Agent",
-    "actions": "操作"
+    "actions": "操作",
+    "nextRun": "下次运行",
+    "lastRun": "上次运行"
   },
   "runNow": "立即运行",
   "running": "运行中...",
@@ -63,7 +65,15 @@
   "runLog": {
     "title": "运行日志：{{name}}",
     "noHistory": "暂无运行历史。",
-    "loading": "加载中..."
+    "loading": "加载中...",
+    "time": "时间",
+    "status": "状态",
+    "duration": "时长",
+    "tokens": "令牌",
+    "summary": "摘要",
+    "errorTitle": "无法加载运行记录",
+    "errorBody": "网关未返回运行日志。请重试。",
+    "noHistoryDescription": "任务触发后，运行记录会显示在这里。"
   },
   "detail": {
     "runNow": "立即运行",
@@ -145,5 +155,54 @@
     "failedRun": "运行定时任务失败",
     "updated": "任务已更新",
     "failedUpdate": "更新任务失败"
+  },
+  "enableToggle": "启用 {{name}}",
+  "rowMenu": "{{name}} 的操作",
+  "paused": "已暂停",
+  "summary_other": "{{count}} 个任务 · {{active}} 个已启用",
+  "states": {
+    "errorTitle": "无法加载定时任务",
+    "errorBody": "网关未返回任务列表。请检查连接后重试。"
+  },
+  "status": {
+    "succeeded": "成功",
+    "failed": "失败",
+    "running": "运行中",
+    "other": "未知",
+    "paused": "已暂停"
+  },
+  "schedule": {
+    "everySeconds_other": "每 {{count}} 秒",
+    "everyMinutes_other": "每 {{count}} 分钟",
+    "everyHours_other": "每 {{count}} 小时",
+    "onceAt": "单次，{{time}}"
+  },
+  "edit": {
+    "menu": "编辑",
+    "title": "编辑定时任务",
+    "save": "保存更改",
+    "delete": "删除任务"
+  },
+  "form": {
+    "interval": "间隔",
+    "unit": "单位",
+    "units": {
+      "seconds": "秒",
+      "minutes": "分钟",
+      "hours": "小时"
+    },
+    "timezone": "时区：{{tz}}",
+    "nextRun": "下次运行：{{time}}",
+    "onceAt": "将在 {{time}} 运行一次。",
+    "lastFailed": "上次运行失败。{{error}}",
+    "viewLog": "查看日志",
+    "errors": {
+      "saveFailed": "无法保存任务",
+      "nameRequired": "请输入名称。",
+      "nameFormat": "仅可使用小写字母、数字和连字符。",
+      "everyMin": "请输入 1 或更大的数。",
+      "messageRequired": "请告诉智能体要做什么。",
+      "cronFields": "Cron 表达式需要 5 个字段。"
+    }
   }
 }

@@ -1,0 +1,23 @@
+/* Slow shimmer for the "Thinking" label. Static under reduced motion. */
+.chat-shimmer {
+  background: linear-gradient(90deg, var(--color-ink-muted) 30%, var(--color-ink) 50%, var(--color-ink-muted) 70%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: chat-shimmer 2.4s linear infinite;
+}
+
+@keyframes chat-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-shimmer {
+    animation: none;
+    background: none;
+    color: var(--color-ink-muted);
+  }
+}

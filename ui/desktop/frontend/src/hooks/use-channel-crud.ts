@@ -1,18 +1,22 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getApiClient } from '../lib/api'
 import { toast } from '../stores/toast-store'
+import i18n from '../i18n'
 import type { ChannelInstanceData, ChannelInstanceInput } from '../types/channel'
 
 export function useChannelCrud() {
   const [instances, setInstances] = useState<ChannelInstanceData[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
 
   const fetchInstances = useCallback(async () => {
+    setError(false)
     try {
       const res = await getApiClient().get<{ instances: ChannelInstanceData[] | null }>('/v1/channels/instances')
       setInstances(res.instances ?? [])
     } catch (err) {
       console.error('Failed to fetch channel instances:', err)
+      setError(true)
     } finally {
       setLoading(false)
     }
@@ -34,10 +38,10 @@ export function useChannelCrud() {
       }
       const res = await getApiClient().post<{ id: string }>('/v1/channels/instances', payload)
       await fetchInstances()
-      toast.success('Channel created')
+      toast.success(i18n.t('channels:toast.created'))
       return res
     } catch (err) {
-      toast.error('Failed to create channel', (err as Error).message)
+      toast.error(i18n.t('channels:toast.failedCreate'), (err as Error).message)
       throw err
     }
   }, [fetchInstances])
@@ -46,9 +50,9 @@ export function useChannelCrud() {
     try {
       await getApiClient().put(`/v1/channels/instances/${id}`, data)
       await fetchInstances()
-      toast.success('Channel updated')
+      toast.success(i18n.t('channels:toast.updated'))
     } catch (err) {
-      toast.error('Failed to update channel', (err as Error).message)
+      toast.error(i18n.t('channels:toast.failedUpdate'), (err as Error).message)
       throw err
     }
   }, [fetchInstances])
@@ -57,9 +61,9 @@ export function useChannelCrud() {
     try {
       await getApiClient().delete(`/v1/channels/instances/${id}`)
       await fetchInstances()
-      toast.success('Channel deleted')
+      toast.success(i18n.t('channels:toast.deleted'))
     } catch (err) {
-      toast.error('Failed to delete channel', (err as Error).message)
+      toast.error(i18n.t('channels:toast.failedDelete'), (err as Error).message)
       throw err
     }
   }, [fetchInstances])
@@ -68,5 +72,5 @@ export function useChannelCrud() {
   const discordExists = instances.some((i) => i.channel_type === 'discord')
   const atLimit = instances.length >= 2
 
-  return { instances, loading, atLimit, telegramExists, discordExists, fetchInstances, createInstance, updateInstance, deleteInstance }
+  return { instances, loading, error, atLimit, telegramExists, discordExists, fetchInstances, createInstance, updateInstance, deleteInstance }
 }

@@ -117,6 +117,29 @@
     "deleteFailed": "删除技能失败",
     "rescanUpdated": "已更新 {{count}} 个技能",
     "rescanNoChanges": "所有技能已是最新",
-    "rescanFailed": "重新扫描依赖失败"
+    "rescanFailed": "重新扫描依赖失败",
+    "uploaded": "技能已上传",
+    "uploadFailed": "无法上传技能"
+  },
+  "screen": {
+    "summary_other": "{{count}} 个技能 · {{active}} 个已启用",
+    "limit": "Lite 版最多包含 {{max}} 个技能。删除一个后才能添加新技能。",
+    "addSkill": "添加技能",
+    "editSkill": "编辑技能",
+    "deleteSkill": "删除技能",
+    "rowActions": "{{name}} 的操作",
+    "errorTitle": "无法加载技能",
+    "errorDescription": "请确认网关正在运行，然后重试。",
+    "emptyAction": "添加技能",
+    "loading": "正在加载技能",
+    "addTitle": "添加技能",
+    "chooseFile": "选择 .zip 文件",
+    "chooseAnother": "选择其他文件",
+    "addSubmit": "上传技能",
+    "enableLabel": "启用 {{name}}",
+    "sourceFile": "已选文件",
+    "editNameRequired": "请输入技能名称。",
+    "tagsHelper": "用逗号分隔标签。",
+    "clearSearch": "清除搜索"
   }
 }

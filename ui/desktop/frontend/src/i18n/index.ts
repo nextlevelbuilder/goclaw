@@ -18,6 +18,9 @@ import enDesktop from './locales/en/desktop.json'
 import enTeams from './locales/en/teams.json'
 import enChannels from './locales/en/channels.json'
 import enTts from './locales/en/tts.json'
+import enSettings from './locales/en/settings.json'
+import enUsage from './locales/en/usage.json'
+import enOnboarding from './locales/en/onboarding.json'
 
 // --- VI namespaces ---
 import viCommon from './locales/vi/common.json'
@@ -36,6 +39,9 @@ import viDesktop from './locales/vi/desktop.json'
 import viTeams from './locales/vi/teams.json'
 import viChannels from './locales/vi/channels.json'
 import viTts from './locales/vi/tts.json'
+import viSettings from './locales/vi/settings.json'
+import viUsage from './locales/vi/usage.json'
+import viOnboarding from './locales/vi/onboarding.json'
 
 // --- ZH namespaces ---
 import zhCommon from './locales/zh/common.json'
@@ -54,6 +60,9 @@ import zhDesktop from './locales/zh/desktop.json'
 import zhTeams from './locales/zh/teams.json'
 import zhChannels from './locales/zh/channels.json'
 import zhTts from './locales/zh/tts.json'
+import zhSettings from './locales/zh/settings.json'
+import zhUsage from './locales/zh/usage.json'
+import zhOnboarding from './locales/zh/onboarding.json'
 
 // --- RU namespaces ---
 import ruCommon from './locales/ru/common.json'
@@ -72,6 +81,9 @@ import ruDesktop from './locales/ru/desktop.json'
 import ruTeams from './locales/ru/teams.json'
 import ruChannels from './locales/ru/channels.json'
 import ruTts from './locales/ru/tts.json'
+import ruSettings from './locales/ru/settings.json'
+import ruUsage from './locales/ru/usage.json'
+import ruOnboarding from './locales/ru/onboarding.json'
 
 const STORAGE_KEY = 'goclaw:language'
 
@@ -92,27 +104,31 @@ i18n.use(initReactI18next).init({
       skills: enSkills, cron: enCron, mcp: enMcp, tools: enTools,
       traces: enTraces, memory: enMemory, storage: enStorage, sessions: enSessions,
       desktop: enDesktop, teams: enTeams, channels: enChannels, tts: enTts,
+      settings: enSettings, usage: enUsage, onboarding: enOnboarding,
     },
     vi: {
       common: viCommon, chat: viChat, agents: viAgents, providers: viProviders,
       skills: viSkills, cron: viCron, mcp: viMcp, tools: viTools,
       traces: viTraces, memory: viMemory, storage: viStorage, sessions: viSessions,
       desktop: viDesktop, teams: viTeams, channels: viChannels, tts: viTts,
+      settings: viSettings, usage: viUsage, onboarding: viOnboarding,
     },
     zh: {
       common: zhCommon, chat: zhChat, agents: zhAgents, providers: zhProviders,
       skills: zhSkills, cron: zhCron, mcp: zhMcp, tools: zhTools,
       traces: zhTraces, memory: zhMemory, storage: zhStorage, sessions: zhSessions,
       desktop: zhDesktop, teams: zhTeams, channels: zhChannels, tts: zhTts,
+      settings: zhSettings, usage: zhUsage, onboarding: zhOnboarding,
     },
     ru: {
       common: ruCommon, chat: ruChat, agents: ruAgents, providers: ruProviders,
       skills: ruSkills, cron: ruCron, mcp: ruMcp, tools: ruTools,
       traces: ruTraces, memory: ruMemory, storage: ruStorage, sessions: ruSessions,
       desktop: ruDesktop, teams: ruTeams, channels: ruChannels, tts: ruTts,
+      settings: ruSettings, usage: ruUsage, onboarding: ruOnboarding,
     },
   },
-  ns: ['common', 'chat', 'agents', 'providers', 'skills', 'cron', 'mcp', 'tools', 'traces', 'memory', 'storage', 'sessions', 'desktop', 'teams', 'channels', 'tts'],
+  ns: ['common', 'chat', 'agents', 'providers', 'skills', 'cron', 'mcp', 'tools', 'traces', 'memory', 'storage', 'sessions', 'desktop', 'teams', 'channels', 'tts', 'settings', 'usage', 'onboarding'],
   defaultNS: 'common',
   lng: getInitialLanguage(),
   fallbackLng: 'en',
