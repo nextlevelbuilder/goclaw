@@ -301,3 +301,68 @@ func TestStreamChat_RedactedThinkingPassback(t *testing.T) {
 		t.Errorf("data = %v, want encrypted-blob", blocks[0]["data"])
 	}
 }
+
+// TestStreamChat_MessageDeltaUsage verifies that input and cache token counts
+// sent in message_delta (cumulative usage, as some Anthropic-compatible
+// endpoints do) override the placeholder values from message_start, and that
+// absent/zero fields in message_delta do not wipe the earlier counts.
+func TestStreamChat_MessageDeltaUsage(t *testing.T) {
+	run := func(t *testing.T, startUsage, deltaUsage string) *ChatResponse {
+		t.Helper()
+		events := []string{
+			"event: message_start\n",
+			`data: {"message":{"usage":` + startUsage + `}}` + "\n\n",
+
+			"event: content_block_start\n",
+			`data: {"index":0,"content_block":{"type":"text","text":""}}` + "\n\n",
+
+			"event: content_block_delta\n",
+			`data: {"index":0,"delta":{"type":"text_delta","text":"hi"}}` + "\n\n",
+
+			"event: content_block_stop\n",
+			"data: {}\n\n",
+
+			"event: message_delta\n",
+			`data: {"delta":{"stop_reason":"end_turn"},"usage":` + deltaUsage + `}` + "\n\n",
+
+			"event: message_stop\n",
+			"data: {}\n\n",
+		}
+		server := newAnthropicSSEServer(t, events)
+		p := newTestAnthropicProvider(server.URL)
+		result, err := p.ChatStream(context.Background(), ChatRequest{
+			Model:    "claude-sonnet-4-5-20250929",
+			Messages: []Message{{Role: "user", Content: "hello"}},
+		}, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result == nil || result.Usage == nil {
+			t.Fatal("expected non-nil result with usage")
+		}
+		return result
+	}
+
+	t.Run("delta overrides start", func(t *testing.T) {
+		r := run(t,
+			`{"input_tokens":1,"output_tokens":1}`,
+			`{"input_tokens":500,"cache_creation_input_tokens":40,"cache_read_input_tokens":300,"output_tokens":20}`)
+		u := r.Usage
+		if u.PromptTokens != 500 || u.CacheCreationTokens != 40 || u.CacheReadTokens != 300 || u.CompletionTokens != 20 {
+			t.Errorf("usage = %+v, want prompt=500 cacheCreate=40 cacheRead=300 completion=20", u)
+		}
+		if u.TotalTokens != 520 {
+			t.Errorf("TotalTokens = %d, want 520", u.TotalTokens)
+		}
+	})
+
+	t.Run("delta without input keeps start", func(t *testing.T) {
+		r := run(t,
+			`{"input_tokens":10,"cache_creation_input_tokens":4,"cache_read_input_tokens":6}`,
+			`{"output_tokens":20}`)
+		u := r.Usage
+		if u.PromptTokens != 10 || u.CacheCreationTokens != 4 || u.CacheReadTokens != 6 || u.CompletionTokens != 20 {
+			t.Errorf("usage = %+v, want prompt=10 cacheCreate=4 cacheRead=6 completion=20", u)
+		}
+	})
+}
