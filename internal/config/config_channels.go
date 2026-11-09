@@ -218,6 +218,56 @@ type ZaloPersonalConfig struct {
 	CredentialsPath string              `json:"credentials_path,omitempty"` // path to saved cookies JSON
 	BlockReply      *bool               `json:"block_reply,omitempty"`      // override gateway block_reply (nil = inherit)
 	ChatBehavior    *ChatBehaviorConfig `json:"chat_behavior,omitempty"`    // override gateway chat behavior (nil = inherit)
+
+	// v2 runtime controls. Zero values select the documented defaults via the
+	// Effective* helpers; PersistCookies is a pointer so explicit false works.
+	MediaMaxMB        int   `json:"media_max_mb,omitempty"`         // default 30
+	SendRatePerMinute int   `json:"send_rate_per_minute,omitempty"` // default 30
+	SendDelayMS       int   `json:"send_delay_ms,omitempty"`        // default 1200
+	DailySendCap      int   `json:"daily_send_cap,omitempty"`       // default 500
+	RichText          bool  `json:"rich_text,omitempty"`            // default false
+	QuoteReply        bool  `json:"quote_reply,omitempty"`          // default false
+	MentionsEnabled   bool  `json:"mentions_enabled,omitempty"`     // default false
+	ReactionWakeup    bool  `json:"reaction_wakeup,omitempty"`      // default false
+	PersistCookies    *bool `json:"persist_cookies,omitempty"`      // default true
+}
+
+// EffectiveMediaMaxMB returns the inbound media download cap in MiB.
+func (c ZaloPersonalConfig) EffectiveMediaMaxMB() int {
+	if c.MediaMaxMB <= 0 {
+		return 30
+	}
+	return c.MediaMaxMB
+}
+
+// EffectiveSendRatePerMinute returns the per-instance outbound API rate limit.
+func (c ZaloPersonalConfig) EffectiveSendRatePerMinute() int {
+	if c.SendRatePerMinute <= 0 {
+		return 30
+	}
+	return c.SendRatePerMinute
+}
+
+// EffectiveSendDelayMS returns the minimum delay between text chunks.
+func (c ZaloPersonalConfig) EffectiveSendDelayMS() int {
+	if c.SendDelayMS <= 0 {
+		return 1200
+	}
+	return c.SendDelayMS
+}
+
+// EffectiveDailySendCap returns the per-instance daily outbound message cap.
+func (c ZaloPersonalConfig) EffectiveDailySendCap() int {
+	if c.DailySendCap <= 0 {
+		return 500
+	}
+	return c.DailySendCap
+}
+
+// EffectivePersistCookies reports whether rotated cookies should be persisted.
+// Unset defaults to true; an explicit false disables persistence.
+func (c ZaloPersonalConfig) EffectivePersistCookies() bool {
+	return c.PersistCookies == nil || *c.PersistCookies
 }
 
 type FeishuConfig struct {

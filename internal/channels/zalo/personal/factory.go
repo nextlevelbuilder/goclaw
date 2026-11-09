@@ -28,6 +28,38 @@ type zaloInstanceConfig struct {
 	AllowFrom      []string                   `json:"allow_from,omitempty"`
 	BlockReply     *bool                      `json:"block_reply,omitempty"`
 	ChatBehavior   *config.ChatBehaviorConfig `json:"chat_behavior,omitempty"`
+
+	MediaMaxMB        int   `json:"media_max_mb,omitempty"`
+	SendRatePerMinute int   `json:"send_rate_per_minute,omitempty"`
+	SendDelayMS       int   `json:"send_delay_ms,omitempty"`
+	DailySendCap      int   `json:"daily_send_cap,omitempty"`
+	RichText          bool  `json:"rich_text,omitempty"`
+	QuoteReply        bool  `json:"quote_reply,omitempty"`
+	MentionsEnabled   bool  `json:"mentions_enabled,omitempty"`
+	ReactionWakeup    bool  `json:"reaction_wakeup,omitempty"`
+	PersistCookies    *bool `json:"persist_cookies,omitempty"`
+}
+
+func zaloConfigFromInstance(ic zaloInstanceConfig) config.ZaloPersonalConfig {
+	return config.ZaloPersonalConfig{
+		Enabled:           true,
+		AllowFrom:         ic.AllowFrom,
+		DMPolicy:          ic.DMPolicy,
+		GroupPolicy:       ic.GroupPolicy,
+		RequireMention:    ic.RequireMention,
+		HistoryLimit:      ic.HistoryLimit,
+		BlockReply:        ic.BlockReply,
+		ChatBehavior:      ic.ChatBehavior,
+		MediaMaxMB:        ic.MediaMaxMB,
+		SendRatePerMinute: ic.SendRatePerMinute,
+		SendDelayMS:       ic.SendDelayMS,
+		DailySendCap:      ic.DailySendCap,
+		RichText:          ic.RichText,
+		QuoteReply:        ic.QuoteReply,
+		MentionsEnabled:   ic.MentionsEnabled,
+		ReactionWakeup:    ic.ReactionWakeup,
+		PersistCookies:    ic.PersistCookies,
+	}
 }
 
 // Factory creates a Zalo Personal channel from DB instance data.
@@ -55,16 +87,7 @@ func Factory(name string, creds json.RawMessage, cfg json.RawMessage,
 		}
 	}
 
-	zaloCfg := config.ZaloPersonalConfig{
-		Enabled:        true,
-		AllowFrom:      ic.AllowFrom,
-		DMPolicy:       ic.DMPolicy,
-		GroupPolicy:    ic.GroupPolicy,
-		RequireMention: ic.RequireMention,
-		HistoryLimit:   ic.HistoryLimit,
-		BlockReply:     ic.BlockReply,
-		ChatBehavior:   ic.ChatBehavior,
-	}
+	zaloCfg := zaloConfigFromInstance(ic)
 
 	ch, err := New(zaloCfg, msgBus, pairingSvc, nil)
 	if err != nil {
@@ -106,16 +129,7 @@ func FactoryWithPendingStore(pendingStore store.PendingMessageStore) channels.Ch
 			}
 		}
 
-		zaloCfg := config.ZaloPersonalConfig{
-			Enabled:        true,
-			AllowFrom:      ic.AllowFrom,
-			DMPolicy:       ic.DMPolicy,
-			GroupPolicy:    ic.GroupPolicy,
-			RequireMention: ic.RequireMention,
-			HistoryLimit:   ic.HistoryLimit,
-			BlockReply:     ic.BlockReply,
-			ChatBehavior:   ic.ChatBehavior,
-		}
+		zaloCfg := zaloConfigFromInstance(ic)
 
 		ch, err := New(zaloCfg, msgBus, pairingSvc, pendingStore)
 		if err != nil {
