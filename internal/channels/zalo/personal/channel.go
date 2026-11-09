@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -24,6 +26,10 @@ type Channel struct {
 	config      config.ZaloPersonalConfig
 	typingCtrls sync.Map // threadID → *typing.Controller
 	replyCache  *replycontext.Cache
+	dedupe      *dedupeCache
+	limiter     *sendLimiter
+
+	authFailureReported atomic.Bool
 
 	mu       sync.RWMutex // protects sess and listener
 	sess     *protocol.Session
@@ -62,7 +68,13 @@ func New(cfg config.ZaloPersonalConfig, msgBus *bus.MessageBus, pairingSvc store
 		BaseChannel: base,
 		config:      cfg,
 		replyCache:  replycontext.NewCache(replycontext.DefaultOptions()),
-		stopCh:      make(chan struct{}),
+		dedupe:      newDedupeCache(defaultDedupeTTL, defaultDedupeMaxKeys, nil),
+		limiter: newSendLimiter(sendLimiterConfig{
+			ratePerMinute: cfg.EffectiveSendRatePerMinute(),
+			delay:         time.Duration(cfg.EffectiveSendDelayMS()) * time.Millisecond,
+			dailyCap:      cfg.EffectiveDailySendCap(),
+		}),
+		stopCh: make(chan struct{}),
 	}
 	ch.SetPairingService(pairingSvc)
 	ch.SetGroupHistory(channels.MakeHistory(channels.TypeZaloPersonal, pendingStore, base.TenantID()))

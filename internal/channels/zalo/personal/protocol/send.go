@@ -71,7 +71,7 @@ func SendMessage(ctx context.Context, sess *Session, threadID string, threadType
 		return "", fmt.Errorf("zalo_personal: parse send response: %w", err)
 	}
 	if envelope.ErrorCode != 0 {
-		return "", fmt.Errorf("zalo_personal: send error code %d", envelope.ErrorCode)
+		return "", NewAPIError("send", envelope.ErrorCode)
 	}
 	if envelope.Data == nil {
 		return "", nil
@@ -80,6 +80,34 @@ func SendMessage(ctx context.Context, sess *Session, threadID string, threadType
 	plain, err := decryptDataField(sess, *envelope.Data)
 	if err != nil {
 		return "", fmt.Errorf("zalo_personal: decrypt send response: %w", err)
+	}
+
+	return parseSendResult(plain)
+}
+
+// parseSendResult checks the inner error_code before reading msgId. Zalo can
+// return {error_code, data:{msgId}} or a flat {msgId} depending on the endpoint.
+func parseSendResult(plain []byte) (string, error) {
+	var inner struct {
+		ErrorCode int             `json:"error_code"`
+		MsgID     json.Number     `json:"msgId"`
+		Data      json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(plain, &inner); err == nil {
+		if inner.ErrorCode != 0 {
+			return "", NewAPIError("send", inner.ErrorCode)
+		}
+		if inner.MsgID != "" {
+			return inner.MsgID.String(), nil
+		}
+		if len(inner.Data) > 0 {
+			var nested struct {
+				MsgID json.Number `json:"msgId"`
+			}
+			if err := json.Unmarshal(inner.Data, &nested); err == nil && nested.MsgID != "" {
+				return nested.MsgID.String(), nil
+			}
+		}
 	}
 
 	var result struct {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
+
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/typing"
@@ -12,6 +14,9 @@ import (
 )
 
 const maxTextLength = 2000
+
+// sendRetryDelays is a variable so tests can avoid real backoff sleeps.
+var sendRetryDelays = []time.Duration{time.Second, 3 * time.Second}
 
 // Send delivers an outbound message to a Zalo chat.
 func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
@@ -40,14 +45,21 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 
 	// Send media attachments.
 	for _, media := range msg.Media {
+		if err := c.waitSend(ctx, msg.ChatID); err != nil {
+			return err
+		}
+
+		var err error
 		if protocol.IsImageFile(media.URL) {
-			if err := c.sendImage(ctx, sess, msg.ChatID, threadType, media.URL, media.Caption); err != nil {
-				slog.Warn("zalo_personal: failed to send image", "path", media.URL, "error", err)
-			}
+			err = c.sendImage(ctx, sess, msg.ChatID, threadType, media.URL, media.Caption)
 		} else {
-			if err := c.sendFile(ctx, sess, msg.ChatID, threadType, media.URL); err != nil {
-				slog.Warn("zalo_personal: failed to send file", "path", media.URL, "error", err)
+			err = c.sendFile(ctx, sess, msg.ChatID, threadType, media.URL)
+		}
+		if err != nil {
+			if c.handleSendError(err) {
+				return err
 			}
+			slog.Warn("zalo_personal: failed to send media", "path", media.URL, "error", err)
 		}
 	}
 
@@ -58,15 +70,40 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	return nil
 }
 
+func (c *Channel) waitSend(ctx context.Context, threadID string) error {
+	if c.limiter == nil {
+		return nil
+	}
+	return c.limiter.Wait(ctx, threadID)
+}
+
+// handleSendError reports terminal auth failures once and tells the caller
+// whether the send must stop. Policy errors also stop; transient errors may be
+// logged and skipped so the remaining content can still be delivered.
+func (c *Channel) handleSendError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if protocol.IsAuthError(err) {
+		if c.authFailureReported.CompareAndSwap(false, true) {
+			c.MarkFailed("Zalo session expired", err.Error(), channels.ChannelFailureKindAuth, false)
+		}
+		return true
+	}
+	return protocol.IsPolicyError(err)
+}
+
 // sendImage uploads and sends an image file to a Zalo thread.
 func (c *Channel) sendImage(ctx context.Context, sess *protocol.Session, chatID string, threadType protocol.ThreadType, filePath, caption string) error {
-	upload, err := protocol.UploadImage(ctx, sess, chatID, threadType, filePath)
-	if err != nil {
-		return fmt.Errorf("upload: %w", err)
-	}
+	return retryTransient(ctx, func() error {
+		upload, err := protocol.UploadImage(ctx, sess, chatID, threadType, filePath)
+		if err != nil {
+			return fmt.Errorf("upload: %w", err)
+		}
 
-	_, err = protocol.SendImage(ctx, sess, chatID, threadType, upload, caption)
-	return err
+		_, err = protocol.SendImage(ctx, sess, chatID, threadType, upload, caption)
+		return err
+	})
 }
 
 // sendFile uploads and sends a file to a Zalo thread.
@@ -75,20 +112,57 @@ func (c *Channel) sendFile(ctx context.Context, sess *protocol.Session, chatID s
 	if ln == nil {
 		return fmt.Errorf("listener not available for file upload")
 	}
-	upload, err := protocol.UploadFile(ctx, sess, ln, chatID, threadType, filePath)
-	if err != nil {
-		return fmt.Errorf("upload: %w", err)
-	}
+	return retryTransient(ctx, func() error {
+		upload, err := protocol.UploadFile(ctx, sess, ln, chatID, threadType, filePath)
+		if err != nil {
+			return fmt.Errorf("upload: %w", err)
+		}
 
-	_, err = protocol.SendFile(ctx, sess, chatID, threadType, upload)
-	return err
+		_, err = protocol.SendFile(ctx, sess, chatID, threadType, upload)
+		return err
+	})
 }
 
 func (c *Channel) sendChunkedText(ctx context.Context, sess *protocol.Session, chatID string, threadType protocol.ThreadType, text string) error {
-	for _, chunk := range channels.ChunkMarkdown(text, maxTextLength) {
-		if _, err := protocol.SendMessage(ctx, sess, chatID, threadType, chunk); err != nil {
+	chunks := channels.ChunkMarkdown(text, maxTextLength)
+	for i, chunk := range chunks {
+		if err := c.waitSend(ctx, chatID); err != nil {
 			return err
+		}
+
+		err := retryTransient(ctx, func() error {
+			_, err := protocol.SendMessage(ctx, sess, chatID, threadType, chunk)
+			return err
+		})
+		if err != nil {
+			c.handleSendError(err)
+			return err
+		}
+
+		if i < len(chunks)-1 && c.limiter != nil {
+			if err := c.limiter.Jitter(ctx); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+// retryTransient retries only transient failures, twice, with the documented
+// 1s/3s backoff. Auth and policy errors return immediately.
+func retryTransient(ctx context.Context, fn func() error) error {
+	err := fn()
+	for _, delay := range sendRetryDelays {
+		if err == nil || !protocol.IsTransient(err) {
+			return err
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		if sleepErr := sleepContext(ctx, delay); sleepErr != nil {
+			return sleepErr
+		}
+		err = fn()
+	}
+	return err
 }

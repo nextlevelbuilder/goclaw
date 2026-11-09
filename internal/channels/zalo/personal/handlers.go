@@ -32,6 +32,11 @@ func (c *Channel) handleDM(msg protocol.UserMessage) {
 	senderID := msg.Data.UIDFrom
 	threadID := msg.ThreadID()
 
+	if c.dedupe != nil && c.dedupe.Seen(msg.Data.MsgID, msg.Data.CliMsgID) {
+		slog.Debug("zalo_personal: duplicate DM suppressed", "msg_id", msg.Data.MsgID, "thread", threadID)
+		return
+	}
+
 	if !c.checkDMPolicy(ctx, senderID, threadID) {
 		return
 	}
@@ -86,6 +91,11 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 	ctx = store.WithTenantID(ctx, c.TenantID())
 	senderID := msg.Data.UIDFrom
 	threadID := msg.ThreadID()
+
+	if c.dedupe != nil && c.dedupe.Seen(msg.Data.MsgID, msg.Data.CliMsgID) {
+		slog.Debug("zalo_personal: duplicate group message suppressed", "msg_id", msg.Data.MsgID, "thread", threadID)
+		return
+	}
 
 	// Step 1: enforce access policy (allowlist/pairing). Hard reject — don't record history.
 	if !c.checkGroupPolicy(ctx, senderID, threadID) {
