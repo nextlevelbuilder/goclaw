@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -99,5 +101,79 @@ func TestFetchAnthropicModelsKeepsEarlierPagesOnLaterFailure(t *testing.T) {
 	defer first.Close()
 	if _, err := fetchAnthropicModels(context.Background(), "k", first.URL+"/v1"); err == nil {
 		t.Fatal("first-page failure: want an error")
+	}
+}
+
+// Gemini's endpoint is fixed, so intercept requests without contacting Google.
+type geminiModelsTransport func(*http.Request) (*http.Response, error)
+
+func (f geminiModelsTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestFetchGeminiModelsPagination(t *testing.T) {
+	for _, mode := range []string{"pages", "first-error", "later-error", "repeat", "empty"} {
+		t.Run(mode, func(t *testing.T) {
+			old := http.DefaultClient
+			t.Cleanup(func() { http.DefaultClient = old })
+			calls := 0
+			http.DefaultClient = &http.Client{Transport: geminiModelsTransport(func(r *http.Request) (*http.Response, error) {
+				calls++
+				q := r.URL.Query()
+				if q.Get("key") != "key+&=" {
+					t.Errorf("key = %q", q.Get("key"))
+				}
+				if q.Get("pageSize") != "1000" {
+					t.Errorf("pageSize = %q", q.Get("pageSize"))
+				}
+				status, body := 200, `{"models":[{"name":"models/gemini-a","displayName":"A"}],"nextPageToken":"next+&="}`
+				if calls > 1 {
+					if q.Get("pageToken") != "next+&=" {
+						t.Errorf("pageToken = %q", q.Get("pageToken"))
+					}
+					body = `{"models":[{"name":"models/gemini-b","displayName":"B"}]}`
+					if mode == "repeat" {
+						body = `{"models":[],"nextPageToken":"next+&="}`
+					}
+				}
+				if mode == "empty" {
+					body = `{"models":[]}`
+				}
+				if mode == "first-error" || (mode == "later-error" && calls > 1) {
+					status, body = 500, "boom"
+				}
+				if calls > 3 {
+					t.Fatal("pagination did not stop")
+				}
+				return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+			})}
+			models, err := fetchGeminiModels(context.Background(), "key+&=")
+			if mode == "first-error" {
+				if err == nil {
+					t.Fatal("want first-page error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := 1
+			if mode == "pages" {
+				want = 2
+			}
+			if mode == "empty" {
+				want = 0
+				if models == nil {
+					t.Fatal("want non-nil empty list")
+				}
+			}
+			if len(models) != want {
+				t.Fatalf("got %d models, want %d", len(models), want)
+			}
+			if want > 0 && (models[0].ID != "gemini-a" || models[0].Name != "A") {
+				t.Fatalf("unexpected model: %+v", models[0])
+			}
+			if mode == "pages" && (models[1].ID != "gemini-b" || calls != 2) {
+				t.Fatalf("models=%v calls=%d", models, calls)
+			}
+		})
 	}
 }
