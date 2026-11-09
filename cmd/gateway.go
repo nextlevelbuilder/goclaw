@@ -288,7 +288,11 @@ func runGateway() {
 	}
 
 	slog.Debug("creating mcpMgr via setupToolRegistry")
-	toolsReg, execApprovalMgr, mcpMgr, sandboxMgr, browserMgr, webFetchTool, ttsTool, audioMgr, permPE, toolPE, dataDir, agentCfg := setupToolRegistry(cfg, workspace, providerRegistry)
+	toolsReg, execApprovalMgr, mcpMgr, sandboxMgr, browserMgr, webFetchTool, ttsTool, audioMgr, permPE, toolPE, dataDir, agentCfg, err := setupToolRegistry(cfg, workspace, providerRegistry)
+	if err != nil {
+		slog.Warn("security.sandbox_unavailable", "configured_mode", cfg.Agents.Defaults.Sandbox.Mode, "error", err)
+		os.Exit(1)
+	}
 	slog.Debug("setupToolRegistry completed", "mcpMgr_nil", mcpMgr == nil)
 	if browserMgr != nil {
 		defer browserMgr.Close()

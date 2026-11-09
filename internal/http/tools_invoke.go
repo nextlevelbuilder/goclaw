@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/i18n"
 	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
@@ -92,6 +93,12 @@ func (h *ToolsInvokeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Note: userID, tenantID, role, locale already injected by enrichContext above.
 	ctx := r.Context()
 
+	// Start from the default request budget so media tools (read_image/
+	// read_audio/read_video) pass the budget guard, then overwrite it from the
+	// agent row below when it can be read.
+	ctx = store.WithAgentContextWindow(ctx, config.DefaultContextWindow)
+	ctx = store.WithAgentMaxTokens(ctx, config.DefaultMaxTokens)
+
 	agentIDStr := req.AgentID
 	if agentIDStr == "" {
 		agentIDStr = extractAgentID(r, "")
@@ -100,6 +107,16 @@ func (h *ToolsInvokeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ag, err := h.agentStore.GetByKey(ctx, agentIDStr)
 		if err == nil {
 			ctx = store.WithAgentID(ctx, ag.ID)
+			if ag.ContextWindow > 0 {
+				ctx = store.WithAgentContextWindow(ctx, ag.ContextWindow)
+			}
+			if ag.MaxTokens > 0 {
+				ctx = store.WithAgentMaxTokens(ctx, ag.MaxTokens)
+			}
+		} else {
+			slog.Warn("tools_invoke: agent lookup failed, using default request budget",
+				"agent", agentIDStr, "err", err,
+				"context_window", config.DefaultContextWindow, "max_tokens", config.DefaultMaxTokens)
 		}
 	}
 

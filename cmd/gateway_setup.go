@@ -34,7 +34,7 @@ import (
 // setupToolRegistry creates the tool registry and registers all tools.
 // Returns the registry, exec approval manager, MCP manager, sandbox manager,
 // browser manager (caller must defer Close), web fetch tool, TTS tool,
-// permission policy engine, tool policy engine, data directory, and resolved agent defaults.
+// permission policy engine, tool policy engine, data directory, resolved agent defaults, and startup error.
 func setupToolRegistry(
 	cfg *config.Config,
 	workspace string,
@@ -52,24 +52,22 @@ func setupToolRegistry(
 	toolPE *tools.PolicyEngine,
 	dataDir string,
 	agentCfg config.AgentDefaults,
+	err error,
 ) {
+	// Check configured isolation before allocating tools or other resources.
+	if sbCfg := cfg.Agents.Defaults.Sandbox; sbCfg != nil && sbCfg.Mode != "" && sbCfg.Mode != "off" {
+		if probeErr := sandbox.CheckDockerAvailable(context.Background()); probeErr != nil {
+			err = fmt.Errorf("sandbox mode %q unavailable: %w", sbCfg.Mode, probeErr)
+			return
+		}
+		resolved := sbCfg.ToSandboxConfig()
+		sandboxMgr = sandbox.NewDockerManager(resolved)
+		slog.Info("sandbox enabled", "mode", string(resolved.Mode), "image", resolved.Image, "scope", string(resolved.Scope))
+	}
+
 	// Create tool registry with all tools
 	toolsReg = tools.NewRegistry()
 	agentCfg = cfg.ResolveAgent("default")
-
-	// Sandbox manager (optional — routes tools through Docker containers)
-	if sbCfg := cfg.Agents.Defaults.Sandbox; sbCfg != nil && sbCfg.Mode != "" && sbCfg.Mode != "off" {
-		if err := sandbox.CheckDockerAvailable(context.Background()); err != nil {
-			slog.Warn("sandbox disabled: Docker not available",
-				"configured_mode", sbCfg.Mode,
-				"error", err,
-			)
-		} else {
-			resolved := sbCfg.ToSandboxConfig()
-			sandboxMgr = sandbox.NewDockerManager(resolved)
-			slog.Info("sandbox enabled", "mode", string(resolved.Mode), "image", resolved.Image, "scope", string(resolved.Scope))
-		}
-	}
 
 	// Register file tools + exec tool (with sandbox routing via FsBridge if enabled)
 	if sandboxMgr != nil {

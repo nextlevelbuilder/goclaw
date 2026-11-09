@@ -21,6 +21,7 @@ type slackStream struct {
 	channelID  string
 	threadTS   string
 	msgTS      string    // placeholder message timestamp
+	key        string    // c.placeholders key the message is registered under
 	lastUpdate time.Time // last chat.update call
 	mu         sync.Mutex
 }
@@ -80,22 +81,48 @@ func (c *Channel) StreamEnabled(isGroup bool) bool {
 // Implements channels.StreamingChannel.
 // The placeholder "Thinking..." was already sent in handleMessage.
 func (c *Channel) CreateStream(_ context.Context, chatID string, _ bool) (channels.ChannelStream, error) {
-	pTS, pOK := c.placeholders.Load(chatID)
-	if !pOK {
-		// No placeholder — stream will be a no-op
-		return &slackStream{
-			api:       c.api,
-			channelID: extractChannelID(chatID),
-			threadTS:  extractThreadTS(chatID),
-		}, nil
-	}
-
-	return &slackStream{
+	stream := &slackStream{
 		api:       c.api,
 		channelID: extractChannelID(chatID),
 		threadTS:  extractThreadTS(chatID),
-		msgTS:     pTS.(string),
-	}, nil
+	}
+	if key, pTS, ok := c.streamPlaceholder(chatID); ok {
+		stream.msgTS = pTS
+		stream.key = key
+	}
+	return stream, nil
+}
+
+// streamPlaceholder resolves the placeholder a run should stream into. The
+// streaming transport only receives the run's local key, while a placeholder may
+// be keyed with a thread suffix (each top-level mention owns its own thread —
+// see threadPlaceholderKey). An exact hit wins. Otherwise a single thread-scoped
+// entry for the same local key is reused, so one in-flight mention keeps its live
+// preview; when several mentions are in flight the lookup is ambiguous and the
+// stream stays a no-op rather than editing another thread's placeholder.
+func (c *Channel) streamPlaceholder(chatID string) (key, ts string, ok bool) {
+	if v, found := c.placeholders.Load(chatID); found {
+		if s, isString := v.(string); isString {
+			return chatID, s, true
+		}
+	}
+
+	prefix := chatID + ":thread:"
+	matches := 0
+	c.placeholders.Range(func(k, v any) bool {
+		ks, kOK := k.(string)
+		s, vOK := v.(string)
+		if !kOK || !vOK || !strings.HasPrefix(ks, prefix) {
+			return true
+		}
+		matches++
+		key, ts = ks, s
+		return matches < 2
+	})
+	if matches != 1 {
+		return "", "", false
+	}
+	return key, ts, true
 }
 
 // FinalizeStream stores the stream's placeholder TS back into c.placeholders so that
@@ -110,7 +137,31 @@ func (c *Channel) FinalizeStream(_ context.Context, chatID string, stream channe
 	if !ok || ss.msgTS == "" {
 		return
 	}
-	c.placeholders.Store(chatID, ss.msgTS)
+	// Store the placeholder back under the key it was resolved from, so Send()
+	// finds it again through metadata["placeholder_key"].
+	key := ss.key
+	if key == "" {
+		key = chatID
+	}
+	c.placeholders.Store(key, ss.msgTS)
+}
+
+// threadPlaceholderKey returns the c.placeholders key for a run's "Thinking..."
+// placeholder.
+//
+// A group session is keyed per channel, but in Slack every top-level @mention
+// opens its own reply thread, so answering one mention never replaces another.
+// Keying the placeholder by the session key alone therefore makes concurrent
+// mentions in the same channel overwrite each other's entry: the second mention
+// takes over the first one's placeholder timestamp, the first answer is edited
+// into the newer thread, and the first placeholder is orphaned as "Thinking...".
+// Carrying the reply thread in the key gives each mention its own entry while
+// leaving local_key (and group session/history scoping) untouched.
+func threadPlaceholderKey(localKey, replyThreadTS string) string {
+	if replyThreadTS == "" || strings.Contains(localKey, ":thread:") {
+		return localKey
+	}
+	return localKey + ":thread:" + replyThreadTS
 }
 
 // extractChannelID gets the channel ID from a local_key.

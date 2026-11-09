@@ -187,8 +187,12 @@ func (p *OllamaProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 				onChunk(StreamChunk{Thinking: thinking})
 			}
 
-			if resp.Done {
-				// Tool calls come in the final response message.
+			// Ollama emits tool calls in an intermediate (done=false) chunk and
+			// then a final done=true chunk with an empty message, so collect
+			// them from every chunk, not only the last one. If the final chunk
+			// repeats calls already seen, keep the earlier ones to avoid
+			// executing a tool twice.
+			if !resp.Done || len(acc.ToolCalls) == 0 {
 				for _, tc := range resp.Message.ToolCalls {
 					call := ToolCall{
 						ID:        tc.ID,
@@ -197,6 +201,9 @@ func (p *OllamaProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 					}
 					acc.ToolCalls = append(acc.ToolCalls, call)
 				}
+			}
+
+			if resp.Done {
 				acc.FinishReason = mapDoneReason(resp.DoneReason)
 				if len(acc.ToolCalls) > 0 && acc.FinishReason != "length" {
 					acc.FinishReason = "tool_calls"

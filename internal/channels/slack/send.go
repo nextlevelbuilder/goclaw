@@ -18,16 +18,27 @@ func (c *Channel) Send(_ context.Context, msg bus.OutboundMessage) error {
 		return fmt.Errorf("slack bot not running")
 	}
 
-	channelID := msg.ChatID
-	if channelID == "" {
+	chatID := msg.ChatID
+	if chatID == "" {
 		return fmt.Errorf("empty chat ID for slack send")
 	}
 
-	placeholderKey := channelID
+	// A group session keyed by "CHANNEL:thread:TS" reaches Send() with that
+	// composite local key as its chat ID when the reply skips the draft
+	// (streaming) transport, which already splits it with extractChannelID and
+	// extractThreadTS. chat.postMessage takes the bare channel ID and the thread
+	// timestamp in its own field: passing the composite value as the channel
+	// makes Slack answer channel_not_found, and the reply is lost.
+	channelID := extractChannelID(chatID)
+	threadTS := msg.Metadata["message_thread_id"]
+	if threadTS == "" {
+		threadTS = extractThreadTS(chatID)
+	}
+
+	placeholderKey := threadPlaceholderKey(chatID, threadTS)
 	if pk := msg.Metadata["placeholder_key"]; pk != "" {
 		placeholderKey = pk
 	}
-	threadTS := msg.Metadata["message_thread_id"]
 
 	// Placeholder update (LLM retry notification)
 	if msg.Metadata["placeholder_update"] == "true" {

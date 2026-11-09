@@ -24,10 +24,18 @@ type reasoningCapabilityEntry struct {
 	capability ReasoningCapability
 }
 
+// GPT-6 and GPT-5.6 models also accept "max" (and most accept "ultra"); those
+// stay out of Levels until their capability rollout explicitly enables them.
 var reasoningCapabilityEntries = []reasoningCapabilityEntry{
 	{id: "minimax-m3.1-flash", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh", "max"}, DefaultEffort: "max"}},
-	{id: "gpt-5.6-sol", capability: ReasoningCapability{Levels: []string{"none", "low", "medium", "high", "xhigh"}, DefaultEffort: "medium"}},
-	{id: "gpt-5.6-terra", capability: ReasoningCapability{Levels: []string{"none", "low", "medium", "high", "xhigh"}, DefaultEffort: "medium"}},
+	{id: "gpt-6.1-sol", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "low"}},
+	{id: "gpt-6.1-terra", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "low"}},
+	{id: "gpt-6-astra", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "low"}},
+	{id: "gpt-6-sol", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "medium"}},
+	{id: "gpt-6-luna", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "medium"}},
+	{id: "gpt-5.6-sol", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "low"}},
+	{id: "gpt-5.6-terra", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "medium"}},
+	{id: "gpt-5.6-luna", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "medium"}},
 	{id: "gpt-5.5", capability: ReasoningCapability{Levels: []string{"none", "low", "medium", "high", "xhigh"}, DefaultEffort: "medium"}},
 	{id: "gpt-5.4-mini", capability: ReasoningCapability{Levels: []string{"none", "low", "medium", "high", "xhigh"}, DefaultEffort: "none"}},
 	{id: "gpt-5-mini", capability: ReasoningCapability{Levels: []string{"none", "low", "medium", "high", "xhigh"}, DefaultEffort: "none"}},

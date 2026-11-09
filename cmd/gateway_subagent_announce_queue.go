@@ -29,6 +29,7 @@ func makeDelegateAnnounceCallback(
 	return func(sessionKey string, items []tools.AnnounceQueueItem, meta tools.AnnounceMetadata) {
 		roster := subagentMgr.RosterForParent(tools.TaskScope{
 			TenantID: meta.OriginTenantID, RootAgentID: meta.RootAgentID, RootAgentKey: meta.ParentAgent,
+			Administrative: true,
 		})
 		content := tools.FormatBatchedAnnounce(items, roster)
 		senderID := fmt.Sprintf("subagent:batch-%d", len(items))
@@ -186,6 +187,7 @@ func processSubagentAnnounceLoop(
 		// Refresh roster each iteration for up-to-date task statuses.
 		roster = subagentMgr.RosterForParent(tools.TaskScope{
 			TenantID: r.TenantID, RootAgentID: r.RootAgentID, RootAgentKey: r.ParentAgent,
+			Administrative: true,
 		})
 		content := buildMergedSubagentAnnounce(entries, roster)
 

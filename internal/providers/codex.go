@@ -16,7 +16,7 @@ type CodexRoutingDefaults struct {
 }
 
 // DefaultCodexModel is the default model for ChatGPT Subscription (OAuth).
-const DefaultCodexModel = "gpt-5.5"
+const DefaultCodexModel = "gpt-6.1-sol"
 
 // CodexProvider implements Provider for the OpenAI Responses API,
 // used with ChatGPT subscription via OAuth (Codex flow).
