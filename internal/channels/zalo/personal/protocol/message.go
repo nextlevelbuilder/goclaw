@@ -11,20 +11,23 @@ type Message interface {
 
 // TMessage is the raw JSON message payload from Zalo WebSocket.
 type TMessage struct {
-	MsgID       string  `json:"msgId"`
-	CliMsgID    string  `json:"cliMsgId,omitempty"`
-	RealMsgID   string  `json:"realMsgId,omitempty"`
-	GlobalMsgID string  `json:"globalMsgId,omitempty"`
-	UIDFrom     string  `json:"uidFrom"`
-	IDTo        string  `json:"idTo"`
-	DName       string  `json:"dName"`
-	TS          string  `json:"ts"`
-	Content     Content `json:"content"`
-	Quote       *TQuote `json:"quote,omitempty"`
-	MsgType     string  `json:"msgType"`
-	CMD         int     `json:"cmd"`
-	ST          int     `json:"st"`
-	AT          int     `json:"at"`
+	MsgID       string          `json:"msgId"`
+	CliMsgID    string          `json:"cliMsgId,omitempty"`
+	RealMsgID   string          `json:"realMsgId,omitempty"`
+	GlobalMsgID string          `json:"globalMsgId,omitempty"`
+	UIDFrom     string          `json:"uidFrom"`
+	IDTo        string          `json:"idTo"`
+	DName       string          `json:"dName"`
+	TS          string          `json:"ts"`
+	Content     Content         `json:"content"`
+	Quote       *TQuote         `json:"quote,omitempty"`
+	MsgType     string          `json:"msgType"`
+	CMD         int             `json:"cmd"`
+	ST          int             `json:"st"`
+	AT          int             `json:"at"`
+	Notify      string          `json:"notify,omitempty"`
+	PropertyExt json.RawMessage `json:"propertyExt,omitempty"`
+	TTL         int             `json:"ttl,omitempty"`
 }
 
 // TGroupMessage extends TMessage with group-specific fields.
@@ -49,6 +52,9 @@ func (m *TMessage) UnmarshalJSON(data []byte) error {
 		CMD         int             `json:"cmd"`
 		ST          int             `json:"st"`
 		AT          int             `json:"at"`
+		Notify      string          `json:"notify"`
+		PropertyExt json.RawMessage `json:"propertyExt"`
+		TTL         int             `json:"ttl"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -67,6 +73,9 @@ func (m *TMessage) UnmarshalJSON(data []byte) error {
 	m.CMD = raw.CMD
 	m.ST = raw.ST
 	m.AT = raw.AT
+	m.Notify = raw.Notify
+	m.PropertyExt = raw.PropertyExt
+	m.TTL = raw.TTL
 	return nil
 }
 

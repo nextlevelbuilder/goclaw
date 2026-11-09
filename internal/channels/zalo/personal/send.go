@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
@@ -25,8 +26,10 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		return fmt.Errorf("zalo_personal channel not running")
 	}
 
-	// Strip markdown — Zalo does not support any markup rendering.
-	msg.Content = zalo.StripMarkdown(msg.Content)
+	// Plain mode strips markdown; rich mode converts it to Zalo style spans.
+	if !c.config.RichText {
+		msg.Content = zalo.StripMarkdown(msg.Content)
+	}
 
 	// Stop typing indicator before sending response
 	if ctrl, ok := c.typingCtrls.LoadAndDelete(msg.ChatID); ok {
@@ -40,6 +43,15 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		if _, ok := msg.Metadata["group_id"]; ok {
 			threadType = protocol.ThreadTypeGroup
 			c.MarkGroupApproved(msg.ChatID)
+		}
+	}
+
+	var quote *protocol.TMessage
+	if c.config.QuoteReply && msg.Metadata != nil {
+		if id := strings.TrimSpace(msg.Metadata["quote_msg_id"]); id != "" {
+			if cached, ok := c.quoteCache.Get(id); ok {
+				quote = &cached
+			}
 		}
 	}
 
@@ -65,7 +77,7 @@ func (c *Channel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 
 	// Send text content (if any remains after media).
 	if msg.Content != "" {
-		return c.sendChunkedText(ctx, sess, msg.ChatID, threadType, msg.Content)
+		return c.sendChunkedText(ctx, sess, msg.ChatID, threadType, msg.Content, quote)
 	}
 	return nil
 }
@@ -123,15 +135,37 @@ func (c *Channel) sendFile(ctx context.Context, sess *protocol.Session, chatID s
 	})
 }
 
-func (c *Channel) sendChunkedText(ctx context.Context, sess *protocol.Session, chatID string, threadType protocol.ThreadType, text string) error {
+func (c *Channel) sendChunkedText(ctx context.Context, sess *protocol.Session, chatID string, threadType protocol.ThreadType, text string, quote *protocol.TMessage) error {
 	chunks := channels.ChunkMarkdown(text, maxTextLength)
 	for i, chunk := range chunks {
+		opts := protocol.SendOptions{Text: chunk}
+		if c.config.RichText {
+			styled, spans := zalo.MarkdownToZaloStyles(chunk)
+			opts.Text = styled
+			for _, span := range spans {
+				opts.Styles = append(opts.Styles, protocol.TextStyle{
+					Start: span.Start,
+					Len:   span.Len,
+					St:    span.St,
+				})
+			}
+		}
+		if strings.TrimSpace(opts.Text) == "" {
+			continue
+		}
+		if i == 0 {
+			opts.Quote = quote
+		}
+		if c.config.MentionsEnabled && threadType == protocol.ThreadTypeGroup {
+			opts.Mentions = c.resolveMentions(ctx, chatID, opts.Text)
+		}
+
 		if err := c.waitSend(ctx, chatID); err != nil {
 			return err
 		}
 
 		err := retryTransient(ctx, func() error {
-			_, err := protocol.SendMessage(ctx, sess, chatID, threadType, chunk)
+			_, err := protocol.SendMessageOptions(ctx, sess, chatID, threadType, opts)
 			return err
 		})
 		if err != nil {

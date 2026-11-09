@@ -9,10 +9,16 @@ import (
 	"time"
 )
 
-// SendMessage sends a text message to a user or group.
+// SendMessage sends a plain text message to a user or group.
 // threadID: user UID (DM) or group ID (group).
 func SendMessage(ctx context.Context, sess *Session, threadID string, threadType ThreadType, text string) (string, error) {
-	if text == "" {
+	return SendMessageOptions(ctx, sess, threadID, threadType, SendOptions{Text: text})
+}
+
+// SendMessageOptions sends a text message with optional styles, mentions,
+// quote reply, and TTL.
+func SendMessageOptions(ctx context.Context, sess *Session, threadID string, threadType ThreadType, opts SendOptions) (string, error) {
+	if opts.Text == "" {
 		return "", fmt.Errorf("zalo_personal: message text cannot be empty")
 	}
 
@@ -30,9 +36,9 @@ func SendMessage(ctx context.Context, sess *Session, threadID string, threadType
 
 	// Build payload
 	payload := map[string]any{
-		"message":  text,
+		"message":  opts.Text,
 		"clientId": time.Now().UnixMilli(),
-		"ttl":      0,
+		"ttl":      opts.TTL,
 	}
 	if threadType == ThreadTypeGroup {
 		payload["grid"] = threadID
@@ -41,6 +47,25 @@ func SendMessage(ctx context.Context, sess *Session, threadID string, threadType
 		payload["toid"] = threadID
 		payload["imei"] = sess.IMEI
 	}
+
+	if len(opts.Styles) > 0 {
+		textProperties, err := marshalJSONField(map[string]any{
+			"styles": opts.Styles,
+			"ver":    0,
+		})
+		if err != nil {
+			return "", err
+		}
+		payload["textProperties"] = textProperties
+	}
+	if len(opts.Mentions) > 0 {
+		mentionInfo, err := marshalJSONField(opts.Mentions)
+		if err != nil {
+			return "", err
+		}
+		payload["mentionInfo"] = mentionInfo
+	}
+	addQuotePayload(payload, opts.Quote, threadType)
 
 	// Encrypt payload with session secret key
 	encData, err := encryptPayload(sess, payload)

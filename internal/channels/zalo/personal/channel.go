@@ -29,6 +29,8 @@ type Channel struct {
 	dedupe        *dedupeCache
 	limiter       *sendLimiter
 	cookiePersist *cookiePersister
+	quoteCache    *quoteCache
+	groupCache    *groupMemberCache
 
 	authFailureReported atomic.Bool
 
@@ -75,7 +77,9 @@ func New(cfg config.ZaloPersonalConfig, msgBus *bus.MessageBus, pairingSvc store
 			delay:         time.Duration(cfg.EffectiveSendDelayMS()) * time.Millisecond,
 			dailyCap:      cfg.EffectiveDailySendCap(),
 		}),
-		stopCh: make(chan struct{}),
+		quoteCache: newQuoteCache(defaultQuoteCacheTTL, defaultQuoteCacheMax, nil),
+		groupCache: newGroupMemberCache(defaultGroupMemberCacheTTL, nil),
+		stopCh:     make(chan struct{}),
 	}
 	if cfg.EffectivePersistCookies() {
 		ch.cookiePersist = newCookiePersister(cookiePersistDebounce, func(cred *protocol.Credentials) error {

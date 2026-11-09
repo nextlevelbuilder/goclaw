@@ -15,6 +15,7 @@ func (c *Channel) buildReplyContext(threadID string, quote *protocol.TQuote) str
 }
 
 func (c *Channel) rememberReplyContext(threadID, sender string, msg protocol.TMessage, body string) {
+	c.quoteCache.Store(msg)
 	if c.replyCache == nil {
 		return
 	}

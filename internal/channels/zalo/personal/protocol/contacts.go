@@ -269,7 +269,7 @@ func decryptDataField(sess *Session, data string) ([]byte, error) {
 		return nil, fmt.Errorf("zalo_personal: unwrap inner response: %w", err)
 	}
 	if inner.ErrorCode != 0 {
-		return nil, fmt.Errorf("zalo_personal: inner error code %d: %s", inner.ErrorCode, inner.ErrorMessage)
+		return nil, NewAPIError("response", inner.ErrorCode)
 	}
 	return inner.Data, nil
 }
