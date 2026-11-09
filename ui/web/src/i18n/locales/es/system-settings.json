@@ -1,0 +1,107 @@
+{
+  "title": "Ajustes del sistema",
+  "save": "Guardar",
+  "cancel": "Cancelar",
+  "saving": "Guardando...",
+  "saved": "Ajustes guardados",
+  "loadFailed": "No se pudieron cargar los ajustes",
+  "saveFailed": "No se pudieron guardar los ajustes",
+  "embedding": {
+    "title": "Embedding",
+    "description": "Proveedor y modelo para embeddings vectoriales y búsqueda semántica.",
+    "importance": "El embedding es crítico para el recuerdo de memoria, la búsqueda de skills, el grafo de conocimiento y la precisión del emparejamiento de tareas. Los cambios afectan a todo el sistema.",
+    "provider": "Proveedor de embeddings",
+    "model": "Modelo de embeddings",
+    "providerTip": "Proveedor LLM usado para generar embeddings de texto.",
+    "modelTip": "Modelo de embedding (p. ej. text-embedding-3-small). Debe soportar el endpoint /embeddings.",
+    "providerPlaceholder": "Seleccionar proveedor",
+    "modelPlaceholder": "text-embedding-3-small",
+    "supportedProviders": "Verificado 1536d: OpenAI (text-embedding-3-small/large), Gemini (gemini-embedding-001 + dimensions), Mistral (codestral-embed), Cohere (embed-v4), DashScope (text-embedding-v3 + dimensions). Configura las dimensiones en los ajustes del proveedor para modelos con dimensiones nativas > 1536.",
+    "verify": "Verificar embedding",
+    "verifyRequired": "Verifica el modelo de embedding antes de guardar.",
+    "verifyFailed": "Falló la verificación",
+    "dimensions": "{{count}} dimensiones",
+    "dimensionsMismatch": "{{count}} dimensiones — no coincide con las 1536 requeridas",
+    "maxChunkLen": "Longitud máxima del fragmento",
+    "maxChunkLenHint": "Máximo de caracteres por fragmento de memoria antes de dividirlo.",
+    "chunkOverlap": "Solapamiento de fragmentos",
+    "chunkOverlapHint": "Caracteres de solapamiento entre fragmentos consecutivos para mantener la continuidad del contexto."
+  },
+  "ux": {
+    "title": "Comportamiento de UX",
+    "description": "Controla cómo el gateway muestra la actividad de los agentes a los usuarios.",
+    "intentClassify": "Clasificación de mensajes con el agente ocupado",
+    "intentClassifyHint": "Cuando el agente ya está procesando un turno anterior, clasifica los mensajes nuevos como preguntas de estado, solicitudes de cancelación, instrucciones de redirección o solicitudes nuevas.",
+    "intentClassifyInfo": "Solo aplica mientras una sesión está ocupada; no decide si una solicitud necesita flujo de trabajo en equipo.",
+    "teamWorkClassify": "Clasificación de trabajo en equipo",
+    "teamWorkClassifyHint": "Clasifica las solicitudes nuevas como manejo directo o flujo de trabajo en equipo/delegación.",
+    "teamWorkClassifyInfo": "Cuando una solicitud excede el alcance del agente actual o debe dividirse, el sistema usa embeddings como evidencia y pide al modelo que decida entre manejo directo y flujo de trabajo en equipo/delegación. El sistema también verifica los permisos de líder y miembro; los miembros solo pueden crear solicitudes de ayuda cuando el equipo habilitó las solicitudes de miembros y el despacho automático.",
+    "teamWorkClassifyEmbeddingRequired": "Configura los embeddings antes de habilitar la clasificación de trabajo en equipo."
+  },
+  "kg": {
+    "title": "Grafo de conocimiento",
+    "description": "Extrae entidades y relaciones de la memoria de los agentes hacia un grafo de conocimiento consultable.",
+    "provider": "Proveedor de extracción",
+    "model": "Modelo de extracción",
+    "providerTip": "Proveedor LLM usado para extraer entidades de la memoria.",
+    "modelTip": "Modelo para extraer entidades y relaciones (p. ej. claude-sonnet-4-20250514).",
+    "providerPlaceholder": "Seleccionar proveedor",
+    "modelPlaceholder": "Seleccionar modelo",
+    "minConfidence": "Confianza mínima",
+    "minConfidenceHint": "Umbral mínimo de confianza (0–1) para las entidades extraídas.",
+    "info": "Extrae entidades y relaciones automáticamente cuando los agentes escriben en memoria. Deja el proveedor vacío para deshabilitarlo."
+  },
+  "bg": {
+    "title": "Trabajadores en segundo plano",
+    "description": "Proveedor y modelo para tareas en segundo plano (enriquecimiento de bóveda, consolidación, dreaming).",
+    "provider": "Proveedor",
+    "model": "Modelo",
+    "providerTip": "Proveedor LLM para tareas en segundo plano. Déjalo vacío para usar el predeterminado del agente.",
+    "modelTip": "Modelo para tareas en segundo plano. Déjalo vacío para usar el predeterminado del proveedor.",
+    "providerPlaceholder": "(predeterminado del agente)",
+    "modelPlaceholder": "(predeterminado)",
+    "info": "Se usa para el enriquecimiento de bóveda (resumen de documentos), la consolidación (resúmenes de sesiones) y dreaming. Déjalo vacío para usar el proveedor predeterminado del agente."
+  },
+  "providers": {
+    "requestTimeout": "Tiempo de espera de solicitudes del proveedor (segundos)",
+    "requestTimeoutHint": "Tiempo de espera para verificar modelos y listar los modelos disponibles (30 por defecto). Auméntalo para modelos lentos. Déjalo vacío para usar el predeterminado."
+  },
+  "skills": {
+    "title": "Skills",
+    "description": "Ajustes de paquetes de skills y comandos de barra del tenant.",
+    "maxUploadSize": "Tamaño máximo de subida",
+    "maxUploadSizeHint": "Límite por archivo ZIP en MB. Rango permitido: 1-500.",
+    "slashEnabled": "Habilitar comandos de barra",
+    "slashEnabledHint": "Detecta /nombre-skill y /use nombre-skill al inicio de los prompts del usuario.",
+    "slashSuggest": "Sugerir skills similares",
+    "slashSuggestHint": "Muestra coincidencias cercanas cuando no se encuentra la skill solicitada.",
+    "slashPartial": "Permitir coincidencia parcial",
+    "slashPartialHint": "Permite que prefijos únicos como /frontend activen las skills coincidentes.",
+    "slashPrefix": "Prefijo de comando",
+    "slashPrefixHint": "Carácter único usado antes de los comandos de skill."
+  },
+  "compaction": {
+    "title": "Compactación de mensajes pendientes",
+    "description": "Resume el historial largo de mensajes pendientes para mantenerte dentro de los límites de contexto.",
+    "providerPlaceholder": "(automático)",
+    "threshold": "Umbral",
+    "thresholdHint": "Mensajes antes de que se active la compactación.",
+    "keepRecent": "Conservar recientes",
+    "keepRecentHint": "Mensajes que se conservan tras la compactación.",
+    "maxTokens": "Máximo de tokens",
+    "maxTokensHint": "Límite de tokens para el resumen compactado.",
+    "info": "Cuando un chat grupal supera el umbral, el LLM resume automáticamente los mensajes más antiguos en una sola entrada compacta y conserva intactos los más recientes para el contexto."
+  },
+  "moreConfig": "Más configuración",
+  "alert": {
+    "message": "Fallaron los trabajadores en segundo plano: {{reason}}. Funciones como la consolidación de memoria y el enriquecimiento de bóveda pueden no funcionar.",
+    "openSettings": "Corregir en Ajustes",
+    "reason": {
+      "auth": "Falló la autenticación (clave de API inválida o vencida)",
+      "auth_permanent": "Clave de API revocada o deshabilitada",
+      "billing": "Problema de facturación (créditos agotados o pago requerido)",
+      "model_not_found": "Modelo no encontrado (nombre de modelo inválido o no disponible)",
+      "unknown": "Error desconocido del proveedor"
+    }
+  }
+}

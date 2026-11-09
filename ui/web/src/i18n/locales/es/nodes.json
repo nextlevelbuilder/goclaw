@@ -1,0 +1,54 @@
+{
+  "title": "Nodos",
+  "description": "Administra dispositivos emparejados y solicitudes de emparejamiento pendientes",
+  "emptyTitle": "Sin dispositivos",
+  "emptyDescription": "No hay dispositivos emparejados ni solicitudes de emparejamiento pendientes.",
+  "pendingRequests": "Solicitudes pendientes ({{count}})",
+  "pairedDevices": "Dispositivos emparejados ({{count}})",
+  "sender": "Remitente:",
+  "chat": "Chat:",
+  "columns": {
+    "channel": "Canal",
+    "senderId": "ID del remitente",
+    "paired": "Emparejado",
+    "by": "Por",
+    "expires": "Vence",
+    "actions": "Acciones"
+  },
+  "approve": "Aprobar",
+  "deny": "Denegar",
+  "revoke": "Revocar",
+  "never": "Nunca",
+  "makePermanent": "Hacer permanente",
+  "makeExpiring": "Definir vencimiento",
+  "confirmApprove": {
+    "title": "Aprobar emparejamiento",
+    "description": "¿Aprobar la solicitud de emparejamiento de {{channel}}:{{senderId}} (código: {{code}})? Este dispositivo podrá interactuar con los agentes.",
+    "confirmLabel": "Aprobar",
+    "permanent": "Nunca vence (de lo contrario, 30 días)"
+  },
+  "confirmDeny": {
+    "title": "Denegar emparejamiento",
+    "description": "¿Denegar la solicitud de emparejamiento de {{channel}}:{{senderId}} (código: {{code}})? La solicitud se eliminará.",
+    "confirmLabel": "Denegar"
+  },
+  "confirmRevoke": {
+    "title": "Revocar dispositivo",
+    "description": "¿Revocar el emparejamiento de {{channel}}:{{senderId}}? El dispositivo tendrá que volver a emparejarse.",
+    "confirmLabel": "Revocar"
+  },
+  "confirmPermanent": {
+    "title": "Hacer permanente el emparejamiento",
+    "description": "¿Hacer permanente el emparejamiento de {{channel}}:{{senderId}}? Se mantendrá hasta que lo revoques manualmente.",
+    "confirmLabel": "Hacer permanente"
+  },
+  "confirmExpiring": {
+    "title": "Definir vencimiento del emparejamiento",
+    "description": "¿Volver al plazo estándar para el emparejamiento de {{channel}}:{{senderId}}? Vencerá en 30 días a partir de ahora.",
+    "confirmLabel": "Definir vencimiento"
+  },
+  "toast": {
+    "approveFailed": "No se pudo aprobar el emparejamiento",
+    "updateFailed": "No se pudo cambiar el vencimiento del emparejamiento"
+  }
+}

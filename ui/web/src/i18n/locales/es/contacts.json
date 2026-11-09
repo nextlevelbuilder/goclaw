@@ -1,0 +1,59 @@
+{
+  "title": "Contactos",
+  "description": "Contactos recopilados automáticamente de todas las interacciones en canales.",
+  "searchPlaceholder": "Buscar por nombre, usuario o ID...",
+  "filter": "Filtrar",
+  "emptyTitle": "Sin contactos",
+  "emptyDescription": "Los contactos aparecerán aquí a medida que los usuarios interactúen con tus agentes a través de los canales.",
+  "noMatchTitle": "Sin contactos coincidentes",
+  "noMatchDescription": "Prueba con otro término de búsqueda o filtro.",
+  "columns": {
+    "name": "Nombre",
+    "username": "Usuario",
+    "senderId": "ID del remitente",
+    "channelType": "Canal",
+    "peerKind": "Tipo",
+    "lastSeen": "Última vez visto",
+    "merged": "Fusionado"
+  },
+  "permissionsNote": {
+    "title": "Permisos de canal para los nombres de contactos",
+    "telegram": "Telegram — Nombres y usuarios disponibles automáticamente.",
+    "discord": "Discord — Nombres visibles y usuarios disponibles automáticamente.",
+    "zalo": "Zalo — Nombres visibles disponibles automáticamente.",
+    "slack": "Slack — Nombres visibles resueltos vía la API de Slack (el bot debe estar en el espacio de trabajo).",
+    "feishu": "Feishu/Lark — Requiere el permiso contact:user.base:readonly. Sin él, los nombres quedarán vacíos.",
+    "bitrix24": "Bitrix24 — Requiere el scope `user` + una llamada `user.get` por cada remitente nuevo. Los nombres pueden quedar vacíos brevemente en el primer mensaje."
+  },
+  "selectedCount": "{{count}} seleccionados",
+  "merge": {
+    "button": "Fusionar",
+    "unmergeButton": "Separar",
+    "dialogTitle": "Fusionar contactos",
+    "dialogDescription": "Vincula los contactos seleccionados a la identidad de un usuario del tenant. Así se identifican como la misma persona en todos los canales.",
+    "linkExisting": "Vincular a un usuario existente",
+    "createNew": "Crear usuario nuevo",
+    "selectUser": "Selecciona un usuario del tenant...",
+    "displayName": "Nombre visible",
+    "displayNamePlaceholder": "ej. John Doe",
+    "userId": "ID de usuario",
+    "userIdPlaceholder": "Identificador único",
+    "confirm": "Fusionar",
+    "cancel": "Cancelar",
+    "success": "Contactos fusionados correctamente",
+    "unmergeSuccess": "Contactos separados correctamente",
+    "error": "No se pudieron fusionar los contactos",
+    "unmergeError": "No se pudieron separar los contactos",
+    "comingSoon": "Esta función está en desarrollo y aún no está disponible."
+  },
+  "types": {
+    "user": "Usuario",
+    "group": "Grupo"
+  },
+  "filters": {
+    "allChannels": "Todos los canales",
+    "allTypes": "Todos los tipos",
+    "direct": "Directo",
+    "group": "Grupo"
+  }
+}

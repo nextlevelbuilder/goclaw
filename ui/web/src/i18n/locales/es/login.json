@@ -1,0 +1,41 @@
+{
+  "subtitle": "Inicia sesión en el panel del gateway",
+  "selectTenant": "Seleccionar tenant",
+  "selectTenantDescription": "Elige un tenant para continuar",
+  "allTenantsOption": "Todos los tenants",
+  "allTenantsDescription": "Ver datos de todos los tenants",
+  "noAccess": "Sin acceso",
+  "noAccessDescription": "No tienes acceso a ningún tenant. Contacta a tu administrador.",
+  "tabs": {
+    "token": "Token",
+    "pairing": "Emparejamiento"
+  },
+  "token": {
+    "userId": "ID de usuario",
+    "userIdPlaceholder": "tu-id-de-usuario",
+    "userIdHint": "Usa \"system\" para acceso total al sistema",
+    "gatewayToken": "Token del gateway",
+    "tokenPlaceholder": "Token Bearer",
+    "connect": "Conectar",
+    "connecting": "Conectando...",
+    "errorInvalidCredentials": "Credenciales inválidas. Revisa tu token y tu ID de usuario.",
+    "errorServer": "El servidor respondió {{status}}. Inténtalo de nuevo.",
+    "errorCannotConnect": "No se pudo conectar al gateway. Verifica que el servidor esté corriendo."
+  },
+  "pairing": {
+    "userId": "ID de usuario",
+    "userIdPlaceholder": "tu-id-de-usuario",
+    "noTokenNeeded": "No necesitas token. Se generará un código de emparejamiento para que un administrador lo apruebe.",
+    "requestAccess": "Solicitar acceso",
+    "connecting": "Conectando...",
+    "errorConnectionLost": "Se perdió la conexión. Inténtalo de nuevo.",
+    "errorCannotConnect": "No se pudo conectar al gateway.",
+    "askAdmin": "Pide a un administrador que apruebe este código:",
+    "orRun": "O ejecuta:",
+    "waitingForApproval": "Esperando aprobación...",
+    "cancel": "Cancelar",
+    "approved": "¡Acceso aprobado! Redirigiendo..."
+  },
+  "noAccessHint": "Pide a tu administrador que te agregue a un tenant, o usa otra cuenta.",
+  "logout": "Cerrar sesión"
+}

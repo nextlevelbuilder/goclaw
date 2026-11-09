@@ -1,0 +1,102 @@
+{
+  "title": "Estaciones de trabajo",
+  "description": "Administra conexiones remotas a estaciones de trabajo (SSH, Docker) para que los agentes ejecuten comandos.",
+  "addWorkstation": "Agregar estación de trabajo",
+  "emptyTitle": "Sin estaciones de trabajo configuradas",
+  "emptyDescription": "Agrega una estación de trabajo para permitir que los agentes ejecuten comandos en máquinas remotas.",
+  "backend": {
+    "ssh": "SSH",
+    "docker": "Docker"
+  },
+  "status": {
+    "active": "Activa",
+    "inactive": "Inactiva"
+  },
+  "columns": {
+    "name": "Nombre",
+    "key": "Clave",
+    "backend": "Backend",
+    "status": "Estado",
+    "created": "Creada",
+    "actions": "Acciones"
+  },
+  "actions": {
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "test": "Probar conexión",
+    "activate": "Activar",
+    "deactivate": "Desactivar"
+  },
+  "createDialog": {
+    "title": "Agregar estación de trabajo",
+    "description": "Configura una nueva conexión remota a una estación de trabajo.",
+    "nameLabel": "Nombre visible",
+    "namePlaceholder": "Mi servidor de desarrollo",
+    "keyLabel": "Clave de la estación de trabajo",
+    "keyPlaceholder": "dev-server",
+    "keyHint": "Minúsculas, dígitos y guiones. Los agentes la usan para referenciar esta estación de trabajo.",
+    "backendLabel": "Tipo de backend",
+    "sshOption": "SSH",
+    "dockerOption": "Docker",
+    "hostLabel": "Host",
+    "hostPlaceholder": "192.168.1.100",
+    "portLabel": "Puerto",
+    "userLabel": "Usuario SSH",
+    "userPlaceholder": "ubuntu",
+    "authMethodLabel": "Autenticación",
+    "authPrivateKeyOption": "Clave privada",
+    "authPasswordOption": "Contraseña",
+    "privateKeyLabel": "Clave privada (PEM)",
+    "privateKeyPlaceholder": "-----BEGIN OPENSSH PRIVATE KEY-----",
+    "privateKeyHint": "La clave pegada se cifra en reposo y la API nunca la devuelve.",
+    "passwordLabel": "Contraseña SSH",
+    "passwordPlaceholder": "Contraseña del usuario SSH",
+    "passwordHint": "Prefiere la autenticación por clave cuando sea posible.",
+    "containerLabel": "Nombre / ID del contenedor",
+    "containerPlaceholder": "mi-contenedor",
+    "imageLabel": "Imagen",
+    "imagePlaceholder": "ubuntu:24.04",
+    "socketPathLabel": "Ruta del socket de Docker (opcional)",
+    "socketPathPlaceholder": "unix:///var/run/docker.sock",
+    "cancel": "Cancelar",
+    "create": "Crear",
+    "errors": {
+      "keyRequired": "La clave de la estación de trabajo es obligatoria.",
+      "nameRequired": "El nombre visible es obligatorio.",
+      "sshHostUserRequired": "El host y el usuario SSH son obligatorios para el backend SSH.",
+      "sshPortRange": "El puerto debe estar entre 1 y 65535.",
+      "sshPrivateKeyRequired": "Se requiere una clave privada para la autenticación por clave.",
+      "sshPasswordRequired": "Se requiere una contraseña para la autenticación por contraseña.",
+      "dockerContainerRequired": "El nombre del contenedor es obligatorio para el backend Docker.",
+      "dockerImageRequired": "La imagen es obligatoria para el backend Docker.",
+      "createFailed": "No se pudo crear la estación de trabajo."
+    }
+  },
+  "deleteDialog": {
+    "title": "Eliminar estación de trabajo",
+    "description": "¿Seguro que quieres eliminar \"{{name}}\"? Esto no se puede deshacer.",
+    "confirmLabel": "Eliminar"
+  },
+  "testResult": {
+    "success": "Conexión exitosa",
+    "notImplemented": "La prueba de conexión aún no está disponible"
+  },
+  "activity": {
+    "title": "Actividad reciente",
+    "emptyTitle": "Aún no hay actividad",
+    "emptyDescription": "Los eventos de ejecución aparecerán aquí cuando los agentes ejecuten comandos.",
+    "columns": {
+      "action": "Acción",
+      "cmdPreview": "Comando",
+      "exitCode": "Código de salida",
+      "duration": "Duración",
+      "agent": "Agente",
+      "timestamp": "Hora"
+    },
+    "actions": {
+      "exec": "Ejecución",
+      "deny": "Denegado"
+    },
+    "loadMore": "Cargar más"
+  }
+}
