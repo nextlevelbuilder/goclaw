@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -219,7 +220,13 @@ func (p *CodexProvider) chatStreamOnce(ctx context.Context, req ChatRequest, onC
 	imageState.appendToResponse(result)
 
 	// Build tool calls from accumulators
+	// Emit in the order the model produced them, not map iteration order.
+	ordered := make([]*codexToolCallAcc, 0, len(toolCalls))
 	for _, acc := range toolCalls {
+		ordered = append(ordered, acc)
+	}
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].seq < ordered[j].seq })
+	for _, acc := range ordered {
 		if acc.name == "" {
 			continue
 		}
@@ -294,7 +301,7 @@ func (p *CodexProvider) processSSEEvent(event *codexSSEEvent, result *ChatRespon
 		if event.ItemID != "" {
 			acc := toolCalls[event.ItemID]
 			if acc == nil {
-				acc = &codexToolCallAcc{}
+				acc = &codexToolCallAcc{seq: len(toolCalls)}
 				toolCalls[event.ItemID] = acc
 			}
 			acc.rawArgs += event.Delta
@@ -310,7 +317,7 @@ func (p *CodexProvider) processSSEEvent(event *codexSSEEvent, result *ChatRespon
 			case "function_call":
 				acc := toolCalls[event.Item.ID]
 				if acc == nil {
-					acc = &codexToolCallAcc{}
+					acc = &codexToolCallAcc{seq: len(toolCalls)}
 				}
 				acc.callID = event.Item.CallID
 				acc.name = event.Item.Name
