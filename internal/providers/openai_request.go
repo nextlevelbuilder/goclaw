@@ -78,8 +78,13 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 		// is enabled but reasoning_content is missing in assistant tool call message".
 		// DeepSeek enforces the same rule, but only once the conversation is in
 		// thinking mode (historyHasReasoning).
-		if m.Role == "assistant" && (openAIWireAssistantReasoningContent(model) ||
-			(p.isMiniMaxEndpoint() && (model == "MiniMax-M3.1-Flash" || model == "MiniMax-M3"))) {
+		wireAssistantReasoning := openAIWireAssistantReasoningContent(model)
+		if strings.EqualFold(modelFamily(model), "minimax-m3.1-flash") {
+			wireAssistantReasoning = p.isMiniMaxEndpoint()
+		} else if p.isMiniMaxEndpoint() && strings.EqualFold(modelFamily(model), "minimax-m3") {
+			wireAssistantReasoning = true
+		}
+		if m.Role == "assistant" && wireAssistantReasoning {
 			switch {
 			case m.Thinking != "":
 				msg["reasoning_content"] = m.Thinking

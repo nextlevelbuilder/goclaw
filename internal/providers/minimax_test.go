@@ -110,9 +110,19 @@ func TestMiniMaxSavedModelsAndEndpointIsolation(t *testing.T) {
 		if p.isMiniMaxEndpoint() {
 			t.Fatalf("unrelated endpoint matched: %s", base)
 		}
-		body := p.buildRequestBody(p.DefaultModel(), ChatRequest{Options: map[string]any{OptThinkingLevel: "max"}}, false)
+		body := p.buildRequestBody(p.DefaultModel(), ChatRequest{
+			Messages: []Message{
+				{Role: "assistant", Thinking: "internal reasoning"},
+				{Role: "user", Content: "continue"},
+			},
+			Options: map[string]any{OptThinkingLevel: "max"},
+		}, false)
 		if _, exists := body[OptReasoningEffort]; exists {
 			t.Fatalf("native effort leaked to %s", base)
+		}
+		messages := body["messages"].([]map[string]any)
+		if _, exists := messages[0]["reasoning_content"]; exists {
+			t.Fatalf("native assistant reasoning leaked to %s", base)
 		}
 	}
 	for _, base := range []string{"https://api.minimax.io/v1", "https://api.minimaxi.com/v1"} {
