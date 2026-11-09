@@ -371,8 +371,13 @@ func registerDBProvider(registry *providers.Registry, p store.LLMProviderData, s
 		OllamaNumCtx:    resolveOllamaNumCtx(&p),
 	}
 	if provStore != nil {
-		build.Quirks = loadQuirks(context.Background(), provStore, p.WireAPI)
-		build.ModelCompat = loadModelCompat(context.Background(), provStore, p.ID)
+		// Both catalogue reads are tenant-scoped: ListModels fails closed without a
+		// tenant (ErrTenantRequired) and ListQuirks falls back to bundled rows only.
+		// A bare context therefore dropped per-model compat and tenant quirk
+		// overrides at registration.
+		pctx := providerTenantContext(p.TenantID)
+		build.Quirks = loadQuirks(pctx, provStore, p.WireAPI)
+		build.ModelCompat = loadModelCompat(pctx, provStore, p.ID)
 	}
 
 	switch desc.API {
@@ -412,6 +417,17 @@ func registerDBProvider(registry *providers.Registry, p store.LLMProviderData, s
 	}
 	registry.RegisterForTenant(p.TenantID, prov)
 	return true
+}
+
+// providerTenantContext scopes provider catalogue reads to the row's owning
+// tenant. llm_providers.tenant_id is NOT NULL (migrations/000027), so Nil only
+// occurs on synthetic rows; those fall back to the master tenant so the read
+// stays fail-closed instead of erroring out.
+func providerTenantContext(tenantID uuid.UUID) context.Context {
+	if tenantID == uuid.Nil {
+		tenantID = store.MasterTenantID
+	}
+	return store.WithTenantID(context.Background(), tenantID)
 }
 
 // loadQuirks reads the operator's declared quirk rows for a wire API and

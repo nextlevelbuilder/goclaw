@@ -1,9 +1,11 @@
 package pg
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -30,13 +32,50 @@ func (s *PGSnapshotStore) UpsertSnapshots(ctx context.Context, snapshots []store
 	if len(snapshots) == 0 {
 		return nil
 	}
-	for start := 0; start < len(snapshots); start += maxBatchRows {
-		end := min(start+maxBatchRows, len(snapshots))
-		if err := s.upsertBatch(ctx, snapshots[start:end]); err != nil {
+	// Lock order: the multi-row INSERT below takes row locks in VALUES order, and
+	// the rows arrive from GROUP BY queries with no ORDER BY. Two writers
+	// refreshing overlapping buckets in different orders deadlock (SQLSTATE 40P01),
+	// so sort by the conflict key before splitting into batches.
+	ordered := make([]store.UsageSnapshot, len(snapshots))
+	copy(ordered, snapshots)
+	sortSnapshotsByConflictKey(ordered)
+	for start := 0; start < len(ordered); start += maxBatchRows {
+		end := min(start+maxBatchRows, len(ordered))
+		if err := s.upsertBatch(ctx, ordered[start:end]); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// sortSnapshotsByConflictKey orders rows exactly like the ON CONFLICT target
+// (bucket_hour, agent_id, provider, model, channel); a nil agent_id compares as
+// the zero UUID the conflict target COALESCEs it to.
+func sortSnapshotsByConflictKey(snapshots []store.UsageSnapshot) {
+	sort.SliceStable(snapshots, func(i, j int) bool {
+		a, b := snapshots[i], snapshots[j]
+		if !a.BucketHour.Equal(b.BucketHour) {
+			return a.BucketHour.Before(b.BucketHour)
+		}
+		ak, bk := snapshotAgentKey(a.AgentID), snapshotAgentKey(b.AgentID)
+		if c := bytes.Compare(ak[:], bk[:]); c != 0 {
+			return c < 0
+		}
+		if a.Provider != b.Provider {
+			return a.Provider < b.Provider
+		}
+		if a.Model != b.Model {
+			return a.Model < b.Model
+		}
+		return a.Channel < b.Channel
+	})
+}
+
+func snapshotAgentKey(id *uuid.UUID) uuid.UUID {
+	if id == nil {
+		return uuid.Nil
+	}
+	return *id
 }
 
 func (s *PGSnapshotStore) upsertBatch(ctx context.Context, snapshots []store.UsageSnapshot) error {

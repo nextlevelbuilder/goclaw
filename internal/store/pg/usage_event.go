@@ -1,9 +1,11 @@
 package pg
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -146,6 +148,12 @@ func (s *PGUsageEventStore) upsertEventRollups(ctx context.Context, rollups []st
 	if len(rollups) == 0 {
 		return nil
 	}
+	// Lock order: see sortRollupsByConflictKey. Rows come from a GROUP BY with no
+	// ORDER BY, so concurrent refreshes of the same bucket could deadlock (40P01).
+	ordered := make([]store.UsageEventRollup, len(rollups))
+	copy(ordered, rollups)
+	sortRollupsByConflictKey(ordered)
+	rollups = ordered
 	vals := make([]string, len(rollups))
 	args := make([]any, 0, len(rollups)*usageRollupFieldCount)
 	for i, rollup := range rollups {
@@ -197,6 +205,52 @@ func (s *PGUsageEventStore) upsertEventRollups(ctx context.Context, rollups []st
 		updated_at = EXCLUDED.updated_at`
 	_, err := s.db.ExecContext(ctx, query, args...)
 	return err
+}
+
+// sortRollupsByConflictKey orders rows exactly like the ON CONFLICT target
+// (tenant, bucket_hour, event_type, resource_type, resource_name, source,
+// agent_id, channel, provider, model, status); a nil agent_id compares as the
+// zero UUID the target COALESCEs it to.
+func sortRollupsByConflictKey(rollups []store.UsageEventRollup) {
+	sort.SliceStable(rollups, func(i, j int) bool {
+		a, b := rollups[i], rollups[j]
+		if c := bytes.Compare(a.TenantID[:], b.TenantID[:]); c != 0 {
+			return c < 0
+		}
+		if !a.BucketHour.Equal(b.BucketHour) {
+			return a.BucketHour.Before(b.BucketHour)
+		}
+		switch {
+		case a.EventType != b.EventType:
+			return a.EventType < b.EventType
+		case a.ResourceType != b.ResourceType:
+			return a.ResourceType < b.ResourceType
+		case a.ResourceName != b.ResourceName:
+			return a.ResourceName < b.ResourceName
+		case a.Source != b.Source:
+			return a.Source < b.Source
+		}
+		ak, bk := rollupAgentKey(a.AgentID), rollupAgentKey(b.AgentID)
+		if c := bytes.Compare(ak[:], bk[:]); c != 0 {
+			return c < 0
+		}
+		switch {
+		case a.Channel != b.Channel:
+			return a.Channel < b.Channel
+		case a.Provider != b.Provider:
+			return a.Provider < b.Provider
+		case a.Model != b.Model:
+			return a.Model < b.Model
+		}
+		return a.Status < b.Status
+	})
+}
+
+func rollupAgentKey(id *uuid.UUID) uuid.UUID {
+	if id == nil {
+		return uuid.Nil
+	}
+	return *id
 }
 
 func (s *PGUsageEventStore) GetEventTimeSeries(ctx context.Context, q store.UsageEventQuery) ([]store.UsageEventTimeSeries, error) {
