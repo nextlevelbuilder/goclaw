@@ -703,6 +703,25 @@ Zalo Personal uses an unofficial, reverse-engineered protocol. The account used 
 - Exponential backoff up to 60 seconds
 - Special handling for error code 3000: 60-second initial delay
 - Typing controller per thread
+- Rotated cookies are persisted (debounced) when `persist_cookies` is on (default)
+
+### Runtime controls
+
+All keys are optional; zero values select the documented default.
+
+| Key | Default | Behavior |
+|---|---|---|
+| `media_max_mb` | `30` | Inbound media download cap |
+| `send_rate_per_minute` | `30` | Per-instance outbound API cap |
+| `send_delay_ms` | `1200` | Per-thread delay between chunks |
+| `daily_send_cap` | `500` | Daily outbound cap; `-1` = unlimited |
+| `rich_text` | `false` | Convert Markdown to Zalo style spans; off = plain text |
+| `quote_reply` | `false` | Quote the source message when `metadata["quote_msg_id"]` is set |
+| `mentions_enabled` | `false` | Resolve exact group member names to `mentionInfo` |
+| `reaction_wakeup` | `false` | Wake the agent on reactions; off = history note only |
+| `persist_cookies` | `true` | Persist cookies rotated during the session |
+
+Rollback: set `rich_text`, `quote_reply`, or `mentions_enabled` back to `false`; no data migration is involved.
 
 ---
 
