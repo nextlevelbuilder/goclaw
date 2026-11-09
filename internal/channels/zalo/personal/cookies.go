@@ -57,7 +57,7 @@ type cookiePersister struct {
 
 	debounce time.Duration
 	snapshot func() *protocol.Credentials
-	save     func(*protocol.Credentials) error
+	save     func(context.Context, *protocol.Credentials) error
 
 	timer    *time.Timer
 	dirty    bool
@@ -66,7 +66,7 @@ type cookiePersister struct {
 	hasHash  bool
 }
 
-func newCookiePersister(debounce time.Duration, save func(*protocol.Credentials) error) *cookiePersister {
+func newCookiePersister(debounce time.Duration, save func(context.Context, *protocol.Credentials) error) *cookiePersister {
 	if debounce <= 0 {
 		debounce = cookiePersistDebounce
 	}
@@ -86,6 +86,17 @@ func (p *cookiePersister) Bind(snapshot func() *protocol.Credentials) {
 		p.lastHash = hashCredentials(cred)
 		p.hasHash = true
 	}
+}
+
+// SetSave replaces the persistence callback (DB instance writer overrides the
+// file fallback used by config-based channels).
+func (p *cookiePersister) SetSave(save func(context.Context, *protocol.Credentials) error) {
+	if p == nil || save == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.save = save
 }
 
 func (p *cookiePersister) MarkDirty() {
@@ -134,7 +145,7 @@ func (p *cookiePersister) Flush(ctx context.Context) error {
 	if p.hasHash && hash == p.lastHash {
 		return nil
 	}
-	if err := p.save(cred); err != nil {
+	if err := p.save(ctx, cred); err != nil {
 		p.dirty = true
 		return err
 	}

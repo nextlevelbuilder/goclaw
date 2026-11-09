@@ -82,6 +82,24 @@ func TestContentRouterPhotoPrefersOriURL(t *testing.T) {
 	}
 }
 
+func TestExtractQuoteMediaPrefersOriURL(t *testing.T) {
+	var quote protocol.TQuote
+	if err := json.Unmarshal([]byte(`{"attach":"{\"type\":\"image\",\"href\":\"https://example.com/landing\",\"oriUrl\":\"https://cdn.example.com/jpg/photo.jpg\"}"}`), &quote); err != nil {
+		t.Fatal(err)
+	}
+	var fetched string
+	paths := extractQuoteMediaWithFetcher(&quote, func(_ context.Context, url string) (string, error) {
+		fetched = url
+		return "photo.jpg", nil
+	})
+	if fetched != "https://cdn.example.com/jpg/photo.jpg" {
+		t.Fatalf("fetched = %q, want oriUrl", fetched)
+	}
+	if len(paths) != 1 || paths[0] != "photo.jpg" {
+		t.Fatalf("paths = %v", paths)
+	}
+}
+
 func TestContentRouterPhotoDownloadFailureIsNonEmpty(t *testing.T) {
 	content := protocol.Content{Raw: json.RawMessage(`{"title":"brief.png","href":"https://example.com/brief.png"}`)}
 	got, media := extractContentAndMediaWithFetcher(content, "chat.photo", "", func(context.Context, string) (string, error) {

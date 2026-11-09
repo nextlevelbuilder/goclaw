@@ -170,6 +170,9 @@ func (ln *Listener) handleControlEvents(ctx context.Context, data string, encTyp
 			if ctrl.Content.ActType == "group" && ctrl.Content.Act == "join_reject" {
 				continue // Zalo duplicates join; the join event already covers it.
 			}
+			if ctrl.Content.ActType == "fr" && ctrl.Content.Act == "req" {
+				continue // Zalo sends the real friend request as req_v2.
+			}
 			if ev := parseGroupEvent(ctrl.Content.ActType, ctrl.Content.Act, ctrl.Content.GroupID, ctrl.Content.ActorIDs, ctrl.Content.Data); ev != nil {
 				emit(ctx, ln.groupEventCh, *ev)
 			}

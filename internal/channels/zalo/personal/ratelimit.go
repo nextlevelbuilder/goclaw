@@ -68,7 +68,7 @@ func newSendLimiter(cfg sendLimiterConfig) *sendLimiter {
 	if cfg.delay <= 0 {
 		cfg.delay = 1200 * time.Millisecond
 	}
-	if cfg.dailyCap <= 0 {
+	if cfg.dailyCap == 0 {
 		cfg.dailyCap = 500
 	}
 	if cfg.maxThreads <= 0 {

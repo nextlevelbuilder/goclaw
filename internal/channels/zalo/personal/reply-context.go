@@ -59,7 +59,6 @@ func zaloMessageIDs(msg protocol.TMessage) []string {
 	var ids []string
 	ids = append(ids,
 		zaloIDAlias("msg", msg.MsgID),
-		zaloIDAlias("global", msg.MsgID),
 		zaloIDAlias("cli", msg.CliMsgID),
 		zaloIDAlias("real", msg.RealMsgID),
 		zaloIDAlias("global", msg.GlobalMsgID),

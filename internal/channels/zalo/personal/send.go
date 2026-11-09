@@ -137,6 +137,7 @@ func (c *Channel) sendFile(ctx context.Context, sess *protocol.Session, chatID s
 
 func (c *Channel) sendChunkedText(ctx context.Context, sess *protocol.Session, chatID string, threadType protocol.ThreadType, text string, quote *protocol.TMessage) error {
 	chunks := channels.ChunkMarkdown(text, maxTextLength)
+	sentFirst := false
 	for i, chunk := range chunks {
 		opts := protocol.SendOptions{Text: chunk}
 		if c.config.RichText {
@@ -153,8 +154,9 @@ func (c *Channel) sendChunkedText(ctx context.Context, sess *protocol.Session, c
 		if strings.TrimSpace(opts.Text) == "" {
 			continue
 		}
-		if i == 0 {
+		if !sentFirst {
 			opts.Quote = quote
+			sentFirst = true
 		}
 		if c.config.MentionsEnabled && threadType == protocol.ThreadTypeGroup {
 			opts.Mentions = c.resolveMentions(ctx, chatID, opts.Text)

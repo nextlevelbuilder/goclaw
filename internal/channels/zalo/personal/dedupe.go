@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	defaultDedupeTTL     = 10 * time.Minute
-	defaultDedupeMaxKeys = 10000
+	defaultDedupeTTL     = 5 * time.Minute
+	defaultDedupeMaxKeys = 2048
 )
 
 // dedupeCache suppresses replays of the same inbound message after a listener
@@ -20,6 +20,7 @@ type dedupeCache struct {
 	maxKeys int
 	now     func() time.Time
 	seen    map[string]time.Time
+	order   []string
 }
 
 func newDedupeCache(ttl time.Duration, maxKeys int, now func() time.Time) *dedupeCache {
@@ -37,6 +38,7 @@ func newDedupeCache(ttl time.Duration, maxKeys int, now func() time.Time) *dedup
 		maxKeys: maxKeys,
 		now:     now,
 		seen:    make(map[string]time.Time),
+		order:   make([]string, 0, maxKeys),
 	}
 }
 
@@ -62,32 +64,38 @@ func (d *dedupeCache) Seen(keys ...string) bool {
 		}
 	}
 
-	if len(d.seen) >= d.maxKeys {
-		d.evictExpiredLocked(now)
-	}
-	// Still full of live entries: drop arbitrary oldest entries rather than
-	// growing without bound. Map iteration order is random, which is fine for
-	// a best-effort replay guard.
-	for key := range d.seen {
-		if len(d.seen) < d.maxKeys {
-			break
-		}
-		delete(d.seen, key)
+	d.evictExpiredLocked(now)
+	for len(d.seen)+len(normalized) > d.maxKeys && len(d.order) > 0 {
+		oldest := d.order[0]
+		d.order = d.order[1:]
+		delete(d.seen, oldest)
 	}
 
 	expiry := now.Add(d.ttl)
 	for _, key := range normalized {
+		if _, exists := d.seen[key]; exists {
+			continue
+		}
 		d.seen[key] = expiry
+		d.order = append(d.order, key)
 	}
 	return false
 }
 
 func (d *dedupeCache) evictExpiredLocked(now time.Time) {
-	for key, expiry := range d.seen {
-		if !now.Before(expiry) {
-			delete(d.seen, key)
-		}
+	if len(d.order) == 0 {
+		return
 	}
+	kept := d.order[:0]
+	for _, key := range d.order {
+		expiry, ok := d.seen[key]
+		if !ok || !now.Before(expiry) {
+			delete(d.seen, key)
+			continue
+		}
+		kept = append(kept, key)
+	}
+	d.order = kept
 }
 
 func normalizeDedupeKeys(keys []string) []string {

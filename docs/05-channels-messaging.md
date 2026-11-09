@@ -711,7 +711,7 @@ All keys are optional; zero values select the documented default.
 
 | Key | Default | Behavior |
 |---|---|---|
-| `media_max_mb` | `30` | Inbound media download cap |
+| `media_max_mb` | `20` | Inbound media download cap |
 | `send_rate_per_minute` | `30` | Per-instance outbound API cap |
 | `send_delay_ms` | `1200` | Per-thread delay between chunks |
 | `daily_send_cap` | `500` | Daily outbound cap; `-1` = unlimited |

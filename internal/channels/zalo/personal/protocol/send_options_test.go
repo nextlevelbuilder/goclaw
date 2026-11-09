@@ -55,27 +55,78 @@ func TestAddQuotePayloadGroupAttachment(t *testing.T) {
 	if obj["thumbUrl"] != "https://example.com/t.png" {
 		t.Fatalf("thumbUrl = %#v", obj["thumbUrl"])
 	}
-	if payload["qmsgType"] != 1 {
+	if payload["qmsgType"] != 32 {
 		t.Fatalf("qmsgType = %#v", payload["qmsgType"])
+	}
+}
+
+func TestAddQuotePayloadTextGroupUsesPropertyExt(t *testing.T) {
+	text := "hello"
+	quote := &TMessage{
+		MsgID:       "m1",
+		MsgType:     "webchat",
+		Content:     Content{String: &text},
+		PropertyExt: json.RawMessage(`{"thumb":"t"}`),
+	}
+	payload := map[string]any{}
+	addQuotePayload(payload, quote, ThreadTypeGroup)
+	if payload["qmsgAttach"] != `{"thumb":"t"}` {
+		t.Fatalf("qmsgAttach = %#v", payload["qmsgAttach"])
+	}
+}
+
+func TestAddQuotePayloadTodo(t *testing.T) {
+	raw := json.RawMessage(`{"params":"{\"item\":{\"content\":\"buy milk\"}}"}`)
+	quote := &TMessage{
+		MsgID:   "m1",
+		MsgType: "chat.todo",
+		Content: Content{Raw: raw},
+	}
+	payload := map[string]any{}
+	addQuotePayload(payload, quote, ThreadTypeGroup)
+	if payload["qmsg"] != "buy milk" {
+		t.Fatalf("qmsg = %#v", payload["qmsg"])
+	}
+	attach, ok := payload["qmsgAttach"].(string)
+	if !ok || attach == "" {
+		t.Fatalf("qmsgAttach = %#v", payload["qmsgAttach"])
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(attach), &obj); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := obj["properties"]; !ok {
+		t.Fatalf("todo attach = %#v", obj)
+	}
+}
+
+func TestAddQuotePayloadRejectsObjectWebchat(t *testing.T) {
+	quote := &TMessage{
+		MsgID:   "m1",
+		MsgType: "webchat",
+		Content: Content{Raw: json.RawMessage(`{"foo":"bar"}`)},
+	}
+	payload := map[string]any{}
+	addQuotePayload(payload, quote, ThreadTypeUser)
+	if len(payload) != 0 {
+		t.Fatalf("payload = %#v", payload)
 	}
 }
 
 func TestClientMessageType(t *testing.T) {
 	tests := map[string]int{
 		"webchat":           1,
-		"chat.photo":        1,
-		"chat.sticker":      2,
-		"chat.voice":        3,
-		"chat.video":        4,
-		"chat.video.msg":    4,
-		"share.file":        5,
-		"chat.location.new": 6,
-		"chat.poll":         7,
-		"chat.card":         8,
-		"chat.bankcard":     8,
-		"chat.recommended":  9,
-		"chat.todo":         10,
-		"unknown":           -1,
+		"chat.voice":        31,
+		"chat.photo":        32,
+		"chat.sticker":      36,
+		"chat.doodle":       37,
+		"chat.recommended":  38,
+		"chat.link":         38,
+		"chat.location.new": 43,
+		"chat.video.msg":    44,
+		"share.file":        46,
+		"chat.gif":          49,
+		"unknown":           1,
 	}
 	for msgType, want := range tests {
 		if got := clientMessageType(msgType); got != want {

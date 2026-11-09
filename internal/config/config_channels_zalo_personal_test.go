@@ -8,8 +8,8 @@ import (
 func TestZaloPersonalEffectiveDefaults(t *testing.T) {
 	var cfg ZaloPersonalConfig
 
-	if got := cfg.EffectiveMediaMaxMB(); got != 30 {
-		t.Fatalf("EffectiveMediaMaxMB() = %d, want 30", got)
+	if got := cfg.EffectiveMediaMaxMB(); got != 20 {
+		t.Fatalf("EffectiveMediaMaxMB() = %d, want 20", got)
 	}
 	if got := cfg.EffectiveSendRatePerMinute(); got != 30 {
 		t.Fatalf("EffectiveSendRatePerMinute() = %d, want 30", got)
@@ -49,6 +49,13 @@ func TestZaloPersonalEffectiveExplicitValues(t *testing.T) {
 	}
 	if cfg.EffectivePersistCookies() {
 		t.Fatal("EffectivePersistCookies() = true, want explicit false")
+	}
+}
+
+func TestZaloPersonalDailySendCapUnlimited(t *testing.T) {
+	cfg := ZaloPersonalConfig{DailySendCap: -1}
+	if got := cfg.EffectiveDailySendCap(); got != -1 {
+		t.Fatalf("EffectiveDailySendCap() = %d, want -1 (unlimited)", got)
 	}
 }
 

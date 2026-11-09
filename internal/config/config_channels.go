@@ -221,7 +221,7 @@ type ZaloPersonalConfig struct {
 
 	// v2 runtime controls. Zero values select the documented defaults via the
 	// Effective* helpers; PersistCookies is a pointer so explicit false works.
-	MediaMaxMB        int   `json:"media_max_mb,omitempty"`         // default 30
+	MediaMaxMB        int   `json:"media_max_mb,omitempty"`         // default 20
 	SendRatePerMinute int   `json:"send_rate_per_minute,omitempty"` // default 30
 	SendDelayMS       int   `json:"send_delay_ms,omitempty"`        // default 1200
 	DailySendCap      int   `json:"daily_send_cap,omitempty"`       // default 500
@@ -235,7 +235,7 @@ type ZaloPersonalConfig struct {
 // EffectiveMediaMaxMB returns the inbound media download cap in MiB.
 func (c ZaloPersonalConfig) EffectiveMediaMaxMB() int {
 	if c.MediaMaxMB <= 0 {
-		return 30
+		return 20
 	}
 	return c.MediaMaxMB
 }
@@ -257,8 +257,9 @@ func (c ZaloPersonalConfig) EffectiveSendDelayMS() int {
 }
 
 // EffectiveDailySendCap returns the per-instance daily outbound message cap.
+// Zero selects the 500 default; -1 means unlimited.
 func (c ZaloPersonalConfig) EffectiveDailySendCap() int {
-	if c.DailySendCap <= 0 {
+	if c.DailySendCap == 0 {
 		return 500
 	}
 	return c.DailySendCap

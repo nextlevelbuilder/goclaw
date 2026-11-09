@@ -384,12 +384,16 @@ func extractQuoteMediaWithFetcher(quote *protocol.TQuote, fetch mediaFetcher) []
 		return nil
 	}
 	att := quote.Attach.ParseAttachment()
-	if att == nil || !att.IsImage() || att.URL() == "" {
+	if att == nil || !att.IsImage() {
 		return nil
 	}
-	filePath, err := fetch(context.Background(), att.URL())
+	url := att.URLFor("chat.photo")
+	if url == "" {
+		return nil
+	}
+	filePath, err := fetch(context.Background(), url)
 	if err != nil {
-		slog.Warn("zalo_personal: failed to download quoted attachment", "url", att.URL(), "error", err)
+		slog.Warn("zalo_personal: failed to download quoted attachment", "url", url, "error", err)
 		return nil
 	}
 	return []string{filePath}

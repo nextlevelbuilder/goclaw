@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal/protocol"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
@@ -255,6 +256,19 @@ func TestHandleDM_RejectedMessageDoesNotDownloadAttachment(t *testing.T) {
 	defer cancel()
 	if got, ok := msgBus.ConsumeInbound(ctx); ok {
 		t.Fatalf("unexpected inbound for rejected message: %+v", got)
+	}
+}
+
+func TestHandleUndoDeletesHistoryByGlobalID(t *testing.T) {
+	ch := newTestChannel(t, config.ZaloPersonalConfig{DMPolicy: "open", GroupPolicy: "open"})
+	ch.GroupHistory().Record("group-1", channels.HistoryEntry{
+		Sender:    "Alice",
+		Body:      "to be recalled",
+		MessageID: "global-1",
+	}, 10)
+	ch.handleUndo(protocol.UndoEvent{ThreadID: "group-1", MsgID: "global-1", CliMsgID: "cli-1", IsGroup: true})
+	if got := ch.GroupHistory().GetEntries("group-1"); len(got) != 0 {
+		t.Fatalf("history still has %d entries: %#v", len(got), got)
 	}
 }
 

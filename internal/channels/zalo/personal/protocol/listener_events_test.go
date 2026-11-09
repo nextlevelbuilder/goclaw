@@ -73,6 +73,25 @@ func TestHandleFrameRoutesReaction(t *testing.T) {
 	}
 }
 
+func TestListenerStopWithBufferedEventsDoesNotBlock(t *testing.T) {
+	ln := newEventTestListener()
+	ln.undoCh <- UndoEvent{MsgID: "m1"}
+	ln.reactionCh <- ReactionEvent{MsgID: "m1"}
+	ln.groupEventCh <- GroupEvent{Type: "group:join"}
+	ln.errorCh <- nil
+
+	done := make(chan struct{})
+	go func() {
+		ln.Stop()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-t.Context().Done():
+		t.Fatal("Stop blocked with buffered event channels")
+	}
+}
+
 func TestHandleFrameRoutesGroupEvent(t *testing.T) {
 	ln := newEventTestListener()
 	payload := `{"data":{"controls":[{"content":{"act_type":"group","act":"join","groupId":"g1","actorIds":["u1"],"data":{"groupId":"g1"}}}]}}`

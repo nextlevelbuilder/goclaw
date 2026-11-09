@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 )
@@ -69,20 +70,31 @@ func rawTruthy(raw json.RawMessage) bool {
 // carries rMsg[0] with the target IDs and rIcon with the emoji.
 func parseReaction(raw json.RawMessage, isGroup bool) *ReactionEvent {
 	var payload struct {
-		UIDFrom string `json:"uidFrom"`
-		IDTo    string `json:"idTo"`
-		Content struct {
-			RMsg []struct {
-				GMsgID json.RawMessage `json:"gMsgID"`
-				CMsgID json.RawMessage `json:"cMsgID"`
-			} `json:"rMsg"`
-			RIcon string `json:"rIcon"`
-		} `json:"content"`
+		UIDFrom string          `json:"uidFrom"`
+		IDTo    string          `json:"idTo"`
+		Content json.RawMessage `json:"content"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return nil
 	}
-	if len(payload.Content.RMsg) == 0 {
+	var content struct {
+		RMsg []struct {
+			GMsgID json.RawMessage `json:"gMsgID"`
+			CMsgID json.RawMessage `json:"cMsgID"`
+		} `json:"rMsg"`
+		RIcon string `json:"rIcon"`
+	}
+	contentRaw := bytes.TrimSpace(payload.Content)
+	if len(contentRaw) > 0 && contentRaw[0] == '"' {
+		var encoded string
+		if json.Unmarshal(contentRaw, &encoded) == nil {
+			contentRaw = []byte(encoded)
+		}
+	}
+	if err := json.Unmarshal(contentRaw, &content); err != nil {
+		return nil
+	}
+	if len(content.RMsg) == 0 {
 		return nil
 	}
 	threadID := payload.UIDFrom
@@ -91,10 +103,10 @@ func parseReaction(raw json.RawMessage, isGroup bool) *ReactionEvent {
 	}
 	return &ReactionEvent{
 		ThreadID: threadID,
-		MsgID:    rawJSONToDecimalString(payload.Content.RMsg[0].GMsgID),
-		CliMsgID: rawJSONToDecimalString(payload.Content.RMsg[0].CMsgID),
+		MsgID:    rawJSONToDecimalString(content.RMsg[0].GMsgID),
+		CliMsgID: rawJSONToDecimalString(content.RMsg[0].CMsgID),
 		UIDFrom:  payload.UIDFrom,
-		Icon:     payload.Content.RIcon,
+		Icon:     content.RIcon,
 		IsGroup:  isGroup,
 	}
 }

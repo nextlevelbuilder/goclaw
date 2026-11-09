@@ -327,6 +327,18 @@ func (l *InstanceLoader) loadInstance(ctx context.Context, inst store.ChannelIns
 		ph.SetPendingHistoryTenantID(inst.TenantID)
 	}
 
+	// Let channels that rotate credentials (Zalo Personal cookies) write back to
+	// the encrypted channel_instances row instead of the config-file fallback.
+	if setter, ok := ch.(interface {
+		SetCredentialSaver(func(context.Context, []byte) error)
+	}); ok && l.store != nil {
+		setter.SetCredentialSaver(func(ctx context.Context, creds []byte) error {
+			return l.store.Update(store.WithTenantID(ctx, inst.TenantID), inst.ID, map[string]any{
+				"credentials": string(creds),
+			})
+		})
+	}
+
 	// Wire pending message auto-compaction.
 	// Priority: config provider/model > agent's provider/model > fallback.
 	if pc, ok := ch.(PendingCompactable); ok && l.providerReg != nil {

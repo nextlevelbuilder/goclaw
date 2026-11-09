@@ -221,7 +221,7 @@ export const configSchema: Record<string, FieldDef[]> = {
     { key: "group_policy", label: "Group Policy", type: "select", options: groupPolicyOptions, defaultValue: "allowlist" },
     { key: "require_mention", label: "Require @mention in groups", type: "boolean", defaultValue: true },
     { key: "allow_from", label: "Allowed Users", type: "tags", help: "Zalo user IDs or group IDs" },
-    { key: "media_max_mb", label: "Max Media Size (MB)", type: "number", defaultValue: 30, help: "Inbound media download cap. Default: 30 MB." },
+    { key: "media_max_mb", label: "Max Media Size (MB)", type: "number", defaultValue: 20, help: "Inbound media download cap. Default: 20 MB." },
     { key: "send_rate_per_minute", label: "Send Rate / Minute", type: "number", defaultValue: 30, help: "Per-instance outbound API cap. Default: 30." },
     { key: "send_delay_ms", label: "Send Delay (ms)", type: "number", defaultValue: 1200, help: "Per-thread delay between chunks. Default: 1200 ms." },
     { key: "daily_send_cap", label: "Daily Send Cap", type: "number", defaultValue: 500, help: "Daily outbound cap. -1 = unlimited. Default: 500." },

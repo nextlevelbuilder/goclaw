@@ -28,6 +28,19 @@ func TestDedupeCacheSuppressesReplayAcrossIDVariants(t *testing.T) {
 	}
 }
 
+func TestDedupeCacheEvictsOldest(t *testing.T) {
+	cache := newDedupeCache(time.Hour, 2, nil)
+	if cache.Seen("m1", "c1") {
+		t.Fatal("first message reported as duplicate")
+	}
+	if cache.Seen("m2", "c2") {
+		t.Fatal("second message reported as duplicate")
+	}
+	if cache.Seen("m1") {
+		t.Fatal("oldest entry was not evicted")
+	}
+}
+
 func TestDedupeCacheIgnoresEmptyKeys(t *testing.T) {
 	cache := newDedupeCache(time.Minute, 10, nil)
 	if cache.Seen("", "  ") {

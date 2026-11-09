@@ -243,6 +243,14 @@ func processNormalMessage(
 	// Build outbound metadata for reply-to + thread routing BEFORE RegisterRun
 	// so block.reply handler can use it for routing intermediate messages.
 	outMeta := channels.CopyFinalRoutingMeta(msg.Metadata)
+	// Zalo Personal can attach the final reply to the triggering message. The
+	// channel only uses this when QuoteReply is enabled, and the quote cache is
+	// keyed by the inbound message id.
+	if msg.Channel == channels.TypeZaloPersonal {
+		if mid := msg.Metadata["message_id"]; mid != "" {
+			outMeta["quote_msg_id"] = mid
+		}
+	}
 	if isGroup {
 		if mid := msg.Metadata["message_id"]; mid != "" {
 			outMeta["reply_to_message_id"] = mid

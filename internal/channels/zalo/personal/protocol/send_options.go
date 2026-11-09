@@ -30,8 +30,12 @@ type SendOptions struct {
 }
 
 // addQuotePayload fills the qmsg* fields expected by Zalo for a quoted reply.
+// Mirrors zca-js prepareQMSG/prepareQMSGAttach.
 func addQuotePayload(payload map[string]any, quote *TMessage, threadType ThreadType) {
 	if quote == nil {
+		return
+	}
+	if quote.Content.String == nil && (quote.MsgType == "webchat" || quote.MsgType == "group.poll") {
 		return
 	}
 	payload["qmsgOwner"] = quote.UIDFrom
@@ -43,12 +47,25 @@ func addQuotePayload(payload map[string]any, quote *TMessage, threadType ThreadT
 	if quote.Content.String != nil {
 		payload["qmsg"] = *quote.Content.String
 	} else {
-		payload["qmsg"] = ""
+		payload["qmsg"] = todoQuoteText(quote)
 	}
 
 	// Group replies carry the original attachment metadata so Zalo renders the
-	// thumbnail; DM replies only need qmsg*. chat.todo keeps its raw shape.
-	if threadType != ThreadTypeGroup || len(quote.Content.Raw) == 0 {
+	// thumbnail; DM replies only need qmsg*.
+	if threadType != ThreadTypeGroup {
+		return
+	}
+	if quote.Content.String != nil {
+		if len(quote.PropertyExt) > 0 {
+			payload["qmsgAttach"] = string(quote.PropertyExt)
+		}
+		return
+	}
+	if quote.MsgType == "chat.todo" {
+		payload["qmsgAttach"] = `{"properties":{"color":0,"size":0,"type":0,"subType":0,"ext":"{\"shouldParseLinkOrContact\":0}"}}`
+		return
+	}
+	if len(quote.Content.Raw) == 0 {
 		return
 	}
 	var obj map[string]any
@@ -69,32 +86,54 @@ func addQuotePayload(payload map[string]any, quote *TMessage, threadType ThreadT
 	payload["qmsgAttach"] = string(attach)
 }
 
+// todoQuoteText extracts the quoted todo item content (zca-js prepareQMSG).
+func todoQuoteText(quote *TMessage) string {
+	if quote.MsgType != "chat.todo" || len(quote.Content.Raw) == 0 {
+		return ""
+	}
+	var content struct {
+		Params string `json:"params"`
+	}
+	if err := json.Unmarshal(quote.Content.Raw, &content); err != nil || content.Params == "" {
+		return ""
+	}
+	var params struct {
+		Item struct {
+			Content string `json:"content"`
+		} `json:"item"`
+	}
+	if err := json.Unmarshal([]byte(content.Params), &params); err != nil {
+		return ""
+	}
+	return params.Item.Content
+}
+
 // clientMessageType maps inbound msgType strings to the integer Zalo expects
-// in qmsgType. Unknown types use -1, matching the JS client.
+// in qmsgType (zca-js getClientMessageType). Unknown types fall back to 1.
 func clientMessageType(msgType string) int {
 	switch msgType {
-	case "webchat", "chat.photo":
+	case "webchat":
 		return 1
-	case "chat.sticker":
-		return 2
 	case "chat.voice":
-		return 3
-	case "chat.video", "chat.video.msg":
-		return 4
-	case "share.file":
-		return 5
+		return 31
+	case "chat.photo":
+		return 32
+	case "chat.sticker":
+		return 36
+	case "chat.doodle":
+		return 37
+	case "chat.recommended", "chat.link":
+		return 38
 	case "chat.location.new":
-		return 6
-	case "chat.poll":
-		return 7
-	case "chat.card", "chat.bankcard":
-		return 8
-	case "chat.recommended":
-		return 9
-	case "chat.todo":
-		return 10
+		return 43
+	case "chat.video.msg":
+		return 44
+	case "share.file":
+		return 46
+	case "chat.gif":
+		return 49
 	}
-	return -1
+	return 1
 }
 
 func marshalJSONField(v any) (string, error) {

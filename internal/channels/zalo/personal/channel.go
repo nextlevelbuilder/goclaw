@@ -82,7 +82,7 @@ func New(cfg config.ZaloPersonalConfig, msgBus *bus.MessageBus, pairingSvc store
 		stopCh:     make(chan struct{}),
 	}
 	if cfg.EffectivePersistCookies() {
-		ch.cookiePersist = newCookiePersister(cookiePersistDebounce, func(cred *protocol.Credentials) error {
+		ch.cookiePersist = newCookiePersister(cookiePersistDebounce, func(_ context.Context, cred *protocol.Credentials) error {
 			return saveCredentials(ch.resolveCredentialsPath(), cred)
 		})
 	}

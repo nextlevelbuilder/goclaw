@@ -102,6 +102,13 @@ func (c *Channel) restartWithBackoff(ctx context.Context) bool {
 		}
 
 		if err := c.restart(ctx); err != nil {
+			if protocol.IsAuthError(err) {
+				slog.Error("zalo_personal re-auth failed; stopping instead of restart loop", "channel", c.Name(), "error", err)
+				if c.authFailureReported.CompareAndSwap(false, true) {
+					c.MarkFailed("Zalo session expired", err.Error(), channels.ChannelFailureKindAuth, false)
+				}
+				return false
+			}
 			slog.Warn("zalo_personal restart failed", "attempt", attempt+1, "error", err)
 			continue
 		}

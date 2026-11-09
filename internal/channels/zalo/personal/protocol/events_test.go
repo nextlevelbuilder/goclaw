@@ -38,6 +38,18 @@ func TestParseReaction(t *testing.T) {
 	}
 }
 
+func TestParseReactionStringContent(t *testing.T) {
+	raw := json.RawMessage(`{
+		"uidFrom":"u1",
+		"idTo":"g1",
+		"content":"{\"rMsg\":[{\"gMsgID\":123,\"cMsgID\":456}],\"rIcon\":\"😍\"}"
+	}`)
+	ev := parseReaction(raw, true)
+	if ev == nil || ev.Icon != "😍" || ev.MsgID != "123" {
+		t.Fatalf("event = %#v", ev)
+	}
+}
+
 func TestParseReactionDMUsesIDToWhenSelf(t *testing.T) {
 	raw := json.RawMessage(`{
 		"uidFrom":"0",

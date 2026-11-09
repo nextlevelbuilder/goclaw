@@ -13,6 +13,15 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
+// historyMessageID prefers globalMsgId because Zalo's undo payload carries
+// globalMsgId, not the local msgId.
+func historyMessageID(msg protocol.TMessage) string {
+	if msg.GlobalMsgID != "" {
+		return msg.GlobalMsgID
+	}
+	return msg.MsgID
+}
+
 func (c *Channel) handleMessage(msg protocol.Message) {
 	if msg.IsSelf() {
 		return
@@ -134,7 +143,7 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 				Body:      content,
 				Media:     media,
 				Timestamp: time.Now(),
-				MessageID: msg.Data.MsgID,
+				MessageID: historyMessageID(msg.Data.TMessage),
 			}, c.HistoryLimit())
 
 			// Collect contact even when bot is not mentioned (cache prevents DB spam).

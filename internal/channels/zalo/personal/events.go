@@ -64,7 +64,12 @@ func (c *Channel) handleUndo(ev protocol.UndoEvent) {
 		}
 	}
 	if c.replyCache != nil {
-		c.replyCache.Delete(c.replyScope(ev.ThreadID), ids...)
+		aliases := []string{
+			zaloIDAlias("global", ev.MsgID),
+			zaloIDAlias("msg", ev.MsgID),
+			zaloIDAlias("cli", ev.CliMsgID),
+		}
+		c.replyCache.Delete(c.replyScope(ev.ThreadID), append(ids, aliases...)...)
 	}
 	for _, id := range ids {
 		c.quoteCache.Delete(id)

@@ -7,10 +7,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal/protocol"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 )
 
 func TestCookieObserverNotifiesOnSet(t *testing.T) {
@@ -70,7 +72,7 @@ func TestSnapshotCredentialsIncludesServiceMapHosts(t *testing.T) {
 func TestCookiePersisterSkipsUnchangedAndWritesOnChange(t *testing.T) {
 	cred := &protocol.Credentials{IMEI: "imei-1", UserAgent: "ua"}
 	var saved []*protocol.Credentials
-	persister := newCookiePersister(time.Hour, func(c *protocol.Credentials) error {
+	persister := newCookiePersister(time.Hour, func(_ context.Context, c *protocol.Credentials) error {
 		saved = append(saved, c)
 		return nil
 	})
@@ -98,7 +100,7 @@ func TestCookiePersisterSkipsUnchangedAndWritesOnChange(t *testing.T) {
 func TestCookiePersisterCloseFlushesDirty(t *testing.T) {
 	cred := &protocol.Credentials{IMEI: "imei-1", UserAgent: "ua"}
 	var saved int
-	persister := newCookiePersister(time.Hour, func(*protocol.Credentials) error {
+	persister := newCookiePersister(time.Hour, func(context.Context, *protocol.Credentials) error {
 		saved++
 		return nil
 	})
@@ -119,6 +121,26 @@ func TestCookiePersisterCloseFlushesDirty(t *testing.T) {
 	}
 	if saved != 1 {
 		t.Fatalf("post-close dirty write: saved = %d, want 1", saved)
+	}
+}
+
+func TestSetCredentialSaverWritesDBShape(t *testing.T) {
+	ch := newTestChannel(t, config.ZaloPersonalConfig{DMPolicy: "open", GroupPolicy: "open"})
+	cred := &protocol.Credentials{IMEI: "imei-1", UserAgent: "ua"}
+	var saved []byte
+	ch.SetCredentialSaver(func(_ context.Context, blob []byte) error {
+		saved = append([]byte(nil), blob...)
+		return nil
+	})
+	ch.cookiePersist.Bind(func() *protocol.Credentials { return cred })
+	union := protocol.NewHTTPCookies([]*http.Cookie{{Name: "a", Value: "1"}})
+	cred.Cookie = &union
+	ch.cookiePersist.MarkDirty()
+	if err := ch.cookiePersist.Flush(context.Background()); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	if !strings.Contains(string(saved), `"imei":"imei-1"`) {
+		t.Fatalf("saved credentials = %s", saved)
 	}
 }
 
