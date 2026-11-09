@@ -14,7 +14,7 @@ export const NO_EMBEDDING_TYPES = new Set([
 ]);
 
 export const SIMPLE_REASONING_LEVELS = new Set(["off", "low", "medium", "high"]);
-export const ADVANCED_REASONING_LEVELS = ["off", "auto", "none", "minimal", "low", "medium", "high", "xhigh"] as const;
+export const ADVANCED_REASONING_LEVELS = ["off", "auto", "none", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 export const REASONING_FALLBACKS = ["downgrade", "provider_default", "off"] as const;
 
 /** Determine provider OAuth availability from status map */

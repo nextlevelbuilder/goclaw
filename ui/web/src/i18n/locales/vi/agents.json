@@ -922,6 +922,8 @@
       "highDesc": "~32K ngân sách token",
       "xhigh": "Rất cao",
       "xhighDesc": "Dùng mức reasoning cao nhất được hỗ trợ",
+      "max": "Max",
+      "maxDesc": "Use the model's maximum reasoning effort",
       "downgrade": "Giảm cấp",
       "downgradeDesc": "Chuẩn hóa xuống mức thấp hơn gần nhất được hỗ trợ hoặc mức thấp nhất được hỗ trợ nếu cần",
       "provider_default": "Dùng mặc định model",

@@ -5,8 +5,8 @@ import "slices"
 import "strings"
 
 // ReasoningCapability describes the supported reasoning levels for a model.
-// The registry is intentionally narrow: only GPT-5/Codex families we can
-// validate reliably today get explicit entries.
+// The registry is intentionally narrow: only model families we can validate
+// reliably get explicit entries.
 type ReasoningCapability struct {
 	Levels        []string `json:"levels,omitempty"`
 	DefaultEffort string   `json:"default_effort,omitempty"`
@@ -25,8 +25,9 @@ type reasoningCapabilityEntry struct {
 }
 
 // GPT-6 and GPT-5.6 models also accept "max" (and most accept "ultra"); those
-// stay out of Levels until NormalizeReasoningEffort and the UI can select them.
+// stay out of Levels until their capability rollout explicitly enables them.
 var reasoningCapabilityEntries = []reasoningCapabilityEntry{
+	{id: "minimax-m3.1-flash", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh", "max"}, DefaultEffort: "max"}},
 	{id: "gpt-6.1-sol", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "low"}},
 	{id: "gpt-6.1-terra", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "low"}},
 	{id: "gpt-6-astra", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "low"}},
