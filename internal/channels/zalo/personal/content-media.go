@@ -16,8 +16,15 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 )
 
+// mediaFetcher downloads one URL and returns a local path. Tests inject a fake.
+type mediaFetcher func(context.Context, string) (string, error)
+
 // extractContentAndMedia returns text content with media tags plus local media paths.
 func extractContentAndMedia(content protocol.Content) (string, []string) {
+	return extractContentAndMediaWithFetcher(content, downloadFile)
+}
+
+func extractContentAndMediaWithFetcher(content protocol.Content, fetch mediaFetcher) (string, []string) {
 	if text := content.Text(); text != "" {
 		return text, nil
 	}
@@ -26,7 +33,7 @@ func extractContentAndMedia(content protocol.Content) (string, []string) {
 		return "", nil
 	}
 
-	filePath, err := downloadFile(context.Background(), att.URL())
+	filePath, err := fetch(context.Background(), att.URL())
 	if err != nil {
 		slog.Warn("zalo_personal: failed to download attachment", "url", att.URL(), "error", err)
 		if text := content.AttachmentText(); text != "" {
@@ -61,6 +68,10 @@ func extractContentAndMedia(content protocol.Content) (string, []string) {
 	return tag, []string{filePath}
 }
 
+func (c *Channel) extractContentAndMedia(content protocol.Content) (string, []string) {
+	return extractContentAndMediaWithFetcher(content, c.downloadFile)
+}
+
 func cacheBodyForContent(content protocol.Content) string {
 	if text := strings.TrimSpace(content.Text()); text != "" {
 		return text
@@ -77,17 +88,46 @@ func displayNameOrID(displayName, id string) string {
 
 const maxMediaBytes = 20 * 1024 * 1024
 
-// downloadFile validates URL safety and stores the attachment in a bounded temp file.
+// checkMediaURL is a package var so tests can exercise the download path with
+// an httptest server (which binds a private loopback address).
+var checkMediaURL = tools.CheckSSRF
+
+// downloadFile is the unauthenticated fallback used by legacy tests/helpers.
 func downloadFile(ctx context.Context, fileURL string) (string, error) {
-	if err := tools.CheckSSRF(fileURL); err != nil {
+	return downloadFileWithClient(ctx, &http.Client{Timeout: 30 * time.Second}, "", maxMediaBytes, fileURL)
+}
+
+// downloadFile downloads inbound media with the authenticated session client so
+// Zalo CDN cookies and the required Referer header are present.
+func (c *Channel) downloadFile(ctx context.Context, fileURL string) (string, error) {
+	sess := c.session()
+	if sess == nil || sess.Client == nil {
+		return "", fmt.Errorf("zalo_personal: not connected")
+	}
+	maxBytes := int64(c.config.EffectiveMediaMaxMB()) * 1024 * 1024
+	return downloadFileWithClient(ctx, sess.Client, sess.UserAgent, maxBytes, fileURL)
+}
+
+func downloadFileWithClient(ctx context.Context, client *http.Client, userAgent string, maxBytes int64, fileURL string) (string, error) {
+	if err := checkMediaURL(fileURL); err != nil {
 		return "", fmt.Errorf("ssrf check: %w", err)
 	}
+	if client == nil {
+		return "", fmt.Errorf("download: nil client")
+	}
+	if maxBytes <= 0 {
+		maxBytes = maxMediaBytes
+	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fileURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("download: %w", err)
 	}
+	if userAgent != "" {
+		req.Header.Set("User-Agent", userAgent)
+	}
+	req.Header.Set("Referer", "https://chat.zalo.me/")
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("download: %w", err)
@@ -96,6 +136,9 @@ func downloadFile(ctx context.Context, fileURL string) (string, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download status %d", resp.StatusCode)
+	}
+	if resp.ContentLength > maxBytes {
+		return "", fmt.Errorf("file too large: %d bytes (max %d)", resp.ContentLength, maxBytes)
 	}
 
 	path := fileURL
@@ -113,14 +156,14 @@ func downloadFile(ctx context.Context, fileURL string) (string, error) {
 	}
 	defer tmpFile.Close()
 
-	written, err := io.Copy(tmpFile, io.LimitReader(resp.Body, maxMediaBytes+1))
+	written, err := io.Copy(tmpFile, io.LimitReader(resp.Body, maxBytes+1))
 	if err != nil {
 		os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("save: %w", err)
 	}
-	if written > maxMediaBytes {
+	if written > maxBytes {
 		os.Remove(tmpFile.Name())
-		return "", fmt.Errorf("file too large: %d bytes (max %d)", written, maxMediaBytes)
+		return "", fmt.Errorf("file too large: %d bytes (max %d)", written, maxBytes)
 	}
 	return fixDownloadedExt(tmpFile.Name()), nil
 }
@@ -172,6 +215,10 @@ func fixDownloadedExt(path string) string {
 // reply like “make a poster from this photo” actually carries the photo.
 // Non-image quotes (files, stickers) stay text-only placeholders.
 func extractQuoteMedia(quote *protocol.TQuote) []string {
+	return extractQuoteMediaWithFetcher(quote, downloadFile)
+}
+
+func extractQuoteMediaWithFetcher(quote *protocol.TQuote, fetch mediaFetcher) []string {
 	if quote == nil {
 		return nil
 	}
@@ -179,12 +226,16 @@ func extractQuoteMedia(quote *protocol.TQuote) []string {
 	if att == nil || !att.IsImage() || att.URL() == "" {
 		return nil
 	}
-	filePath, err := downloadFile(context.Background(), att.URL())
+	filePath, err := fetch(context.Background(), att.URL())
 	if err != nil {
 		slog.Warn("zalo_personal: failed to download quoted attachment", "url", att.URL(), "error", err)
 		return nil
 	}
 	return []string{filePath}
+}
+
+func (c *Channel) extractQuoteMedia(quote *protocol.TQuote) []string {
+	return extractQuoteMediaWithFetcher(quote, c.downloadFile)
 }
 
 // buildQuoteMediaTag renders a bare <media:image> content tag for each image

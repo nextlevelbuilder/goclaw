@@ -41,10 +41,10 @@ func (c *Channel) handleDM(msg protocol.UserMessage) {
 		return
 	}
 
-	body, media := extractContentAndMedia(msg.Data.Content)
+	body, media := c.extractContentAndMedia(msg.Data.Content)
 	// A reply to an image should carry the image itself, not just the
 	// "[Quoted image]" placeholder — download it and attach as media.
-	quoteMedia := extractQuoteMedia(msg.Data.Quote)
+	quoteMedia := c.extractQuoteMedia(msg.Data.Quote)
 	media = append(media, quoteMedia...)
 	content := replycontext.Compose(c.buildReplyContext(threadID, msg.Data.Quote), body)
 	if content == "" {
@@ -107,10 +107,10 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 		senderName = senderID
 	}
 
-	body, media := extractContentAndMedia(msg.Data.Content)
+	body, media := c.extractContentAndMedia(msg.Data.Content)
 	// A reply to an image should carry the image itself, not just the
 	// "[Quoted image]" placeholder — download it and attach as media.
-	quoteMedia := extractQuoteMedia(msg.Data.Quote)
+	quoteMedia := c.extractQuoteMedia(msg.Data.Quote)
 	media = append(media, quoteMedia...)
 	content := replycontext.Compose(c.buildReplyContext(threadID, msg.Data.Quote), body)
 	if content == "" {

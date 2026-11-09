@@ -263,6 +263,11 @@ func (l *Loop) persistMedia(sessionKey string, files []bus.MediaFile, workspace 
 			}
 			continue
 		}
+		if isTempMediaSource(f.Path, dstPath) {
+			if err := os.Remove(f.Path); err != nil && !os.IsNotExist(err) {
+				slog.Warn("media: failed to remove temp source", "path", f.Path, "error", err)
+			}
+		}
 		if sanitizedTemp != "" {
 			os.Remove(sanitizedTemp) // cleanup sanitized temp file
 		}
@@ -276,6 +281,21 @@ func (l *Loop) persistMedia(sessionKey string, files []bus.MediaFile, workspace 
 		slog.Debug("media: persisted file", "id", id, "kind", kind, "path", dstPath, "agent", l.id)
 	}
 	return refs
+}
+
+// isTempMediaSource reports whether src is a download temp file, not a user
+// file or the persisted destination. Only those sources are safe to delete
+// after a successful copy.
+func isTempMediaSource(src, dst string) bool {
+	if src == "" || dst == "" {
+		return false
+	}
+	cleanSrc := filepath.Clean(src)
+	if cleanSrc == filepath.Clean(dst) {
+		return false
+	}
+	tmpPrefix := filepath.Clean(os.TempDir()) + string(os.PathSeparator)
+	return strings.HasPrefix(cleanSrc+string(os.PathSeparator), tmpPrefix)
 }
 
 // copyMediaFile copies src to dst using buffered I/O.

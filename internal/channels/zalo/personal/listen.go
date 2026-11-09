@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/nextlevelbuilder/goclaw/internal/channels"
 	"github.com/nextlevelbuilder/goclaw/internal/channels/zalo/personal/protocol"
 )
 
@@ -98,6 +99,7 @@ func (c *Channel) restartWithBackoff(ctx context.Context) bool {
 		return true
 	}
 	slog.Error("zalo_personal channel gave up after max restart attempts", "channel", c.Name())
+	c.MarkFailed("Zalo Personal stopped", "gave up after 10 restart attempts", channels.ChannelFailureKindAuth, false)
 	return false
 }
 
@@ -125,5 +127,7 @@ func (c *Channel) restart(ctx context.Context) error {
 	c.sess = sess
 	c.listener = ln
 	c.mu.Unlock()
+	c.authFailureReported.Store(false)
+	c.MarkHealthy("Connected")
 	return nil
 }

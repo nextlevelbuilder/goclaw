@@ -23,11 +23,12 @@ import (
 // WARNING: Zalo Personal is an unofficial, reverse-engineered integration. Account may be locked/banned.
 type Channel struct {
 	*channels.BaseChannel
-	config      config.ZaloPersonalConfig
-	typingCtrls sync.Map // threadID → *typing.Controller
-	replyCache  *replycontext.Cache
-	dedupe      *dedupeCache
-	limiter     *sendLimiter
+	config        config.ZaloPersonalConfig
+	typingCtrls   sync.Map // threadID → *typing.Controller
+	replyCache    *replycontext.Cache
+	dedupe        *dedupeCache
+	limiter       *sendLimiter
+	cookiePersist *cookiePersister
 
 	authFailureReported atomic.Bool
 
@@ -75,6 +76,11 @@ func New(cfg config.ZaloPersonalConfig, msgBus *bus.MessageBus, pairingSvc store
 			dailyCap:      cfg.EffectiveDailySendCap(),
 		}),
 		stopCh: make(chan struct{}),
+	}
+	if cfg.EffectivePersistCookies() {
+		ch.cookiePersist = newCookiePersister(cookiePersistDebounce, func(cred *protocol.Credentials) error {
+			return saveCredentials(ch.resolveCredentialsPath(), cred)
+		})
 	}
 	ch.SetPairingService(pairingSvc)
 	ch.SetGroupHistory(channels.MakeHistory(channels.TypeZaloPersonal, pendingStore, base.TenantID()))
@@ -167,6 +173,8 @@ func (c *Channel) Start(ctx context.Context) error {
 	slog.Info("zalo_personal connected", "uid", sess.UID)
 
 	c.SetRunning(true)
+	c.authFailureReported.Store(false)
+	c.MarkHealthy("Connected")
 	go c.listenLoop(ctx)
 	// Best-effort: warm the approvedGroups cache so a forward TO a group works
 	// correctly even if its origin session was never itself a group (see
@@ -199,7 +207,7 @@ func (c *Channel) SetPendingHistoryTenantID(id uuid.UUID) {
 }
 
 // Stop gracefully shuts down the Zalo Personal channel.
-func (c *Channel) Stop(_ context.Context) error {
+func (c *Channel) Stop(ctx context.Context) error {
 	if gh := c.GroupHistory(); gh != nil {
 		gh.StopFlusher()
 	}
@@ -217,6 +225,11 @@ func (c *Channel) Stop(_ context.Context) error {
 	}
 	if ln := c.getListener(); ln != nil {
 		ln.Stop()
+	}
+	if c.cookiePersist != nil {
+		if err := c.cookiePersist.Close(ctx); err != nil {
+			slog.Warn("zalo_personal: failed to flush cookies on stop", "error", err)
+		}
 	}
 	c.SetRunning(false)
 	return nil

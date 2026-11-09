@@ -16,6 +16,9 @@ import (
 // Priority: preloaded (DB) > saved file > QR login.
 func (c *Channel) authenticate(ctx context.Context) (*protocol.Session, error) {
 	sess := protocol.NewSession()
+	if c.cookiePersist != nil {
+		installCookieObserver(sess, c.cookiePersist.MarkDirty)
+	}
 
 	// 1. Preloaded credentials (from DB via factory).
 	if c.preloadedCreds != nil {
@@ -23,6 +26,7 @@ func (c *Channel) authenticate(ctx context.Context) (*protocol.Session, error) {
 		if err := protocol.LoginWithCredentials(ctx, sess, *c.preloadedCreds); err != nil {
 			return nil, fmt.Errorf("preloaded credentials failed: %w", err)
 		}
+		c.bindCookieSession(sess)
 		return sess, nil
 	}
 
@@ -33,6 +37,7 @@ func (c *Channel) authenticate(ctx context.Context) (*protocol.Session, error) {
 		if err := protocol.LoginWithCredentials(ctx, sess, *cred); err != nil {
 			slog.Warn("zalo_personal: saved credentials failed, falling back to QR", "error", err)
 		} else {
+			c.bindCookieSession(sess)
 			return sess, nil
 		}
 	}
@@ -53,7 +58,17 @@ func (c *Channel) authenticate(ctx context.Context) (*protocol.Session, error) {
 		slog.Info("zalo_personal: credentials saved", "path", credPath)
 	}
 
+	c.bindCookieSession(sess)
 	return sess, nil
+}
+
+func (c *Channel) bindCookieSession(sess *protocol.Session) {
+	if c.cookiePersist == nil {
+		return
+	}
+	c.cookiePersist.Bind(func() *protocol.Credentials {
+		return snapshotCredentials(sess)
+	})
 }
 
 // SetPreloadedCredentials sets credentials from DB factory.
@@ -88,12 +103,36 @@ func saveCredentials(path string, cred *protocol.Credentials) error {
 	if cred == nil {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(cred, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0600)
+
+	tmp, err := os.CreateTemp(dir, ".zalo-creds-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+
+	if err := tmp.Chmod(0600); err != nil {
+		tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
