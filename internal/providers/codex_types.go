@@ -76,6 +76,7 @@ type codexSSEEvent struct {
 }
 
 type codexToolCallAcc struct {
+	seq     int // order in which the item was first seen in the stream
 	callID  string
 	name    string
 	rawArgs string
