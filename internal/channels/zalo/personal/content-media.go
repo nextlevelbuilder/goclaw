@@ -1,13 +1,16 @@
 package personal
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,27 +22,77 @@ import (
 // mediaFetcher downloads one URL and returns a local path. Tests inject a fake.
 type mediaFetcher func(context.Context, string) (string, error)
 
-// extractContentAndMedia returns text content with media tags plus local media paths.
-func extractContentAndMedia(content protocol.Content) (string, []string) {
-	return extractContentAndMediaWithFetcher(content, downloadFile)
+// extractContentAndMedia routes a non-text payload by msgType. Every branch
+// returns a non-empty description so the model always has something to reason
+// about, even for unsupported payloads.
+func extractContentAndMedia(content protocol.Content, msgType, notify string) (string, []string) {
+	return extractContentAndMediaWithFetcher(content, msgType, notify, downloadFile)
 }
 
-func extractContentAndMediaWithFetcher(content protocol.Content, fetch mediaFetcher) (string, []string) {
+func extractContentAndMediaWithFetcher(content protocol.Content, msgType, notify string, fetch mediaFetcher) (string, []string) {
 	if text := content.Text(); text != "" {
 		return text, nil
 	}
+
 	att := content.ParseAttachment()
-	if att == nil || att.URL() == "" {
-		return "", nil
+	if att == nil {
+		switch msgType {
+		case "chat.sticker":
+			return "[sticker]", nil
+		case "chat.voice":
+			return "[voice]", nil
+		case "chat.video", "chat.video.msg":
+			return "[video]", nil
+		case "share.link", "chat.link":
+			return "[link]", nil
+		case "chat.location.new":
+			return "[location]", nil
+		case "chat.poll", "chat.todo", "chat.card", "chat.bankcard",
+			"chat.doodle", "chat.gif", "chat.recommended", "share.file":
+			return formatTaggedJSON(content, msgType), nil
+		}
+		return describeUnknown(content, msgType, notify), nil
 	}
 
-	filePath, err := fetch(context.Background(), att.URL())
-	if err != nil {
-		slog.Warn("zalo_personal: failed to download attachment", "url", att.URL(), "error", err)
-		if text := content.AttachmentText(); text != "" {
-			return text, nil
+	switch msgType {
+	case "chat.photo", "":
+		if att.IsImage() || att.URLFor(msgType) != "" {
+			return downloadPhoto(att, msgType, fetch)
 		}
-		return "", nil
+	case "chat.sticker":
+		return formatSticker(att), nil
+	case "chat.voice":
+		return fmt.Sprintf("[voice %ss]", formatDuration(att.Duration)), nil
+	case "chat.video", "chat.video.msg":
+		text := fmt.Sprintf("[video %ss]", formatDuration(att.Duration))
+		if thumb := firstNonEmpty(att.ThumbURL, att.Thumb); thumb != "" {
+			text += "\n[thumbnail] " + thumb
+		}
+		return text, nil
+	case "share.link", "chat.link":
+		return formatLink(att), nil
+	case "chat.location.new":
+		return fmt.Sprintf("[location %s,%s] %s", formatFloat(att.Lat), formatFloat(att.Lng), strings.TrimSpace(att.Desc)), nil
+	case "chat.poll", "chat.todo", "chat.card", "chat.bankcard",
+		"chat.doodle", "chat.gif", "chat.recommended", "share.file":
+		return formatTaggedJSON(content, msgType), nil
+	}
+
+	if notify = strings.TrimSpace(notify); notify != "" {
+		return notify, nil
+	}
+	return describeUnknown(content, msgType, notify), nil
+}
+
+func downloadPhoto(att *protocol.Attachment, msgType string, fetch mediaFetcher) (string, []string) {
+	url := att.URLFor(msgType)
+	if url == "" {
+		return contentFallback(att), nil
+	}
+	filePath, err := fetch(context.Background(), url)
+	if err != nil {
+		slog.Warn("zalo_personal: failed to download attachment", "url", url, "error", err)
+		return contentFallback(att), nil
 	}
 
 	mimeType := media.DetectMIMEType(filePath)
@@ -68,15 +121,123 @@ func extractContentAndMediaWithFetcher(content protocol.Content, fetch mediaFetc
 	return tag, []string{filePath}
 }
 
-func (c *Channel) extractContentAndMedia(content protocol.Content) (string, []string) {
-	return extractContentAndMediaWithFetcher(content, c.downloadFile)
+func (c *Channel) extractContentAndMedia(content protocol.Content, msgType, notify string) (string, []string) {
+	return extractContentAndMediaWithFetcher(content, msgType, notify, c.downloadFile)
 }
 
-func cacheBodyForContent(content protocol.Content) string {
+func cacheBodyForContent(content protocol.Content, msgType, notify string) string {
 	if text := strings.TrimSpace(content.Text()); text != "" {
 		return text
 	}
-	return content.AttachmentText()
+	att := content.ParseAttachment()
+	if att == nil {
+		return describeUnknown(content, msgType, notify)
+	}
+	switch msgType {
+	case "chat.sticker":
+		return formatSticker(att)
+	case "chat.voice":
+		return fmt.Sprintf("[voice %ss]", formatDuration(att.Duration))
+	case "chat.video", "chat.video.msg":
+		return fmt.Sprintf("[video %ss]", formatDuration(att.Duration))
+	case "share.link", "chat.link":
+		return formatLink(att)
+	case "chat.location.new":
+		return fmt.Sprintf("[location %s,%s] %s", formatFloat(att.Lat), formatFloat(att.Lng), strings.TrimSpace(att.Desc))
+	case "chat.poll", "chat.todo", "chat.card", "chat.bankcard",
+		"chat.doodle", "chat.gif", "chat.recommended", "share.file":
+		return formatTaggedJSON(content, msgType)
+	}
+	if notify = strings.TrimSpace(notify); notify != "" {
+		return notify
+	}
+	return contentFallback(att)
+}
+
+func formatSticker(att *protocol.Attachment) string {
+	id := firstNonEmpty(att.StickerID, att.ID)
+	if id == "" {
+		return "[sticker]"
+	}
+	return "[sticker id=" + id + "]"
+}
+
+func formatLink(att *protocol.Attachment) string {
+	url := firstNonEmpty(att.Href, att.OriURL, att.NormalURL)
+	if url == "" {
+		return "[link]"
+	}
+	return "[link] " + url
+}
+
+func formatTaggedJSON(content protocol.Content, msgType string) string {
+	raw := compactJSON(content.Raw)
+	if raw == "" {
+		return "[zalo:" + msgType + "]"
+	}
+	return "[zalo:" + msgType + "] " + raw
+}
+
+func describeUnknown(content protocol.Content, msgType, notify string) string {
+	if notify = strings.TrimSpace(notify); notify != "" {
+		return notify
+	}
+	if msgType == "" {
+		return contentFallback(content.ParseAttachment())
+	}
+	if raw := compactJSON(content.Raw); raw != "" {
+		return "[unsupported: " + msgType + "] " + raw
+	}
+	return "[unsupported: " + msgType + "]"
+}
+
+func contentFallback(att *protocol.Attachment) string {
+	if att == nil {
+		return "[User sent a non-text message]"
+	}
+	if att.IsImage() {
+		if title := strings.TrimSpace(att.Title); title != "" {
+			return "[User sent an image: " + title + "]"
+		}
+		return "[User sent an image]"
+	}
+	if title := strings.TrimSpace(att.Title); title != "" {
+		return "[User sent a file: " + title + "]"
+	}
+	return "[User sent a file]"
+}
+
+func compactJSON(raw []byte) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, raw); err != nil {
+		return ""
+	}
+	out := buf.String()
+	const maxJSONBytes = 512
+	if len(out) > maxJSONBytes {
+		out = out[:maxJSONBytes]
+	}
+	return out
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func formatDuration(d float64) string {
+	return strconv.FormatFloat(d, 'f', -1, 64)
+}
+
+func formatFloat(f float64) string {
+	return strconv.FormatFloat(f, 'f', -1, 64)
 }
 
 func displayNameOrID(displayName, id string) string {

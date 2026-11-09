@@ -138,6 +138,19 @@ func TestCacheEvictsExpiredMessagesAndClear(t *testing.T) {
 	}
 }
 
+func TestCacheDeleteRemovesAliases(t *testing.T) {
+	cache := NewCache(DefaultOptions())
+	scope := Scope{TenantID: "tenant-a", ChannelID: "zalo-main", ThreadID: "thread-1"}
+	cache.Store(scope, Message{IDs: []string{"m1", "c1"}, Sender: "Alice", Body: "recalled"})
+
+	cache.Delete(scope, "c1")
+
+	got := cache.Build(scope, Quote{IDs: []string{"m1"}, Sender: "Alice", Body: "fallback"})
+	if strings.Contains(got, "recalled") {
+		t.Fatalf("deleted context rendered: %q", got)
+	}
+}
+
 func assertOrder(t *testing.T, haystack string, values ...string) {
 	t.Helper()
 	last := -1

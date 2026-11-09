@@ -48,6 +48,15 @@ func (c *Channel) runListenerLoop(ctx context.Context) bool {
 			}
 			c.handleMessage(msg)
 
+		case ev := <-ln.Reactions():
+			c.handleReaction(ev)
+
+		case ev := <-ln.Undos():
+			c.handleUndo(ev)
+
+		case ev := <-ln.GroupEvents():
+			c.handleGroupEvent(ev)
+
 		case ci := <-ln.Disconnected():
 			slog.Warn("zalo_personal disconnected", "code", ci.Code, "reason", ci.Reason)
 

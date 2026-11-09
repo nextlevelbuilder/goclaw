@@ -42,14 +42,20 @@ func (c Content) Text() string {
 
 // Attachment holds parsed fields from a non-text content object.
 type Attachment struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Href        string `json:"href"`
-	Thumb       string `json:"thumb"`
-	ThumbURL    string `json:"thumbUrl"`
-	OriURL      string `json:"oriUrl"`
-	NormalURL   string `json:"normalUrl"`
-	Type        string `json:"type"`
+	Title       string  `json:"title"`
+	Description string  `json:"description"`
+	Href        string  `json:"href"`
+	Thumb       string  `json:"thumb"`
+	ThumbURL    string  `json:"thumbUrl"`
+	OriURL      string  `json:"oriUrl"`
+	NormalURL   string  `json:"normalUrl"`
+	Type        string  `json:"type"`
+	ID          string  `json:"id"`
+	StickerID   string  `json:"stickerId"`
+	Duration    float64 `json:"duration"`
+	Lat         float64 `json:"lat"`
+	Lng         float64 `json:"lng"`
+	Desc        string  `json:"desc"`
 }
 
 // ParseAttachment extracts attachment metadata from non-text content.
@@ -67,10 +73,27 @@ func (c Content) ParseAttachment() *Attachment {
 
 // URL returns the best available attachment URL across Zalo content variants.
 func (a *Attachment) URL() string {
+	return a.URLFor("")
+}
+
+// URLFor applies the msgType-specific priority. Image/video payloads often put
+// an HTML page in href and the actual media in oriUrl; link payloads put the
+// target page in href. Using one order for all types either downloads HTML or
+// misses the link target.
+func (a *Attachment) URLFor(msgType string) string {
 	if a == nil {
 		return ""
 	}
-	for _, candidate := range []string{a.Href, a.OriURL, a.NormalURL, a.Thumb, a.ThumbURL} {
+	var candidates []string
+	switch msgType {
+	case "share.link", "chat.link":
+		candidates = []string{a.Href, a.OriURL, a.NormalURL, a.Thumb, a.ThumbURL}
+	case "chat.photo", "chat.video", "chat.video.msg", "chat.gif", "chat.doodle":
+		candidates = []string{a.OriURL, a.NormalURL, a.Href, a.Thumb, a.ThumbURL}
+	default:
+		candidates = []string{a.Href, a.OriURL, a.NormalURL, a.Thumb, a.ThumbURL}
+	}
+	for _, candidate := range candidates {
 		if strings.TrimSpace(candidate) != "" {
 			return candidate
 		}
@@ -86,10 +109,22 @@ var imageExts = map[string]bool{
 // IsImage reports whether the attachment href points to an image file.
 // Checks both file extension and Zalo CDN path patterns (e.g. /jpg/, /png/).
 func (a *Attachment) IsImage() bool {
-	if a == nil || a.URL() == "" {
+	if a == nil {
 		return false
 	}
-	path := strings.SplitN(a.URL(), "?", 2)[0]
+	for _, candidate := range []string{a.OriURL, a.NormalURL, a.Href, a.Thumb, a.ThumbURL} {
+		if isImageURL(candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+func isImageURL(rawURL string) bool {
+	if strings.TrimSpace(rawURL) == "" {
+		return false
+	}
+	path := strings.SplitN(rawURL, "?", 2)[0]
 	if imageExts[strings.ToLower(filepath.Ext(path))] {
 		return true
 	}

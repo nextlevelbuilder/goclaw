@@ -31,14 +31,17 @@ type Listener struct {
 	client      *WSClient
 	cipherKey   string
 	connectedAt time.Time
-	stopped     bool         // prevents reconnect after Stop()
-	reconnTimer *time.Timer  // pending reconnect timer, cancelled on Stop()
+	stopped     bool        // prevents reconnect after Stop()
+	reconnTimer *time.Timer // pending reconnect timer, cancelled on Stop()
 
 	retryStates map[string]*retryState
 
 	uploadCallbacks sync.Map // fileID (string) → chan string (fileURL)
 
 	messageCh      chan Message
+	reactionCh     chan ReactionEvent
+	undoCh         chan UndoEvent
+	groupEventCh   chan GroupEvent
 	disconnectedCh chan CloseInfo
 	closedCh       chan CloseInfo
 	errorCh        chan error
@@ -86,6 +89,9 @@ func NewListener(sess *Session) (*Listener, error) {
 		wsURL:          wsURL,
 		retryStates:    buildListenerRetryStates(sess.Settings),
 		messageCh:      make(chan Message, msgBufferSize),
+		reactionCh:     make(chan ReactionEvent, msgBufferSize),
+		undoCh:         make(chan UndoEvent, msgBufferSize),
+		groupEventCh:   make(chan GroupEvent, msgBufferSize),
 		disconnectedCh: make(chan CloseInfo, 4),
 		closedCh:       make(chan CloseInfo, 1),
 		errorCh:        make(chan error, 16),
@@ -93,10 +99,13 @@ func NewListener(sess *Session) (*Listener, error) {
 }
 
 // Channel accessors.
-func (ln *Listener) Messages() <-chan Message      { return ln.messageCh }
-func (ln *Listener) Disconnected() <-chan CloseInfo { return ln.disconnectedCh }
-func (ln *Listener) Closed() <-chan CloseInfo       { return ln.closedCh }
-func (ln *Listener) Errors() <-chan error           { return ln.errorCh }
+func (ln *Listener) Messages() <-chan Message        { return ln.messageCh }
+func (ln *Listener) Reactions() <-chan ReactionEvent { return ln.reactionCh }
+func (ln *Listener) Undos() <-chan UndoEvent         { return ln.undoCh }
+func (ln *Listener) GroupEvents() <-chan GroupEvent  { return ln.groupEventCh }
+func (ln *Listener) Disconnected() <-chan CloseInfo  { return ln.disconnectedCh }
+func (ln *Listener) Closed() <-chan CloseInfo        { return ln.closedCh }
+func (ln *Listener) Errors() <-chan error            { return ln.errorCh }
 
 // Start connects to WebSocket and begins reading messages.
 func (ln *Listener) Start(ctx context.Context) error {
@@ -241,12 +250,18 @@ func (ln *Listener) handleFrame(ctx context.Context, data []byte) {
 	switch key {
 	case "1_1_1":
 		ln.handleCipherKey(ctx, envelope.Key)
-	case "1_501_0":
+	case "1_501_0", "1_551_0":
 		ln.handleUserMessages(ctx, envelope.Data, envelope.Encrypt)
 	case "1_521_0":
 		ln.handleGroupMessages(ctx, envelope.Data, envelope.Encrypt)
+	case "1_612_0", "1_610_0", "1_611_0":
+		ln.handleReactions(ctx, envelope.Data, envelope.Encrypt)
 	case "1_601_0":
 		ln.handleControlEvents(ctx, envelope.Data, envelope.Encrypt)
+	case "1_502_0", "1_602_0", "1_510_0", "1_511_0":
+		// Seen/delivered, typing, and old message envelopes carry no agent
+		// action; ignore explicitly so they don't surface as parse errors.
+		return
 	case "1_3000_0":
 		slog.Warn("zalo_personal: duplicate connection detected, closing")
 		ln.mu.RLock()
@@ -282,4 +297,3 @@ func (ln *Listener) handleCipherKey(ctx context.Context, key *string) {
 		}
 	}
 }
-

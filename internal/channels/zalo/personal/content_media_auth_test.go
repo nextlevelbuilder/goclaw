@@ -69,7 +69,7 @@ func TestExtractContentAndMediaUsesInjectedFetcher(t *testing.T) {
 
 	content := protocol.Content{Raw: json.RawMessage(`{"title":"brief.png","href":"https://example.com/brief.png"}`)}
 	called := 0
-	got, media := extractContentAndMediaWithFetcher(content, func(context.Context, string) (string, error) {
+	got, media := extractContentAndMediaWithFetcher(content, "chat.photo", "", func(context.Context, string) (string, error) {
 		called++
 		return imagePath, nil
 	})

@@ -181,3 +181,29 @@ func (c *Cache) Clear() {
 	clear(c.nodes)
 	clear(c.aliases)
 }
+
+// Delete removes the canonical entry and all aliases for any of the supplied
+// message IDs. Used when a platform reports that a message was recalled.
+func (c *Cache) Delete(scope Scope, ids ...string) {
+	if c == nil {
+		return
+	}
+	ids = NormalizeIDs(ids)
+	if len(ids) == 0 {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, id := range ids {
+		key := scopedKey(scope, id)
+		if canonical, ok := c.aliases[key]; ok {
+			if n := c.nodes[canonical]; n != nil {
+				c.deleteNodeLocked(canonical, n)
+			}
+			continue
+		}
+		if n := c.nodes[key]; n != nil {
+			c.deleteNodeLocked(key, n)
+		}
+	}
+}

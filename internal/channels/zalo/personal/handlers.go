@@ -41,7 +41,7 @@ func (c *Channel) handleDM(msg protocol.UserMessage) {
 		return
 	}
 
-	body, media := c.extractContentAndMedia(msg.Data.Content)
+	body, media := c.extractContentAndMedia(msg.Data.Content, msg.Data.MsgType, msg.Data.Notify)
 	// A reply to an image should carry the image itself, not just the
 	// "[Quoted image]" placeholder — download it and attach as media.
 	quoteMedia := c.extractQuoteMedia(msg.Data.Quote)
@@ -62,7 +62,7 @@ func (c *Channel) handleDM(msg protocol.UserMessage) {
 	if senderName != "" {
 		content = fmt.Sprintf("[From: %s]\n%s", senderName, content)
 	}
-	c.rememberReplyContext(threadID, displayNameOrID(senderName, senderID), msg.Data, cacheBodyForContent(msg.Data.Content))
+	c.rememberReplyContext(threadID, displayNameOrID(senderName, senderID), msg.Data, cacheBodyForContent(msg.Data.Content, msg.Data.MsgType, msg.Data.Notify))
 
 	slog.Debug("zalo_personal DM received",
 		"sender", senderID,
@@ -107,7 +107,7 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 		senderName = senderID
 	}
 
-	body, media := c.extractContentAndMedia(msg.Data.Content)
+	body, media := c.extractContentAndMedia(msg.Data.Content, msg.Data.MsgType, msg.Data.Notify)
 	// A reply to an image should carry the image itself, not just the
 	// "[Quoted image]" placeholder — download it and attach as media.
 	quoteMedia := c.extractQuoteMedia(msg.Data.Quote)
@@ -122,7 +122,7 @@ func (c *Channel) handleGroupMessage(msg protocol.GroupMessage) {
 	if tag := buildQuoteMediaTag(quoteMedia); tag != "" {
 		content = content + "\n" + tag
 	}
-	c.rememberReplyContext(threadID, senderName, msg.Data.TMessage, cacheBodyForContent(msg.Data.Content))
+	c.rememberReplyContext(threadID, senderName, msg.Data.TMessage, cacheBodyForContent(msg.Data.Content, msg.Data.MsgType, msg.Data.Notify))
 
 	// Step 2: @mention gating — record non-mentioned messages in history and return.
 	if c.RequireMention() {
@@ -208,7 +208,7 @@ func (c *Channel) startTyping(threadID string, threadType protocol.ThreadType) {
 }
 
 func extractContentAndMediaWithQuote(content protocol.Content, quote *protocol.TQuote) (string, []string) {
-	text, media := extractContentAndMedia(content)
+	text, media := extractContentAndMedia(content, "webchat", "")
 	quoteMedia := extractQuoteMedia(quote)
 	media = append(media, quoteMedia...)
 	composed := replycontext.Compose(formatQuoteContext(quote), text)

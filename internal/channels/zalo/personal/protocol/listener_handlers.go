@@ -46,6 +46,10 @@ func (ln *Listener) handleUserMessages(ctx context.Context, data string, encType
 			continue
 		}
 		um := NewUserMessage(ln.sess.UID, msg)
+		if undo := undoEventFromMessage(msg.Content, um.ThreadID(), false); undo != nil {
+			emit(ctx, ln.undoCh, *undo)
+			continue
+		}
 		if um.IsSelf() {
 			continue // skip self-sent messages
 		}
@@ -80,10 +84,52 @@ func (ln *Listener) handleGroupMessages(ctx context.Context, data string, encTyp
 			continue
 		}
 		gm := NewGroupMessage(ln.sess.UID, msg)
+		if undo := undoEventFromMessage(msg.Content, gm.ThreadID(), true); undo != nil {
+			emit(ctx, ln.undoCh, *undo)
+			continue
+		}
 		if gm.IsSelf() {
 			continue
 		}
 		emit(ctx, ln.messageCh, Message(gm))
+	}
+}
+
+// --- Reaction events (cmd=612; old 610/611) ---
+
+func (ln *Listener) handleReactions(ctx context.Context, data string, encType uint) {
+	ln.mu.RLock()
+	ck := ln.cipherKey
+	ln.mu.RUnlock()
+
+	payload, err := ln.decryptEventData(data, encType, ck)
+	if err != nil {
+		emit(ctx, ln.errorCh, fmt.Errorf("zalo_personal: decrypt reaction event: %w", err))
+		return
+	}
+
+	var envelope struct {
+		Data struct {
+			Reacts      []json.RawMessage `json:"reacts"`
+			ReactGroups []json.RawMessage `json:"reactGroups"`
+		} `json:"data"`
+		Reacts      []json.RawMessage `json:"reacts"`
+		ReactGroups []json.RawMessage `json:"reactGroups"`
+	}
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		emit(ctx, ln.errorCh, fmt.Errorf("zalo_personal: parse reaction event: %w", err))
+		return
+	}
+
+	for _, raw := range append(envelope.Data.Reacts, envelope.Reacts...) {
+		if ev := parseReaction(raw, false); ev != nil {
+			emit(ctx, ln.reactionCh, *ev)
+		}
+	}
+	for _, raw := range append(envelope.Data.ReactGroups, envelope.ReactGroups...) {
+		if ev := parseReaction(raw, true); ev != nil {
+			emit(ctx, ln.reactionCh, *ev)
+		}
 	}
 }
 
@@ -104,9 +150,12 @@ func (ln *Listener) handleControlEvents(ctx context.Context, data string, encTyp
 		Data struct {
 			Controls []struct {
 				Content struct {
-					ActType string          `json:"act_type"`
-					FileID  any             `json:"fileId"` // can be string or number
-					Data    json.RawMessage `json:"data"`   // can be object {"url":"..."} or string
+					ActType  string          `json:"act_type"`
+					Act      string          `json:"act"`
+					GroupID  string          `json:"groupId"`
+					ActorIDs []string        `json:"actorIds"`
+					FileID   any             `json:"fileId"` // can be string or number
+					Data     json.RawMessage `json:"data"`   // can be object {"url":"..."} or string
 				} `json:"content"`
 			} `json:"controls"`
 		} `json:"data"`
@@ -117,6 +166,15 @@ func (ln *Listener) handleControlEvents(ctx context.Context, data string, encTyp
 	}
 
 	for _, ctrl := range envelope.Data.Controls {
+		if ctrl.Content.ActType == "group" || ctrl.Content.ActType == "fr" {
+			if ctrl.Content.ActType == "group" && ctrl.Content.Act == "join_reject" {
+				continue // Zalo duplicates join; the join event already covers it.
+			}
+			if ev := parseGroupEvent(ctrl.Content.ActType, ctrl.Content.Act, ctrl.Content.GroupID, ctrl.Content.ActorIDs, ctrl.Content.Data); ev != nil {
+				emit(ctx, ln.groupEventCh, *ev)
+			}
+			continue
+		}
 		if ctrl.Content.ActType != "file_done" {
 			continue
 		}
@@ -250,9 +308,9 @@ func (ln *Listener) sendPing(ctx context.Context) {
 	body, _ := json.Marshal(data)
 
 	buf := make([]byte, 4+len(body))
-	buf[0] = 1 // version
+	buf[0] = 1                                 // version
 	binary.LittleEndian.PutUint16(buf[1:3], 2) // cmd=2
-	buf[3] = 1 // subCmd=1
+	buf[3] = 1                                 // subCmd=1
 	copy(buf[4:], body)
 
 	ln.mu.RLock()
