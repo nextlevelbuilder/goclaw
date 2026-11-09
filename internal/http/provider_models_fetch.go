@@ -90,40 +90,61 @@ func fetchAnthropicModels(ctx context.Context, apiKey, apiBase string) ([]ModelI
 	return models, nil
 }
 
-// fetchGeminiModels calls the Google Gemini models API.
-// Gemini uses a different format: GET /v1beta/models?key=API_KEY
+const (
+	geminiModelsPageSize = 1000
+	// Bound pagination in case an upstream keeps issuing new tokens.
+	geminiModelsMaxPages = 20
+)
+
+// fetchGeminiModels calls the Google Gemini models API, following nextPageToken.
 func fetchGeminiModels(ctx context.Context, apiKey string) ([]ModelInfo, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://generativelanguage.googleapis.com/v1beta/models?key="+apiKey, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return nil, fmt.Errorf("gemini API returned %d: %s", resp.StatusCode, string(body))
-	}
-
-	var result struct {
-		Models []struct {
-			Name        string `json:"name"`        // e.g. "models/gemini-2.0-flash"
-			DisplayName string `json:"displayName"` // e.g. "Gemini 2.0 Flash"
-		} `json:"models"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode gemini response: %w", err)
-	}
-
-	models := make([]ModelInfo, 0, len(result.Models))
-	for _, m := range result.Models {
-		// Strip "models/" prefix to get the usable model ID
-		id := strings.TrimPrefix(m.Name, "models/")
-		models = append(models, ModelInfo{ID: id, Name: m.DisplayName})
+	models := make([]ModelInfo, 0)
+	pageToken := ""
+	for page := range geminiModelsMaxPages {
+		q := neturl.Values{"key": {apiKey}, "pageSize": {strconv.Itoa(geminiModelsPageSize)}}
+		if pageToken != "" {
+			q.Set("pageToken", pageToken)
+		}
+		req, err := http.NewRequestWithContext(ctx, "GET", "https://generativelanguage.googleapis.com/v1beta/models?"+q.Encode(), nil)
+		if err != nil {
+			return nil, err
+		}
+		failPage := func(err error) ([]ModelInfo, error) {
+			if page == 0 {
+				return nil, err
+			}
+			// Do not log the error: transport errors may contain the API key in the URL.
+			slog.Warn("gemini models: later page failed, returning partial list", "page", page+1, "models", len(models))
+			return models, nil
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return failPage(err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+			resp.Body.Close()
+			return failPage(fmt.Errorf("gemini API returned %d: %s", resp.StatusCode, string(body)))
+		}
+		var result struct {
+			Models []struct {
+				Name        string `json:"name"`
+				DisplayName string `json:"displayName"`
+			} `json:"models"`
+			NextPageToken string `json:"nextPageToken"`
+		}
+		err = json.NewDecoder(resp.Body).Decode(&result)
+		resp.Body.Close()
+		if err != nil {
+			return failPage(fmt.Errorf("failed to decode gemini response: %w", err))
+		}
+		for _, m := range result.Models {
+			models = append(models, ModelInfo{ID: strings.TrimPrefix(m.Name, "models/"), Name: m.DisplayName})
+		}
+		if result.NextPageToken == "" || result.NextPageToken == pageToken {
+			break
+		}
+		pageToken = result.NextPageToken
 	}
 	return models, nil
 }
