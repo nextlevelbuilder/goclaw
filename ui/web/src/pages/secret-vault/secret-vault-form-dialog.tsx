@@ -129,9 +129,9 @@ export function SecretVaultFormDialog({ open, onOpenChange, entry, onCreate, onU
           </div>
 
           <div className="space-y-1.5">
-            <Label>{t("form.kind")}</Label>
+            <Label htmlFor="sv-kind">{t("form.kind")}</Label>
             <Select value={kind} onValueChange={(v) => handleKind(v as SecretKind)} disabled={editing}>
-              <SelectTrigger className="text-base md:text-sm">
+              <SelectTrigger id="sv-kind" className="text-base md:text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
