@@ -127,6 +127,62 @@ make desktop-build VERSION=0.1.0             # Build .app (macOS) or .exe (Windo
 make desktop-dmg VERSION=0.1.0               # Create .dmg installer (macOS only)
 ```
 
+### Linux CI via Docker (Windows host) — do not skip
+
+The Windows toolchain has `CGO_ENABLED=0`, so `go test -race` cannot run natively. Docker Desktop's Linux backend is the supported local CI path; do not report a Go change as verified until the race tests have run in this container.
+
+```bash
+# Race tests (the minimum check for Go changes)
+MSYS_NO_PATHCONV=1 docker run --rm \
+  -v "A:/ORCA/goclaw/zalo-personal-v2-plan:/src" \
+  -v goclaw-gomod:/go/pkg/mod -v goclaw-gocache:/root/.cache/go-build \
+  -w /src -e CGO_ENABLED=1 golang:1.26 \
+  /usr/local/go/bin/go test -race ./internal/channels/zalo/... -count=1
+
+# Full Go CI job: build both editions, vet, full race suite
+MSYS_NO_PATHCONV=1 docker run --rm \
+  -v "A:/ORCA/goclaw/zalo-personal-v2-plan:/src" \
+  -v goclaw-gomod:/go/pkg/mod -v goclaw-gocache:/root/.cache/go-build \
+  -w /src -e CGO_ENABLED=1 golang:1.26 sh -c '
+    /usr/local/go/bin/go build ./... &&
+    /usr/local/go/bin/go build -tags sqliteonly ./... &&
+    /usr/local/go/bin/go vet ./... &&
+    /usr/local/go/bin/go test -race -timeout=5m ./...
+  '
+
+# Integration tests: pgvector service on a Docker network
+docker network create goclaw-ci 2>/dev/null || true
+docker run -d --rm --name goclaw-ci-pg --network goclaw-ci \
+  -e POSTGRES_PASSWORD=test -e POSTGRES_DB=goclaw_test \
+  pgvector/pgvector:pg18
+until docker exec goclaw-ci-pg pg_isready -U postgres; do sleep 1; done
+MSYS_NO_PATHCONV=1 docker run --rm --network goclaw-ci \
+  -v "A:/ORCA/goclaw/zalo-personal-v2-plan:/src" \
+  -v goclaw-gomod:/go/pkg/mod -v goclaw-gocache:/root/.cache/go-build \
+  -w /src -e CGO_ENABLED=1 \
+  -e TEST_DATABASE_URL='postgres://postgres:test@goclaw-ci-pg:5432/goclaw_test?sslmode=disable' \
+  golang:1.26 \
+  /usr/local/go/bin/go test -race -timeout=180s -tags integration ./tests/integration/
+
+# Web CI
+MSYS_NO_PATHCONV=1 docker run --rm \
+  -v "A:/ORCA/goclaw/zalo-personal-v2-plan:/src" \
+  -v goclaw-web-node-modules:/src/ui/web/node_modules \
+  -v goclaw-pnpm-store:/root/.local/share/pnpm/store \
+  -w /src/ui/web node:22 sh -c '
+    corepack enable &&
+    corepack prepare pnpm@10.30.1 --activate &&
+    pnpm install --frozen-lockfile &&
+    pnpm lint && pnpm a11y:audit && pnpm build
+  '
+```
+
+Notes:
+- `golang:1.26` does not expose `/usr/local/go/bin` under `sh -lc`; use the absolute path shown above.
+- `CGO_ENABLED=1` is required for the race detector; the official Go image includes gcc.
+- On PowerShell, drop `MSYS_NO_PATHCONV=1` and use backtick line continuations.
+- Fork PRs may show `no checks reported` until a maintainer approves the workflows.
+
 ## CI/CD & Releases
 
 ### Workflows
