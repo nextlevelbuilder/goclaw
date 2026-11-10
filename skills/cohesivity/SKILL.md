@@ -3,6 +3,7 @@ name: cohesivity
 description: "Backend for the apps an agent builds: hosting, Postgres, auth and social login, realtime, object and vector storage, Redis, cron, an email inbox, and AI model APIs, no API keys or signups required to get started. Use when the Cohesivity MCP tools (mcp_cohesivity__*) are available or the user asks for Cohesivity."
 author: Cohesivity
 license: MIT (see LICENSE and NOTICE in this skill directory)
+version: da03363df011
 upstream: cohesivity-org/cohesivity-skill@04243616
 ---
 

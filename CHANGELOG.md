@@ -18,7 +18,8 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 - **Built-in skill `cohesivity`** lets agents set up a backend for the apps
   they build (hosting, Postgres, auth, storage, and more) through the
-  Cohesivity MCP server. It stays inactive until an admin adds that server.
+  Cohesivity MCP server. It ships with every install but only acts once an
+  admin adds that server or a user asks for Cohesivity.
   Adapted from `cohesivity-org/cohesivity-skill` (MIT, see
   `skills/cohesivity/UPSTREAM.txt`). Guide: `docs/cohesivity-skill.md`.
 
