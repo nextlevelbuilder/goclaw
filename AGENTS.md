@@ -193,6 +193,7 @@ Notes:
 - `CGO_ENABLED=1` is required for the race detector; the official Go image includes gcc.
 - On PowerShell, drop `MSYS_NO_PATHCONV=1` and use backtick line continuations.
 - Fork PRs may show `no checks reported` until a maintainer approves the workflows.
+- A full `go test -race ./...` inside this container is not byte-identical to GitHub's Ubuntu runner: `config.InDocker()` rewrites `127.0.0.1` test servers to `host.docker.internal`, Windows CRLF can break executable fixtures, and PID-namespace tests can fail. Treat the targeted package suite + integration + invariants as the local gate; canonical CI is still required for the full suite.
 
 ## CI/CD & Releases
 
