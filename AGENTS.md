@@ -152,6 +152,7 @@ MSYS_NO_PATHCONV=1 docker run --rm \
 
 # Integration tests: pgvector service on a Docker network
 docker network create goclaw-ci 2>/dev/null || true
+docker rm -f goclaw-ci-pg 2>/dev/null || true
 docker run -d --rm --name goclaw-ci-pg --network goclaw-ci \
   -e POSTGRES_PASSWORD=test -e POSTGRES_DB=goclaw_test \
   pgvector/pgvector:pg18
@@ -163,6 +164,16 @@ MSYS_NO_PATHCONV=1 docker run --rm --network goclaw-ci \
   -e TEST_DATABASE_URL='postgres://postgres:test@goclaw-ci-pg:5432/goclaw_test?sslmode=disable' \
   golang:1.26 \
   /usr/local/go/bin/go test -race -timeout=180s -tags integration ./tests/integration/
+
+# Invariant tests (P0): use a separate database so integration state cannot leak
+docker exec goclaw-ci-pg psql -U postgres -c 'CREATE DATABASE goclaw_invariants' 2>/dev/null || true
+MSYS_NO_PATHCONV=1 docker run --rm --network goclaw-ci \
+  -v "A:/ORCA/goclaw/zalo-personal-v2-plan:/src" \
+  -v goclaw-gomod:/go/pkg/mod -v goclaw-gocache:/root/.cache/go-build \
+  -w /src -e CGO_ENABLED=1 \
+  -e TEST_DATABASE_URL='postgres://postgres:test@goclaw-ci-pg:5432/goclaw_invariants?sslmode=disable' \
+  golang:1.26 \
+  /usr/local/go/bin/go test -race -timeout=90s -tags integration ./tests/invariants/...
 
 # Web CI
 MSYS_NO_PATHCONV=1 docker run --rm \
