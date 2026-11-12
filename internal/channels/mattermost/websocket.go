@@ -93,7 +93,7 @@ func (c *Channel) connectAndServe(ctx context.Context) (bool, error) {
 		NetDialContext:   newDialer(wsHandshakeTimeout).DialContext,
 		HandshakeTimeout: wsHandshakeTimeout,
 	}
-	conn, resp, err := dialer.DialContext(ctx, c.api.websocketURL(), nil)
+	conn, resp, err := dialer.DialContext(ctx, c.api.websocketURL(), http.Header{"User-Agent": {userAgent}})
 	if err != nil {
 		if resp != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
 			return false, &apiError{StatusCode: resp.StatusCode, Message: "websocket handshake rejected"}

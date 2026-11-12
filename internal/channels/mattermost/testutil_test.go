@@ -26,9 +26,10 @@ const (
 
 // recordedCall is one REST request the fake server received.
 type recordedCall struct {
-	Method string
-	Path   string
-	Body   map[string]any
+	Method    string
+	Path      string
+	Body      map[string]any
+	UserAgent string
 }
 
 // fakeServer is an in-memory Mattermost API v4 used by the tests.
@@ -154,6 +155,7 @@ func newFakeServer(t *testing.T) *fakeServer {
 		writeJSONResponse(w, fileUploadResponse{FileInfos: []mmFileInfo{{ID: fs.newID("file"), Name: hdr.Filename}}})
 	})
 	mux.HandleFunc("GET /api/v4/websocket", func(w http.ResponseWriter, r *http.Request) {
+		fs.record(r)
 		if fs.wsHandler == nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
@@ -186,7 +188,7 @@ func (fs *fakeServer) record(r *http.Request) map[string]any {
 		_ = json.Unmarshal(data, &body)
 	}
 	fs.mu.Lock()
-	fs.calls = append(fs.calls, recordedCall{Method: r.Method, Path: r.URL.Path, Body: body})
+	fs.calls = append(fs.calls, recordedCall{Method: r.Method, Path: r.URL.Path, Body: body, UserAgent: r.UserAgent()})
 	fs.mu.Unlock()
 	return body
 }

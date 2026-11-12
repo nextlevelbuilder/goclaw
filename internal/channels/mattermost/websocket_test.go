@@ -121,3 +121,30 @@ func TestRunWebSocket_SilentCloseWithRevokedTokenStopsChannel(t *testing.T) {
 		t.Fatalf("health = %+v, want auth failure", h)
 	}
 }
+
+func TestUserAgent_RESTAndWebsocket(t *testing.T) {
+	prev := userAgent
+	t.Cleanup(func() { userAgent = prev })
+	SetVersion("v1.2.3")
+
+	fs := newFakeServer(t)
+	ch, _ := newTestChannel(t, fs, nil)
+	fs.addPost(&mmPost{ID: "r1", UserID: "u1", ChannelID: "c1", Message: "root"})
+	fs.wsHandler = func(conn *websocket.Conn) {
+		serveAuth(t, conn, "OK")
+	}
+
+	if _, err := ch.api.getPost(context.Background(), "r1"); err != nil {
+		t.Fatalf("getPost: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, _ = ch.connectAndServe(ctx)
+
+	for _, path := range []string{"/api/v4/posts/r1", "/api/v4/websocket"} {
+		calls := fs.callsTo("GET", path)
+		if len(calls) != 1 || calls[0].UserAgent != "goclaw/v1.2.3" {
+			t.Errorf("%s: calls = %+v, want one with User-Agent goclaw/v1.2.3", path, calls)
+		}
+	}
+}

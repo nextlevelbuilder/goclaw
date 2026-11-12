@@ -534,6 +534,7 @@ func runGateway() {
 	// Create gateway server and wire enforcement
 	server := gateway.NewServer(cfg, msgBus, agentRouter, pgStores.Sessions, toolsReg)
 	server.SetVersion(Version)
+	mattermost.SetVersion(Version)
 	server.SetDB(pgStores.DB)
 	server.SetPolicyEngine(permPE)
 	server.SetToolPolicy(toolPE)

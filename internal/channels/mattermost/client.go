@@ -16,6 +16,18 @@ import (
 
 const apiTimeout = 30 * time.Second
 
+// userAgent identifies the gateway in Mattermost server logs on REST and
+// websocket requests. SetVersion adds the build version.
+var userAgent = "goclaw"
+
+// SetVersion sets the gateway version reported in the User-Agent header.
+// Call it once at startup, before any channel is created.
+func SetVersion(v string) {
+	if v != "" {
+		userAgent = "goclaw/" + v
+	}
+}
+
 // apiClient is a minimal Mattermost REST API v4 client. It covers only the
 // endpoints the channel needs, so the gateway does not pull in the full
 // Mattermost server module and its dependency tree.
@@ -162,6 +174,7 @@ func (c *apiClient) newRequest(ctx context.Context, method, path string, body io
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", userAgent)
 	return req, nil
 }
 
