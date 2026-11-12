@@ -631,7 +631,7 @@ func TestSameResult_Warning(t *testing.T) {
 		s.recordResult(h, sameResult)
 	}
 	rh := hashResult(sameResult)
-	level, _ := s.detectSameResult("list_files", rh)
+	level, _ := s.detectSameResult("list_files", rh, false)
 	if level != "warning" {
 		t.Fatalf("expected warning after %d same-result calls, got %q", sameResultWarning, level)
 	}
@@ -646,7 +646,7 @@ func TestSameResult_Critical(t *testing.T) {
 		s.recordResult(h, sameResult)
 	}
 	rh := hashResult(sameResult)
-	level, _ := s.detectSameResult("list_files", rh)
+	level, _ := s.detectSameResult("list_files", rh, false)
 	if level != "critical" {
 		t.Fatalf("expected critical after %d same-result calls, got %q", sameResultCritical, level)
 	}
@@ -661,9 +661,35 @@ func TestSameResult_DifferentResults(t *testing.T) {
 		s.recordResult(h, "result "+string(rune('a'+i)))
 	}
 	rh := hashResult("result a") // check against the first result
-	level, _ := s.detectSameResult("list_files", rh)
+	level, _ := s.detectSameResult("list_files", rh, false)
 	if level != "" {
 		t.Fatalf("expected no detection for different results, got %q", level)
+	}
+}
+
+func TestSameResult_ExecSuccessExempt(t *testing.T) {
+	// Successful exec calls (e.g. API mutations returning a static success
+	// body) with different args must not be flagged as a runaway loop.
+	var s toolLoopState
+	same := `{"data":{"ok":true}}`
+	for i := range sameResultCritical + 2 {
+		h := s.record("exec", map[string]any{"command": "curl -d id=" + string(rune('a'+i))})
+		s.recordResult(h, same)
+	}
+	if level, _ := s.detectSameResult("exec", hashResult(same), false); level != "" {
+		t.Fatalf("expected no detection for successful exec, got %q", level)
+	}
+}
+
+func TestSameResult_ExecErrorStillDetected(t *testing.T) {
+	var s toolLoopState
+	same := "command failed"
+	for i := range sameResultCritical {
+		h := s.record("exec", map[string]any{"command": "false " + string(rune('a'+i))})
+		s.recordResult(h, same)
+	}
+	if level, _ := s.detectSameResult("exec", hashResult(same), true); level != "critical" {
+		t.Fatalf("expected critical for repeated failing exec, got %q", level)
 	}
 }
 
