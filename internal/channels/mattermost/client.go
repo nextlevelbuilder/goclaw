@@ -11,21 +11,34 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
 const apiTimeout = 30 * time.Second
 
-// userAgent identifies the gateway in Mattermost server logs on REST and
-// websocket requests. SetVersion adds the build version.
-var userAgent = "goclaw"
+// userAgentStore holds the User-Agent sent on REST and websocket requests so
+// gateway traffic can be told apart in Mattermost server logs. atomic.Pointer
+// keeps tests that call SetVersion race-free against running channels.
+var userAgentStore atomic.Pointer[string]
 
-// SetVersion sets the gateway version reported in the User-Agent header.
-// Call it once at startup, before any channel is created.
+// SetVersion sets the gateway version reported in the User-Agent header
+// ("goclaw/<version>"). Called once at gateway startup; an empty version
+// resets it to plain "goclaw".
 func SetVersion(v string) {
+	ua := "goclaw"
 	if v != "" {
-		userAgent = "goclaw/" + v
+		ua += "/" + v
 	}
+	userAgentStore.Store(&ua)
+}
+
+// userAgent returns the User-Agent header value, "goclaw" if unset.
+func userAgent() string {
+	if p := userAgentStore.Load(); p != nil {
+		return *p
+	}
+	return "goclaw"
 }
 
 // apiClient is a minimal Mattermost REST API v4 client. It covers only the
@@ -174,7 +187,7 @@ func (c *apiClient) newRequest(ctx context.Context, method, path string, body io
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", userAgent())
 	return req, nil
 }
 

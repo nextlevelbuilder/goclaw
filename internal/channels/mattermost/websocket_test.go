@@ -123,9 +123,8 @@ func TestRunWebSocket_SilentCloseWithRevokedTokenStopsChannel(t *testing.T) {
 }
 
 func TestUserAgent_RESTAndWebsocket(t *testing.T) {
-	prev := userAgent
-	t.Cleanup(func() { userAgent = prev })
 	SetVersion("v1.2.3")
+	t.Cleanup(func() { SetVersion("") })
 
 	fs := newFakeServer(t)
 	ch, _ := newTestChannel(t, fs, nil)
