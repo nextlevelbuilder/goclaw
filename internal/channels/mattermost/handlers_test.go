@@ -3,6 +3,7 @@ package mattermost
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -394,5 +395,42 @@ func TestMentionMatching(t *testing.T) {
 
 	if got := ch.stripBotMention("hey @goclawbot, check this"); got != "hey , check this" {
 		t.Errorf("stripBotMention = %q", got)
+	}
+}
+
+func TestHandlePosted_ThreadRootMediaOrderMatchesTags(t *testing.T) {
+	fs := newFakeServer(t)
+	ch, msgBus := newTestChannel(t, fs, nil)
+	fs.addFile("f-root", []byte("rootimage"))
+	fs.addFile("f-reply", []byte("replyimage"))
+	fs.addPost(&mmPost{
+		ID: "r1", UserID: "u1", ChannelID: "c1", Message: "root post",
+		Metadata: &mmPostMetadata{Files: []mmFileInfo{{ID: "f-root", Name: "root.png", Size: 9, MimeType: "image/png"}}},
+	})
+
+	ch.handlePostedEvent(context.Background(), postedEvent(t, mmPost{
+		ID: "p2", UserID: "u1", ChannelID: "c1", RootID: "r1", Message: "@goclawbot what is this",
+		Metadata: &mmPostMetadata{Files: []mmFileInfo{{ID: "f-reply", Name: "reply.png", Size: 10, MimeType: "image/png"}}},
+	}, "O", nil))
+
+	msg, ok := consumeInbound(t, msgBus, time.Second)
+	if !ok {
+		t.Fatal("expected inbound message")
+	}
+	// Tags and files are paired by position: the root's tag comes first, so
+	// the root's file must too.
+	rootTag := strings.Index(msg.Content, "(from replied message)")
+	replyTag := strings.LastIndex(msg.Content, "<media:image>")
+	if rootTag < 0 || replyTag < rootTag {
+		t.Fatalf("expected the root tag before the reply tag:\n%s", msg.Content)
+	}
+	if len(msg.Media) != 2 {
+		t.Fatalf("expected 2 media files, got %+v", msg.Media)
+	}
+	for i, want := range []string{"rootimage", "replyimage"} {
+		data, err := os.ReadFile(msg.Media[i].Path)
+		if err != nil || string(data) != want {
+			t.Fatalf("media[%d] = %q (%v), want %q", i, data, err, want)
+		}
 	}
 }

@@ -224,7 +224,11 @@ func (c *Channel) handlePost(ctx context.Context, in inboundPost) {
 	if post.RootID != "" {
 		rootCtx, rootItems := c.fetchThreadRootContext(ctx, post.RootID)
 		content = joinNonEmpty(rootCtx, content)
-		content, _, mediaFiles = withMedia(content, rootItems, nil, mediaFiles)
+		// Root tags come first in content, so root files must come first too:
+		// tags and files are paired by position downstream.
+		var rootFiles []bus.MediaFile
+		content, _, rootFiles = withMedia(content, rootItems, nil, nil)
+		mediaFiles = append(rootFiles, mediaFiles...)
 	}
 	if content == "" {
 		return
