@@ -14,10 +14,28 @@ type cliJSONResponse struct {
 	Usage     *cliUsage `json:"usage"`
 }
 
-// cliUsage maps Claude CLI usage counters.
+// cliUsage maps Claude CLI usage counters. input_tokens excludes cached
+// segments; cache read and creation are separate, as in the Anthropic API.
 type cliUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
+}
+
+// usageFromCLI maps CLI counters. Cache fields stay separate so ContextTokens
+// can add them back. Nil in, nil out.
+func usageFromCLI(u *cliUsage) *Usage {
+	if u == nil {
+		return nil
+	}
+	return &Usage{
+		PromptTokens:        u.InputTokens,
+		CompletionTokens:    u.OutputTokens,
+		TotalTokens:         u.InputTokens + u.OutputTokens,
+		CacheCreationTokens: u.CacheCreationInputTokens,
+		CacheReadTokens:     u.CacheReadInputTokens,
+	}
 }
 
 // cliStreamEvent is a single line from `--output-format stream-json`.

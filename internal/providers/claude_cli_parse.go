@@ -73,11 +73,7 @@ func parseJSONArray(data []byte) *ChatResponse {
 				finishReason = "error"
 			}
 			if ev.Usage != nil {
-				usage = &Usage{
-					PromptTokens:     ev.Usage.InputTokens,
-					CompletionTokens: ev.Usage.OutputTokens,
-					TotalTokens:      ev.Usage.InputTokens + ev.Usage.OutputTokens,
-				}
+				usage = usageFromCLI(ev.Usage)
 			}
 
 		case "assistant":
@@ -128,11 +124,7 @@ func parseSingleJSONResult(line []byte) *ChatResponse {
 		cr.FinishReason = "error"
 	}
 	if resp.Usage != nil {
-		cr.Usage = &Usage{
-			PromptTokens:     resp.Usage.InputTokens,
-			CompletionTokens: resp.Usage.OutputTokens,
-			TotalTokens:      resp.Usage.InputTokens + resp.Usage.OutputTokens,
-		}
+		cr.Usage = usageFromCLI(resp.Usage)
 	}
 	return cr
 }
