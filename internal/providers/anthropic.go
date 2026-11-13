@@ -240,7 +240,7 @@ func (p *AnthropicProvider) parseResponse(resp *anthropicResponse) *ChatResponse
 	switch resp.StopReason {
 	case "tool_use":
 		result.FinishReason = "tool_calls"
-	case "max_tokens":
+	case "max_tokens", "model_context_window_exceeded":
 		result.FinishReason = "length"
 	default:
 		result.FinishReason = "stop"

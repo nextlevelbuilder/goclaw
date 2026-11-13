@@ -135,7 +135,7 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 					switch ev.Delta.StopReason {
 					case "tool_use":
 						result.FinishReason = "tool_calls"
-					case "max_tokens":
+					case "max_tokens", "model_context_window_exceeded":
 						result.FinishReason = "length"
 					default:
 						result.FinishReason = "stop"
