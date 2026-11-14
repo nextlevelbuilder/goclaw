@@ -28,6 +28,12 @@ func (s *SQLiteCronStore) RunJob(ctx context.Context, jobID string, force bool) 
 		return false, "", fmt.Errorf("no job handler configured")
 	}
 
+	// "due" mode only runs a job whose scheduled time has arrived; a job with no
+	// next_run_at (disabled, or already claimed by the scheduler) is never due.
+	if !force && (job.State.NextRunAtMS == nil || *job.State.NextRunAtMS > time.Now().UnixMilli()) {
+		return false, "not-due", nil
+	}
+
 	// Claim the job for manual execution by clearing next_run_at (match PG behavior).
 	// executeOneJob with reloadClaimed=false skips loadClaimedJob, using the
 	// already-loaded job directly — allowing manual runs on disabled jobs.
