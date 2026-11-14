@@ -1,0 +1,33 @@
+{
+  "title": "Aprobaciones",
+  "description": "Aprobaciones de ejecución pendientes",
+  "pending": "{{count}} pendientes",
+  "emptyTitle": "Sin aprobaciones pendientes",
+  "emptyDescription": "Todas las solicitudes de ejecución fueron resueltas. Las solicitudes nuevas aparecerán aquí en tiempo real.",
+  "allowOnce": "Permitir una vez",
+  "allowAlways": "Permitir siempre",
+  "deny": "Denegar",
+  "confirmAllowOnce": {
+    "title": "Permitir una vez",
+    "description": "¿Permitir la ejecución de \"{{command}}\" del agente \"{{agentId}}\"?"
+  },
+  "confirmAllowAlways": {
+    "title": "Permitir siempre",
+    "description": "¿Permitir permanentemente \"{{command}}\" para el agente \"{{agentId}}\"? Este comando se aprobará automáticamente en el futuro."
+  },
+  "confirmDeny": {
+    "title": "Denegar ejecución",
+    "description": "¿Denegar la solicitud de ejecución \"{{command}}\" del agente \"{{agentId}}\"?",
+    "confirmLabel": "Denegar"
+  },
+  "toast": {
+    "approved": "Aprobado",
+    "approvedAlways": "Comando siempre permitido",
+    "approvedOnce": "Comando aprobado",
+    "approveFailed": "No se pudo aprobar",
+    "denied": "Denegado",
+    "deniedDesc": "Comando denegado",
+    "denyFailed": "No se pudo denegar",
+    "unknownError": "Error desconocido"
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "title": "Capacidades de agentes V3",
+  "subtitle": "Sistemas centrales que impulsan la inteligencia de tu agente",
+  "note": "Todas las capacidades están siempre activas en los agentes v3.",
+  "tabs": {
+    "pipeline": "Pipeline",
+    "memory": "Memoria",
+    "knowledge": "Conocimiento",
+    "orchestration": "Orquestación"
+  },
+  "pipeline": {
+    "title": "Pipeline de ejecución de 8 etapas",
+    "description": "Cada mensaje pasa por 8 etapas estructuradas en 3 fases.",
+    "setup": "Preparación",
+    "setupDesc": "Enriquece el contexto con la configuración del agente, metadatos del espacio de trabajo, historial del usuario y memorias inyectadas automáticamente de sesiones anteriores.",
+    "iteration": "Ciclo de iteración",
+    "iterationDesc": "Se repite hasta completar la tarea o alcanzar el máximo de iteraciones.",
+    "think": "Pensar",
+    "thinkDesc": "Razonamiento del LLM con contexto completo",
+    "prune": "Purgar",
+    "pruneDesc": "Gestión de tokens y compactación",
+    "tools": "Herramientas",
+    "toolsDesc": "Ejecuta las llamadas a herramientas del LLM",
+    "observe": "Observar",
+    "observeDesc": "Captura y valida la salida",
+    "checkpoint": "Punto de control",
+    "checkpointDesc": "Guarda el estado intermedio",
+    "finalize": "Finalizar",
+    "finalizeDesc": "Persiste metadatos, emite eventos para la consolidación de memoria y limpia la ejecución."
+  },
+  "memory": {
+    "title": "Sistema de memoria de 3 niveles",
+    "description": "Memoria progresiva desde la conversación hasta el conocimiento de largo plazo.",
+    "l0Title": "L0 Memoria de trabajo",
+    "l0Desc": "Historial de la sesión con compactación automática basada en tokens. Cuando el historial supera el umbral de la ventana de contexto, los mensajes más antiguos se resumen con el LLM y se truncan. El volcado de memoria extrae hechos clave a archivos persistentes antes de la compactación.",
+    "l1Title": "L1 Memoria episódica",
+    "l1Desc": "Resúmenes de sesión creados después de cada ejecución de conversación. Cada uno obtiene un extracto L0 (~50 tokens) para una inyección rápida. Búsqueda híbrida FTS + vectorial con TTL de 90 días. Los extractos relevantes se inyectan automáticamente en el prompt del sistema en cada turno.",
+    "l2Title": "L2 Memoria semántica",
+    "l2Desc": "Grafo de conocimiento con entidades y relaciones extraídas vía LLM (umbral de confianza 0.75). La deduplicación automática fusiona entidades similares. Dreaming consolida 5+ entradas episódicas en documentos de hechos de largo plazo, consultables con las herramientas de memoria.",
+    "eventFlow": "Basado en eventos: session.completed dispara la creación de L1, que a su vez dispara la extracción de L2 y dreaming."
+  },
+  "knowledge": {
+    "kgTitle": "Grafo de conocimiento",
+    "kgDesc": "Las entidades (personas, proyectos, tecnologías) y sus relaciones se extraen de los resúmenes de sesión vía LLM. El versionado temporal registra cuándo fueron válidos los hechos. Consultable con la herramienta knowledge_graph_search con recorrido de múltiples saltos hasta 5 niveles de profundidad.",
+    "vaultTitle": "Bóveda de conocimiento",
+    "vaultDesc": "Registro de documentos con resolución de [[wikilinks]]. La búsqueda unificada combina documentos de la bóveda (40%), memorias episódicas (30%) y entidades del grafo (30%) en un único conjunto de resultados ordenado. El hash SHA-256 detecta cambios de contenido para la indexación incremental.",
+    "dreamingTitle": "Dreaming",
+    "dreamingDesc": "Cuando se acumulan 5+ resúmenes de sesión, el LLM sintetiza hechos de largo plazo: preferencias del usuario, arquitectura del proyecto, patrones recurrentes y decisiones clave con su justificación. Se almacenan como documentos de memoria consultables. Con debounce de 10 minutos por agente."
+  },
+  "orchestration": {
+    "delegateTitle": "Delegación entre agentes",
+    "delegateDesc": "Los agentes delegan tareas a agentes vinculados mediante agent_links con verificación de permisos. El modo sincrónico bloquea hasta un tiempo de espera configurable a la espera de resultados. El modo asíncrono se dispara de inmediato y anuncia los resultados por el bus de mensajes al completarse.",
+    "evolutionTitle": "Autoevolución",
+    "evolutionDesc": "Rastrea el uso de herramientas y las métricas de recuperación en un ciclo semanal. Detecta tres patrones: bajo uso de recuperación (< 20%), altas tasas de fallo de herramientas (< 10% de éxito) y patrones de herramientas repetidos (> 100 llamadas/semana). Sugiere ajustes de configuración con aplicación automática y reversión protegidas por guardarraíles."
+  }
+}

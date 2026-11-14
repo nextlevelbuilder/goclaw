@@ -1,0 +1,853 @@
+{
+  "title": "Canales",
+  "description": "Administra las instancias de canal",
+  "statusDescription": "Estado de los canales de comunicación",
+  "addChannel": "Agregar canal",
+  "refresh": "Actualizar",
+  "searchPlaceholder": "Buscar canales...",
+  "emptyTitle": "No hay canales",
+  "emptyDescription": "Agrega tu primera instancia de canal para empezar.",
+  "emptyStatusDescription": "No hay canales de comunicación configurados.",
+  "noMatchTitle": "No hay canales que coincidan",
+  "noMatchDescription": "Prueba con otro término de búsqueda.",
+  "columns": {
+    "name": "Nombre",
+    "type": "Tipo",
+    "agent": "Agente",
+    "status": "Estado",
+    "enabled": "Habilitado",
+    "actions": "Acciones"
+  },
+  "status": {
+    "running": "En ejecución",
+    "stopped": "Detenido",
+    "checking": "Verificando",
+    "degraded": "Degradado",
+    "starting": "Iniciando",
+    "registered": "Configurado",
+    "failed": "Fallido"
+  },
+  "enabled": "Habilitado",
+  "disabled": "Deshabilitado",
+  "actions": {
+    "reauthenticate": "Volver a autenticar",
+    "authenticate": "Autentica para iniciar el canal",
+    "reauthShort": "Reaut.",
+    "openCredentials": "Abrir credenciales",
+    "openAdvanced": "Abrir avanzado",
+    "inspect": "Inspeccionar problema"
+  },
+  "list": {
+    "failureStreak": "{{count}} fallos seguidos",
+    "openChannelDetail": "Abre el detalle del canal para ver el último diagnóstico",
+    "nextStep": "Siguiente paso"
+  },
+  "failureKind": {
+    "auth": "Autenticación",
+    "config": "Configuración",
+    "network": "Red",
+    "unknown": "Atención"
+  },
+  "delete": {
+    "title": "Eliminar instancia de canal",
+    "description": "¿Seguro que quieres eliminar \"{{name}}\"? Esta acción no se puede deshacer.",
+    "confirmLabel": "Eliminar"
+  },
+  "form": {
+    "createTitle": "Crear instancia de canal",
+    "editTitle": "Editar instancia de canal",
+    "key": "Clave *",
+    "keyPlaceholder": "my-telegram-bot",
+    "keyHint": "Slug único usado como identificador del canal",
+    "displayName": "Nombre visible",
+    "displayNamePlaceholder": "Bot de ventas",
+    "channelType": "Tipo de canal *",
+    "agent": "Agente *",
+    "selectAgent": "Selecciona un agente",
+    "credentials": "Credenciales",
+    "credentialsHint": "(déjalo vacío para mantener el actual)",
+    "credentialsEncrypted": "Cifradas en el servidor. Nunca se devuelven en las respuestas de la API.",
+    "configuration": "Configuración",
+    "enabled": "Habilitado",
+    "cancel": "Cancelar",
+    "create": "Crear",
+    "update": "Actualizar",
+    "saving": "Guardando...",
+    "step": "Paso {{current}} de {{total}}",
+    "authenticate": "Autenticar — {{label}}",
+    "configure": "Configurar — {{label}}",
+    "skip": "Omitir",
+    "done": "Listo",
+    "errors": {
+      "keyRequired": "La clave es obligatoria",
+      "keySlug": "La clave debe ser un slug válido (solo minúsculas, números y guiones)",
+      "agentRequired": "El agente es obligatorio",
+      "requiredFields": "Obligatorios: {{fields}}",
+      "failedSave": "No se pudo guardar",
+      "failedSaveConfig": "No se pudo guardar la configuración"
+    },
+    "authStatus": {
+      "authenticated": "Autenticado",
+      "notAuthenticated": "No autenticado",
+      "useQrHint": "— Usa el botón de inicio de sesión por QR de la tabla de canales"
+    }
+  },
+  "detail": {
+    "agent": "Agente: {{name}}",
+    "lastChecked": "Última verificación: {{value}}",
+    "checkedRelative": "Verificado {{value}}",
+    "advanced": "Avanzado",
+    "advancedTitle": "Ajustes avanzados",
+    "policies": "Políticas",
+    "policiesDesc": "Políticas de manejo de mensajes",
+    "network": "Red",
+    "networkDesc": "Configuración de servidor y proxy",
+    "limits": "Límites",
+    "limitsDesc": "Restricciones de mensajes y multimedia",
+    "streaming": "Streaming",
+    "streamingDesc": "Opciones de streaming de mensajes en tiempo real",
+    "behavior": "Comportamiento",
+    "behaviorDesc": "Configuración del comportamiento de respuesta",
+    "accessControl": "Control de acceso",
+    "accessControlDesc": "Restricciones de acceso de usuarios",
+    "telegramManagement": "Gestión de Telegram",
+    "telegramManagementDesc": "Habilita la herramienta oculta y elige las acciones de Telegram para los agentes que usan este canal",
+    "discordMetadata": "Metadatos de Discord",
+    "discordMetadataDesc": "Actualiza desde el bot en ejecución los nombres en caché de canales, categorías, hilos y usuarios conocidos de Discord.",
+    "refreshDiscordMetadata": "Actualizar metadatos de Discord",
+    "refreshingDiscordMetadata": "Actualizando...",
+    "discordMetadataRefreshed": "Metadatos de Discord actualizados",
+    "discordMetadataRefreshFailed": "No se pudieron actualizar los metadatos de Discord",
+    "reviewDiagnostics": "Revisa el último diagnóstico de este canal antes de cambiar los ajustes.",
+    "whatHappened": "Qué pasó",
+    "recommendedAction": "Acción recomendada",
+    "technicalDetail": "Detalle técnico",
+    "tabs": {
+      "general": "General",
+      "config": "Config.",
+      "credentials": "Credenciales",
+      "groups": "Grupos",
+      "contexts": "Contextos",
+      "managers": "Gestores"
+    },
+    "general": {
+      "identity": "Identidad",
+      "name": "Nombre",
+      "nameHint": "Slug único (solo lectura)",
+      "channelType": "Tipo de canal",
+      "displayName": "Nombre visible",
+      "displayNamePlaceholder": "Nombre amigable",
+      "agent": "Agente",
+      "selectAgent": "Selecciona un agente",
+      "enabled": "Habilitado",
+      "saved": "Guardado",
+      "saveChanges": "Guardar cambios",
+      "saving": "Guardando..."
+    },
+    "credentials": {
+      "hint": "Deja los campos vacíos para mantener los valores actuales. Las credenciales se cifran en el servidor y nunca se devuelven en las respuestas de la API.",
+      "noSchema": "No hay un esquema de credenciales para este tipo de canal.",
+      "noCredentials": "No hay credenciales para actualizar",
+      "failedSave": "No se pudo guardar",
+      "saved": "Guardado",
+      "updateCredentials": "Actualizar credenciales",
+      "saving": "Guardando..."
+    },
+    "config": {
+      "noSchema": "No hay un esquema de configuración para este tipo de canal.",
+      "saved": "Guardado",
+      "saveConfig": "Guardar configuración",
+      "saving": "Guardando...",
+      "webhookUrlLabel": "Configura esto como la URL de solicitud de eventos de tu app de Lark:",
+      "copyPath": "Copiar ruta"
+    },
+    "groups": {
+      "saved": "Guardado",
+      "saveGroups": "Guardar grupos",
+      "saving": "Guardando..."
+    },
+    "contexts": {
+      "description": "Revisa los contextos del canal, los miembros almacenados, las herramientas MCP efectivas, las herramientas de CLI seguro y las credenciales con alcance.",
+      "emptyTitle": "No hay contextos",
+      "emptyHint": "Los contextos aparecen cuando este canal recibe mensajes o metadatos de grupo.",
+      "loading": "Cargando el detalle de los contextos...",
+      "capabilities": "Capacidades",
+      "members": "Miembros",
+      "noCapabilities": "No hay capacidades disponibles en este contexto.",
+      "noMembers": "No hay miembros almacenados para este contexto.",
+      "none": "Ninguno",
+      "allTools": "Todas las herramientas",
+      "scopedCount": "{{count}} anulación con alcance",
+      "scopedCount_plural": "{{count}} anulaciones con alcance",
+      "live": "En vivo",
+      "grant": "Otorgar",
+      "revoke": "Revocar",
+      "manageCapability": "Gestionar capacidad",
+      "scopedCredential": "Credencial con alcance",
+      "apiKeyPlaceholder": "Clave de API (solo MCP)",
+      "envPlaceholder": "JSON de entorno, por ejemplo {\"TOKEN\":\"...\"}",
+      "secretHint": "Los valores se cifran y no se devuelven después de guardar.",
+      "saveCredential": "Guardar credencial",
+      "deleteCredential": "Eliminar credencial",
+      "grantSaved": "Concesión de contexto guardada",
+      "grantDeleted": "Concesión de contexto eliminada",
+      "credentialSaved": "Credencial de contexto guardada",
+      "credentialDeleted": "Credencial de contexto eliminada",
+      "invalidEnv": "El entorno debe ser un objeto JSON con valores de texto.",
+      "envRequired": "Las credenciales de CLI seguro requieren el JSON de entorno.",
+      "credentialRequired": "Ingresa una clave de API o el JSON de entorno.",
+      "actionFailed": "La acción falló",
+      "columns": {
+        "name": "Nombre",
+        "type": "Tipo",
+        "source": "Origen",
+        "credentials": "Credenciales",
+        "tools": "Herramientas",
+        "actions": "Acciones"
+      }
+    },
+    "passiveMemory": {
+      "title": "Extracción pasiva de memoria",
+      "description": "Extrae hechos duraderos del tráfico pasivo de grupos hacia una memoria que puedes revisar.",
+      "pendingCount": "{{count}} pendientes",
+      "unprocessedCount": "{{count}} mensajes sin procesar",
+      "enable": "Habilitar la extracción pasiva",
+      "reviewMode": "Requerir revisión antes de escribir",
+      "interval": "Intervalo (minutos)",
+      "messageCap": "Límite de mensajes",
+      "retention": "Retención (horas)",
+      "minMessages": "Mínimo de mensajes",
+      "types": "Tipos de memoria",
+      "excludeUsers": "Usuarios excluidos",
+      "excludePatterns": "Patrones excluidos",
+      "channelCustomPrompt": "Instrucciones de extracción del canal",
+      "excludeGroups": "Canales de Discord excluidos",
+      "excludeGroupsPlaceholder": "Selecciona un canal para excluir",
+      "manualExcludePlaceholder": "Pega el ID del canal de Discord",
+      "useDiscordChannelId": "Usar ID de canal de Discord:",
+      "addExcludedGroup": "Agregar",
+      "noExcludeGroups": "Aún no hay historial de canales de Discord.",
+      "noExcludedGroups": "No hay canales excluidos.",
+      "removeExcludedGroup": "Quitar {{group}} de los canales excluidos",
+      "runNow": "Procesar el último grupo",
+      "processAll": "Procesar todos los grupos",
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "saved": "Ajustes de memoria guardados",
+      "saveFailed": "No se pudieron guardar los ajustes de memoria",
+      "runQueued": "Extracción de memoria iniciada",
+      "runAllDone": "Se procesaron {{messages}} mensajes en {{runs}} grupos",
+      "runFailed": "La extracción de memoria falló",
+      "runAllProgress": "Progreso de procesar todos los grupos",
+      "runAllProgressStats": "{{runs}} completados, {{skipped}} omitidos, {{errors}} fallidos, {{messages}} mensajes",
+      "groupCompleted": "Grupo {{historyKey}} completado",
+      "groupSkipped": "Grupo {{historyKey}} omitido por estar bajo el mínimo de mensajes ({{messageCount}} mensajes)",
+      "groupFailed": "El grupo {{historyKey}} falló: {{error}}",
+      "itemUpdated": "Elemento de memoria actualizado",
+      "itemFailed": "La acción sobre el elemento de memoria falló",
+      "reviewQueue": "Cola de revisión",
+      "loading": "Cargando el estado de la memoria...",
+      "noRuns": "Aún no hay ejecuciones de extracción.",
+      "noItems": "Aún no hay candidatos de memoria.",
+      "lastRun": "Última ejecución",
+      "runStats": "{{messages}} mensajes, {{items}} elementos, {{redactions}} redacciones",
+      "approve": "Aprobar",
+      "reject": "Rechazar",
+      "delete": "Eliminar",
+      "debugBadge": {
+        "topic": "Tema",
+        "entity": "Entidad"
+      },
+      "type": {
+        "people": "Personas",
+        "projects": "Proyectos",
+        "decisions": "Decisiones",
+        "todos": "Pendientes",
+        "preferences": "Preferencias",
+        "events": "Eventos"
+      },
+      "groupCustomPrompt": "Instrucciones de extracción por grupo",
+      "groupCustomPromptPlaceholder": "Selecciona un grupo para ajustar",
+      "noPromptGroups": "Aún no hay historial de canales de Discord."
+    },
+    "timeline": {
+      "title": "Cronología",
+      "firstFailed": "Primer fallo",
+      "lastChecked": "Última verificación",
+      "failures": "Fallos",
+      "failureStreak": "{{count}} seguidos",
+      "failureTotal": "{{count}} en total",
+      "lastHealthy": "Último estado saludable",
+      "noData": "Aún no hay verificaciones recientes del canal."
+    },
+    "managers": {
+      "description": "Administra qué usuarios tienen permisos de gestor en los chats de grupo.",
+      "groups": "Grupos",
+      "noManagerGroups": "No hay grupos con gestores",
+      "noManagerGroupsHint": "Usa el formulario de abajo para agregar un gestor a un grupo.",
+      "loadingManagers": "Cargando gestores...",
+      "noManagers": "No hay gestores en este grupo.",
+      "managersCount": "{{count}} gestor",
+      "managersCountPlural": "{{count}} gestores",
+      "searchContacts": "Buscar contactos...",
+      "noResults": "No se encontraron contactos",
+      "columns": {
+        "userId": "ID de usuario",
+        "name": "Nombre",
+        "username": "Nombre de usuario"
+      },
+      "addForm": {
+        "title": "Agregar gestor a un grupo nuevo",
+        "hint": "Agrega un gestor a un grupo que no aparece en la lista de arriba.",
+        "groupId": "ID de grupo *",
+        "groupIdPlaceholder": "p. ej. group:telegram:-100123456",
+        "userId": "ID de usuario *",
+        "userIdPlaceholder": "Busca o ingresa el ID de usuario",
+        "displayName": "Nombre visible",
+        "username": "Nombre de usuario",
+        "optional": "Opcional",
+        "usernameWithout": "Opcional (sin @)",
+        "adding": "Agregando...",
+        "addManager": "Agregar gestor",
+        "add": "Agregar",
+        "errors": {
+          "groupUserRequired": "El ID de grupo y el ID de usuario son obligatorios",
+          "failedAdd": "No se pudo agregar el gestor"
+        }
+      }
+    }
+  },
+  "fieldConfig": {
+    "token": {
+      "label": "Token del bot",
+      "help": "Desde @BotFather"
+    },
+    "bot_token": {
+      "label": "Token del bot"
+    },
+    "app_token": {
+      "label": "Token de nivel de app",
+      "help": "Token de nivel de app con alcance connections:write (obligatorio para Socket Mode)"
+    },
+    "user_token": {
+      "label": "Token de usuario (opcional)",
+      "help": "Opcional: token OAuth de usuario para una identidad de bot personalizada. Déjalo vacío para usar la identidad de bot predeterminada."
+    },
+    "app_id": {
+      "label": "ID de app"
+    },
+    "app_secret": {
+      "label": "Secreto de app"
+    },
+    "encrypt_key": {
+      "label": "Clave de cifrado",
+      "help": "Para el modo webhook"
+    },
+    "verification_token": {
+      "label": "Token de verificación",
+      "help": "Para el modo webhook"
+    },
+    "webhook_secret": {
+      "label": "Secreto del webhook"
+    },
+    "api_server": {
+      "label": "URL del servidor de API",
+      "help": "Servidor personalizado de Telegram Bot API para subir archivos grandes (hasta 2 GB). Déjalo vacío para usar el predeterminado."
+    },
+    "proxy": {
+      "label": "Proxy HTTP",
+      "help": "Enruta el tráfico del bot a través de un proxy HTTP"
+    },
+    "dm_policy": {
+      "label": "Política de DM"
+    },
+    "group_policy": {
+      "label": "Política de grupos"
+    },
+    "require_mention": {
+      "label": "Requerir @mención en grupos",
+      "disabledHint": "El modo multibot siempre escucha todos los mensajes"
+    },
+    "mention_mode": {
+      "label": "Comportamiento de respuesta en grupos",
+      "help": "Cómo decide el bot cuándo responder en grupos con varios bots."
+    },
+    "history_limit": {
+      "label": "Límite de historial del grupo",
+      "help": "Máximo de mensajes pendientes del grupo para contexto (0 = deshabilitado)"
+    },
+    "dm_stream": {
+      "label": "Streaming de DM",
+      "help": "Transmite la respuesta de forma progresiva en DMs"
+    },
+    "group_stream": {
+      "label": "Streaming de grupo",
+      "help": "Transmite la respuesta de forma progresiva en grupos"
+    },
+    "draft_transport": {
+      "label": "Vista previa de borrador",
+      "help": "Usa la vista previa sigilosa para el streaming de respuestas en DMs — sin notificación por edición (requiere Streaming de DM)"
+    },
+    "reasoning_delivery": {
+      "label": "Mostrar razonamiento",
+      "help": "Elige cómo se muestra el razonamiento del modelo en los mensajes del canal."
+    },
+    "reaction_level": {
+      "label": "Nivel de reacción"
+    },
+    "activity_indicator": {
+      "label": "Indicador de actividad",
+      "help": "Muestra un indicador nativo de \"el agente está trabajando\" (pensando/buscando/generando…) mientras el agente procesa. Es efímero, no es un mensaje de chat."
+    },
+    "media_max_mb": {
+      "label": "Tamaño máximo de multimedia (MB)"
+    },
+    "link_preview": {
+      "label": "Vista previa de enlaces"
+    },
+    "allow_from": {
+      "label": "Usuarios permitidos"
+    },
+    "telegram_manager": {
+      "enabled": {
+        "label": "Habilitar la herramienta de gestión de Telegram",
+        "help": "Solo aplica a los agentes que se ejecutan a través de este canal de Telegram. Es una herramienta oculta y no aparece en los perfiles de herramientas compartidos."
+      },
+      "allowed_actions": {
+        "label": "Permisos de gestión de Telegram",
+        "help": "Elige qué acciones de Telegram puede usar el agente. Si no seleccionas ningún permiso, la herramienta no se otorga al agente."
+      }
+    },
+    "domain": {
+      "label": "Dominio"
+    },
+    "connection_mode": {
+      "label": "Modo de conexión",
+      "help": "WebSocket no necesita IP pública — solo conexión saliente"
+    },
+    "webhook_port": {
+      "label": "Puerto del webhook",
+      "help": "0 = comparte el puerto principal del gateway (recomendado)"
+    },
+    "webhook_path": {
+      "label": "Ruta del webhook",
+      "help": "Ruta en el servidor principal para los eventos de Lark"
+    },
+    "webhook_url": {
+      "label": "URL del webhook"
+    },
+    "topic_session_mode": {
+      "label": "Modo de sesión por tema",
+      "help": "Usa el root_id del hilo para aislar sesiones"
+    },
+    "render_mode": {
+      "label": "Modo de renderizado"
+    },
+    "text_chunk_limit": {
+      "label": "Límite de caracteres por fragmento",
+      "help": "Máximo de caracteres por mensaje"
+    },
+    "group_allow_from": {
+      "label": "Usuarios permitidos en grupos",
+      "help": "Lista de permitidos aparte para remitentes de grupos"
+    },
+    "native_stream": {
+      "label": "Streaming nativo (Agents & AI Apps)",
+      "help": "Usa la API ChatStreamer de Slack para streaming nativo. Si no está disponible, usa la edición en el mismo mensaje."
+    },
+    "debounce_delay": {
+      "label": "Retardo de debounce (ms)",
+      "help": "Milisegundos de espera antes de despachar mensajes seguidos. Pon 0 para deshabilitar."
+    },
+    "thread_ttl": {
+      "label": "TTL de participación en hilos (horas)",
+      "help": "Horas antes de que el bot deje de responder automáticamente en hilos donde participó. 0 = siempre requerir @mención."
+    },
+    "skills": {
+      "label": "Filtro de skills",
+      "help": "Limita las skills disponibles para este grupo"
+    },
+    "tools": {
+      "label": "Lista de herramientas permitidas",
+      "help": "Restringe qué herramientas puede usar el agente en este grupo"
+    },
+    "system_prompt": {
+      "label": "Prompt del sistema"
+    },
+    "chat_behavior": {
+      "enabled": {
+        "label": "Entrega humanizada",
+        "help": "Anulación a nivel de canal del comportamiento de entrega. Los ajustes del canal prevalecen sobre los del agente y del espacio de trabajo."
+      },
+      "intermediate_replies": {
+        "enabled": {
+          "label": "Respuestas intermedias",
+          "help": "Envía mensajes de progreso naturales durante ejecuciones largas o con muchas herramientas. Estos mensajes no se agregan al historial de la sesión."
+        },
+        "mode": {
+          "label": "Modo de respuesta intermedia",
+          "help": "Elige si las actualizaciones de progreso las genera el modelo de entrega o se deshabilitan para este canal."
+        },
+        "provider": {
+          "label": "Proveedor de respuestas intermedias",
+          "help": "Proveedor opcional para los mensajes de progreso. Déjalo vacío para heredar el proveedor del agente; elige aquí un proveedor rápido y económico."
+        },
+        "model": {
+          "label": "Modelo de respuestas intermedias",
+          "help": "Modelo opcional para los mensajes de progreso. Déjalo vacío para heredar el modelo del agente; se permiten nombres de modelo personalizados."
+        },
+        "timeout_ms": {
+          "label": "Tiempo de espera intermedio (ms)",
+          "help": "Tiempo máximo de espera del modelo de entrega antes de omitir una actualización intermedia."
+        },
+        "max_tokens": {
+          "label": "Máximo de tokens intermedio",
+          "help": "Límite de tokens por cada mensaje de progreso generado. Mantenlo bajo para que las actualizaciones sean cortas."
+        },
+        "max_chars": {
+          "label": "Máximo de caracteres intermedio",
+          "help": "Límite de caracteres después de la generación para que los mensajes de progreso no se conviertan en respuestas completas."
+        }
+      },
+      "quick_ack": {
+        "enabled": {
+          "label": "Confirmación rápida",
+          "help": "Envía una confirmación natural breve antes de que empiece el trabajo largo. Este mensaje no se agrega al historial de la sesión."
+        },
+        "mode": {
+          "label": "Modo de confirmación rápida",
+          "help": "Los modos generados usan el proveedor y modelo de entrega configurados. El modo de plantilla fija es el único que envía texto de plantilla."
+        },
+        "provider": {
+          "label": "Proveedor de confirmación rápida",
+          "help": "Proveedor opcional para las confirmaciones rápidas. Déjalo vacío para heredar el proveedor del agente; elige aquí un proveedor rápido y económico."
+        },
+        "model": {
+          "label": "Modelo de confirmación rápida",
+          "help": "Modelo opcional para las confirmaciones rápidas. Déjalo vacío para heredar el modelo del agente; se permiten nombres de modelo personalizados."
+        },
+        "timeout_ms": {
+          "label": "Tiempo de espera de la confirmación rápida (ms)",
+          "help": "Tiempo máximo de espera del modelo de confirmación antes de omitir la confirmación generada."
+        },
+        "max_tokens": {
+          "label": "Máximo de tokens de la confirmación rápida",
+          "help": "Límite de tokens para la confirmación. Mantenlo bajo para que se lea como un acuse y no como una respuesta."
+        },
+        "max_chars": {
+          "label": "Máximo de caracteres de la confirmación rápida",
+          "help": "Límite de caracteres después de la generación para que los mensajes de confirmación se mantengan compactos."
+        }
+      },
+      "final_split": {
+        "enabled": {
+          "label": "División de la respuesta final",
+          "help": "Divide las respuestas finales largas en varios mensajes del canal. Es independiente del razonamiento y de los mensajes de progreso."
+        }
+      }
+    },
+    "platform": {
+      "label": "Plataforma",
+      "help": "Selecciona la plataforma que atiende esta página de Pancake."
+    },
+    "tiktok_type": {
+      "label": "Tipo de TikTok",
+      "help": "Selecciona el tipo de cuenta de TikTok para esta página"
+    },
+    "features.private_reply": {
+      "label": "Respuesta privada (comentario → DM)",
+      "help": "Envía un DM único a quienes comentan después de la respuesta pública. Solo Facebook/Instagram. Meta permite enviar el DM dentro de los 7 días posteriores al comentario."
+    },
+    "private_reply_message": {
+      "label": "Mensaje de DM",
+      "help": "Admite los marcadores commenter_name y post_title. Vacío = texto predeterminado en inglés."
+    }
+  },
+  "fieldOptions": {
+    "dm_policy": {
+      "pairing": "Emparejamiento (requiere código)",
+      "open": "Abierto (acepta todo)",
+      "allowlist": "Solo lista de permitidos",
+      "disabled": "Deshabilitado"
+    },
+    "group_policy": {
+      "open": "Abierto (acepta todo)",
+      "pairing": "Emparejamiento (requiere aprobación)",
+      "allowlist": "Solo lista de permitidos",
+      "disabled": "Deshabilitado"
+    },
+    "mention_mode": {
+      "strict": "Predeterminado (sigue el ajuste de @mención)",
+      "yield": "Multibot (responde salvo que se @mencione a otro bot)"
+    },
+    "reaction_level": {
+      "off": "Desactivado",
+      "minimal": "Mínimo",
+      "full": "Completo"
+    },
+    "reasoning_delivery": {
+      "streaming_only": "Solo streaming",
+      "always_bubbles": "Siempre como burbujas",
+      "off": "Desactivado"
+    },
+    "telegram_manager": {
+      "allowed_actions": {
+        "topic": "Gestionar temas",
+        "message": "Gestionar mensajes",
+        "member": "Gestionar miembros",
+        "invite": "Gestionar enlaces de invitación",
+        "chat": "Información y ajustes del chat",
+        "join_request": "Aprobar solicitudes de ingreso"
+      }
+    },
+    "chat_behavior": {
+      "enabled": {
+        "inherit": "Heredar del gateway",
+        "true": "Habilitado",
+        "false": "Deshabilitado"
+      },
+      "intermediate_replies": {
+        "enabled": {
+          "inherit": "Heredar del gateway",
+          "true": "Habilitado",
+          "false": "Deshabilitado"
+        },
+        "mode": {
+          "inherit": "Heredar del gateway",
+          "sidecar_generated": "Generado por sidecar",
+          "off": "Desactivado"
+        }
+      },
+      "quick_ack": {
+        "enabled": {
+          "inherit": "Heredar del gateway",
+          "true": "Habilitado",
+          "false": "Deshabilitado"
+        },
+        "mode": {
+          "inherit": "Heredar del gateway",
+          "sidecar_generated": "Generado por sidecar",
+          "llm_generated": "Generado por LLM",
+          "fixed_template": "Plantilla fija",
+          "off": "Desactivado"
+        }
+      },
+      "final_split": {
+        "enabled": {
+          "inherit": "Heredar del gateway",
+          "true": "Habilitado",
+          "false": "Deshabilitado"
+        }
+      }
+    },
+    "domain": {
+      "lark": "Lark (global)",
+      "feishu": "Feishu (China)"
+    },
+    "connection_mode": {
+      "webhook": "Webhook",
+      "websocket": "WebSocket (recomendado)"
+    },
+    "topic_session_mode": {
+      "disabled": "Deshabilitado",
+      "enabled": "Habilitado"
+    },
+    "render_mode": {
+      "auto": "Automático",
+      "raw": "Sin formato",
+      "card": "Tarjeta"
+    },
+    "platform": {
+      "facebook": "Facebook",
+      "instagram": "Instagram",
+      "threads": "Threads (beta)",
+      "tiktok": "TikTok",
+      "youtube": "YouTube (beta)",
+      "shopee": "Shopee",
+      "line": "Line",
+      "google": "Google",
+      "chat_plugin": "Complemento de chat",
+      "lazada": "Lazada",
+      "tokopedia": "Tokopedia"
+    }
+  },
+  "groupOverrides": {
+    "title": "Anulaciones por grupo y tema",
+    "hint": "Anula los valores predeterminados del canal por chat de grupo o tema de foro. Usa \"*\" como ID de grupo para valores comodín.",
+    "groupLabel": "Grupo: {{id}}",
+    "groupWildcard": "* (comodín)",
+    "addGroupPlaceholder": "ID de chat (p. ej. -100123456) o *",
+    "addGroup": "Agregar grupo",
+    "knownGroups": "Grupos conocidos",
+    "topicOverrides": "Anulaciones de temas",
+    "topicLabel": "Tema: {{id}}",
+    "addTopicPlaceholder": "ID del hilo del tema",
+    "addTopic": "Agregar tema",
+    "fieldConfig": {
+      "dm_stream": {
+        "label": "Streaming de DM",
+        "help": "Transmite la respuesta de forma progresiva en DMs"
+      },
+      "group_stream": {
+        "label": "Streaming de grupo",
+        "help": "Transmite la respuesta de forma progresiva en grupos"
+      },
+      "draft_transport": {
+        "label": "Vista previa de borrador",
+        "help": "Usa la vista previa sigilosa para el streaming de respuestas en DMs — sin notificación por edición (requiere Streaming de DM)"
+      },
+      "reasoning_delivery": {
+        "label": "Mostrar razonamiento",
+        "help": "Elige cómo se muestra el razonamiento del modelo en los mensajes del canal."
+      }
+    },
+    "fields": {
+      "groupPolicy": "Política de grupos",
+      "requireMention": "Requerir @mención",
+      "enabled": "Habilitado",
+      "allowedUsers": "Usuarios permitidos",
+      "allowedUsersPlaceholder": "Un ID de usuario por línea o separados por comas",
+      "skillsFilter": "Filtro de skills",
+      "skillsPlaceholder": "Un nombre de skill por línea (vacío = heredar)",
+      "toolAllow": "Herramientas permitidas",
+      "toolAllowPlaceholder": "Selecciona las herramientas permitidas (vacío = heredar todas)...",
+      "toolAllowHint": "Restringe qué herramientas están disponibles en este grupo. Admite nombres de grupo como \"group:web\", \"group:fs\". Vacío = heredar todas las herramientas.",
+      "systemPrompt": "Prompt del sistema",
+      "systemPromptPlaceholder": "Prompt de sistema adicional para este grupo o tema",
+      "inherit": "Heredar (valor predeterminado del canal)",
+      "yes": "Sí",
+      "no": "No"
+    }
+  },
+  "wizard": {
+    "zaloPersonal": {
+      "createLabel": "Crear y autenticar",
+      "formBanner": "Después de crear, te autenticarás con un código QR y configurarás los usuarios permitidos."
+    },
+    "whatsapp": {
+      "createLabel": "Crear y escanear QR",
+      "formBanner": "Después de crear, escanea el código QR con WhatsApp para autenticarte."
+    }
+  },
+  "fallback": {
+    "authRequiredSummary": "Se requiere autenticación",
+    "authRequiredDetail": "La instancia de canal está habilitada, pero necesita iniciar sesión antes de conectarse.",
+    "authRequiredHeadline": "Vuelve a conectar la sesión del canal",
+    "authRequiredHint": "Autentica este canal de nuevo para restaurar la sesión actual.",
+    "missingCredentialsSummary": "Faltan credenciales",
+    "missingCredentialsDetail": "La instancia de canal está habilitada, pero las credenciales requeridas están incompletas.",
+    "missingCredentialsHeadline": "Completa las credenciales requeridas",
+    "missingCredentialsHint": "Abre las credenciales y completa los valores faltantes o inválidos de este canal."
+  },
+  "scopes": {
+    "title": "Permisos de API requeridos",
+    "description": "Tu app de Lark/Feishu debe tener estos alcances habilitados en la consola de desarrollador. Publica una nueva versión de la app después de agregar permisos.",
+    "publishReminder": "Después de agregar alcances, configura Contact Range como \"All members\" y publica una nueva versión de la app para que los cambios surtan efecto."
+  },
+  "toast": {
+    "created": "Canal creado",
+    "createdDesc": "Se agregó {{name}}",
+    "updated": "Canal actualizado",
+    "deleted": "Canal eliminado",
+    "failedCreate": "No se pudo crear el canal",
+    "failedUpdate": "No se pudo actualizar el canal",
+    "failedDelete": "No se pudo eliminar el canal"
+  },
+  "zalo": {
+    "allowedUsers": "Usuarios permitidos",
+    "loadContacts": "Cargar contactos",
+    "loading": "Cargando...",
+    "searchContacts": "Buscar contactos...",
+    "friends": "Amigos",
+    "groups": "Grupos",
+    "membersCount": "{{count}} miembros",
+    "noContacts": "No se encontraron contactos",
+    "noContactsMatch": "Ningún contacto coincide con \"{{search}}\"",
+    "addManualPlaceholder": "Agregar ID manualmente",
+    "add": "Agregar",
+    "zaloIdsHint": "IDs de usuario o de grupo de Zalo",
+    "completeQrLogin": "Completa el inicio de sesión por QR para cargar contactos",
+    "loginQr": "Iniciar sesión con QR — {{name}}",
+    "loginSuccessful": "¡Inicio de sesión correcto! Iniciando el canal...",
+    "generatingQr": "Generando código QR...",
+    "scanHint": "Escanea con tu app de Zalo (vence en ~100 s)",
+    "loginSuccessLoading": "¡Inicio de sesión correcto! Cargando contactos...",
+    "retry": "Reintentar",
+    "close": "Cerrar",
+    "skip": "Omitir"
+  },
+  "whatsapp": {
+    "loginSuccessLoading": "✅ ¡WhatsApp conectado! Cargando el canal...",
+    "waitingForQr": "Esperando el código QR...",
+    "scanHint": "Abre WhatsApp → toca Tú → Dispositivos vinculados → Vincular un dispositivo",
+    "initializing": "Inicializando...",
+    "skip": "Omitir",
+    "retry": "Reintentar",
+    "close": "Cerrar",
+    "reauthTitle": "Vincular WhatsApp — {{name}}",
+    "reauthDescription": "Escanea el código QR con WhatsApp para vincular tu dispositivo.",
+    "alreadyLinked": "✅ Dispositivo ya vinculado",
+    "alreadyLinkedDetail": "WhatsApp está conectado. Para vincular otro dispositivo, haz clic en Revincular — esto cerrará la sesión actual.",
+    "relinkDevice": "Revincular dispositivo",
+    "connectedSuccess": "✅ ¡WhatsApp conectado correctamente!",
+    "tabQrCode": "Código QR"
+  },
+  "bitrix24": {
+    "portalSelect": {
+      "placeholder": "Selecciona un portal...",
+      "empty": "Aún no hay portales de Bitrix24 conectados.",
+      "createFirst": "Conecta tu primer portal de Bitrix24",
+      "createNew": "Crear portal nuevo",
+      "pendingBadge": "Instalación pendiente — haz clic para reanudar",
+      "loadError": "No se pudieron cargar los portales. Actualiza para reintentar.",
+      "deleteAria": "Eliminar el portal {{name}}",
+      "deleteConfirm": {
+        "title": "Eliminar portal pendiente",
+        "description": "¿Eliminar el portal pendiente \"{{name}}\"? No terminó la instalación y ningún canal lo usa. Esta acción no se puede deshacer.",
+        "confirmLabel": "Eliminar",
+        "success": "Portal \"{{name}}\" eliminado",
+        "error": "No se pudo eliminar el portal"
+      }
+    },
+    "errors": {
+      "portalRequired": "Selecciona un portal.",
+      "portalNotInstalled": "Este portal no completó la autorización. Autorízalo antes de crear un canal."
+    },
+    "create": {
+      "title": "Conectar portal de Bitrix24",
+      "submit": "Crear y autorizar →",
+      "fields": {
+        "name": "Nombre del portal",
+        "nameHint": "Slug interno. Se completa desde el dominio; puedes editarlo.",
+        "domain": "Dominio",
+        "clientId": "ID de cliente",
+        "clientSecret": "Secreto de cliente"
+      },
+      "errors": {
+        "invalidName": "Usa solo minúsculas, dígitos, guiones y guiones bajos (2-64 caracteres).",
+        "invalidDomain": "Debe ser un nombre de host válido (p. ej. mycorp.bitrix24.com, mycorp.bitrix24.vn o tu dominio autoalojado).",
+        "duplicateName": "Ya existe un portal con este nombre.",
+        "forbidden": "Necesitas permisos de administrador del tenant para crear portales.",
+        "gatewayURLUnknown": "Abre primero la UI de goclaw desde tu URL pública (no localhost) y vuelve a intentar."
+      },
+      "help": {
+        "title": "¿Cómo obtener el ID de cliente y el secreto?",
+        "step1": "Abre tu portal de Bitrix24 como administrador.",
+        "step2": "Ve a Recursos para desarrolladores → Otros → Aplicación local → Agregar.",
+        "step3": "Configura la URL del manejador:",
+        "step4": "Marca los alcances requeridos:",
+        "step5": "Guarda → copia el Application ID y la Key en el formulario de arriba.",
+        "localDevWarning": "Estás en localhost — Bitrix24 no puede acceder a esta URL. Usa Cloudflare Tunnel o tu dominio público primero."
+      },
+      "authorize": {
+        "title": "Autorizar \"{{name}}\"",
+        "openButton": "Abrir página de autorización",
+        "waiting": "Esperando la autorización...",
+        "installed": "¡Portal instalado correctamente!",
+        "timedOut": "La autorización aún no se completó. Puedes reanudarla desde el menú desplegable.",
+        "closeResumeLater": "Cerrar (reanudar después)",
+        "urlUnknown": "La URL de instalación no está disponible. Abre la UI de goclaw desde tu URL pública y reintenta desde el menú desplegable."
+      }
+    }
+  }
+}
