@@ -174,7 +174,10 @@ func (w *episodicWorker) summarizeFromMessages(ctx context.Context, provider pro
 		}
 	}
 
-	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	// 120s — ACP-mode providers (Gemini CLI etc.) need 5~10s for spawn +
+	// initialize + session/new before the LLM call begins; 30s often timed out
+	// during the model response itself.
+	sctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 
 	req := providers.ChatRequest{
