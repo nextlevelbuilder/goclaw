@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/internal/teamconfig"
 	"github.com/nextlevelbuilder/goclaw/internal/tracing"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -35,7 +36,7 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 
 	if !isLead {
 		// Members may only create "request" tasks when the feature is enabled.
-		memberCfg := ParseMemberRequestConfig(team.Settings)
+		memberCfg := teamconfig.ParseMemberRequest(team.Settings)
 		if !memberCfg.Enabled {
 			return ErrorResult("Members cannot create tasks. Use team_tasks(action=\"comment\") to communicate.")
 		}
@@ -136,7 +137,7 @@ func (t *TeamTasksTool) executeCreate(ctx context.Context, args map[string]any) 
 	// ends via post-turn processing (avoids race with blocked_by setup).
 
 	// Member requests without auto_dispatch stay pending for leader review.
-	memberCfgForDispatch := ParseMemberRequestConfig(team.Settings)
+	memberCfgForDispatch := teamconfig.ParseMemberRequest(team.Settings)
 	skipAutoDispatch := !isLead && taskType == "request" && !memberCfgForDispatch.AutoDispatch
 
 	chatID := OriginChatIDFromCtx(ctx)

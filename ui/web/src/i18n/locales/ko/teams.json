@@ -307,7 +307,21 @@
       "downgradeNote": "다운그레이드는 안전합니다 — V2 데이터가 보존되지만 숨겨집니다.",
       "betaNote": "일부 기능은 현재 베타 버전입니다.",
       "gotIt": "알겠습니다"
-    }
+    },
+    "routing": "라우팅 규칙",
+    "routingEnabled": "멤버 라우팅 활성화",
+    "routingEnabledDesc": "임베딩 분류 전에 일치하는 메시지를 특정 멤버에게 라우팅",
+    "routingFallbackToSelf": "자기 자신으로 폴백",
+    "routingFallbackToSelfDesc": "규칙이 일치하지 않을 때 자기 자신에게 라우팅 (권장)",
+    "routingConfidence": "신뢰도 임계값",
+    "routingConfidenceDesc": "규칙 기반 라우팅의 최소 신뢰도 (0.01–1.00)",
+    "routingRuleOrderHint": "처음 일치하는 규칙이 적용됨 — 목록 순서로 규칙 순서 설정",
+    "routingKeywords": "키워드",
+    "routingKeywordsHint": "단어 경계 부분 문자열 일치 (예: golang, deploy)",
+    "routingFilePatterns": "파일 패턴",
+    "routingFilePatternsHint": ".go, dockerfile, *.ts 같은 확장자",
+    "routingCriteria": "판단 기준",
+    "routingCriteriaHint": "결정 모델을 위한 자연어 기준 (선택 사항)"
   },
   "create": {
     "title": "팀 만들기",

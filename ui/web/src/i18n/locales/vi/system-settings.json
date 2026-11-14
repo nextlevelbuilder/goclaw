@@ -36,7 +36,7 @@
     "teamWorkClassify": "Phân Loại Team Work",
     "teamWorkClassifyHint": "Phân loại yêu cầu mới thành tự xử lý hoặc làm theo team/delegate workflow.",
     "teamWorkClassifyInfo": "Khi yêu cầu vượt chuyên môn hoặc nên chia việc, hệ thống dùng embedding làm bằng chứng rồi để model quyết định tự xử lý hay dùng team/delegate workflow. Hệ thống xét cả quyền lead/member; member chỉ được tạo request nhờ hỗ trợ khi team đã bật Yêu cầu thành viên và Tự động phân phối.",
-    "teamWorkClassifyEmbeddingRequired": "Cần cấu hình embedding trước khi bật Phân Loại Team Work."
+    "teamWorkClassifyEmbeddingRequired": "Cần cấu hình embedding hoặc ít nhất một quy tắc định tuyến team trước khi bật Phân Loại Team Work."
   },
   "kg": {
     "title": "Đồ thị tri thức",

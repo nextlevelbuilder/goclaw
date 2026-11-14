@@ -149,7 +149,7 @@
   "behavior.teamWorkClassify": "Phân Loại Team Work",
   "behavior.teamWorkClassifyHint": "Phân loại yêu cầu mới thành tự xử lý hoặc làm theo team/delegate workflow.",
   "behavior.teamWorkClassifyInfo": "Khi yêu cầu vượt chuyên môn hoặc nên chia việc, hệ thống dùng embedding làm bằng chứng rồi để model quyết định tự xử lý hay dùng team/delegate workflow. Hệ thống xét cả quyền lead/member; member chỉ được tạo request nhờ hỗ trợ khi team đã bật Yêu cầu thành viên và Tự động phân phối.",
-  "behavior.teamWorkClassifyEmbeddingRequired": "Cần cấu hình embedding trước khi bật Phân Loại Team Work.",
+  "behavior.teamWorkClassifyEmbeddingRequired": "Cần cấu hình embedding hoặc ít nhất một quy tắc định tuyến team trước khi bật Phân Loại Team Work.",
   "behavior.chatTitle": "Gửi tin nhắn giống người hơn",
   "behavior.chatDescription": "Xác nhận sidecar, tiến độ trung gian và tách phản hồi cuối an toàn cho kênh không streaming",
   "behavior.chatEnabled": "Bật hành vi gửi tin theo kênh",
