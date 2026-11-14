@@ -219,6 +219,34 @@ func geminiFileAPICall(ctx context.Context, apiKey, model, prompt string, data [
 	return parseGeminiResponse(respBody)
 }
 
+// geminiUsageMetadata is generateContent's usageMetadata.
+// thoughtsTokenCount is not part of candidatesTokenCount. totalTokenCount
+// includes prompt, candidate, tool-use, and thinking tokens.
+type geminiUsageMetadata struct {
+	PromptTokenCount     int `json:"promptTokenCount"`
+	CandidatesTokenCount int `json:"candidatesTokenCount"`
+	TotalTokenCount      int `json:"totalTokenCount"`
+	ThoughtsTokenCount   int `json:"thoughtsTokenCount"`
+}
+
+// usageFromGeminiMetadata maps Gemini counts onto providers.Usage.
+// ThinkingTokens is a sub-count of CompletionTokens (see tracing.CalculateCost).
+// Gemini bills thinking as output but reports it beside candidatesTokenCount,
+// so thoughts are folded into CompletionTokens. A response with no thoughts
+// keeps the three original counts.
+func usageFromGeminiMetadata(m geminiUsageMetadata) *providers.Usage {
+	completion := m.CandidatesTokenCount
+	if m.ThoughtsTokenCount > 0 {
+		completion += m.ThoughtsTokenCount
+	}
+	return &providers.Usage{
+		PromptTokens:     m.PromptTokenCount,
+		CompletionTokens: completion,
+		TotalTokens:      m.TotalTokenCount,
+		ThinkingTokens:   m.ThoughtsTokenCount,
+	}
+}
+
 // parseGeminiResponse extracts text content and usage from a Gemini generateContent response.
 func parseGeminiResponse(respBody []byte) (*providers.ChatResponse, error) {
 	var geminiResp struct {
@@ -229,11 +257,7 @@ func parseGeminiResponse(respBody []byte) (*providers.ChatResponse, error) {
 				} `json:"parts"`
 			} `json:"content"`
 		} `json:"candidates"`
-		UsageMetadata struct {
-			PromptTokenCount     int `json:"promptTokenCount"`
-			CandidatesTokenCount int `json:"candidatesTokenCount"`
-			TotalTokenCount      int `json:"totalTokenCount"`
-		} `json:"usageMetadata"`
+		UsageMetadata geminiUsageMetadata `json:"usageMetadata"`
 	}
 	if err := json.Unmarshal(respBody, &geminiResp); err != nil {
 		return nil, fmt.Errorf("parse response: %w", err)
@@ -257,11 +281,7 @@ func parseGeminiResponse(respBody []byte) (*providers.ChatResponse, error) {
 	return &providers.ChatResponse{
 		Content:      content,
 		FinishReason: "stop",
-		Usage: &providers.Usage{
-			PromptTokens:     geminiResp.UsageMetadata.PromptTokenCount,
-			CompletionTokens: geminiResp.UsageMetadata.CandidatesTokenCount,
-			TotalTokens:      geminiResp.UsageMetadata.TotalTokenCount,
-		},
+		Usage:        usageFromGeminiMetadata(geminiResp.UsageMetadata),
 	}, nil
 }
 
