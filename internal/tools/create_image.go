@@ -951,11 +951,7 @@ func (t *CreateImageTool) callGeminiNativeImageGen(ctx context.Context, apiKey, 
 				} `json:"parts"`
 			} `json:"content"`
 		} `json:"candidates"`
-		UsageMetadata *struct {
-			PromptTokenCount     int `json:"promptTokenCount"`
-			CandidatesTokenCount int `json:"candidatesTokenCount"`
-			TotalTokenCount      int `json:"totalTokenCount"`
-		} `json:"usageMetadata"`
+		UsageMetadata *geminiUsageMetadata `json:"usageMetadata"`
 	}
 	if err := json.Unmarshal(respBody, &gemResp); err != nil {
 		return nil, nil, fmt.Errorf("parse response: %w", err)
@@ -971,11 +967,7 @@ func (t *CreateImageTool) callGeminiNativeImageGen(ctx context.Context, apiKey, 
 				}
 				var usage *providers.Usage
 				if gemResp.UsageMetadata != nil {
-					usage = &providers.Usage{
-						PromptTokens:     gemResp.UsageMetadata.PromptTokenCount,
-						CompletionTokens: gemResp.UsageMetadata.CandidatesTokenCount,
-						TotalTokens:      gemResp.UsageMetadata.TotalTokenCount,
-					}
+					usage = usageFromGeminiMetadata(*gemResp.UsageMetadata)
 				}
 				return imageBytes, usage, nil
 			}
