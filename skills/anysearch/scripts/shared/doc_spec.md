@@ -3,7 +3,7 @@
 ## Protocol
 - Endpoints: `POST /v1/search`, `GET /v1/sub-domains`, `POST /v1/extract` on https://api.anysearch.com
 - Format: ordinary HTTP with JSON request/response envelopes; CLI output remains Markdown for agent compatibility
-- Auth: Header "Authorization: Bearer <API_KEY>" (optional, anonymous has lower rate limits)
+- Auth: Header "Authorization: Bearer <API_KEY>" (optional, anonymous has lower rate limits). Prefer `ANYSEARCH_API_KEY` or a local `.env`; when using the Python CLI, global options such as `--api_key` must appear before the subcommand.
 
 ## CLI Invocation ({{LANG_NAME}})
 
@@ -227,10 +227,16 @@ From a JSON file:
 ### Scenario 8: Search with API key
 
 ```bash
-{{LANG_INVOKE}} search "climate change policy 2025" --api_key <your_api_key> --max_results 3
+{{LANG_INVOKE}} --api_key <your_api_key> search "climate change policy 2025" --max_results 3
 ```
 
 ---
+
+Successful responses include a visible `Request ID` footer for support and troubleshooting.
+
+## Runtime Dependencies
+- Python CLI: Python 3 and the `requests` package.
+- Node.js CLI: Node.js 16 or newer with no additional npm package. It is an optional direct-use alternative; the GoClaw bundled skill uses the Python runtime for dependency readiness.
 
 ## Rate Limit Handling
 - On rate limit error with auto_registered api_key in response: present key to user for approval, then save to .env and retry

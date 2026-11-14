@@ -20,8 +20,8 @@ Anonymous access works (lower rate limits). An API key raises limits.
 | GoClaw image | Requirement |
 |--------------|-------------|
 | `latest` / `full` | Python 3 + `requests` (`pip3 install requests`) |
-| `base` | No Python/Node — install Python + `requests`, or use a host with Node.js |
-| Desktop / binary | Python 3 recommended |
+| `base` | No Python/Node — install Python + `requests`, or use a host with Node.js 16+ |
+| Desktop / binary | Python 3 recommended; on Windows, `python`/`pip` are accepted aliases for `python3`/`pip3` |
 
 ## Configure an API key (optional)
 
@@ -79,7 +79,7 @@ $CMD batch_search --query "quantum computing" --max_results 3
 $CMD extract "https://example.com"
 ```
 
-Both CLIs (Python and Node) expose the same commands. Prefer `runtime.conf`'s `Command` for routine calls. Node has no third-party dependencies.
+Both CLIs (Python and Node) expose the same commands. Prefer `runtime.conf`'s `Command` for routine calls. Node has no third-party dependencies and requires Node.js 16+ (the GoClaw bundled skill uses Python by default). Successful search/extract responses include a visible `Request ID` footer for troubleshooting.
 
 ## Decision rules for agents
 
@@ -101,7 +101,7 @@ Cache `get_sub_domains` results per domain for the session; do not call repeated
 
 | Symptom | Fix |
 |---------|-----|
-| Skill missing / archived | `pip3 install requests`, restart or re-seed skills |
+| Skill missing / archived | `pip3 install requests` (or `pip install requests` on Windows), restart or re-seed skills |
 | `ModuleNotFoundError: requests` | Install `requests` or switch runtime to Node CLI |
 | Rate limited / quota | Add `ANYSEARCH_API_KEY`, or wait and retry |
 | Vertical search errors | Ensure **all** required `--sdp` params are present (empty string if N/A) |
