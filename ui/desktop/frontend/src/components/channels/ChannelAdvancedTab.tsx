@@ -2,15 +2,13 @@ import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChannelFields } from './channel-field-renderer'
 import { configSchema, NETWORK_KEYS, LIMITS_KEYS, STREAMING_KEYS, BEHAVIOR_KEYS, ACCESS_KEYS } from './channel-schemas'
-import { normalizeReasoningDeliveryConfig } from './reasoning-delivery-config'
+import { buildAdvancedConfigUpdate, deriveAdvancedInitialValues, ESSENTIAL_KEYS } from './channel-advanced-config'
 import type { ChannelInstanceData } from '../../types/channel'
 
 interface ChannelAdvancedTabProps {
   instance: ChannelInstanceData
   onUpdate: (updates: Record<string, unknown>) => Promise<void>
 }
-
-const ESSENTIAL_KEYS = new Set(['dm_policy', 'group_policy', 'require_mention', 'mention_mode'])
 
 function getAdvancedFields(channelType: string) {
   const allFields = configSchema[channelType] ?? []
@@ -24,21 +22,13 @@ function getAdvancedFields(channelType: string) {
   }
 }
 
-function deriveInitialValues(instance: ChannelInstanceData): Record<string, unknown> {
-  const config = normalizeReasoningDeliveryConfig((instance.config ?? {}) as Record<string, unknown>)
-  const { groups: _groups, ...rest } = config
-  return Object.fromEntries(
-    Object.entries(rest).filter(([k]) => !ESSENTIAL_KEYS.has(k)),
-  )
-}
-
 export function ChannelAdvancedTab({ instance, onUpdate }: ChannelAdvancedTabProps) {
   const { t } = useTranslation('channels')
   const [values, setValues] = useState<Record<string, unknown>>({})
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    setValues(deriveInitialValues(instance))
+    setValues(deriveAdvancedInitialValues(instance.config))
   }, [instance])
 
   const handleChange = useCallback((key: string, value: unknown) => {
@@ -50,12 +40,7 @@ export function ChannelAdvancedTab({ instance, onUpdate }: ChannelAdvancedTabPro
   const handleSave = async () => {
     setSaving(true)
     try {
-      const existingConfig = (instance.config ?? {}) as Record<string, unknown>
-      const cleanAdvanced = Object.fromEntries(
-        Object.entries(values).filter(([, v]) => v !== undefined && v !== '' && v !== null),
-      )
-      const merged = normalizeReasoningDeliveryConfig({ ...existingConfig, ...cleanAdvanced })
-      await onUpdate({ config: merged })
+      await onUpdate({ config: buildAdvancedConfigUpdate(instance.config, values) })
     } catch {
       // toast shown by hook
     } finally {
