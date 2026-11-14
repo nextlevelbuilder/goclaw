@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -14,7 +15,7 @@ import (
 
 var (
 	scanSkillDeps                  = skills.ScanSkillDeps
-	checkSkillDeps                 = skills.CheckSkillDeps
+	checkSkillDepsContext          = skills.CheckSkillDepsContext
 	githubSkillDependencyInstalled = skillGitHubDependencyInstalled
 )
 
@@ -49,7 +50,7 @@ func (h *SkillsHandler) handleSkillDependenciesStatus(w http.ResponseWriter, r *
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, h.buildSkillDependencyStatus(sk))
+	writeJSON(w, http.StatusOK, h.buildSkillDependencyStatus(r.Context(), sk))
 }
 
 func (h *SkillsHandler) handleSkillDependenciesInstall(w http.ResponseWriter, r *http.Request) {
@@ -61,30 +62,36 @@ func (h *SkillsHandler) handleSkillDependenciesInstall(w http.ResponseWriter, r 
 		return
 	}
 	manifest := h.scanWithFallback(sk)
-	if manifest == nil || manifest.IsEmpty() {
-		h.persistSkillDependencyState(r.Context(), sk, true, nil)
-		writeJSON(w, http.StatusOK, h.buildSkillDependencyStatus(sk))
+	checked := lifecycleCheckSkillDeps(r.Context(), manifest)
+	if checked.Incomplete || checked.Status == skills.DepCheckUnknown {
+		writeJSON(w, http.StatusOK, dependencyResponse(sk, manifest, checked))
 		return
 	}
-	_, missing := lifecycleCheckSkillDeps(manifest)
-	if len(missing) == 0 {
-		h.persistSkillDependencyState(r.Context(), sk, true, nil)
-		writeJSON(w, http.StatusOK, h.buildSkillDependencyStatus(sk))
-		return
+	var installed *skills.InstallResult
+	if checked.Status == skills.DepCheckMissing {
+		installedResult, err := installLifecycleDeps(r.Context(), manifest, checked.Missing)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		installed = installedResult
+		checked = lifecycleCheckSkillDeps(r.Context(), manifest)
 	}
-	result, err := installLifecycleDeps(r.Context(), manifest, missing)
+	persisted, changed, err := h.persistSkillDependencyState(r.Context(), sk, checked)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	okAfter, missingAfter := lifecycleCheckSkillDeps(manifest)
-	h.persistSkillDependencyState(r.Context(), sk, okAfter, missingAfter)
-	resp := h.buildSkillDependencyStatus(sk)
-	resp.OK = okAfter
-	resp.Missing = missingAfter
-	resp.MissingCount = len(missingAfter)
-	resp.Status = dependencyStatus(okAfter)
-	writeJSON(w, http.StatusOK, map[string]any{"result": result, "dependencies": resp})
+	if changed {
+		h.emitCacheInvalidate(bus.CacheKindSkills, sk.ID, uuid.Nil)
+	}
+	resp := dependencyResponse(persisted, manifest, checked)
+	if installed != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"result": installed, "dependencies": resp})
+	} else {
+		writeJSON(w, http.StatusOK, resp)
+	}
+
 }
 
 func (h *SkillsHandler) lifecycleSkill(w http.ResponseWriter, r *http.Request, crossTenant bool) (store.SkillInfo, bool) {
@@ -106,37 +113,63 @@ func (h *SkillsHandler) lifecycleSkill(w http.ResponseWriter, r *http.Request, c
 	return sk, true
 }
 
-func (h *SkillsHandler) buildSkillDependencyStatus(sk store.SkillInfo) skillDependencyStatusResponse {
+func (h *SkillsHandler) buildSkillDependencyStatus(ctx context.Context, sk store.SkillInfo) skillDependencyStatusResponse {
 	manifest := h.scanWithFallback(sk)
-	if manifest == nil || manifest.IsEmpty() {
-		return skillDependencyStatusResponse{Skill: refForSkill(sk), OK: true, Status: "ok"}
-	}
-	ok, missing := lifecycleCheckSkillDeps(manifest)
-	return skillDependencyStatusResponse{
-		Skill:        refForSkill(sk),
-		Dependencies: dependencyItems(manifest, missing),
-		OK:           ok,
-		Status:       dependencyStatus(ok),
-		Missing:      missing,
-		MissingCount: len(missing),
-	}
+	return dependencyResponse(sk, manifest, lifecycleCheckSkillDeps(ctx, manifest))
 }
 
-func (h *SkillsHandler) persistSkillDependencyState(ctx context.Context, sk store.SkillInfo, ok bool, missing []string) {
+func dependencyResponse(sk store.SkillInfo, manifest *skills.SkillManifest, checked skills.DepCheckResult) skillDependencyStatusResponse {
+	incomplete := checked.Incomplete || checked.Status == skills.DepCheckUnknown
+	status := "unknown"
+	if checked.Status == skills.DepCheckMissing {
+		status = "missing"
+	} else if !incomplete {
+		status = "ok"
+	}
+	resp := skillDependencyStatusResponse{
+		Skill: refForSkill(sk), OK: checked.Status == skills.DepCheckPresent && !incomplete,
+		Status: status, Missing: checked.Missing, MissingCount: len(checked.Missing),
+	}
+	if manifest != nil {
+		resp.Dependencies = dependencyItems(manifest, checked.Missing, incomplete)
+	}
+	return resp
+}
+
+// persistSkillDependencyState writes status and dependency data together. A
+// failed or cancelled SQL statement leaves both old values intact.
+func (h *SkillsHandler) persistSkillDependencyState(ctx context.Context, sk store.SkillInfo, checked skills.DepCheckResult) (store.SkillInfo, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return sk, false, err
+	}
+	if checked.Incomplete || checked.Status == skills.DepCheckUnknown {
+		return sk, false, nil
+	}
 	id, err := uuid.Parse(sk.ID)
 	if err != nil {
-		return
+		return sk, false, err
 	}
-	updateCtx := skillTenantContext(ctx, sk)
-	_ = h.skills.StoreMissingDeps(updateCtx, id, missing)
 	wantStatus := "archived"
-	if ok {
+	if checked.Status == skills.DepCheckPresent {
 		wantStatus = "active"
 	}
-	if sk.Status != wantStatus {
-		_ = h.skills.UpdateSkill(updateCtx, id, map[string]any{"status": wantStatus})
-		h.emitCacheInvalidate(bus.CacheKindSkills, sk.ID, uuid.Nil)
+	missing := checked.Missing
+	if missing == nil {
+		missing = []string{}
 	}
+	if sk.Status == wantStatus && stringSlicesEqual(sk.MissingDeps, missing) {
+		return sk, false, nil
+	}
+	encoded, err := json.Marshal(map[string]any{"missing": missing})
+	if err != nil {
+		return sk, false, err
+	}
+	if err := h.skills.UpdateSkill(skillTenantContext(ctx, sk), id, map[string]any{"status": wantStatus, "deps": string(encoded)}); err != nil {
+		return sk, false, err
+	}
+	sk.Status = wantStatus
+	sk.MissingDeps = append([]string(nil), missing...)
+	return sk, true, nil
 }
 
 func refForSkill(sk store.SkillInfo) skillRef {

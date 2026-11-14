@@ -106,6 +106,15 @@ PATH=/app/data/.runtime/npm-global/bin:/app/data/.runtime/pip/bin:$PATH
 2. **Node.js**: `npm install -g <package>` installs to `/app/data/.runtime/npm-global/`. `NODE_PATH` includes both system globals (`/usr/local/lib/node_modules`) and runtime globals.
 3. **Persistence**: Packages installed at runtime persist across tool calls within the same container lifecycle (volume-backed).
 
+### Dependency Check Timeout
+
+The skill dependency check imports the Python packages in one `python3 -c` probe and resolves the npm packages in one `node -e` probe. Each probe is killed after 30s by default. Set `GOCLAW_DEP_CHECK_TIMEOUT` (a Go duration such as `60s`) to change it; empty values keep the default. Invalid or non-positive values keep the default and log `skills.dep_check.invalid_timeout`.
+
+A probe that times out logs `skills.dep_check.timeout` and its packages are treated as unknown, not missing, so the skill is not archived. A probe stopped by the caller's context logs `skills.dep_check.cancelled` and is also unknown.
+
+The 30s default is per probe, not per pass. One `POST /v1/skills/rescan-deps` (or `install-deps`) pass checks every skill, so it also has a single 2-minute pass deadline derived from the request context. Probes inherit the request deadline. When the pass deadline expires, the remaining skills are reported with their stored status and are not re-checked. A check that ends unknown leaves the stored status and the stored missing-dependency list unchanged; only a completed check can archive a skill, clear its stored missing deps, or recover it from `archived`. The startup seeder uses the same rules and recovers a previously archived system skill when the check is known present. Status and stored missing dependencies are written in one tenant-scoped SQL statement. A failed write does not count as an update and does not publish a successful transition. The single-skill dependency endpoints inherit the request context and return `status: "unknown"`, `ok: false`, and `unknown` item states for unverified checks. If a dependency is known missing while another probe is incomplete, the known item remains `missing` and unchecked items are `unknown`. Incomplete results preserve the prior stored state.
+
+
 ### Bare-Metal Ubuntu/Debian
 
 When the gateway runs directly on Ubuntu/Debian instead of inside the Alpine Docker image:
