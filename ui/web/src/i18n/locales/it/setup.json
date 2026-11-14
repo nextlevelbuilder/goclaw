@@ -1,0 +1,122 @@
+{
+  "layout": {
+    "subtitle": "Prepariamo il tuo gateway per essere attivo e funzionante"
+  },
+  "steps": {
+    "provider": "Provider",
+    "model": "Modello",
+    "agent": "Agente",
+    "channel": "Canale",
+    "channelOptional": "(Opzionale)"
+  },
+  "complete": {
+    "title": "Configurazione completata!",
+    "ready": "Il tuo sistema è pronto all'uso!",
+    "description": "Il provider, l'agente e il canale sono stati configurati. Puoi gestirli in qualsiasi momento dalla dashboard.",
+    "goToDashboard": "Vai alla Dashboard"
+  },
+  "provider": {
+    "title": "Configura il provider LLM",
+    "descriptionCli": "Connettiti utilizzando la tua installazione locale di Claude CLI. Non è richiesta alcuna chiave API.",
+    "descriptionOauth": "Accedi per creare un account OpenAI Codex OAuth dedicato. Assegna un alias ora, potrai aggiungere altri alias in seguito per i membri del pool o per il round robin.",
+    "description": "Connettiti a un provider di intelligenza artificiale per alimentare i tuoi agenti. Sarà necessaria una chiave API.",
+    "providerType": "Tipo di provider",
+    "providerTypeHint": "Il servizio LLM a cui desideri connetterti. Si consiglia OpenRouter per l'accesso a molteplici modelli.",
+    "name": "Nome",
+    "nameHint": "Identificativo interno per questo provider. Generato automaticamente dal tipo di provider.",
+    "oauthAlias": "Alias dell'account",
+    "oauthAliasPlaceholder": "es. primario",
+    "oauthAliasHint": "Usa un alias univoco in lettere minuscole (come primario, lavoro o team) per questo account OpenAI/Codex. L'alias diventerà il prefisso del provider/modello usato dagli agenti.",
+    "displayName": "Nome visualizzato (Opzionale)",
+    "displayNameHint": "Un'etichetta intuitiva per questo account OpenAI/Codex. Utile quando si aggiungeranno altri alias in seguito.",
+    "displayNamePlaceholder": "Account Codex primario",
+    "apiKey": "Chiave API *",
+    "apiKeyHint": "La chiave segreta del tuo provider. Crittografata lato server e mai mostrata nelle risposte dell'API.",
+    "apiBase": "URL di base dell'API",
+    "apiBaseHint": "L'URL dell'endpoint per le richieste API. Compilato automaticamente in base al tipo di provider. Sostituisci solo se utilizzi un proxy personalizzato.",
+    "creating": "Creazione in corso...",
+    "create": "Crea provider",
+    "errors": {
+      "apiKeyRequired": "La chiave API è obbligatoria",
+      "oauthProviderNotFound": "Autenticazione OAuth riuscita, ma non è stato possibile trovare il provider. Riprova.",
+      "failedCreate": "Impossibile creare il provider"
+    }
+  },
+  "model": {
+    "title": "Seleziona e verifica il modello",
+    "description": "Scegli un modello e verifica che la connessione al tuo provider funzioni correttamente.",
+    "provider": "Provider:",
+    "model": "Modello *",
+    "modelHint": "Il modello di IA da utilizzare. Selezionalo dall'elenco o digita manualmente l'ID del modello se non è presente.",
+    "loadingModels": "Caricamento modelli...",
+    "selectModel": "Seleziona o digita l'ID di un modello",
+    "noModelsHint": "Questo provider non elenca i modelli — digita l'ID del modello manualmente.",
+    "verified": "Verificato",
+    "verify": "Verifica",
+    "verifying": "Verifica in corso...",
+    "continue": "Continua",
+    "modelVerified": "Modello verificato",
+    "modelVerifiedDesc": "{{model}} funziona correttamente",
+    "verificationFailed": "Verifica non riuscita. Controlla la chiave API e il modello."
+  },
+  "agent": {
+    "title": "Crea il tuo primo agente",
+    "description": "Un agente è il tuo assistente IA. Personalizza il suo nome e la sua personalità.",
+    "provider": "Provider:",
+    "model": "Modello:",
+    "displayName": "Nome visualizzato",
+    "displayNameHint": "Verrà generato automaticamente durante l'evocazione in base alla personalità dell'agente.",
+    "agentKey": "Chiave dell'agente",
+    "agentKeyHint": "Identificativo univoco per l'agente. Sono consentiti solo lettere minuscole, numeri e trattini.",
+    "agentKeyPlaceholder": "mio-agente",
+    "personality": "Personalità dell'agente",
+    "personalityHint": "Descrivi il ruolo e il comportamento del tuo agente. L'IA genererà i file di contesto da questa descrizione durante l'evocazione.",
+    "personalityPlaceholder": "Descrivi la personalità, lo scopo e il comportamento del tuo agente...",
+    "personalityHintBottom": "Personalizza questo prompt per plasmare la personalità e le competenze del tuo agente.",
+    "selfEvolve": "Auto-evoluzione",
+    "selfEvolveDesc": "Consenti all'agente di far evolvere il proprio stile comunicativo nel tempo tramite SOUL.md",
+    "gatewayOperatorAccess": "Accesso operatore del gateway",
+    "gatewayOperatorAccessDesc": "Concedi l'accesso SecureCLI revocabile alla CLI locale goclaw per questo primo agente.",
+    "gatewayOperatorGranted": "Accesso operatore del gateway concesso",
+    "gatewayOperatorGrantedDesc": "L'agente può utilizzare la CLI locale goclaw. Verificalo o revocalo in Pacchetti → Credenziali CLI.",
+    "gatewayOperatorWarning": "Avviso di accesso operatore del gateway",
+    "creating": "Creazione in corso...",
+    "create": "Crea agente",
+    "summoningFailed": "Evocazione non riuscita. Modifica le impostazioni e riprova.",
+    "errors": {
+      "noProvider": "Nessun provider disponibile",
+      "failedCreate": "Impossibile creare l'agente"
+    }
+  },
+  "channel": {
+    "title": "Connetti un canale",
+    "description": "Connetti una piattaforma di messaggistica al tuo agente. Potrai sempre aggiungere altri canali in seguito.",
+    "skip": "Salta",
+    "skipFinish": "Salta e termina",
+    "agent": "Agente:",
+    "channelType": "Tipo di canale",
+    "channelTypeHint": "La piattaforma di messaggistica da connettere. Es. Telegram, Discord, Zalo.",
+    "name": "Nome",
+    "nameHint": "Identificativo interno per questa istanza di canale. Generato automaticamente dal tipo di canale.",
+    "namePlaceholder": "mio-telegram",
+    "displayName": "Nome visualizzato",
+    "displayNameHint": "Un nome intuitivo mostrato nell'interfaccia utente. Opzionale.",
+    "displayNamePlaceholder": "Bot delle vendite",
+    "credentials": "Credenziali",
+    "credentialsHint": "Crittografate lato server. Non vengono mai restituite nelle risposte dell'API.",
+    "creating": "Creazione in corso...",
+    "create": "Crea canale",
+    "errors": {
+      "noAgent": "Nessun agente disponibile",
+      "requiredFields": "Campi obbligatori: {{fields}}",
+      "failedCreate": "Impossibile creare il canale"
+    }
+  },
+  "common": {
+    "back": "Indietro"
+  },
+  "skipSetup": "Salta la configurazione e vai alla dashboard",
+  "skipSetupConfirm": "Sei sicuro di voler saltare la configurazione? Potrai sempre configurare i provider e gli agenti in un secondo momento dalla dashboard.",
+  "switchTenant": "Cambia",
+  "allTenants": "Tutti i tenant"
+}

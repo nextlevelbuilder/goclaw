@@ -1,0 +1,26 @@
+{
+  "title": "Registro delle attività",
+  "description": "Tracciamento dei controlli per le modifiche di amministrazione e configurazione.",
+  "filters": {
+    "action": "Azione",
+    "allActions": "Tutte le azioni",
+    "agentCreated": "Agente creato",
+    "agentUpdated": "Agente aggiornato",
+    "agentDeleted": "Agente eliminato",
+    "entityType": "Tipo di entità",
+    "allEntities": "Tutte le entità",
+    "agent": "Agente"
+  },
+  "table": {
+    "action": "Azione",
+    "actor": "Autore",
+    "entity": "Entità",
+    "entityId": "ID entità",
+    "ip": "Indirizzo IP",
+    "time": "Ora"
+  },
+  "empty": {
+    "title": "Nessun registro delle attività",
+    "description": "I registri delle attività appariranno qui quando verranno eseguite azioni amministrative."
+  }
+}

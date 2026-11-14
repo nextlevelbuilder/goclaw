@@ -1,0 +1,54 @@
+{
+  "title": "Nodi",
+  "description": "Gestisci i dispositivi accoppiati e le richieste di accoppiamento in attesa",
+  "emptyTitle": "Nessun dispositivo",
+  "emptyDescription": "Nessun dispositivo accoppiato o richiesta di accoppiamento in attesa.",
+  "pendingRequests": "Richieste in attesa ({{count}})",
+  "pairedDevices": "Dispositivi accoppiati ({{count}})",
+  "sender": "Mittente:",
+  "chat": "Chat:",
+  "columns": {
+    "channel": "Canale",
+    "senderId": "ID mittente",
+    "paired": "Accoppiato il",
+    "by": "Da",
+    "expires": "Scadenza",
+    "actions": "Azioni"
+  },
+  "approve": "Approva",
+  "deny": "Rifiuta",
+  "revoke": "Revoca",
+  "never": "Mai",
+  "makePermanent": "Rendi permanente",
+  "makeExpiring": "Imposta scadenza",
+  "confirmApprove": {
+    "title": "Approva accoppiamento",
+    "description": "Approvare la richiesta di accoppiamento da {{channel}}:{{senderId}} (codice: {{code}})? Questo dispositivo sarà in grado di interagire con gli agenti.",
+    "confirmLabel": "Approva",
+    "permanent": "Non scade mai (altrimenti la durata è di 30 giorni)"
+  },
+  "confirmDeny": {
+    "title": "Rifiuta accoppiamento",
+    "description": "Rifiutare la richiesta di accoppiamento da {{channel}}:{{senderId}} (codice: {{code}})? La richiesta verrà rimossa.",
+    "confirmLabel": "Rifiuta"
+  },
+  "confirmRevoke": {
+    "title": "Revoca dispositivo",
+    "description": "Revocare l'accoppiamento per {{channel}}:{{senderId}}? Il dispositivo dovrà eseguire nuovamente l'accoppiamento.",
+    "confirmLabel": "Revoca"
+  },
+  "confirmPermanent": {
+    "title": "Rendi accoppiamento permanente",
+    "description": "Rendere permanente l'accoppiamento per {{channel}}:{{senderId}}? Rimarrà attivo fino a una revoca manuale.",
+    "confirmLabel": "Rendi permanente"
+  },
+  "confirmExpiring": {
+    "title": "Imposta scadenza accoppiamento",
+    "description": "Ripristinare l'accoppiamento per {{channel}}:{{senderId}} alla durata standard? Scadrà tra 30 giorni a partire da oggi.",
+    "confirmLabel": "Imposta scadenza"
+  },
+  "toast": {
+    "approveFailed": "Impossibile approvare l'accoppiamento",
+    "updateFailed": "Impossibile modificare la scadenza dell'accoppiamento"
+  }
+}
