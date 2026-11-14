@@ -21,3 +21,20 @@ func TestExtFromMimeArchiveTypes(t *testing.T) {
 		})
 	}
 }
+
+func TestExtFromMimeParametersAndCase(t *testing.T) {
+	for _, tc := range []struct{ mime, want string }{
+		{"IMAGE/JPEG", ".jpg"},
+		{"image/png; charset=binary", ".png"},
+		{"application/vnd.openxmlformats-officedocument.wordprocessingml.document; charset=binary", ".docx"},
+		{"Application/Vnd.Openxmlformats-Officedocument.Spreadsheetml.Sheet", ".xlsx"},
+		{"image/png-invalid", ""},
+		{"application/pdf-not-pdf", ""},
+	} {
+		t.Run(tc.mime, func(t *testing.T) {
+			if got := ExtFromMime(tc.mime); got != tc.want {
+				t.Errorf("ExtFromMime(%q) = %q, want %q", tc.mime, got, tc.want)
+			}
+		})
+	}
+}
