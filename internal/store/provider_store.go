@@ -39,6 +39,7 @@ const (
 	ProviderAtlasCloud      = "atlascloud"      // Atlas Cloud (OpenAI-compatible endpoint)
 	ProviderAPIRoute        = "api_route"       // API Route (OpenAI-compatible endpoint)
 	ProviderRequesty        = "requesty"        // Requesty (OpenAI-compatible router)
+	ProviderRuncrate        = "runcrate"        // Runcrate (OpenAI-compatible endpoint for open models)
 
 	// MiniMax defaults.
 	MiniMaxDefaultAPIBase = "https://api.minimax.io/v1"
@@ -77,6 +78,10 @@ const (
 	// can be set through api_base.
 	RequestyDefaultAPIBase = "https://router.requesty.ai/v1"
 	RequestyDefaultModel   = "openai/gpt-4o-mini"
+
+	// Runcrate defaults. Model ids are vendor/model (GET /models lists them).
+	RuncrateDefaultAPIBase = "https://api.runcrate.ai/v1"
+	RuncrateDefaultModel   = "deepseek-ai/DeepSeek-V4.1-Flash"
 )
 
 // Vertex AI constants live in internal/providers/vertex.go to avoid a store→providers import cycle
@@ -115,6 +120,7 @@ var ValidProviderTypes = map[string]bool{
 	ProviderAtlasCloud:      true,
 	ProviderAPIRoute:        true,
 	ProviderRequesty:        true,
+	ProviderRuncrate:        true,
 }
 
 // VertexProviderSettings holds Vertex-specific config stored in llm_providers.settings JSONB.

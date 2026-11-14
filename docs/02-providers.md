@@ -100,6 +100,7 @@ Supported price units: input, output, cache read, cache write, reasoning, reques
 | api_route | `https://global.api-route.com/v1` | `gpt-5.4-mini` | API Route branded OpenAI-compatible endpoint |
 | openrouter | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4-5-20250929` | Model must contain `/` |
 | requesty | `https://router.requesty.ai/v1` | `openai/gpt-4o-mini` | Requesty router; regional bases such as `https://router.eu.requesty.ai/v1` |
+| runcrate | `https://api.runcrate.ai/v1` | `deepseek-ai/DeepSeek-V4.1-Flash` | Runcrate open models; ids are `vendor/model` |
 | groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` | |
 | deepseek | `https://api.deepseek.com/v1` | `deepseek-chat` | |
 | gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.0-flash` | Skips empty content fields |
@@ -152,6 +153,27 @@ Set `GOCLAW_REQUESTY_API_KEY` in the environment (keys are created at https://ap
     defaults: {
       provider: "requesty",
       model: "openai/gpt-4o-mini"
+    }
+  }
+}
+```
+
+### Runcrate setup
+
+Set `GOCLAW_RUNCRATE_API_KEY` in the environment (keys are created at https://www.runcrate.ai/dashboard/api-keys), or add the key through the setup wizard. `GOCLAW_RUNCRATE_BASE_URL` or `api_base` overrides the base URL. Models use `vendor/model` ids from `GET https://api.runcrate.ai/v1/models`, such as `deepseek-ai/DeepSeek-V4.1-Flash` or `openai/gpt-oss-120b`; open models are free with your GitHub account.
+
+```json5
+{
+  providers: {
+    runcrate: {
+      api_key: "rc_live_...",
+      api_base: "https://api.runcrate.ai/v1"
+    }
+  },
+  agents: {
+    defaults: {
+      provider: "runcrate",
+      model: "deepseek-ai/DeepSeek-V4.1-Flash"
     }
   }
 }
