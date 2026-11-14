@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"regexp"
+	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
@@ -339,6 +340,18 @@ func (m *CronMethods) handleRun(ctx context.Context, client *gateway.Client, req
 	}
 	if err := store.CheckCronCredentialOwner(ctx, job); err != nil {
 		client.SendResponse(protocol.NewErrorResponse(req.ID, protocol.ErrUnauthorized, i18n.T(locale, i18n.MsgPermissionDenied, "cron job credential context")))
+		return
+	}
+
+	// "due" mode only runs a job whose scheduled time has arrived. The store
+	// applies the same check, but its result is lost in the background goroutine,
+	// so report the skip here instead of answering ran:true for a job that won't run.
+	if !force && (job.State.NextRunAtMS == nil || *job.State.NextRunAtMS > time.Now().UnixMilli()) {
+		client.SendResponse(protocol.NewOKResponse(req.ID, map[string]any{
+			"ok":     true,
+			"ran":    false,
+			"reason": "not-due",
+		}))
 		return
 	}
 
