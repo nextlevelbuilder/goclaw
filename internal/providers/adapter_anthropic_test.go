@@ -160,6 +160,7 @@ func TestAnthropicAdapterToRequest_SkipsTemperatureForClaude46AndNewer(t *testin
 		"claude-opus-5",
 		"claude-sonnet-5",
 		"claude-sonnet-5-5",
+		"claude-haiku-5-5",
 	} {
 		t.Run(model, func(t *testing.T) {
 			req := ChatRequest{
@@ -522,5 +523,76 @@ func TestAnthropicAdapterToRequest_NativeToolIgnored(t *testing.T) {
 	tool := tools[0].(map[string]any)
 	if tool["name"] != "web_search" {
 		t.Errorf("expected tool name 'web_search', got %v", tool["name"])
+	}
+}
+
+func TestAnthropicAdapterToRequest_Haiku45KeepsTemperatureAndManualThinking(t *testing.T) {
+	adapter, _ := NewAnthropicAdapter(ProviderConfig{APIKey: "sk-test"})
+
+	for _, model := range []string{"claude-haiku-4-5", "claude-haiku-4-5-20251001"} {
+		t.Run(model, func(t *testing.T) {
+			data, _, err := adapter.ToRequest(ChatRequest{
+				Model:    model,
+				Messages: []Message{{Role: "user", Content: "hi"}},
+				Options:  map[string]any{OptTemperature: 0.7},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var body map[string]any
+			if err := json.Unmarshal(data, &body); err != nil {
+				t.Fatal(err)
+			}
+			if body["temperature"] != 0.7 {
+				t.Errorf("haiku 4.5 should keep temperature, got %v", body["temperature"])
+			}
+
+			data, _, err = adapter.ToRequest(ChatRequest{
+				Model:    model,
+				Messages: []Message{{Role: "user", Content: "hi"}},
+				Options:  map[string]any{OptThinkingLevel: "high"},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			body = nil
+			if err := json.Unmarshal(data, &body); err != nil {
+				t.Fatal(err)
+			}
+			thinking, _ := body["thinking"].(map[string]any)
+			if thinking["type"] != "enabled" {
+				t.Errorf("haiku 4.5 thinking type = %v, want enabled", thinking["type"])
+			}
+		})
+	}
+}
+
+func TestAnthropicAdapterToRequest_AdaptiveThinkingForHaiku55(t *testing.T) {
+	adapter, _ := NewAnthropicAdapter(ProviderConfig{APIKey: "sk-test"})
+
+	data, _, err := adapter.ToRequest(ChatRequest{
+		Model:    "claude-haiku-5-5",
+		Messages: []Message{{Role: "user", Content: "Think about this"}},
+		Options: map[string]any{
+			OptThinkingLevel: "high",
+			OptTemperature:   0.7,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(data, &body); err != nil {
+		t.Fatal(err)
+	}
+	thinking, ok := body["thinking"].(map[string]any)
+	if !ok || thinking["type"] != "adaptive" {
+		t.Errorf("thinking = %v, want type adaptive", body["thinking"])
+	}
+	if _, hasBudget := thinking["budget_tokens"]; hasBudget {
+		t.Error("adaptive thinking should not set budget_tokens")
+	}
+	if _, hasTemp := body["temperature"]; hasTemp {
+		t.Error("temperature should be omitted for claude-haiku-5-5")
 	}
 }
