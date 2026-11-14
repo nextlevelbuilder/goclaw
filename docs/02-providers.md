@@ -100,6 +100,7 @@ Supported price units: input, output, cache read, cache write, reasoning, reques
 | api_route | `https://global.api-route.com/v1` | `gpt-5.4-mini` | API Route branded OpenAI-compatible endpoint |
 | openrouter | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4-5-20250929` | Model must contain `/` |
 | requesty | `https://router.requesty.ai/v1` | `openai/gpt-4o-mini` | Requesty router; regional bases such as `https://router.eu.requesty.ai/v1` |
+| cheaperinference | `https://api.cheaperinference.com/v1` | `gpt-5.4-mini` | Cheaper Inference gateway; model ids have no vendor prefix |
 | groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` | |
 | deepseek | `https://api.deepseek.com/v1` | `deepseek-chat` | |
 | gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.0-flash` | Skips empty content fields |
@@ -152,6 +153,27 @@ Set `GOCLAW_REQUESTY_API_KEY` in the environment (keys are created at https://ap
     defaults: {
       provider: "requesty",
       model: "openai/gpt-4o-mini"
+    }
+  }
+}
+```
+
+### Cheaper Inference setup
+
+Set `GOCLAW_CHEAPERINFERENCE_API_KEY` in the environment (keys are created at https://cheaperinference.com/signup), or add the key through the setup wizard. Set `GOCLAW_CHEAPERINFERENCE_BASE_URL` or `api_base` to override the endpoint. Model ids have no vendor prefix, for example `gpt-5.4-mini` or `claude-sonnet-5`; the provider models list reads them from `GET /models`.
+
+```json5
+{
+  providers: {
+    cheaperinference: {
+      api_key: "ci_live_...",
+      api_base: "https://api.cheaperinference.com/v1"
+    }
+  },
+  agents: {
+    defaults: {
+      provider: "cheaperinference",
+      model: "gpt-5.4-mini"
     }
   }
 }

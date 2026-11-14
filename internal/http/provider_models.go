@@ -156,6 +156,8 @@ func openAIModelsAPIBase(providerType, apiBase string) string {
 		return store.APIRouteDefaultAPIBase
 	case store.ProviderRequesty:
 		return store.RequestyDefaultAPIBase
+	case store.ProviderCheaperInference:
+		return store.CheaperInferenceDefaultAPIBase
 	case store.ProviderKimiCoding:
 		return store.KimiCodingDefaultAPIBase
 	default:
