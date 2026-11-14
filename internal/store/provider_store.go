@@ -39,6 +39,7 @@ const (
 	ProviderAtlasCloud      = "atlascloud"      // Atlas Cloud (OpenAI-compatible endpoint)
 	ProviderAPIRoute        = "api_route"       // API Route (OpenAI-compatible endpoint)
 	ProviderRequesty        = "requesty"        // Requesty (OpenAI-compatible router)
+	ProviderLLMTR           = "llmtr"           // LLMTR (OpenAI-compatible gateway)
 
 	// MiniMax defaults.
 	MiniMaxDefaultAPIBase = "https://api.minimax.io/v1"
@@ -77,6 +78,10 @@ const (
 	// can be set through api_base.
 	RequestyDefaultAPIBase = "https://router.requesty.ai/v1"
 	RequestyDefaultModel   = "openai/gpt-4o-mini"
+
+	// LLMTR defaults. Catalog ids such as "llmtr/qwen3-8-27b" are sent unchanged.
+	LLMTRDefaultAPIBase = "https://llmtr.com/v1"
+	LLMTRDefaultModel   = "qwen/qwen3.8-27b-free"
 )
 
 // Vertex AI constants live in internal/providers/vertex.go to avoid a store→providers import cycle
@@ -115,6 +120,7 @@ var ValidProviderTypes = map[string]bool{
 	ProviderAtlasCloud:      true,
 	ProviderAPIRoute:        true,
 	ProviderRequesty:        true,
+	ProviderLLMTR:           true,
 }
 
 // VertexProviderSettings holds Vertex-specific config stored in llm_providers.settings JSONB.
