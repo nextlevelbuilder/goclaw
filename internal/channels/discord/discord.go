@@ -36,6 +36,11 @@ type Channel struct {
 	contactRefreshCancel context.CancelFunc
 	// pairingService, pairingDebounce, approvedGroups, groupHistory, historyLimit, requireMention
 	// are inherited from channels.BaseChannel.
+
+	// mentionedThreads tracks thread/channel IDs where the bot was @mentioned.
+	// Once mentioned in a thread, respond to ALL subsequent messages without requiring another mention.
+	mentionedThreads   map[string]bool
+	mentionedThreadsMu sync.Mutex
 }
 
 // New creates a new Discord channel from config.
@@ -63,12 +68,13 @@ func New(cfg config.DiscordConfig, msgBus *bus.MessageBus, pairingSvc store.Pair
 	}
 
 	ch := &Channel{
-		BaseChannel:     base,
-		session:         session,
-		config:          cfg,
-		agentStore:      agentStore,
-		configPermStore: configPermStore,
-		audioMgr:        audioMgr,
+		BaseChannel:      base,
+		session:          session,
+		config:           cfg,
+		agentStore:       agentStore,
+		configPermStore:  configPermStore,
+		audioMgr:         audioMgr,
+		mentionedThreads: make(map[string]bool),
 	}
 	ch.SetRequireMention(requireMention)
 	ch.SetPairingService(pairingSvc)
