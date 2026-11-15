@@ -1,0 +1,125 @@
+{
+  "title": "Runtimes e pacotes",
+  "description": "Gerencie runtimes e pacotes instalados dentro do contêiner de runtime ativo do GoClaw",
+  "runtimes": {
+    "title": "Runtimes",
+    "scopeTitle": "Status dos runtimes no escopo do contêiner",
+    "scopeDesc": "Estas verificações são executadas dentro do contêiner de runtime ativo do GoClaw. Runtimes instalados no host, alterações no perfil do shell e binários gerenciados pelo nvm não são usados aqui.",
+    "minimalImageHint": "A imagem latest publicada inclui Python, mas não Node. Use a imagem full para Node/npm e extras embutidos, use a base para a menor imagem, recompile com ENABLE_NODE=true / ENABLE_FULL_SKILLS=true ou instale os runtimes manualmente neste contêiner.",
+    "available": "Disponível",
+    "missing": "Ausente",
+    "missingInContainer": "Ausente no contêiner"
+  },
+  "system": {
+    "title": "Pacotes do sistema",
+    "placeholder": "Nome do pacote (ex.: github-cli)"
+  },
+  "pip": {
+    "title": "Pacotes Python",
+    "placeholder": "Nome do pacote (ex.: pandas)"
+  },
+  "npm": {
+    "title": "Pacotes Node",
+    "placeholder": "Nome do pacote (ex.: typescript)"
+  },
+  "github": {
+    "title": "Binários do GitHub",
+    "placeholder": "dono/repo[@tag] (ex.: cli/cli@v2.45.0)",
+    "browse": "Explorar releases",
+    "muslWarning": "O Alpine Linux usa musl libc. Binários compilados para glibc podem falhar em tempo de execução. Prefira releases estáticas ou compatíveis com musl.",
+    "muslDismiss": "Dispensar",
+    "pickerTitle": "Selecione uma release de {{repo}}",
+    "pickerEmpty": "Nenhuma release encontrada para {{repo}}",
+    "pickerLoading": "Carregando releases...",
+    "pickerMatchingAssets": "{{count}} compatíveis / {{total}} no total",
+    "pickerPrerelease": "Pré-release",
+    "pickerSelect": "Selecionar",
+    "columns": {
+      "repo": "Repositório",
+      "tag": "Versão",
+      "binaries": "Binários",
+      "installedAt": "Instalado em"
+    }
+  },
+  "updates": {
+    "available": "{{count}} atualizações disponíveis",
+    "none": "Todos os pacotes estão atualizados",
+    "refresh": "Atualizar lista",
+    "refreshing": "Atualizando...",
+    "lastCheckedAgo": "Última verificação {{ago}}",
+    "neverChecked": "Ainda não verificado",
+    "update": "Atualizar",
+    "updateAll": "Atualizar todos",
+    "updating": "Atualizando {{name}}...",
+    "updateSucceeded": "{{name}} atualizado para {{version}}",
+    "updateFailed": "Falha ao atualizar {{name}}: {{reason}}",
+    "updateAllResult": "{{succeeded}} com sucesso, {{failed}} com falha",
+    "confirmAllTitle": "Atualizar {{count}} pacotes?",
+    "confirmAllBody": "Isso pode levar vários minutos. As atualizações individuais são aplicadas em sequência.",
+    "selected": "{{count}} selecionados",
+    "manifestDesyncWarn": "O binário foi atualizado, mas falhou ao salvar o manifesto. É necessária recuperação manual para {{name}}.",
+    "cacheStale": "O cache de atualizações está desatualizado. Atualize a lista primeiro.",
+    "adminOnly": "É necessário acesso de administrador",
+    "empty": "Nenhuma atualização disponível",
+    "source": {
+      "github": "GitHub",
+      "pip": "pip",
+      "npm": "npm",
+      "apk": "apk"
+    },
+    "filter": {
+      "all": "Todas as origens",
+      "label": "Filtrar"
+    },
+    "unavailable": {
+      "pip": "pip não instalado",
+      "npm": "npm não instalado",
+      "apk": "apk não disponível neste sistema"
+    },
+    "button": {
+      "tooltip": {
+        "github": "Atualizar a partir da release do GitHub",
+        "pip": "Atualizar via pip",
+        "npm": "Atualizar via npm",
+        "apk": "Atualizar via apk (pacote do sistema)"
+      }
+    },
+    "summary": {
+      "perSource": "{{source}}: {{count}}"
+    }
+  },
+  "actions": {
+    "install": "Instalar",
+    "uninstall": "Desinstalar",
+    "installing": "Instalando...",
+    "uninstalling": "Removendo..."
+  },
+  "messages": {
+    "installSuccess": "{{name}} instalado com sucesso",
+    "installError": "Falha ao instalar {{name}}",
+    "uninstallSuccess": "{{name}} removido com sucesso",
+    "uninstallError": "Falha ao remover {{name}}"
+  },
+  "confirmUninstall": {
+    "title": "Confirmar desinstalação",
+    "description": "Tem certeza de que deseja remover {{name}}? Esta ação não pode ser desfeita."
+  },
+  "table": {
+    "name": "Nome",
+    "version": "Versão",
+    "actions": "Ações",
+    "empty": "Nenhum pacote instalado"
+  },
+  "tabs": {
+    "system": "Sistema",
+    "python": "Python",
+    "node": "Node",
+    "github": "GitHub",
+    "cliCredentials": "Credenciais da CLI"
+  },
+  "runtimesHeader": {
+    "title": "Runtimes",
+    "available": "Disponível",
+    "missing": "Ausente"
+  }
+}

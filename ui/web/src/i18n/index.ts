@@ -212,17 +212,59 @@ import ruBackup from "./locales/ru/backup.json";
 import ruHooks from "./locales/ru/hooks.json";
 import ruWebhooks from "./locales/ru/webhooks.json";
 import ruWorkstations from "./locales/ru/workstations.json";
+import ptCommon from "./locales/pt/common.json";
+import ptSidebar from "./locales/pt/sidebar.json";
+import ptTopbar from "./locales/pt/topbar.json";
+import ptLogin from "./locales/pt/login.json";
+import ptOverview from "./locales/pt/overview.json";
+import ptChat from "./locales/pt/chat.json";
+import ptAgents from "./locales/pt/agents.json";
+import ptTeams from "./locales/pt/teams.json";
+import ptSessions from "./locales/pt/sessions.json";
+import ptSkills from "./locales/pt/skills.json";
+import ptCron from "./locales/pt/cron.json";
+import ptConfig from "./locales/pt/config.json";
+import ptChannels from "./locales/pt/channels.json";
+import ptProviders from "./locales/pt/providers.json";
+import ptTraces from "./locales/pt/traces.json";
+import ptEvents from "./locales/pt/events.json";
+import ptUsage from "./locales/pt/usage.json";
+import ptApprovals from "./locales/pt/approvals.json";
+import ptNodes from "./locales/pt/nodes.json";
+import ptLogs from "./locales/pt/logs.json";
+import ptTools from "./locales/pt/tools.json";
+import ptMcp from "./locales/pt/mcp.json";
+import ptTts from "./locales/pt/tts.json";
+import ptSetup from "./locales/pt/setup.json";
+import ptMemory from "./locales/pt/memory.json";
+import ptVault from "./locales/pt/vault.json";
+import ptStorage from "./locales/pt/storage.json";
+import ptPendingMessages from "./locales/pt/pending-messages.json";
+import ptContacts from "./locales/pt/contacts.json";
+import ptActivity from "./locales/pt/activity.json";
+import ptApiKeys from "./locales/pt/api-keys.json";
+import ptCliCredentials from "./locales/pt/cli-credentials.json";
+import ptPackages from "./locales/pt/packages.json";
+import ptTenants from "./locales/pt/tenants.json";
+import ptSystemSettings from "./locales/pt/system-settings.json";
+import ptImportExport from "./locales/pt/import-export.json";
+import ptV3Capabilities from "./locales/pt/v3-capabilities.json";
+import ptBackup from "./locales/pt/backup.json";
+import ptHooks from "./locales/pt/hooks.json";
+import ptWebhooks from "./locales/pt/webhooks.json";
+import ptWorkstations from "./locales/pt/workstations.json";
 
 const STORAGE_KEY = "goclaw:language";
 
 function getInitialLanguage(): string {
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "en" || stored === "vi" || stored === "zh" || stored === "ko" || stored === "ru") return stored;
+  if (stored === "en" || stored === "vi" || stored === "zh" || stored === "ko" || stored === "ru" || stored === "pt") return stored;
   const lang = navigator.language.toLowerCase();
   if (lang.startsWith("vi")) return "vi";
   if (lang.startsWith("zh")) return "zh";
   if (lang.startsWith("ko")) return "ko";
   if (lang.startsWith("ru")) return "ru";
+  if (lang.startsWith("pt")) return "pt";
   return "en";
 }
 
@@ -343,6 +385,27 @@ i18n.use(initReactI18next).init({
       hooks: ruHooks,
       webhooks: ruWebhooks,
       workstations: ruWorkstations,
+    },
+    pt: {
+      common: ptCommon, sidebar: ptSidebar, topbar: ptTopbar, login: ptLogin,
+      overview: ptOverview, chat: ptChat, agents: ptAgents, teams: ptTeams,
+      sessions: ptSessions, skills: ptSkills, cron: ptCron, config: ptConfig,
+      channels: ptChannels, providers: ptProviders, traces: ptTraces,
+      events: ptEvents, usage: ptUsage,
+      approvals: ptApprovals, nodes: ptNodes, logs: ptLogs, tools: ptTools,
+      mcp: ptMcp, tts: ptTts, setup: ptSetup, memory: ptMemory, vault: ptVault, storage: ptStorage,
+      "pending-messages": ptPendingMessages,
+      contacts: ptContacts, activity: ptActivity, "api-keys": ptApiKeys,
+      "cli-credentials": ptCliCredentials,
+      packages: ptPackages,
+      tenants: ptTenants,
+      "system-settings": ptSystemSettings,
+      "import-export": ptImportExport,
+      "v3-capabilities": ptV3Capabilities,
+      backup: ptBackup,
+      hooks: ptHooks,
+      webhooks: ptWebhooks,
+      workstations: ptWorkstations,
     },
   },
   ns: [...ns],

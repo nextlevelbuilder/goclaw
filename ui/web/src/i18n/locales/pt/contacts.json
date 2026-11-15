@@ -1,0 +1,60 @@
+{
+  "title": "Contatos",
+  "description": "Contatos coletados automaticamente de todas as interações nos canais.",
+  "searchPlaceholder": "Pesquisar por nome, nome de usuário ou ID...",
+  "filter": "Filtrar",
+  "emptyTitle": "Nenhum contato",
+  "emptyDescription": "Os contatos aparecerão aqui conforme os usuários interagirem com seus agentes pelos canais.",
+  "noMatchTitle": "Nenhum contato encontrado",
+  "noMatchDescription": "Tente outro termo de pesquisa ou filtro.",
+  "columns": {
+    "name": "Nome",
+    "username": "Nome de usuário",
+    "senderId": "ID do remetente",
+    "channelType": "Canal",
+    "peerKind": "Tipo",
+    "lastSeen": "Visto por último",
+    "merged": "Mesclado"
+  },
+  "permissionsNote": {
+    "title": "Permissões de canal para nomes de contatos",
+    "telegram": "Telegram — Nomes e nomes de usuário disponíveis automaticamente.",
+    "discord": "Discord — Nomes de exibição e nomes de usuário disponíveis automaticamente.",
+    "zalo": "Zalo — Nomes de exibição disponíveis automaticamente.",
+    "slack": "Slack — Nomes de exibição obtidos pela API do Slack (o bot precisa estar no workspace).",
+    "mattermost": "Mattermost — Nomes de exibição obtidos pela API do Mattermost (o bot precisa ser membro da equipe).",
+    "feishu": "Feishu/Lark — Requer a permissão contact:user.base:readonly. Sem ela, os nomes ficarão vazios.",
+    "bitrix24": "Bitrix24 — Requer o escopo `user` e uma chamada `user.get` por novo remetente. Os nomes podem ficar vazios por um instante na primeira mensagem."
+  },
+  "selectedCount": "{{count}} selecionado(s)",
+  "merge": {
+    "button": "Mesclar",
+    "unmergeButton": "Desfazer mesclagem",
+    "dialogTitle": "Mesclar contatos",
+    "dialogDescription": "Vincule os contatos selecionados à identidade de um usuário do tenant. Isso os identifica como a mesma pessoa em todos os canais.",
+    "linkExisting": "Vincular a usuário existente",
+    "createNew": "Criar novo usuário",
+    "selectUser": "Selecione um usuário do tenant...",
+    "displayName": "Nome de exibição",
+    "displayNamePlaceholder": "ex.: João da Silva",
+    "userId": "ID do usuário",
+    "userIdPlaceholder": "Identificador único",
+    "confirm": "Mesclar",
+    "cancel": "Cancelar",
+    "success": "Contatos mesclados com sucesso",
+    "unmergeSuccess": "Mesclagem dos contatos desfeita com sucesso",
+    "error": "Falha ao mesclar os contatos",
+    "unmergeError": "Falha ao desfazer a mesclagem dos contatos",
+    "comingSoon": "Este recurso está em desenvolvimento e ainda não está disponível."
+  },
+  "types": {
+    "user": "Usuário",
+    "group": "Grupo"
+  },
+  "filters": {
+    "allChannels": "Todos os canais",
+    "allTypes": "Todos os tipos",
+    "direct": "Direto",
+    "group": "Grupo"
+  }
+}

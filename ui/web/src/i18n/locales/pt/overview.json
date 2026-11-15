@@ -1,0 +1,93 @@
+{
+  "title": "Painel",
+  "description": "Visão geral do gateway e uso de cotas",
+  "tabs": {
+    "overview": "Visão geral",
+    "usage": "Uso"
+  },
+  "statCards": {
+    "requestsToday": "Requisições hoje",
+    "tokensToday": "Tokens hoje",
+    "costToday": "Custo hoje",
+    "agents": "Agentes",
+    "channels": "Canais",
+    "channelsAttention": "{{count}} precisam de atenção",
+    "running": "em execução",
+    "online": "online",
+    "users": "{{count}} usuários",
+    "inOut": "{{input}} entrada / {{output}} saída"
+  },
+  "providers": {
+    "noProvidersTitle": "Nenhum provedor de LLM configurado",
+    "noEnabledTitle": "Nenhum provedor de LLM ativado",
+    "noProvidersDesc": "É preciso adicionar pelo menos um provedor de LLM para que os agentes funcionem. ",
+    "noEnabledDesc": "Todos os provedores estão desativados no momento. Ative pelo menos um para começar a usar os agentes. ",
+    "goToSettings": "Ir para as configurações de provedores"
+  },
+  "systemHealth": {
+    "title": "Saúde do sistema",
+    "uptime": "Tempo ativo",
+    "version": "Versão",
+    "database": "Banco de dados",
+    "providers": "Provedores",
+    "tools": "Ferramentas",
+    "sessions": "Sessões",
+    "clients": "Clientes",
+    "channels": "Canais",
+    "needsAttention": "Requer atenção",
+    "channelsNeedingAttention": "{{count}} canais",
+    "failedCount": "{{count}} com falha",
+    "warningCountOne": "{{count}} aviso",
+    "warningCountOther": "{{count}} avisos",
+    "moreAttention": "+{{count}} mais",
+    "active": "{{count}} ativos",
+    "none": "nenhum",
+    "runtimes": "Runtimes"
+  },
+  "connectedClients": {
+    "title": "Clientes conectados",
+    "noClients": "Nenhum cliente conectado",
+    "columns": {
+      "ip": "IP",
+      "user": "Usuário",
+      "role": "Papel",
+      "connected": "Conectado"
+    },
+    "you": "você"
+  },
+  "cronJobs": {
+    "title": "Tarefas cron",
+    "manage": "Gerenciar",
+    "noJobs": "Nenhuma tarefa cron configurada",
+    "disabled": "desativada"
+  },
+  "recentRequests": {
+    "title": "Requisições recentes",
+    "viewAll": "Ver todas",
+    "noRequests": "Nenhuma requisição recente",
+    "columns": {
+      "time": "Horário",
+      "name": "Nome",
+      "user": "Usuário",
+      "channel": "Canal",
+      "tokens": "Tokens",
+      "duration": "Duração",
+      "status": "Status"
+    }
+  },
+  "quotaUsage": {
+    "title": "Uso de cota",
+    "columns": {
+      "userGroup": "Usuário / Grupo",
+      "hour": "Hora",
+      "day": "Dia",
+      "week": "Semana"
+    },
+    "noLimit": "sem limite"
+  },
+  "embedding": {
+    "title": "Embedding",
+    "notConfigured": "Não configurado",
+    "configure": "Configurar em Provedores →"
+  }
+}

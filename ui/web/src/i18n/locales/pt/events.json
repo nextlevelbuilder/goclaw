@@ -1,0 +1,36 @@
+{
+  "title": "Eventos em tempo real",
+  "description": "Eventos WebSocket ao vivo de todas as equipes e agentes",
+  "live": "Ao vivo",
+  "paused": "Pausado",
+  "resume": "Retomar",
+  "pause": "Pausar",
+  "clear": "Limpar",
+  "scrollToBottom": "Ir para o final",
+  "eventCount": "{{count}} evento",
+  "eventCountPlural": "{{count}} eventos",
+  "categories": {
+    "all": "Todos",
+    "task": "Tarefa",
+    "message": "Mensagem",
+    "agent": "Agente",
+    "teamCrud": "CRUD de equipe",
+    "agentLink": "Vínculo de agente"
+  },
+  "filters": {
+    "allTeams": "Todas as equipes",
+    "allUsers": "Todos os usuários",
+    "allChats": "Todos os chats"
+  },
+  "global": "Global",
+  "emptyTitle": "Nenhum evento ainda",
+  "emptyPaused": "A captura de eventos está pausada. Retome para ver novos eventos.",
+  "emptyWaiting": "Aguardando eventos em tempo real... Os eventos aparecerão conforme os agentes trabalham.",
+  "detail": {
+    "copy": "Copiar",
+    "copied": "Copiado"
+  },
+  "toolBadge": { "error": "erro", "activated": "ativada", "ok": "ok" },
+  "moreArgs": "...mais {{count}}",
+  "parentLabel": "pai:"
+}

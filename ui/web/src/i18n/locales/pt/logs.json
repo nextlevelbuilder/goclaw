@@ -1,0 +1,15 @@
+{
+  "title": "Logs",
+  "description": "Acompanhamento de logs em tempo real",
+  "descriptionLive": "Acompanhando em tempo real no nível {{level}}",
+  "live": "Ao vivo",
+  "start": "Iniciar",
+  "stop": "Parar",
+  "clear": "Limpar",
+  "filterPlaceholder": "Filtrar logs...",
+  "logLevelTitle": "Nível de log",
+  "emptyWaiting": "Aguardando logs...",
+  "emptyFilter": "Nenhum log corresponde ao filtro.",
+  "emptyStart": "Clique em \"Iniciar\" para começar a transmitir os logs.",
+  "count": "{{filtered}}/{{total}}"
+}

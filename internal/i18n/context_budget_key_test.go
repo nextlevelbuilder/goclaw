@@ -6,7 +6,7 @@ import (
 )
 
 func TestI18nCatalogs_HasContextBudgetExceeded(t *testing.T) {
-	for _, locale := range []string{LocaleEN, LocaleVI, LocaleZH, LocaleRU, LocaleKO} {
+	for _, locale := range []string{LocaleEN, LocaleVI, LocaleZH, LocaleRU, LocaleKO, LocalePT} {
 		msg := lookup(locale, MsgContextBudgetExceeded)
 		if msg == MsgContextBudgetExceeded || strings.TrimSpace(msg) == "" {
 			t.Errorf("locale=%s: translation missing for %s", locale, MsgContextBudgetExceeded)

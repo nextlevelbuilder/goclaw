@@ -14,7 +14,7 @@ describe("traces i18n filter keys", () => {
   });
 
   it("filter labels exist in all locales", async () => {
-    for (const locale of ["en", "vi", "zh", "ru"]) {
+    for (const locale of ["en", "vi", "zh", "ru", "pt"]) {
       const mod = await import(`@/i18n/locales/${locale}/traces.json`);
       const data = mod as unknown as { filters?: Record<string, string> };
       for (const key of ["search", "status", "advanced", "from", "to", "toolName", "hasToolCalls", "clearAll"]) {

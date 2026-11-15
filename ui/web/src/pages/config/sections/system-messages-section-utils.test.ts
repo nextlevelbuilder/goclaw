@@ -46,7 +46,7 @@ describe("system-messages-section-utils", () => {
   });
 
   it("normalizes all supported locales for each known message definition", () => {
-    expect(SYSTEM_MESSAGE_LOCALES.map((locale) => locale.code)).toEqual(["en", "vi", "zh", "ko", "ru"]);
+    expect(SYSTEM_MESSAGE_LOCALES.map((locale) => locale.code)).toEqual(["en", "vi", "zh", "ko", "ru", "pt"]);
 
     const draft = normalizeSystemMessagesDraft(
       {
@@ -92,6 +92,7 @@ describe("system-messages-section-utils", () => {
           zh: "",
           ko: "",
           ru: "",
+          pt: "",
         },
       },
     });
@@ -110,6 +111,7 @@ describe("system-messages-section-utils", () => {
           zh: "",
           ko: "",
           ru: "",
+          pt: "",
         },
       },
     });
@@ -135,6 +137,7 @@ describe("system-messages-section-utils", () => {
           zh: "",
           ko: "",
           ru: "",
+          pt: "",
         },
       },
     });

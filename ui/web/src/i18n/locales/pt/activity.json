@@ -1,0 +1,26 @@
+{
+  "title": "Registro de atividades",
+  "description": "Trilha de auditoria das alterações administrativas e de configuração.",
+  "filters": {
+    "action": "Ação",
+    "allActions": "Todas as ações",
+    "agentCreated": "Agente criado",
+    "agentUpdated": "Agente atualizado",
+    "agentDeleted": "Agente excluído",
+    "entityType": "Tipo de entidade",
+    "allEntities": "Todas as entidades",
+    "agent": "Agente"
+  },
+  "table": {
+    "action": "Ação",
+    "actor": "Autor",
+    "entity": "Entidade",
+    "entityId": "ID da entidade",
+    "ip": "Endereço IP",
+    "time": "Horário"
+  },
+  "empty": {
+    "title": "Nenhum registro de atividade",
+    "description": "Os registros de atividade aparecerão aqui quando ações administrativas forem realizadas."
+  }
+}

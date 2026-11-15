@@ -372,6 +372,7 @@
   "systemMessages.locale.zh": "Tiếng Trung",
   "systemMessages.locale.ko": "Tiếng Hàn",
   "systemMessages.locale.ru": "Tiếng Nga",
+  "systemMessages.locale.pt": "Tiếng Bồ Đào Nha (Brazil)",
   "systemMessages.override": "Mẫu ghi đè",
   "systemMessages.overrideTip": "Mẫu sẽ được gửi thay cho thông báo có sẵn. Biến dùng dạng {{name}}.",
   "systemMessages.defaultTemplate": "Mẫu mặc định",

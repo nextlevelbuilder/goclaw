@@ -1,0 +1,157 @@
+{
+  "title": "Webhooks",
+  "description": "Webhooks HTTP de entrada que acionam um agente (LLM) ou enviam uma mensagem de canal.",
+  "addWebhook": "Criar webhook",
+  "searchPlaceholder": "Pesquisar webhooks...",
+  "showRevoked": "Mostrar revogados",
+  "emptyTitle": "Nenhum webhook",
+  "emptyDescription": "Crie seu primeiro webhook para expor um agente ou canal via HTTP.",
+  "neverUsed": "Nunca utilizado",
+  "pager": {
+    "prev": "Anterior",
+    "next": "Próxima",
+    "pageOf": "Página {{page}} de {{total}}",
+    "noMore": "Não há mais webhooks."
+  },
+  "kind": {
+    "llm": "LLM",
+    "message": "Mensagem"
+  },
+  "status": {
+    "active": "Ativo",
+    "revoked": "Revogado"
+  },
+  "columns": {
+    "name": "Nome",
+    "webhookId": "ID do webhook",
+    "kind": "Tipo",
+    "target": "Destino",
+    "status": "Status",
+    "lastUsed": "Último uso",
+    "actions": "Ações"
+  },
+  "actions": {
+    "test": "Testar",
+    "calls": "Histórico de entregas",
+    "edit": "Editar",
+    "rotate": "Rotacionar segredo",
+    "revoke": "Revogar"
+  },
+  "form": {
+    "createTitle": "Criar webhook",
+    "editTitle": "Editar webhook",
+    "description": "Configure como este webhook se autentica e o que ele aciona.",
+    "name": "Nome",
+    "namePlaceholder": "ex.: Tratador de leads do CRM",
+    "kind": "Tipo",
+    "messageStandardOnly": "Somente na edição Standard",
+    "agent": "Agente",
+    "agentPlaceholder": "Selecione um agente",
+    "agentHint": "Obrigatório para invocar e testar um webhook de LLM.",
+    "none": "Nenhum",
+    "channel": "Canal",
+    "channelPlaceholder": "Selecione um canal",
+    "channelAny": "Qualquer (especificar por requisição)",
+    "rateLimit": "Limite de requisições (por minuto)",
+    "ipAllowlist": "Lista de IPs permitidos",
+    "ipAllowlistPlaceholder": "ex.: 203.0.113.0/24, 198.51.100.7",
+    "ipAllowlistHint": "IPs ou CIDRs separados por vírgula. Vazio permite todos.",
+    "requireHmac": "Exigir HMAC",
+    "requireHmacHint": "Rejeita autenticação por token Bearer; aceita apenas requisições assinadas.",
+    "localhostOnly": "Somente localhost",
+    "localhostOnlyHint": "Aceita requisições apenas de 127.0.0.1 / ::1.",
+    "localhostOnlyLite": "Forçado na edição Lite.",
+    "cancel": "Cancelar",
+    "create": "Criar",
+    "save": "Salvar",
+    "saving": "Salvando..."
+  },
+  "secret": {
+    "title": "Segredo do webhook",
+    "description": "Copie estes valores agora — eles são exibidos apenas uma vez.",
+    "warning": "Este segredo não será exibido novamente. Guarde-o com segurança.",
+    "webhookId": "ID do webhook (cabeçalho X-Webhook-Id)",
+    "bearer": "Segredo (token Bearer)",
+    "hmacKey": "Chave de assinatura HMAC",
+    "copy": "Copiar",
+    "copied": "Copiado",
+    "usageHint": "Envie o segredo como 'Authorization: Bearer <secret>' ou assine as requisições com a chave HMAC.",
+    "done": "Concluído"
+  },
+  "test": {
+    "title": "Testar webhook: {{name}}",
+    "description": "Invoca este webhook no servidor usando sua sessão de administrador (sem precisar do segredo).",
+    "messageWarning": "Isso envia uma mensagem real ao chat de destino.",
+    "channelName": "Nome do canal",
+    "channelNamePlaceholder": "telegram-principal",
+    "input": "Entrada",
+    "inputPlaceholder": "Digite um prompt para enviar ao agente",
+    "chatId": "ID do chat",
+    "chatIdPlaceholder": "Identificador do chat de destino",
+    "content": "Conteúdo",
+    "result": "Resultado",
+    "sent": "Enviado para {{channel}} (chat {{chatId}})",
+    "run": "Enviar teste",
+    "running": "Enviando...",
+    "close": "Fechar",
+    "failed": "Falha no teste"
+  },
+  "calls": {
+    "title": "Histórico de entregas: {{name}}",
+    "description": "Invocações recentes deste webhook.",
+    "statusAll": "Todos os status",
+    "status": {
+      "queued": "Na fila",
+      "running": "Em execução",
+      "done": "Concluída",
+      "failed": "Falhou",
+      "dead": "Morta"
+    },
+    "cols": {
+      "status": "Status",
+      "mode": "Modo",
+      "attempts": "Tentativas",
+      "created": "Criada em",
+      "detail": "Detalhes"
+    },
+    "emptyTitle": "Nenhuma entrega ainda",
+    "emptyDescription": "As chamadas a este webhook aparecerão aqui.",
+    "noMore": "Não há mais chamadas.",
+    "pageOf": "Página {{page}} de {{total}}",
+    "prev": "Anterior",
+    "next": "Próxima"
+  },
+  "callDetail": {
+    "title": "Detalhes da entrega",
+    "description": "Registro completo de uma única invocação do webhook.",
+    "loading": "Carregando...",
+    "deliveryId": "ID da entrega",
+    "idempotencyKey": "Chave de idempotência",
+    "callbackUrl": "URL de callback",
+    "created": "Criada em",
+    "started": "Iniciada em",
+    "completed": "Concluída em",
+    "nextAttempt": "Próxima tentativa",
+    "lastError": "Último erro",
+    "requestPayload": "Payload da requisição",
+    "response": "Resposta"
+  },
+  "rotate": {
+    "title": "Rotacionar segredo",
+    "description": "A rotação invalida o segredo atual de \"{{name}}\". Um novo segredo será exibido uma única vez."
+  },
+  "revoke": {
+    "title": "Revogar webhook",
+    "description": "A revogação desativa \"{{name}}\" permanentemente. Esta ação não pode ser desfeita."
+  },
+  "toast": {
+    "created": "Webhook criado",
+    "updated": "Webhook atualizado",
+    "secretRotated": "Segredo rotacionado",
+    "revoked": "Webhook revogado",
+    "failedCreate": "Falha ao criar o webhook",
+    "failedUpdate": "Falha ao atualizar o webhook",
+    "failedRotate": "Falha ao rotacionar o segredo",
+    "failedRevoke": "Falha ao revogar o webhook"
+  }
+}

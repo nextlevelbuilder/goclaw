@@ -401,6 +401,7 @@
   "systemMessages.locale.zh": "Китайский",
   "systemMessages.locale.ko": "Корейский",
   "systemMessages.locale.ru": "Русский",
+  "systemMessages.locale.pt": "Португальский (Бразилия)",
   "systemMessages.override": "Переопределить шаблон",
   "systemMessages.overrideTip": "Шаблон, отправляемый вместо встроенного сообщения для выбранной локали. Переменные используют {{name}}.",
   "systemMessages.defaultTemplate": "Шаблон по умолчанию",

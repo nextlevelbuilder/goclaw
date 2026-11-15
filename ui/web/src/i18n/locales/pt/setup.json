@@ -1,0 +1,122 @@
+{
+  "layout": {
+    "subtitle": "Vamos colocar seu gateway em funcionamento"
+  },
+  "steps": {
+    "provider": "Provedor",
+    "model": "Modelo",
+    "agent": "Agente",
+    "channel": "Canal",
+    "channelOptional": "(Opcional)"
+  },
+  "complete": {
+    "title": "Configuração concluída!",
+    "ready": "Seu sistema está pronto para uso!",
+    "description": "Provedor, agente e canal foram configurados. Você pode gerenciá-los a qualquer momento pelo painel.",
+    "goToDashboard": "Ir para o painel"
+  },
+  "provider": {
+    "title": "Configurar provedor de LLM",
+    "descriptionCli": "Conecte-se usando a instalação local da CLI do Claude. Não é necessária chave de API.",
+    "descriptionOauth": "Entre para criar uma conta OpenAI Codex OAuth com nome. Dê um apelido agora e adicione mais apelidos depois para membros do pool ou round robin.",
+    "description": "Conecte-se a um provedor de IA para alimentar seus agentes. Você precisará de uma chave de API.",
+    "providerType": "Tipo de provedor",
+    "providerTypeHint": "O serviço de LLM ao qual você quer se conectar. O OpenRouter é recomendado para acessar vários modelos.",
+    "name": "Nome",
+    "nameHint": "Identificador interno deste provedor. Gerado automaticamente a partir do tipo de provedor.",
+    "oauthAlias": "Apelido da conta",
+    "oauthAliasPlaceholder": "ex.: principal",
+    "oauthAliasHint": "Use um apelido exclusivo em minúsculas, como principal, trabalho ou equipe, para esta conta OpenAI/Codex. O apelido se torna o prefixo provedor/modelo usado pelos agentes.",
+    "displayName": "Nome de exibição (opcional)",
+    "displayNameHint": "Rótulo amigável para esta conta OpenAI/Codex. Útil quando você adicionar mais apelidos depois.",
+    "displayNamePlaceholder": "Conta Codex principal",
+    "apiKey": "Chave de API *",
+    "apiKeyHint": "A chave secreta do seu provedor. Criptografada no servidor e nunca exposta nas respostas da API.",
+    "apiBase": "URL base da API",
+    "apiBaseHint": "A URL do endpoint das requisições à API. Preenchida automaticamente conforme o tipo de provedor. Altere apenas se usar um proxy personalizado.",
+    "creating": "Criando...",
+    "create": "Criar provedor",
+    "errors": {
+      "apiKeyRequired": "A chave de API é obrigatória",
+      "oauthProviderNotFound": "A autenticação OAuth foi bem-sucedida, mas o provedor não foi encontrado. Tente novamente.",
+      "failedCreate": "Falha ao criar o provedor"
+    }
+  },
+  "model": {
+    "title": "Selecionar e verificar o modelo",
+    "description": "Escolha um modelo e verifique se a conexão com o provedor funciona.",
+    "provider": "Provedor:",
+    "model": "Modelo *",
+    "modelHint": "O modelo de IA a ser usado. Selecione na lista ou digite o ID do modelo manualmente se ele não aparecer.",
+    "loadingModels": "Carregando modelos...",
+    "selectModel": "Selecione ou digite o ID de um modelo",
+    "noModelsHint": "Este provedor não lista modelos — digite o ID do modelo manualmente.",
+    "verified": "Verificado",
+    "verify": "Verificar",
+    "verifying": "Verificando...",
+    "continue": "Continuar",
+    "modelVerified": "Modelo verificado",
+    "modelVerifiedDesc": "{{model}} está funcionando corretamente",
+    "verificationFailed": "Falha na verificação. Confira sua chave de API e o modelo."
+  },
+  "agent": {
+    "title": "Crie seu primeiro agente",
+    "description": "Um agente é o seu assistente de IA. Personalize o nome e a personalidade dele.",
+    "provider": "Provedor:",
+    "model": "Modelo:",
+    "displayName": "Nome de exibição",
+    "displayNameHint": "Será gerado automaticamente durante a invocação, com base na personalidade do agente.",
+    "agentKey": "Chave do agente",
+    "agentKeyHint": "Identificador exclusivo do agente. Somente letras minúsculas, números e hífens.",
+    "agentKeyPlaceholder": "meu-agente",
+    "personality": "Personalidade do agente",
+    "personalityHint": "Descreva o papel e o comportamento do seu agente. A IA gerará os arquivos de contexto a partir disso durante a invocação.",
+    "personalityPlaceholder": "Descreva a personalidade, o propósito e o comportamento do seu agente...",
+    "personalityHintBottom": "Personalize este prompt para moldar a personalidade e a especialidade do seu agente.",
+    "selfEvolve": "Autoevolução",
+    "selfEvolveDesc": "Permite que o agente evolua seu estilo de comunicação ao longo do tempo via SOUL.md",
+    "gatewayOperatorAccess": "Acesso de operador do gateway",
+    "gatewayOperatorAccessDesc": "Concede ao primeiro agente acesso revogável do SecureCLI à CLI local do goclaw.",
+    "gatewayOperatorGranted": "Acesso de operador do gateway concedido",
+    "gatewayOperatorGrantedDesc": "O agente pode usar a CLI local do goclaw. Revise ou revogue em Pacotes → Credenciais da CLI.",
+    "gatewayOperatorWarning": "Aviso sobre o acesso de operador do gateway",
+    "creating": "Criando...",
+    "create": "Criar agente",
+    "summoningFailed": "A invocação falhou. Ajuste suas configurações e tente novamente.",
+    "errors": {
+      "noProvider": "Nenhum provedor disponível",
+      "failedCreate": "Falha ao criar o agente"
+    }
+  },
+  "channel": {
+    "title": "Conectar um canal",
+    "description": "Conecte uma plataforma de mensagens ao seu agente. Você pode adicionar canais depois.",
+    "skip": "Pular",
+    "skipFinish": "Pular e concluir",
+    "agent": "Agente:",
+    "channelType": "Tipo de canal",
+    "channelTypeHint": "A plataforma de mensagens a conectar. Ex.: Telegram, Discord, Zalo.",
+    "name": "Nome",
+    "nameHint": "Identificador interno desta instância de canal. Gerado automaticamente a partir do tipo de canal.",
+    "namePlaceholder": "meu-telegram",
+    "displayName": "Nome de exibição",
+    "displayNameHint": "Um nome amigável exibido na interface. Opcional.",
+    "displayNamePlaceholder": "Bot de vendas",
+    "credentials": "Credenciais",
+    "credentialsHint": "Criptografadas no servidor. Nunca retornadas nas respostas da API.",
+    "creating": "Criando...",
+    "create": "Criar canal",
+    "errors": {
+      "noAgent": "Nenhum agente disponível",
+      "requiredFields": "Obrigatório: {{fields}}",
+      "failedCreate": "Falha ao criar o canal"
+    }
+  },
+  "common": {
+    "back": "Voltar"
+  },
+  "skipSetup": "Pular a configuração e ir para o painel",
+  "skipSetupConfirm": "Tem certeza de que deseja pular a configuração? Você poderá configurar provedores e agentes depois, pelo painel.",
+  "switchTenant": "Trocar",
+  "allTenants": "Todos os tenants"
+}
