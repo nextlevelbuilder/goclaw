@@ -81,7 +81,7 @@ func Default() *Config {
 				Workspace:           "~/.goclaw/workspace",
 				RestrictToWorkspace: true,
 				Provider:            "anthropic",
-				Model:               "claude-sonnet-4-5-20250929",
+				Model:               "claude-sonnet-5-5",
 				MaxTokens:           DefaultMaxTokens,
 				Temperature:         DefaultTemperature,
 				MaxToolIterations:   DefaultMaxIterations,

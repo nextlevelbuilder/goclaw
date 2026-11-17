@@ -112,10 +112,11 @@ func TestAnthropicAdapterToRequest_CacheControl(t *testing.T) {
 	}
 }
 
-func TestAnthropicAdapterToRequest_Thinking(t *testing.T) {
+func TestAnthropicAdapterToRequest_LegacyThinking(t *testing.T) {
 	adapter, _ := NewAnthropicAdapter(ProviderConfig{APIKey: "sk-test"})
 
 	req := ChatRequest{
+		Model:    "claude-sonnet-4-5-20250929",
 		Messages: []Message{{Role: "user", Content: "Think about this"}},
 		Options:  map[string]any{OptThinkingLevel: "high"},
 	}

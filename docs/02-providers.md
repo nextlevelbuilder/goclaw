@@ -84,7 +84,7 @@ Supported price units: input, output, cache read, cache write, reasoning, reques
 
 | Provider | Type | Configuration | Default Model |
 |----------|------|----------|---------------|
-| **anthropic** | Native HTTP + SSE | API key required | `claude-sonnet-4-5-20250929` |
+| **anthropic** | Native HTTP + SSE | API key required | `claude-sonnet-5-5` |
 | **claude_cli** | stdio subprocess + MCP | Binary path (default: `claude`) | `sonnet` |
 | **codex** | OAuth Responses API | OAuth token source | `gpt-6.1-sol` |
 | **acp** | JSON-RPC 2.0 subagents | Binary + workspace dir | `claude` |
@@ -98,7 +98,7 @@ Supported price units: input, output, cache read, cache write, reasoning, reques
 | openai | `https://api.openai.com/v1` | `gpt-4o` | |
 | atlascloud | `https://api.atlascloud.ai/v1` | `qwen/qwen3.5-flash` | Atlas Cloud OpenAI-compatible LLM endpoint |
 | api_route | `https://global.api-route.com/v1` | `gpt-5.4-mini` | API Route branded OpenAI-compatible endpoint |
-| openrouter | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4-5-20250929` | Model must contain `/` |
+| openrouter | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-5.5` | Model must contain `/` |
 | requesty | `https://router.requesty.ai/v1` | `openai/gpt-4o-mini` | Requesty router; regional bases such as `https://router.eu.requesty.ai/v1` |
 | groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` | |
 | deepseek | `https://api.deepseek.com/v1` | `deepseek-chat` | |
