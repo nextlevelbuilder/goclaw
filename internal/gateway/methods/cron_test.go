@@ -24,6 +24,7 @@ type stubCronStore struct {
 	updateCnt int
 	enableCnt int
 	runCnt    int
+	ran       chan struct{} // optional: signalled on every RunJob call (handleRun runs it in a goroutine)
 }
 
 func newStubCronStore() *stubCronStore {
@@ -113,6 +114,9 @@ func (s *stubCronStore) SetOnJob(_ func(*store.CronJob) (*store.CronJobResult, e
 func (s *stubCronStore) SetOnEvent(_ func(store.CronEvent))                            {}
 func (s *stubCronStore) RunJob(_ context.Context, _ string, _ bool) (bool, string, error) {
 	s.runCnt++
+	if s.ran != nil {
+		s.ran <- struct{}{}
+	}
 	return true, "", nil
 }
 func (s *stubCronStore) SetDefaultTimezone(_ string)            {}
@@ -375,6 +379,51 @@ func TestCronRun_BlocksCredentialBoundJobByDifferentUser(t *testing.T) {
 
 	if svc.runCnt != 0 {
 		t.Fatalf("RunJob called %d times, want 0", svc.runCnt)
+	}
+}
+
+// handleRun answers before the job runs in the background, so a "due" run of a
+// job that is not due must be skipped up front instead of reporting ran:true.
+func TestCronRun_DueModeSkipsJobThatIsNotDue(t *testing.T) {
+	future := time.Now().Add(time.Hour).UnixMilli()
+	past := time.Now().Add(-time.Minute).UnixMilli()
+
+	tests := []struct {
+		name    string
+		nextRun *int64
+		params  map[string]any
+		wantRun bool
+	}{
+		{"due mode, next run in the future", &future, map[string]any{"jobId": "job-1"}, false},
+		{"explicit due mode, next run in the future", &future, map[string]any{"jobId": "job-1", "mode": "due"}, false},
+		{"due mode, no next run", nil, map[string]any{"jobId": "job-1"}, false},
+		{"due mode, next run reached", &past, map[string]any{"jobId": "job-1"}, true},
+		{"force mode, next run in the future", &future, map[string]any{"jobId": "job-1", "mode": "force"}, true},
+		{"force mode, no next run", nil, map[string]any{"jobId": "job-1", "mode": "force"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := newStubCronStore()
+			svc.ran = make(chan struct{}, 1)
+			svc.jobs["job-1"] = &store.CronJob{ID: "job-1", State: store.CronJobState{NextRunAtMS: tt.nextRun}}
+			m := buildCronMethods(t, svc)
+
+			m.handleRun(context.Background(), nullClient(), cronReqFrame(t, protocol.MethodCronRun, tt.params))
+
+			if tt.wantRun {
+				select {
+				case <-svc.ran:
+				case <-time.After(2 * time.Second):
+					t.Fatal("RunJob was not called")
+				}
+				return
+			}
+			select {
+			case <-svc.ran:
+				t.Fatal("RunJob called for a job that is not due")
+			case <-time.After(200 * time.Millisecond):
+			}
+		})
 	}
 }
 

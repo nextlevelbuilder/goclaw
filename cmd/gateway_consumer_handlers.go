@@ -149,6 +149,7 @@ func handleSubagentAnnounce(
 			// Fetch live roster for merged announce context.
 			roster := deps.SubagentMgr.RosterForParent(tools.TaskScope{
 				TenantID: msg.TenantID, RootAgentID: rootAgentID, RootAgentKey: parentAgent,
+				Administrative: true,
 			})
 
 			processSubagentAnnounceLoop(ctx, routing, roster, deps.SubagentMgr, deps.Sched, deps.MsgBus, deps.Cfg, deps.ChannelMgr)

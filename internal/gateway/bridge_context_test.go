@@ -2,12 +2,14 @@ package gateway
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
@@ -17,11 +19,12 @@ import (
 // implements only GetByIDUnscoped — the single method bridgeContextMiddleware calls.
 type stubAgentKeyStore struct {
 	store.AgentStore
-	ag *store.AgentData
+	ag  *store.AgentData
+	err error
 }
 
 func (s *stubAgentKeyStore) GetByIDUnscoped(context.Context, uuid.UUID) (*store.AgentData, error) {
-	return s.ag, nil
+	return s.ag, s.err
 }
 
 // TestBridgeContextMiddleware_InjectsAgentKey guards the MCP bridge identity path:
@@ -168,5 +171,54 @@ func TestBridgeContextMiddleware_RejectsLegacySignatureWithDelegationHeaders(t *
 
 	if rec.Code != http.StatusForbidden || called {
 		t.Fatalf("status=%d called=%v, want forbidden", rec.Code, called)
+	}
+}
+
+// TestBridgeContextMiddleware_InjectsAgentBudget guards the media tools on claude_cli
+// agents: read_image/read_audio/read_video refuse to run with an AgentBudgetWiringError
+// unless the context carries the agent's context window and max_tokens. Unset (0)
+// columns must resolve to the same defaults the agent loop uses.
+func TestBridgeContextMiddleware_InjectsAgentBudget(t *testing.T) {
+	const gatewayToken = "test-gateway-token"
+	tests := []struct {
+		name       string
+		agentID    string // empty means a fresh valid UUID
+		ag         *store.AgentData
+		err        error
+		wantWindow int
+		wantMax    int
+	}{
+		{"explicit", "", &store.AgentData{AgentKey: "a", ContextWindow: 120000, MaxTokens: 4096}, nil, 120000, 4096},
+		{"unset falls back to defaults", "", &store.AgentData{AgentKey: "a"}, nil, config.DefaultContextWindow, config.DefaultMaxTokens},
+		{"missing row falls back to defaults", "", nil, nil, config.DefaultContextWindow, config.DefaultMaxTokens},
+		{"lookup error falls back to defaults", "", nil, sql.ErrNoRows, config.DefaultContextWindow, config.DefaultMaxTokens},
+		{"non-UUID agent id keeps defaults", "not-a-uuid", nil, nil, config.DefaultContextWindow, config.DefaultMaxTokens},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			agentID := tt.agentID
+			if agentID == "" {
+				agentID = uuid.NewString()
+			}
+			var gotWindow, gotMax int
+			next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+				gotWindow = store.AgentContextWindowFromContext(r.Context())
+				gotMax = store.AgentMaxTokensFromContext(r.Context())
+			})
+			mw := bridgeContextMiddleware(gatewayToken, &stubAgentKeyStore{ag: tt.ag, err: tt.err}, next)
+
+			sig := providers.SignBridgeContext(gatewayToken, agentID, "", "", "", "", "", "", "", "")
+			req := httptest.NewRequest(http.MethodPost, "/mcp/bridge", nil)
+			req.Header.Set("X-Agent-ID", agentID)
+			req.Header.Set("X-Bridge-Sig", sig)
+			mw.ServeHTTP(httptest.NewRecorder(), req)
+
+			if gotWindow != tt.wantWindow {
+				t.Errorf("context window = %d, want %d", gotWindow, tt.wantWindow)
+			}
+			if gotMax != tt.wantMax {
+				t.Errorf("max tokens = %d, want %d", gotMax, tt.wantMax)
+			}
+		})
 	}
 }

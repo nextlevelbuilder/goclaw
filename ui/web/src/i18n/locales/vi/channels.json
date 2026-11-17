@@ -353,6 +353,10 @@
       "label": "URL máy chủ API",
       "help": "Máy chủ API Bot Telegram tùy chỉnh cho tải file lớn (lên đến 2GB). Để trống cho mặc định."
     },
+    "server_url": {
+      "label": "URL máy chủ",
+      "help": "URL gốc của máy chủ Mattermost. Máy chủ trong mạng nội bộ (10.x, 192.168.x, localhost) cần đặt GOCLAW_ALLOW_PRIVATE_MATTERMOST_URLS=true trên gateway."
+    },
     "proxy": {
       "label": "Proxy HTTP",
       "help": "Định tuyến lưu lượng bot qua proxy HTTP"
@@ -461,6 +465,10 @@
     "thread_ttl": {
       "label": "TTL tham gia luồng (giờ)",
       "help": "Số giờ trước khi bot ngừng tự động trả lời trong các luồng đã tham gia. 0 = luôn yêu cầu @đề cập."
+    },
+    "group_dm_as_direct": {
+      "label": "Tin nhắn nhóm như DM",
+      "help": "Xử lý tin nhắn trực tiếp nhóm (3–8 người) như DM: trả lời mọi tin nhắn không cần @đề cập hay luồng. Chính sách nhóm vẫn áp dụng và cuộc trò chuyện vẫn là một phiên nhóm chung. Tắt = xử lý như kênh."
     },
     "skills": {
       "label": "Bộ lọc skill",

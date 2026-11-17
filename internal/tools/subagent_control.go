@@ -159,7 +159,8 @@ func (sm *SubagentManager) beginLifecycleOperations(count int) ([]func(), bool) 
 	return finishes, true
 }
 
-// GetTask returns an immutable snapshot when the caller owns the root tree.
+// GetTask returns an immutable snapshot when the caller owns the root tree
+// and, unless the scope is administrative, the originating session.
 func (sm *SubagentManager) GetTask(scope TaskScope, id string) (*SubagentTask, bool) {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
@@ -171,6 +172,7 @@ func (sm *SubagentManager) GetTask(scope TaskScope, id string) (*SubagentTask, b
 }
 
 // ListTasks returns immutable snapshots from one tenant/root-agent tree.
+// A non-administrative scope also requires the caller's origin session.
 func (sm *SubagentManager) ListTasks(scope TaskScope, parentTaskID string) []*SubagentTask {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
@@ -414,13 +416,19 @@ func (sm *SubagentManager) WaitForChildren(ctx context.Context, scope TaskScope,
 }
 
 func taskMatchesScope(task *SubagentTask, scope TaskScope) bool {
-	return task != nil &&
-		scope.TenantID != uuid.Nil &&
-		scope.RootAgentID != uuid.Nil &&
-		scope.RootAgentKey != "" &&
-		task.OriginTenantID == scope.TenantID &&
-		task.RootAgentID == scope.RootAgentID &&
-		task.RootAgentKey == scope.RootAgentKey
+	if task == nil ||
+		scope.TenantID == uuid.Nil ||
+		scope.RootAgentID == uuid.Nil ||
+		scope.RootAgentKey == "" ||
+		task.OriginTenantID != scope.TenantID ||
+		task.RootAgentID != scope.RootAgentID ||
+		task.RootAgentKey != scope.RootAgentKey {
+		return false
+	}
+	if scope.Administrative {
+		return true
+	}
+	return task.OriginSessionKey == scope.SessionKey
 }
 
 func isActiveTaskStatus(status string) bool {

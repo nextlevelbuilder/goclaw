@@ -74,6 +74,7 @@ func subagentScopeFromContext(ctx context.Context) TaskScope {
 		TenantID:     store.TenantIDFromContext(ctx),
 		RootAgentID:  store.AgentIDFromContext(ctx),
 		RootAgentKey: ToolAgentKeyFromCtx(ctx),
+		SessionKey:   ToolSessionKeyFromCtx(ctx),
 	}
 }
 

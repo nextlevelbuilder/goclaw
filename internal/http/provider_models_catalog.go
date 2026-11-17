@@ -29,16 +29,10 @@ func bailianModels() []ModelInfo {
 func minimaxModels() []ModelInfo {
 	return []ModelInfo{
 		// Chat / text
-		{ID: store.MiniMaxDefaultModel, Name: "MiniMax M3"},
-		{ID: "MiniMax-Text-01", Name: "MiniMax Text 01"},
-		{ID: "MiniMax-M1", Name: "MiniMax M1"},
-		{ID: "MiniMax-M2.7", Name: "MiniMax M2.7"},
-		{ID: "MiniMax-M2.7-highspeed", Name: "MiniMax M2.7 Highspeed"},
-		{ID: "MiniMax-M2.5", Name: "MiniMax M2.5"},
-		{ID: "MiniMax-M2.5-highspeed", Name: "MiniMax M2.5 Highspeed"},
-		{ID: "MiniMax-M2.1", Name: "MiniMax M2.1"},
-		{ID: "MiniMax-M2.1-highspeed", Name: "MiniMax M2.1 Highspeed"},
-		{ID: "MiniMax-M2", Name: "MiniMax M2"},
+		{ID: store.MiniMaxDefaultModel, Name: "MiniMax M3.1 Flash", Reasoning: &providers.ReasoningCapability{
+			Levels: []string{"low", "medium", "high", "xhigh", "max"}, DefaultEffort: "max",
+		}},
+		{ID: "MiniMax-M3", Name: "MiniMax M3"},
 		// Image generation
 		{ID: "image-01", Name: "Image 01"},
 		// Video generation
@@ -117,20 +111,19 @@ func acpModels() []ModelInfo {
 }
 
 // chatGPTOAuthModels returns models available via ChatGPT OAuth integration.
+// Order and names follow the listed entries in the openai/codex model catalog
+// (codex-rs/models-manager/models.json), with the default moved to the front.
+// gpt-5.5 stays listed there, but OpenAI retired it for ChatGPT sign-in on
+// 2026-10-14, so it is only reachable with an API key.
 func chatGPTOAuthModels() []ModelInfo {
 	return withReasoningCapabilities([]ModelInfo{
-		{ID: "gpt-5.6-sol", Name: "GPT-5.6 Sol"},
-		{ID: "gpt-5.6-terra", Name: "GPT-5.6 Terra"},
-		{ID: providers.DefaultCodexModel, Name: "GPT-5.5"},
-		{ID: "gpt-5.4", Name: "GPT-5.4"},
-		{ID: "gpt-5.4-mini", Name: "GPT-5.4 Mini"},
-		{ID: "gpt-5.3-codex", Name: "GPT-5.3 Codex"},
-		{ID: "gpt-5.3-codex-spark", Name: "GPT-5.3 Codex Spark"},
-		{ID: "gpt-5.2-codex", Name: "GPT-5.2 Codex"},
-		{ID: "gpt-5.2", Name: "GPT-5.2"},
-		{ID: "gpt-5.1-codex", Name: "GPT-5.1 Codex"},
-		{ID: "gpt-5.1-codex-max", Name: "GPT-5.1 Codex Max"},
-		{ID: "gpt-5.1-codex-mini", Name: "GPT-5.1 Codex Mini"},
-		{ID: "gpt-5.1", Name: "GPT-5.1"},
+		{ID: providers.DefaultCodexModel, Name: "GPT-6.1-Sol"},
+		{ID: "gpt-6-astra", Name: "GPT-6-Astra"},
+		{ID: "gpt-6.1-terra", Name: "GPT-6.1 Terra"},
+		{ID: "gpt-6-sol", Name: "GPT-6-Sol"},
+		{ID: "gpt-6-luna", Name: "GPT-6-Luna"},
+		{ID: "gpt-5.6-sol", Name: "GPT-5.6-Sol"},
+		{ID: "gpt-5.6-terra", Name: "GPT-5.6-Terra"},
+		{ID: "gpt-5.6-luna", Name: "GPT-5.6-Luna"},
 	})
 }

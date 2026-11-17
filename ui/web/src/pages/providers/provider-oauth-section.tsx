@@ -61,7 +61,7 @@ export function OAuthSection({
       <p className="mt-1">
         {t("oauth.modelPrefixHint")} <code className="rounded bg-muted px-1 font-mono">{provider}/</code>{" "}
         {t("oauth.modelPrefixExample", {
-          example: `${provider}/gpt-5.5`,
+          example: `${provider}/gpt-6.1-sol`,
         })}
       </p>
     </div>
@@ -244,7 +244,7 @@ export function OAuthSection({
         <p className="mt-1">
           {t("oauth.modelPrefixHint")} <code className="rounded bg-muted px-1 font-mono">{resolvedProviderName}/</code>{" "}
           {t("oauth.modelPrefixExample", {
-            example: `${resolvedProviderName}/gpt-5.5`,
+            example: `${resolvedProviderName}/gpt-6.1-sol`,
           })}
         </p>
       </div>

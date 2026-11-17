@@ -25,6 +25,12 @@ func (s *PGCronStore) RunJob(ctx context.Context, jobID string, force bool) (boo
 		return false, "", fmt.Errorf("no job handler configured")
 	}
 
+	// "due" mode only runs a job whose scheduled time has arrived; a job with no
+	// next_run_at (disabled, or already claimed by the scheduler) is never due.
+	if !force && (job.State.NextRunAtMS == nil || *job.State.NextRunAtMS > time.Now().UnixMilli()) {
+		return false, "not-due", nil
+	}
+
 	// Claim the job for forced execution by clearing next_run_at.
 	// executeOneJob calls loadClaimedJob which requires next_run_at IS NULL — same
 	// invariant that claimDueJob establishes for scheduled runs.

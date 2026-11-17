@@ -135,17 +135,32 @@ func (p *AnthropicProvider) ChatStream(ctx context.Context, req ChatRequest, onC
 					switch ev.Delta.StopReason {
 					case "tool_use":
 						result.FinishReason = "tool_calls"
-					case "max_tokens":
+					case "max_tokens", "model_context_window_exceeded":
 						result.FinishReason = "length"
 					default:
 						result.FinishReason = "stop"
 					}
 				}
-				if ev.Usage.OutputTokens > 0 {
+				if u := ev.Usage; u.OutputTokens > 0 || u.InputTokens > 0 ||
+					u.CacheCreationInputTokens > 0 || u.CacheReadInputTokens > 0 {
 					if result.Usage == nil {
 						result.Usage = &Usage{}
 					}
-					result.Usage.CompletionTokens = ev.Usage.OutputTokens
+					// message_delta usage is cumulative. Some Anthropic-compatible
+					// endpoints report the real input/cache counts here instead of
+					// in message_start, so a non-zero value overrides it.
+					if u.InputTokens > 0 {
+						result.Usage.PromptTokens = u.InputTokens
+					}
+					if u.CacheCreationInputTokens > 0 {
+						result.Usage.CacheCreationTokens = u.CacheCreationInputTokens
+					}
+					if u.CacheReadInputTokens > 0 {
+						result.Usage.CacheReadTokens = u.CacheReadInputTokens
+					}
+					if u.OutputTokens > 0 {
+						result.Usage.CompletionTokens = u.OutputTokens
+					}
 				}
 			}
 

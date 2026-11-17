@@ -72,6 +72,7 @@ func (sm *SubagentManager) persistCreate(ctx context.Context, task *SubagentTask
 		if parent := sm.tasks[task.ParentTaskID]; parent != nil && parent.dbID != uuid.Nil &&
 			taskMatchesScope(parent, TaskScope{
 				TenantID: task.OriginTenantID, RootAgentID: task.RootAgentID, RootAgentKey: task.RootAgentKey,
+				SessionKey: task.OriginSessionKey,
 			}) {
 			parentID := parent.dbID
 			spawnedBy = &parentID
@@ -190,8 +191,9 @@ func (sm *SubagentManager) UpdateAnnouncementStatus(
 }
 
 // GetPersistedTask loads one durable self-clone result within the caller's
-// tenant and root-agent scope. Delegate rows intentionally do not satisfy this
-// contract.
+// tenant, root-agent, and origin-session scope. Delegate rows intentionally
+// do not satisfy this contract. An administrative scope skips the session
+// check; interactive spawn(action=get) must not.
 func (sm *SubagentManager) GetPersistedTask(
 	ctx context.Context,
 	scope TaskScope,
@@ -211,7 +213,18 @@ func (sm *SubagentManager) GetPersistedTask(
 	if completionKind(task.Metadata) == asyncCompletionKindDelegate {
 		return nil, nil
 	}
+	if !scope.Administrative && !storedSessionKeyMatches(task.SessionKey, scope.SessionKey) {
+		return nil, nil
+	}
 	return task, nil
+}
+
+func storedSessionKeyMatches(stored *string, want string) bool {
+	got := ""
+	if stored != nil {
+		got = *stored
+	}
+	return got == want
 }
 
 func completionKind(metadata map[string]any) string {

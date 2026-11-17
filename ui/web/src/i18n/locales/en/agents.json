@@ -937,6 +937,8 @@
       "highDesc": "~32K token budget",
       "xhigh": "XHigh",
       "xhighDesc": "Use the maximum supported reasoning effort",
+      "max": "Max",
+      "maxDesc": "Use the model's maximum reasoning effort",
       "downgrade": "Downgrade",
       "downgradeDesc": "Normalize to the nearest supported lower level, or the lowest supported level if needed",
       "provider_default": "Use Model Default",

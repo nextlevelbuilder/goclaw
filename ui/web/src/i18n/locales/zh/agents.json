@@ -922,6 +922,8 @@
       "highDesc": "~32K 令牌预算",
       "xhigh": "超高",
       "xhighDesc": "使用模型支持的最高 reasoning 级别",
+      "max": "Max",
+      "maxDesc": "Use the model's maximum reasoning effort",
       "downgrade": "降级",
       "downgradeDesc": "规范化到最近的受支持较低级别，必要时使用最低受支持级别",
       "provider_default": "使用模型默认值",

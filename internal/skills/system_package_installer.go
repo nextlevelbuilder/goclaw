@@ -13,9 +13,12 @@ var (
 	debPackageNameRE               = regexp.MustCompile(`^[a-z0-9][a-z0-9+.-]*$`)
 	systemLookPath                 = exec.LookPath
 	systemCommandCombinedOutput    = runSystemCommandCombinedOutput
-	aptSystemPackageAliases        = map[string]string{"pip3": "python3-pip", "github-cli": "gh", "go": "golang-go", "golang": "golang-go"}
+	aptSystemPackageAliases        = map[string]string{"pip3": "python3-pip", "github-cli": "gh", "go": "golang-go", "golang": "golang-go", "node": "nodejs"}
 	errSystemPackageMgrUnavailable = "system package manager unavailable on this runtime"
 )
+
+// Alpine has no "node" package; the runtime lives in "nodejs".
+var apkSystemPackageAliases = map[string]string{"node": "nodejs"}
 
 func runSystemCommandCombinedOutput(ctx context.Context, name string, args ...string) ([]byte, error) {
 	return exec.CommandContext(ctx, name, args...).CombinedOutput()
@@ -23,7 +26,7 @@ func runSystemCommandCombinedOutput(ctx context.Context, name string, args ...st
 
 func installSystemPackage(ctx context.Context, requested string) (bool, string) {
 	if IsAlpineRuntime() {
-		return apkViaHelper(ctx, "install", requested)
+		return apkViaHelper(ctx, "install", resolveAlpinePackageName(requested))
 	}
 	pkg, err := resolveDebianPackageName(requested)
 	if err != nil {
@@ -44,7 +47,7 @@ func installSystemPackage(ctx context.Context, requested string) (bool, string) 
 
 func uninstallSystemPackage(ctx context.Context, requested string) (bool, string) {
 	if IsAlpineRuntime() {
-		return apkViaHelper(ctx, "uninstall", requested)
+		return apkViaHelper(ctx, "uninstall", resolveAlpinePackageName(requested))
 	}
 	pkg, err := resolveDebianPackageName(requested)
 	if err != nil {
@@ -61,6 +64,14 @@ func uninstallSystemPackage(ctx context.Context, requested string) (bool, string
 		return false, fmt.Sprintf("package removed but package record update failed: %v", err)
 	}
 	return true, ""
+}
+
+func resolveAlpinePackageName(requested string) string {
+	pkg := strings.ToLower(strings.TrimSpace(requested))
+	if alias, ok := apkSystemPackageAliases[pkg]; ok {
+		return alias
+	}
+	return requested
 }
 
 func resolveDebianPackageName(requested string) (string, error) {

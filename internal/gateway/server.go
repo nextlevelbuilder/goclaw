@@ -433,6 +433,12 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 				return
 			}
 
+			// Start from the default request budget so media tools (read_image/
+			// read_audio/read_video) pass the budget guard even when the agent id
+			// is missing or the row cannot be read. Overwritten below from the row.
+			ctx = store.WithAgentContextWindow(ctx, config.DefaultContextWindow)
+			ctx = store.WithAgentMaxTokens(ctx, config.DefaultMaxTokens)
+
 			if agentIDStr != "" {
 				if id, err := uuid.Parse(agentIDStr); err == nil {
 					ctx = store.WithAgentID(ctx, id)
@@ -456,6 +462,18 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 							if groups != nil {
 								ctx = store.WithShellDenyGroups(ctx, groups)
 							}
+							// Overwrite the default budget with the agent's own settings.
+							// Unset (0) columns keep the defaults the agent loop uses.
+							if ag.ContextWindow > 0 {
+								ctx = store.WithAgentContextWindow(ctx, ag.ContextWindow)
+							}
+							if ag.MaxTokens > 0 {
+								ctx = store.WithAgentMaxTokens(ctx, ag.MaxTokens)
+							}
+						} else if err != nil {
+							slog.Warn("mcp_bridge: agent lookup failed, using default request budget",
+								"agent_id", agentIDStr, "err", err,
+								"context_window", config.DefaultContextWindow, "max_tokens", config.DefaultMaxTokens)
 						}
 					}
 				}

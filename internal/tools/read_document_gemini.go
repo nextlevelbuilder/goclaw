@@ -71,49 +71,5 @@ func geminiNativeDocumentCall(ctx context.Context, apiKey, model, prompt string,
 		return nil, fmt.Errorf("HTTP %d: %s", httpResp.StatusCode, truncateStr(string(respBody), 500))
 	}
 
-	// Parse Gemini native response format.
-	var geminiResp struct {
-		Candidates []struct {
-			Content struct {
-				Parts []struct {
-					Text string `json:"text"`
-				} `json:"parts"`
-			} `json:"content"`
-		} `json:"candidates"`
-		UsageMetadata struct {
-			PromptTokenCount     int `json:"promptTokenCount"`
-			CandidatesTokenCount int `json:"candidatesTokenCount"`
-			TotalTokenCount      int `json:"totalTokenCount"`
-		} `json:"usageMetadata"`
-	}
-
-	if err := json.Unmarshal(respBody, &geminiResp); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
-	}
-
-	// Extract text from response.
-	var content string
-	if len(geminiResp.Candidates) > 0 {
-		for _, part := range geminiResp.Candidates[0].Content.Parts {
-			if part.Text != "" {
-				if content != "" {
-					content += "\n"
-				}
-				content += part.Text
-			}
-		}
-	}
-	if content == "" {
-		return nil, fmt.Errorf("empty response from Gemini")
-	}
-
-	return &providers.ChatResponse{
-		Content:      content,
-		FinishReason: "stop",
-		Usage: &providers.Usage{
-			PromptTokens:     geminiResp.UsageMetadata.PromptTokenCount,
-			CompletionTokens: geminiResp.UsageMetadata.CandidatesTokenCount,
-			TotalTokens:      geminiResp.UsageMetadata.TotalTokenCount,
-		},
-	}, nil
+	return parseGeminiResponse(respBody)
 }

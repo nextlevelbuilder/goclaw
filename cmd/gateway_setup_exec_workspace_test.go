@@ -22,7 +22,11 @@ func testExecToolFromGatewaySetup(t *testing.T, workspace, dataDir string) *tool
 	cfg.Tools.Browser.Enabled = false
 
 	providerRegistry := providers.NewRegistry(nil)
-	toolsReg, _, _, _, _, _, _, _, _, _, _, _ := setupToolRegistry(cfg, workspace, providerRegistry)
+	toolsReg, _, _, _, _, _, _, _, _, _, _, _, err := setupToolRegistry(cfg, workspace, providerRegistry)
+
+	if err != nil {
+		t.Fatalf("setupToolRegistry() error = %v", err)
+	}
 
 	execToolAny, ok := toolsReg.Get("exec")
 	if !ok {

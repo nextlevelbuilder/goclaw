@@ -47,6 +47,7 @@ var DefaultRegistry = map[string]ModelInfo{
 	"claude-":   {TokenizerCL100K, 200_000},
 	"gpt-4o":    {TokenizerO200K, 128_000},
 	"gpt-4":     {TokenizerCL100K, 128_000},
+	"gpt-6":     {TokenizerO200K, 272_000},
 	"gpt-5.5":   {TokenizerO200K, 1_050_000},
 	"gpt-5":     {TokenizerO200K, 1_000_000},
 	"qwen-":     {TokenizerCL100K, 128_000},

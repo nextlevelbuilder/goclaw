@@ -333,6 +333,77 @@ func TestSQLiteCronStore_AddJobNilTenantContext_ReturnsJob(t *testing.T) {
 	}
 }
 
+func TestSQLiteCronStore_RunJob_DueModeSkipsJobThatIsNotDue(t *testing.T) {
+	cronStore, ctx, db := newTestSQLiteCronStore(t)
+	everyMS := int64(time.Minute / time.Millisecond)
+
+	job, err := cronStore.AddJob(ctx, "job-run-due", store.CronSchedule{
+		Kind:    "every",
+		EveryMS: &everyMS,
+	}, "hello", false, "", "", "", "user-1")
+	if err != nil {
+		t.Fatalf("AddJob error: %v", err)
+	}
+	if job == nil {
+		job = mustOnlyJob(t, cronStore, ctx)
+	}
+	jobUUID := uuid.MustParse(job.ID)
+
+	var calls atomic.Int32
+	cronStore.SetOnJob(func(*store.CronJob) (*store.CronJobResult, error) {
+		calls.Add(1)
+		return &store.CronJobResult{Content: "ok"}, nil
+	})
+
+	// The job fires in a minute, so a "due" run must leave it alone.
+	before := mustRawJob(t, db, jobUUID)
+	ran, reason, err := cronStore.RunJob(ctx, job.ID, false)
+	if err != nil {
+		t.Fatalf("RunJob(force=false) error: %v", err)
+	}
+	if ran || reason != "not-due" {
+		t.Fatalf("RunJob(force=false) = (%v, %q), want (false, \"not-due\")", ran, reason)
+	}
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("handler calls after due-mode run = %d, want 0", got)
+	}
+	after := mustRawJob(t, db, jobUUID)
+	if after.nextRunAt == nil || before.nextRunAt == nil || !after.nextRunAt.Equal(*before.nextRunAt) {
+		t.Fatalf("next_run_at changed by skipped run: before %v, after %v", before.nextRunAt, after.nextRunAt)
+	}
+
+	// Once next_run_at has passed, the same call runs the job.
+	if _, err := db.ExecContext(ctx,
+		"UPDATE cron_jobs SET next_run_at = ? WHERE id = ?",
+		time.Now().Add(-time.Second), jobUUID,
+	); err != nil {
+		t.Fatalf("backdate next_run_at error: %v", err)
+	}
+	cronStore.InvalidateCache()
+	ran, reason, err = cronStore.RunJob(ctx, job.ID, false)
+	if err != nil {
+		t.Fatalf("RunJob(force=false) on due job error: %v", err)
+	}
+	if !ran || reason != "" {
+		t.Fatalf("RunJob(force=false) on due job = (%v, %q), want (true, \"\")", ran, reason)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("handler calls after due run = %d, want 1", got)
+	}
+
+	// force ignores the schedule.
+	ran, _, err = cronStore.RunJob(ctx, job.ID, true)
+	if err != nil {
+		t.Fatalf("RunJob(force=true) error: %v", err)
+	}
+	if !ran {
+		t.Fatal("RunJob(force=true) did not run the job")
+	}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("handler calls after forced run = %d, want 2", got)
+	}
+}
+
 func newTestSQLiteCronStore(t *testing.T) (*SQLiteCronStore, context.Context, *sql.DB) {
 	t.Helper()
 

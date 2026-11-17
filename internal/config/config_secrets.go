@@ -51,6 +51,7 @@ func (c *Config) MaskedCopy() *Config {
 	maskNonEmpty(&cp.Channels.Discord.Token)
 	maskNonEmpty(&cp.Channels.Slack.BotToken)
 	maskNonEmpty(&cp.Channels.Slack.AppToken)
+	maskNonEmpty(&cp.Channels.Mattermost.BotToken)
 	maskNonEmpty(&cp.Channels.Zalo.Token)
 	maskNonEmpty(&cp.Channels.Zalo.WebhookSecret)
 	maskNonEmpty(&cp.Channels.Feishu.AppID)
@@ -103,6 +104,7 @@ func (c *Config) StripSecrets() {
 	c.Channels.Discord.Token = ""
 	c.Channels.Slack.BotToken = ""
 	c.Channels.Slack.AppToken = ""
+	c.Channels.Mattermost.BotToken = ""
 	c.Channels.Zalo.Token = ""
 	c.Channels.Zalo.WebhookSecret = ""
 	c.Channels.Feishu.AppID = ""
@@ -160,6 +162,7 @@ func (c *Config) StripMaskedSecrets() {
 	stripIfMasked(&c.Channels.Discord.Token)
 	stripIfMasked(&c.Channels.Slack.BotToken)
 	stripIfMasked(&c.Channels.Slack.AppToken)
+	stripIfMasked(&c.Channels.Mattermost.BotToken)
 	stripIfMasked(&c.Channels.Zalo.Token)
 	stripIfMasked(&c.Channels.Zalo.WebhookSecret)
 	stripIfMasked(&c.Channels.Feishu.AppID)

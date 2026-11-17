@@ -28,15 +28,31 @@ func (s *SQLiteCronStore) RunJob(ctx context.Context, jobID string, force bool) 
 		return false, "", fmt.Errorf("no job handler configured")
 	}
 
+	// "due" mode only runs a job whose scheduled time has arrived; a job with no
+	// next_run_at (disabled, or already claimed by the scheduler) is never due.
+	if !force && (job.State.NextRunAtMS == nil || *job.State.NextRunAtMS > time.Now().UnixMilli()) {
+		return false, "not-due", nil
+	}
+
 	// Claim the job for manual execution by clearing next_run_at (match PG behavior).
 	// executeOneJob with reloadClaimed=false skips loadClaimedJob, using the
 	// already-loaded job directly — allowing manual runs on disabled jobs.
-	if id, parseErr := uuid.Parse(jobID); parseErr == nil {
-		if _, execErr := s.db.ExecContext(ctx,
-			"UPDATE cron_jobs SET last_status = 'running', next_run_at = NULL, updated_at = ? WHERE id = ?",
-			time.Now(), id); execErr != nil {
-			slog.Warn("cron: failed to mark job running", "job", jobID, "error", execErr)
-		}
+	id, parseErr := uuid.Parse(jobID)
+	if parseErr != nil {
+		return false, "", fmt.Errorf("invalid job id %q: %w", jobID, parseErr)
+	}
+	res, err := s.db.ExecContext(ctx,
+		"UPDATE cron_jobs SET last_status = 'running', next_run_at = NULL, updated_at = ? WHERE id = ? AND last_status IS NOT 'running'",
+		time.Now(), id)
+	if err != nil {
+		return false, "", err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, "", err
+	}
+	if n == 0 {
+		return false, "", fmt.Errorf("job %s is already running", jobID)
 	}
 	s.InvalidateCache()
 
