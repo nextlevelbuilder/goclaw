@@ -36,11 +36,11 @@ orca vm recipe doctor tuyetchinh-vps --json
 orca vm recipe doctor tuyetchinh-vps --provision --json
 ```
 
-The second command creates the VPS checkout if it is absent. From an Orca
-terminal inside the VPS workspace, run:
+The second command creates the VPS checkout if it is absent. On the VPS
+checkout, run the Linux CLI installed in `/opt/orca-server`:
 
 ```bash
-orca vm env doctor --run-setup --json
+/opt/orca-server/bin/orca-ide vm env doctor --run-setup --json
 ```
 
 `scripts.setup` runs `scripts/orca-vm/setup.sh` to download Go modules and
