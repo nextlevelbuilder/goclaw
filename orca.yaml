@@ -1,0 +1,8 @@
+scripts:
+  setup: bash ./scripts/orca-vm/setup.sh
+
+environmentRecipes:
+  - id: tuyetchinh-vps
+    name: Tuyet Chinh VPS
+    create: .\scripts\orca-vm\create.cmd
+    destroy: none
