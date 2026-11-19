@@ -94,6 +94,10 @@ type BridgeContext struct {
 	LocalKey         string
 	DelegationID     string
 	DelegationInputs string
+	// SenderID and Role carry the acting sender and their RBAC role so bridge
+	// tools run the same permission checks as in-process tools. Both are signed.
+	SenderID string
+	Role     string
 }
 
 // WriteMCPConfig writes a per-session MCP config file with agent context headers.
@@ -114,13 +118,15 @@ func (d *MCPConfigData) WriteMCPConfig(ctx context.Context, sessionKey string, b
 		bc.LocalKey,
 		bc.DelegationID,
 		bc.DelegationInputs,
+		bc.SenderID,
+		bc.Role,
 	)
 }
 
 func (d *MCPConfigData) writeMCPConfigInternal(
 	ctx context.Context,
 	sessionKey, agentID, userID, channel, chatID, peerKind, workspace, tenantID, localKey string,
-	delegationID, delegationInputs string,
+	delegationID, delegationInputs, senderID, role string,
 ) string {
 	if d == nil || (len(d.Servers) == 0 && d.GatewayAddr == "" && d.AgentMCPLookup == nil) {
 		return ""
@@ -183,11 +189,26 @@ func (d *MCPConfigData) writeMCPConfigInternal(
 		if delegationInputs != "" && !strings.ContainsAny(delegationInputs, "\r\n\x00") {
 			headers["X-Delegation-Inputs"] = delegationInputs
 		}
+		// Blank unsafe sender/role values before both emitting and signing them,
+		// so the header set and the signature always agree.
+		senderID = bridgeIdentityValue(senderID)
+		role = bridgeIdentityValue(role)
+		if senderID != "" {
+			headers["X-Sender-ID"] = senderID
+		}
+		if role != "" {
+			headers["X-Role"] = role
+		}
 		// HMAC signature over all context fields to prevent header forgery
 		if d.GatewayToken != "" && (agentID != "" || userID != "") {
-			extra := []string{localKey, sessionKey}
-			if delegationID != "" || delegationInputs != "" {
-				extra = append(extra, delegationID, delegationInputs)
+			var extra []string
+			switch {
+			case senderID != "" || role != "":
+				extra = BridgeIdentityExtras(localKey, sessionKey, delegationID, delegationInputs, senderID, role)
+			case delegationID != "" || delegationInputs != "":
+				extra = []string{localKey, sessionKey, delegationID, delegationInputs}
+			default:
+				extra = []string{localKey, sessionKey}
 			}
 			headers["X-Bridge-Sig"] = SignBridgeContext(
 				d.GatewayToken,
@@ -301,8 +322,33 @@ func sanitizePathSegment(s string) string {
 	return safe
 }
 
+// bridgeIdentityValue returns v when it is safe to send as an HTTP header value
+// (printable ASCII only), or "" otherwise. Blanking fails closed: the bridge
+// call then runs without a sender/role, exactly as before they were propagated.
+func bridgeIdentityValue(v string) string {
+	for i := 0; i < len(v); i++ {
+		if v[i] < 0x20 || v[i] > 0x7e {
+			return ""
+		}
+	}
+	return v
+}
+
+// BridgeIdentityExtras builds the signed extras for a bridge context that
+// carries a sender or role. The layout is always six slots, with empty
+// delegation slots on non-delegation turns, so a sender-bearing signature can
+// never have the same shape as the four-slot delegation signature
+// (localKey, sessionKey, delegationID, delegationInputs) and be replayed as one.
+func BridgeIdentityExtras(localKey, sessionKey, delegationID, delegationInputs, senderID, role string) []string {
+	return []string{localKey, sessionKey, delegationID, delegationInputs, senderID, role}
+}
+
 // SignBridgeContext computes HMAC-SHA256 over all bridge context fields to prevent forgery.
-// Payload: agentID|userID|channel|chatID|peerKind|workspace|tenantID
+// Payload: agentID|userID|channel|chatID|peerKind|workspace|tenantID, followed by
+// "|"-joined extras in one of these layouts:
+//   - localKey, sessionKey (plain turn)
+//   - localKey, sessionKey, delegationID, delegationInputs (delegation turn)
+//   - BridgeIdentityExtras (any turn carrying a sender or role)
 func SignBridgeContext(key, agentID, userID, channel, chatID, peerKind, workspace, tenantID string, extra ...string) string {
 	mac := hmac.New(sha256.New, []byte(key))
 	var payload strings.Builder

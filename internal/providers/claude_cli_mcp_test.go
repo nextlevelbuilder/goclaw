@@ -245,3 +245,125 @@ func TestWriteMCPConfigSignsDelegationArtifactHeaders(t *testing.T) {
 		t.Fatal("delegation headers were not covered by the exact bridge signature")
 	}
 }
+
+// writeBridgeHeaders writes a per-session MCP config and returns the bridge headers.
+func writeBridgeHeaders(t *testing.T, token, sessionKey string, bc BridgeContext) map[string]string {
+	t.Helper()
+	t.Setenv("GOCLAW_DATA_DIR", t.TempDir())
+	data := &MCPConfigData{GatewayAddr: "127.0.0.1:18790", GatewayToken: token}
+	path := data.WriteMCPConfig(context.Background(), sessionKey, bc)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg struct {
+		MCPServers map[string]struct {
+			Headers map[string]string `json:"headers"`
+		} `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	return cfg.MCPServers["goclaw-bridge"].Headers
+}
+
+func groupBridgeContext() BridgeContext {
+	return BridgeContext{
+		AgentID:  "agent-id",
+		UserID:   "group:telegram:-100123",
+		Channel:  "telegram",
+		ChatID:   "-100123",
+		PeerKind: "group",
+		TenantID: "tenant-id",
+	}
+}
+
+func TestBridgeContextFromOptsCarriesSenderAndRole(t *testing.T) {
+	got := bridgeContextFromOpts(map[string]any{
+		OptAgentID:  "agent-id",
+		OptSenderID: "42|alice",
+		OptRole:     "admin",
+	})
+	if got.SenderID != "42|alice" || got.Role != "admin" {
+		t.Fatalf("bridge context = %#v", got)
+	}
+}
+
+func TestWriteMCPConfigSignsSenderAndRole(t *testing.T) {
+	const token, sessionKey = "gateway-token", "session-key"
+	bc := groupBridgeContext()
+	bc.SenderID = "42|alice"
+	bc.Role = "operator"
+	headers := writeBridgeHeaders(t, token, sessionKey, bc)
+
+	if headers["X-Sender-ID"] != bc.SenderID || headers["X-Role"] != bc.Role {
+		t.Fatalf("identity headers = %#v", headers)
+	}
+	want := SignBridgeContext(token, bc.AgentID, bc.UserID, bc.Channel, bc.ChatID, bc.PeerKind, "", bc.TenantID,
+		BridgeIdentityExtras("", sessionKey, "", "", bc.SenderID, bc.Role)...)
+	if headers["X-Bridge-Sig"] != want {
+		t.Fatal("sender/role were not covered by the six-slot identity signature")
+	}
+}
+
+func TestWriteMCPConfigWithoutIdentityKeepsLegacySignature(t *testing.T) {
+	const token, sessionKey = "gateway-token", "session-key"
+	bc := groupBridgeContext()
+	headers := writeBridgeHeaders(t, token, sessionKey, bc)
+
+	if _, ok := headers["X-Sender-ID"]; ok {
+		t.Fatal("X-Sender-ID emitted without a sender")
+	}
+	if _, ok := headers["X-Role"]; ok {
+		t.Fatal("X-Role emitted without a role")
+	}
+	want := SignBridgeContext(token, bc.AgentID, bc.UserID, bc.Channel, bc.ChatID, bc.PeerKind, "", bc.TenantID, "", sessionKey)
+	if headers["X-Bridge-Sig"] != want {
+		t.Fatal("signature changed for a turn without sender/role")
+	}
+}
+
+func TestWriteMCPConfigSignsSenderWithDelegation(t *testing.T) {
+	const token, sessionKey = "gateway-token", "session-key"
+	bc := groupBridgeContext()
+	bc.DelegationID = "delegation-id"
+	bc.DelegationInputs = "/runtime/inputs"
+	bc.SenderID = "42|alice"
+	headers := writeBridgeHeaders(t, token, sessionKey, bc)
+
+	want := SignBridgeContext(token, bc.AgentID, bc.UserID, bc.Channel, bc.ChatID, bc.PeerKind, "", bc.TenantID,
+		BridgeIdentityExtras("", sessionKey, bc.DelegationID, bc.DelegationInputs, bc.SenderID, "")...)
+	if headers["X-Bridge-Sig"] != want {
+		t.Fatal("sender plus delegation was not signed over all six slots")
+	}
+}
+
+// A sender-bearing signature must never equal a delegation signature built from
+// the same strings, or one could be replayed as the other.
+func TestBridgeIdentitySignatureDiffersFromDelegationShape(t *testing.T) {
+	const key = "gateway-token"
+	identity := SignBridgeContext(key, "agent", "user", "", "", "", "", "",
+		BridgeIdentityExtras("lk", "sk", "", "", "42|alice", "admin")...)
+	delegation := SignBridgeContext(key, "agent", "user", "", "", "", "", "", "lk", "sk", "42|alice", "admin")
+	if identity == delegation {
+		t.Fatal("identity and delegation signatures collide")
+	}
+}
+
+func TestWriteMCPConfigDropsUnsafeSenderFromHeaderAndSignature(t *testing.T) {
+	const token, sessionKey = "gateway-token", "session-key"
+	for _, sender := range []string{"42\r\nX-Role: admin", "42\x00", "42|ålice"} {
+		bc := groupBridgeContext()
+		bc.SenderID = sender
+		headers := writeBridgeHeaders(t, token, sessionKey, bc)
+
+		if _, ok := headers["X-Sender-ID"]; ok {
+			t.Fatalf("unsafe sender %q emitted", sender)
+		}
+		ok, _ := VerifyBridgeContext(token, bc.AgentID, bc.UserID, bc.Channel, bc.ChatID, bc.PeerKind, "", bc.TenantID,
+			headers["X-Bridge-Sig"], "", sessionKey)
+		if !ok {
+			t.Fatalf("unsafe sender %q left a signature the emitted headers cannot verify", sender)
+		}
+	}
+}

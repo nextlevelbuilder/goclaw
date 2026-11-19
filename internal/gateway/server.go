@@ -375,6 +375,8 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 		sessionKey := r.Header.Get("X-Session-Key")
 		delegationID := r.Header.Get("X-Delegation-ID")
 		delegationInputs := r.Header.Get("X-Delegation-Inputs")
+		senderID := r.Header.Get("X-Sender-ID")
+		role := r.Header.Get("X-Role")
 
 		if agentIDStr != "" || userID != "" {
 			// Reject context headers when no gateway token — prevents unauthenticated impersonation.
@@ -390,11 +392,30 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 			sig := r.Header.Get("X-Bridge-Sig")
 			var ok, tenantVerified bool
 			hasDelegationContext := delegationID != "" || delegationInputs != ""
-			if hasDelegationContext {
-				if delegationID == "" || delegationInputs == "" {
-					http.Error(w, `{"error":"incomplete delegation bridge context"}`, http.StatusForbidden)
-					return
-				}
+			hasIdentityContext := senderID != "" || role != ""
+			if hasDelegationContext && (delegationID == "" || delegationInputs == "") {
+				http.Error(w, `{"error":"incomplete delegation bridge context"}`, http.StatusForbidden)
+				return
+			}
+			switch {
+			case hasIdentityContext:
+				// Sender/role gate per-user permissions, so they are trusted only
+				// under an exact match of the six-slot identity layout. Never fall
+				// back to legacy formats: those do not cover these headers.
+				expected := providers.SignBridgeContext(
+					gatewayToken,
+					agentIDStr,
+					userID,
+					channel,
+					chatID,
+					peerKind,
+					workspace,
+					tenantIDStr,
+					providers.BridgeIdentityExtras(localKey, sessionKey, delegationID, delegationInputs, senderID, role)...,
+				)
+				ok = subtle.ConstantTimeCompare([]byte(sig), []byte(expected)) == 1
+				tenantVerified = ok
+			case hasDelegationContext:
 				expected := providers.SignBridgeContext(
 					gatewayToken,
 					agentIDStr,
@@ -411,7 +432,7 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 				)
 				ok = subtle.ConstantTimeCompare([]byte(sig), []byte(expected)) == 1
 				tenantVerified = ok
-			} else {
+			default:
 				ok, tenantVerified = providers.VerifyBridgeContext(
 					gatewayToken,
 					agentIDStr,
@@ -480,6 +501,14 @@ func bridgeContextMiddleware(gatewayToken string, agentStore store.AgentStore, n
 			}
 			if userID != "" {
 				ctx = store.WithUserID(ctx, userID)
+			}
+			// Reaching here with sender/role headers means they passed the exact
+			// identity-layout check above.
+			if senderID != "" {
+				ctx = store.WithSenderID(ctx, senderID)
+			}
+			if role != "" {
+				ctx = store.WithRole(ctx, role)
 			}
 			// Only inject tenant_id when HMAC actually covers it (level 1).
 			// Fallback levels (pre-tenantID sessions) must not trust unsigned tenant headers.

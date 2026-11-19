@@ -295,6 +295,8 @@ func bridgeContextFromOpts(opts map[string]any) BridgeContext {
 		LocalKey:         extractStringOpt(opts, OptLocalKey),
 		DelegationID:     extractStringOpt(opts, OptDelegationID),
 		DelegationInputs: extractStringOpt(opts, OptDelegationInputs),
+		SenderID:         extractStringOpt(opts, OptSenderID),
+		Role:             extractStringOpt(opts, OptRole),
 	}
 }
 

@@ -44,6 +44,14 @@ const OptTenantID = "tenant_id"
 // OptLocalKey passes the composite local key (e.g. "-100123:topic:42") for forum topic routing.
 const OptLocalKey = "local_key"
 
+// OptSenderID passes the acting sender ID (e.g. "123456|username" in group chats)
+// so MCP bridge tools can run the same per-user permission checks as in-process tools.
+const OptSenderID = "sender_id"
+
+// OptRole passes the caller's RBAC role so MCP bridge tools get the same
+// admin/owner bypasses as in-process tools.
+const OptRole = "role"
+
 // OptAllowedToolNames passes the agent's policy-filtered canonical GoClaw tool
 // names ([]string) for the current turn. Used to derive --disallowedTools for
 // the Claude CLI subprocess so native CLI tools (Bash, Edit, Write, Read,
