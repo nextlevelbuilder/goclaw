@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
 
 // Truncation constants matching TS pi-embedded-helpers/bootstrap.ts.
@@ -83,8 +84,16 @@ func trimContent(content, fileName string, maxChars int) string {
 	headChars := int(float64(maxChars) * HeadRatio)
 	tailChars := int(float64(maxChars) * TailRatio)
 
+	for headChars > 0 && !utf8.RuneStart(content[headChars]) {
+		headChars--
+	}
+	tailStart := len(content) - tailChars
+	for tailStart < len(content) && !utf8.RuneStart(content[tailStart]) {
+		tailStart++
+	}
+	tailChars = len(content) - tailStart
 	head := content[:headChars]
-	tail := content[len(content)-tailChars:]
+	tail := content[tailStart:]
 
 	marker := fmt.Sprintf(
 		"\n\n[...truncated, read %s for full content...]\n...(%s: kept %d+%d chars of %d)...\n\n",
@@ -102,8 +111,15 @@ func clampToBudget(content string, budget int) string {
 	if len(content) <= budget {
 		return content
 	}
-	if budget <= 3 {
-		return content[:budget]
+	end := budget
+	if budget > len("…") {
+		end -= len("…")
 	}
-	return content[:budget-1] + "…"
+	for end > 0 && !utf8.RuneStart(content[end]) {
+		end--
+	}
+	if budget <= len("…") {
+		return content[:end]
+	}
+	return content[:end] + "…"
 }
