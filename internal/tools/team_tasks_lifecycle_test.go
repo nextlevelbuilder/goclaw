@@ -145,6 +145,43 @@ func TestComplete(t *testing.T) {
 		}
 	})
 
+	// Regression for #1133: a teammate must not complete another agent's
+	// in_progress task or overwrite its result.
+	t.Run("NonOwnerRejected", func(t *testing.T) {
+		mb, tool, _, memberID, ctx := newTestTeamSetup()
+		taskID := uuid.New()
+		owner := testMember2ID
+		preloadTask(mb, &store.TeamTaskData{
+			BaseModel:    store.BaseModel{ID: taskID},
+			TeamID:       testTeamID,
+			Subject:      "member2's task",
+			Status:       store.TeamTaskStatusInProgress,
+			OwnerAgentID: &owner,
+		})
+
+		mCtx := store.WithAgentID(ctx, memberID)
+		mCtx = WithTaskActionFlags(mCtx, &TaskActionFlags{})
+		result := tool.Execute(mCtx, map[string]any{
+			"action":  "complete",
+			"task_id": taskID.String(),
+			"result":  "overwritten",
+		})
+
+		if !result.IsError {
+			t.Fatalf("expected error when completing another agent's task, got: %v", result.ForLLM)
+		}
+		task := readTask(mb, taskID)
+		if task.Status != store.TeamTaskStatusInProgress {
+			t.Errorf("expected in_progress, got %q", task.Status)
+		}
+		if task.Result != nil {
+			t.Errorf("result overwritten by non-owner: %q", *task.Result)
+		}
+		if task.OwnerAgentID == nil || *task.OwnerAgentID != owner {
+			t.Errorf("owner changed: %v", task.OwnerAgentID)
+		}
+	})
+
 	t.Run("MissingResult", func(t *testing.T) {
 		_, tool, _, memberID, ctx := newTestTeamSetup()
 		mCtx := store.WithAgentID(ctx, memberID)

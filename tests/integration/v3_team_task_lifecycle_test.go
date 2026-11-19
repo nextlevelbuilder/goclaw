@@ -51,7 +51,7 @@ func TestStoreTask_ClaimAndComplete(t *testing.T) {
 	}
 
 	// Complete.
-	if err := ts.CompleteTask(ctx, task.ID, teamID, "all done"); err != nil {
+	if err := ts.CompleteTask(ctx, task.ID, teamID, memberID, "all done"); err != nil {
 		t.Fatalf("CompleteTask: %v", err)
 	}
 
@@ -193,7 +193,7 @@ func TestStoreTask_FixOrphanedBlocked(t *testing.T) {
 	if err := ts.ClaimTask(ctx, taskA.ID, memberID, teamID); err != nil {
 		t.Fatalf("ClaimTask A: %v", err)
 	}
-	if err := ts.CompleteTask(ctx, taskA.ID, teamID, "done"); err != nil {
+	if err := ts.CompleteTask(ctx, taskA.ID, teamID, memberID, "done"); err != nil {
 		t.Fatalf("CompleteTask A: %v", err)
 	}
 
@@ -412,7 +412,7 @@ func TestStoreTask_BlockedUnblockFlow(t *testing.T) {
 	if err := ts.ClaimTask(ctx, taskA.ID, memberID, teamID); err != nil {
 		t.Fatalf("ClaimTask A: %v", err)
 	}
-	if err := ts.CompleteTask(ctx, taskA.ID, teamID, "done"); err != nil {
+	if err := ts.CompleteTask(ctx, taskA.ID, teamID, memberID, "done"); err != nil {
 		t.Fatalf("CompleteTask A: %v", err)
 	}
 

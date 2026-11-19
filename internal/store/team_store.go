@@ -233,7 +233,10 @@ type TaskStore interface {
 	DeleteTasks(ctx context.Context, taskIDs []uuid.UUID, teamID uuid.UUID) ([]uuid.UUID, error)
 	ClaimTask(ctx context.Context, taskID, agentID, teamID uuid.UUID) error
 	AssignTask(ctx context.Context, taskID, agentID, teamID uuid.UUID) error
-	CompleteTask(ctx context.Context, taskID, teamID uuid.UUID, result string) error
+	// CompleteTask marks an in_progress task completed. Only the current owner
+	// (ownerAgentID must equal owner_agent_id) may complete it, so a teammate
+	// cannot complete or overwrite another agent's claimed task.
+	CompleteTask(ctx context.Context, taskID, teamID, ownerAgentID uuid.UUID, result string) error
 	CancelTask(ctx context.Context, taskID, teamID uuid.UUID, reason string) error
 	FailTask(ctx context.Context, taskID, teamID uuid.UUID, errMsg string) error
 	FailPendingTask(ctx context.Context, taskID, teamID uuid.UUID, errMsg string) error

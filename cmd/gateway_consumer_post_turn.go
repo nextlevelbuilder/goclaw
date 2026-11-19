@@ -203,7 +203,15 @@ func resolveTeamTaskOutcome(
 		if len(result) > 100_000 {
 			result = result[:100_000] + "\n[truncated]"
 		}
-		if err := deps.TeamStore.CompleteTask(ctx, meta.TaskID, meta.TeamID, result); err != nil {
+		// Auto-complete only on behalf of the task's current owner. CompleteTask
+		// enforces owner_agent_id, so a task reassigned meanwhile is left alone.
+		var ownerAgentID uuid.UUID
+		if currentTask != nil && currentTask.OwnerAgentID != nil {
+			ownerAgentID = *currentTask.OwnerAgentID
+		}
+		if ownerAgentID == uuid.Nil {
+			slog.Warn("auto-complete: task has no owner, skipping", "task_id", meta.TaskID, "agent", toAgent)
+		} else if err := deps.TeamStore.CompleteTask(ctx, meta.TaskID, meta.TeamID, ownerAgentID, result); err != nil {
 			slog.Warn("auto-complete: CompleteTask error", "task_id", meta.TaskID, "error", err)
 		} else {
 			bus.BroadcastForTenant(deps.MsgBus, protocol.EventTeamTaskCompleted, store.TenantIDFromContext(ctx), tools.BuildTaskEventPayload(

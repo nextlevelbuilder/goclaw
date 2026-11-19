@@ -57,7 +57,7 @@ func (s *PGTeamStore) AssignTask(ctx context.Context, taskID, agentID, teamID uu
 	return nil
 }
 
-func (s *PGTeamStore) CompleteTask(ctx context.Context, taskID, teamID uuid.UUID, result string) error {
+func (s *PGTeamStore) CompleteTask(ctx context.Context, taskID, teamID, ownerAgentID uuid.UUID, result string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -70,9 +70,9 @@ func (s *PGTeamStore) CompleteTask(ctx context.Context, taskID, teamID uuid.UUID
 		 followup_at = NULL, followup_count = 0, followup_message = NULL, followup_channel = NULL, followup_chat_id = NULL,
 		 progress_percent = NULL,
 		 updated_at = $3
-		 WHERE id = $4 AND status = $5 AND team_id = $6 AND tenant_id = $7`,
+		 WHERE id = $4 AND status = $5 AND team_id = $6 AND tenant_id = $7 AND owner_agent_id = $8`,
 		store.TeamTaskStatusCompleted, result, time.Now(),
-		taskID, store.TeamTaskStatusInProgress, teamID, tid,
+		taskID, store.TeamTaskStatusInProgress, teamID, tid, ownerAgentID,
 	)
 	if err != nil {
 		return err
@@ -82,7 +82,7 @@ func (s *PGTeamStore) CompleteTask(ctx context.Context, taskID, teamID uuid.UUID
 		return err
 	}
 	if n == 0 {
-		return fmt.Errorf("task not in progress or not found")
+		return fmt.Errorf("task not in progress, not found, or not owned by this agent")
 	}
 
 	if err := unblockDependentTasks(ctx, tx, taskID); err != nil {

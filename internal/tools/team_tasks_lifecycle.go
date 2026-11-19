@@ -51,9 +51,11 @@ func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any
 	// Auto-claim if the task is still pending (saves an extra tool call).
 	// ClaimTask is atomic — only one agent can succeed, others get an error.
 	// Ignore claim error: task may already be in_progress (claimed by us or someone else).
+	// CompleteTask below is conditioned on owner_agent_id = agentID, so a task
+	// claimed by another agent cannot be completed or overwritten here (#1133).
 	_ = t.manager.Store().ClaimTask(ctx, taskID, agentID, team.ID)
 
-	if err := t.manager.Store().CompleteTask(ctx, taskID, team.ID, result); err != nil {
+	if err := t.manager.Store().CompleteTask(ctx, taskID, team.ID, agentID, result); err != nil {
 		// Fast path: check in-memory turn flags before hitting DB again.
 		if flags := TaskActionFlagsFromCtx(ctx); flags != nil && flags.Completed {
 			return NewResult(fmt.Sprintf("Task %s already completed.", taskID))
@@ -66,10 +68,14 @@ func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any
 				return NewResult(fmt.Sprintf("Task %s already completed.", taskID))
 			case store.TeamTaskStatusFailed, store.TeamTaskStatusCancelled:
 				return NewResult(fmt.Sprintf("Task %s is %s — cannot complete.", taskID, current.Status))
+			case store.TeamTaskStatusInProgress:
+				if current.OwnerAgentID == nil || *current.OwnerAgentID != agentID {
+					return ErrorResult("only the task owner can complete this task")
+				}
 			case store.TeamTaskStatusPending:
 				// Task was reset by stale recovery — re-assign and retry once.
 				if t.manager.Store().AssignTask(ctx, taskID, agentID, team.ID) == nil {
-					if t.manager.Store().CompleteTask(ctx, taskID, team.ID, result) == nil {
+					if t.manager.Store().CompleteTask(ctx, taskID, team.ID, agentID, result) == nil {
 						slog.Info("executeComplete: re-assigned stale-recovered task", "task_id", taskID)
 						err = nil
 					}
