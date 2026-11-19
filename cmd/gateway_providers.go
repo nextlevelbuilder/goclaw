@@ -78,7 +78,7 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 	}
 
 	if cfg.Providers.OpenRouter.APIKey != "" {
-		orProv := providers.NewOpenAIProvider("openrouter", cfg.Providers.OpenRouter.APIKey, "https://openrouter.ai/api/v1", "anthropic/claude-sonnet-4-5-20250929")
+		orProv := providers.NewOpenAIProvider("openrouter", cfg.Providers.OpenRouter.APIKey, "https://openrouter.ai/api/v1", "anthropic/claude-sonnet-5.5")
 		orProv.WithSiteInfo("https://goclaw.sh", "GoClaw")
 		registry.Register(orProv)
 		slog.Info("registered provider", "name", "openrouter")
