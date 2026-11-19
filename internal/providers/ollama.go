@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -285,18 +286,11 @@ func (p *OllamaProvider) buildRequest(ctx context.Context, req ChatRequest, stre
 		if params, ok := td.Function.Parameters["properties"].(map[string]any); ok {
 			for propName, propVal := range params {
 				if propMap, ok2 := propVal.(map[string]any); ok2 {
-					prop := ollamaapi.ToolProperty{}
-					if desc, ok3 := propMap["description"].(string); ok3 {
-						prop.Description = desc
-					}
-					if typ, ok3 := propMap["type"].(string); ok3 {
-						prop.Type = ollamaapi.PropertyType{typ}
-					}
-					props.Set(propName, prop)
+					props.Set(propName, ollamaToolProperty(propMap))
 				}
 			}
 		}
-		required, _ := td.Function.Parameters["required"].([]string)
+		required := toStringSlice(td.Function.Parameters["required"])
 		tool := ollamaapi.Tool{
 			Type: "function",
 			Function: ollamaapi.ToolFunction{
@@ -374,4 +368,43 @@ func mapDoneReason(reason string) string {
 	default:
 		return "stop"
 	}
+}
+
+// ollamaToolProperty converts a JSON-schema property into an Ollama ToolProperty,
+// keeping enum, items, nested properties and required (not just type/description).
+// It round-trips through JSON so it follows the same schema as the OpenAI path.
+func ollamaToolProperty(propMap map[string]any) ollamaapi.ToolProperty {
+	var prop ollamaapi.ToolProperty
+	if raw, err := json.Marshal(propMap); err == nil {
+		if err := json.Unmarshal(raw, &prop); err == nil {
+			return prop
+		}
+	}
+	// Fallback: keep the minimal fields if the schema doesn't fit the Ollama types.
+	prop = ollamaapi.ToolProperty{}
+	if desc, ok := propMap["description"].(string); ok {
+		prop.Description = desc
+	}
+	if typ, ok := propMap["type"].(string); ok {
+		prop.Type = ollamaapi.PropertyType{typ}
+	}
+	return prop
+}
+
+// toStringSlice accepts both []string and []any (as produced by JSON-decoded
+// schemas, e.g. from MCP servers) and returns the string elements.
+func toStringSlice(v any) []string {
+	switch r := v.(type) {
+	case []string:
+		return r
+	case []any:
+		out := make([]string, 0, len(r))
+		for _, e := range r {
+			if s, ok := e.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
 }
