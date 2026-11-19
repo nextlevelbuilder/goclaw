@@ -415,6 +415,11 @@ func openAIProviderDefaults(providerType, apiBase string) (string, string) {
 			apiBase = store.RequestyDefaultAPIBase
 		}
 		return apiBase, store.RequestyDefaultModel
+	case store.ProviderRuncrate:
+		if apiBase == "" {
+			apiBase = store.RuncrateDefaultAPIBase
+		}
+		return apiBase, store.RuncrateDefaultModel
 	default:
 		return apiBase, ""
 	}

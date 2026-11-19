@@ -445,6 +445,36 @@ func TestLoad_RequestyProviderFromFileAndEnv(t *testing.T) {
 	}
 }
 
+func TestLoad_RuncrateProviderFromFileAndEnv(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.json5")
+	if err := os.WriteFile(cfgPath, []byte(`{
+		"providers": {
+			"runcrate": {
+				"api_key": "file-key",
+				"api_base": "https://example.com/v1"
+			}
+		}
+	}`), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	t.Setenv("GOCLAW_RUNCRATE_API_KEY", "env-key")
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load error: %v", err)
+	}
+	if cfg.Providers.Runcrate.APIKey != "env-key" {
+		t.Fatalf("API key = %q, want GOCLAW_RUNCRATE_API_KEY override", cfg.Providers.Runcrate.APIKey)
+	}
+	if cfg.Providers.Runcrate.APIBase != "https://example.com/v1" {
+		t.Fatalf("API base = %q, want file value", cfg.Providers.Runcrate.APIBase)
+	}
+	if !cfg.HasAnyProvider() {
+		t.Fatal("HasAnyProvider() = false with only a Runcrate key")
+	}
+}
+
 // --- Allowed origins from JSON5 ---
 
 func TestLoad_AllowedOrigins_JSON5(t *testing.T) {
