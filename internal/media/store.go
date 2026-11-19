@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/google/uuid"
 )
@@ -95,35 +95,39 @@ func (s *Store) sessionDir(sessionKey string) string {
 }
 
 // ExtFromMime returns a file extension (with dot) for a MIME type.
-func ExtFromMime(mime string) string {
-	switch {
-	case strings.HasPrefix(mime, "image/jpeg"):
+func ExtFromMime(contentType string) string {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return ""
+	}
+	switch mediaType {
+	case "image/jpeg":
 		return ".jpg"
-	case strings.HasPrefix(mime, "image/png"):
+	case "image/png":
 		return ".png"
-	case strings.HasPrefix(mime, "image/gif"):
+	case "image/gif":
 		return ".gif"
-	case strings.HasPrefix(mime, "image/webp"):
+	case "image/webp":
 		return ".webp"
-	case strings.HasPrefix(mime, "video/mp4"):
+	case "video/mp4":
 		return ".mp4"
-	case strings.HasPrefix(mime, "audio/ogg"), strings.HasPrefix(mime, "audio/opus"):
+	case "audio/ogg", "audio/opus":
 		return ".ogg"
-	case strings.HasPrefix(mime, "audio/mpeg"):
+	case "audio/mpeg":
 		return ".mp3"
-	case strings.HasPrefix(mime, "audio/wav"):
+	case "audio/wav":
 		return ".wav"
-	case strings.HasPrefix(mime, "application/pdf"):
+	case "application/pdf":
 		return ".pdf"
-	case strings.HasPrefix(mime, "application/zip"), strings.HasPrefix(mime, "application/x-zip-compressed"):
+	case "application/zip", "application/x-zip-compressed":
 		return ".zip"
-	case strings.HasPrefix(mime, "application/x-tar"):
+	case "application/x-tar":
 		return ".tar"
-	case strings.HasPrefix(mime, "application/gzip"), strings.HasPrefix(mime, "application/x-gzip"):
+	case "application/gzip", "application/x-gzip":
 		return ".gz"
-	case mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+	case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
 		return ".docx"
-	case mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+	case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
 		return ".xlsx"
 	default:
 		return ""
