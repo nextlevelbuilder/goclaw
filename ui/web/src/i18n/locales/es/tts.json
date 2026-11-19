@@ -1,0 +1,265 @@
+{
+  "title": "Texto a voz",
+  "description": "Configura proveedores de TTS y ajustes de aplicación automática",
+  "save": "Guardar",
+  "saving": "Guardando...",
+  "saveChanges": "Guardar cambios",
+  "status": {
+    "title": "Estado",
+    "configured": "Configurado",
+    "disabled": "Deshabilitado",
+    "noProvider": "No hay proveedor de TTS configurado",
+    "activeProvider": "Proveedor principal: {{provider}}, Automático: {{auto}}"
+  },
+  "general": {
+    "title": "Ajustes generales",
+    "primaryProvider": "Proveedor principal",
+    "autoApplyMode": "Modo de aplicación automática",
+    "replyMode": "Modo de respuesta",
+    "maxTextLength": "Longitud máxima del texto",
+    "timeout": "Tiempo de espera (ms)"
+  },
+  "providers": {
+    "none": "Ninguno (deshabilitado)",
+    "openai": "OpenAI",
+    "elevenlabs": "ElevenLabs",
+    "edge": "Edge (gratis)",
+    "minimax": "MiniMax",
+    "gemini": "Google Gemini"
+  },
+  "autoModes": {
+    "off": "Desactivado",
+    "offDesc": "El agente puede usar la herramienta TTS manualmente",
+    "always": "Siempre",
+    "alwaysDesc": "Todas las respuestas llevan audio",
+    "inbound": "Entrante",
+    "inboundDesc": "Solo cuando el usuario envía voz o audio",
+    "tagged": "Etiquetado",
+    "taggedDesc": "Solo cuando la respuesta contiene la etiqueta [[tts]]"
+  },
+  "replyModes": {
+    "final": "Solo finales",
+    "finalDesc": "Solo las respuestas finales",
+    "all": "Todas",
+    "allDesc": "Todas las respuestas, incluidas las de herramientas y bloques"
+  },
+  "providerSettings": "Ajustes de {{provider}}",
+  "openai": {
+    "apiKey": "Clave de API",
+    "apiBase": "URL base de la API",
+    "model": "Modelo",
+    "voice": "Voz",
+    "speed": {
+      "label": "Velocidad",
+      "help": "Multiplicador de velocidad del habla: 0.25 = la más lenta, 4.0 = la más rápida."
+    },
+    "responseFormat": {
+      "label": "Formato de salida",
+      "help": "Codificación de audio que devuelve la API (mp3, opus, aac, flac, wav, pcm)."
+    },
+    "instructions": {
+      "label": "Instrucciones",
+      "help": "Prompt de estilo a nivel de sistema: solo compatible con el modelo gpt-4o-mini-tts."
+    }
+  },
+  "elevenlabs": {
+    "apiKey": "Clave de API",
+    "baseUrl": "URL base",
+    "voiceId": "ID de voz",
+    "modelId": "ID del modelo",
+    "voiceSettings": {
+      "stability": {
+        "label": "Estabilidad",
+        "help": "0 = variación más expresiva, 1 = más constante y estable."
+      },
+      "similarityBoost": {
+        "label": "Refuerzo de similitud",
+        "help": "Qué tan fiel es la salida al clon de voz original (0 = creativo, 1 = similar)."
+      },
+      "style": {
+        "label": "Exageración de estilo",
+        "help": "Amplifica el estilo de la voz. 0 = ninguno; valores más altos agregan más expresividad."
+      },
+      "useSpeakerBoost": {
+        "label": "Refuerzo del hablante",
+        "help": "Mejora la claridad de la voz y la similitud con el hablante objetivo."
+      },
+      "speed": {
+        "label": "Velocidad",
+        "help": "Velocidad del habla: rango de 0.7 (lenta) a 1.2 (rápida)."
+      }
+    },
+    "applyTextNormalization": {
+      "label": "Normalización de texto",
+      "help": "Cómo se expanden los números y las abreviaturas (auto, on u off)."
+    },
+    "seed": {
+      "label": "Semilla (avanzado)",
+      "help": "Define una semilla fija para obtener una salida reproducible. 0 = aleatoria."
+    },
+    "optimizeStreamingLatency": {
+      "label": "Latencia de streaming (avanzado)",
+      "help": "Nivel de optimización de latencia: 0 = ninguno, 4 = máximo."
+    },
+    "languageCode": {
+      "label": "Código de idioma",
+      "help": "Sugerencia de idioma ISO 639-1, p. ej. 'en' o 'vi'. Avanzado."
+    }
+  },
+  "edge": {
+    "voice": "Voz",
+    "speechRate": "Velocidad del habla",
+    "hint": "Edge TTS es gratis y no requiere clave de API. Instálalo con: pip install edge-tts",
+    "rate": {
+      "label": "Velocidad del habla",
+      "help": "Ajuste de velocidad en porcentaje. -50% = mucho más lenta, +100% = mucho más rápida."
+    },
+    "pitch": {
+      "label": "Tono",
+      "help": "Desplazamiento de tono en Hz respecto al neutro. Rango: -50 Hz a +50 Hz."
+    },
+    "volume": {
+      "label": "Volumen",
+      "help": "Ajuste de volumen en porcentaje. -50% = más bajo, +100% = más alto."
+    }
+  },
+  "minimax": {
+    "apiKey": "Clave de API",
+    "groupId": "ID de grupo *",
+    "groupIdPlaceholder": "Obligatorio para MiniMax",
+    "apiBase": "Base de la API",
+    "model": "Modelo",
+    "voiceId": "ID de voz",
+    "speed": {
+      "label": "Velocidad",
+      "help": "Multiplicador de velocidad del habla: 0.5 = la más lenta, 2.0 = la más rápida."
+    },
+    "vol": {
+      "label": "Volumen",
+      "help": "Multiplicador de volumen: 0.01 = casi silencio, 10.0 = el más alto."
+    },
+    "pitch": {
+      "label": "Tono",
+      "help": "Desplazamiento de tono en semitonos. -12 = una octava abajo, +12 = una octava arriba."
+    },
+    "emotion": {
+      "label": "Emoción",
+      "help": "Tono emocional aplicado a la voz sintetizada."
+    },
+    "textNormalization": {
+      "label": "Normalización de texto",
+      "help": "Si los números y símbolos se expanden antes de la síntesis."
+    },
+    "audio": {
+      "format": {
+        "label": "Formato de audio",
+        "help": "Codificación de salida: mp3, pcm, flac o wav."
+      },
+      "sampleRate": {
+        "label": "Frecuencia de muestreo",
+        "help": "Frecuencia de muestreo del audio en Hz. Deja Predeterminado en la mayoría de los casos."
+      },
+      "bitrate": {
+        "label": "Bitrate (solo MP3)",
+        "help": "Tasa de bits MP3 en bps. Solo aplica cuando el formato es mp3."
+      },
+      "channel": {
+        "label": "Canales",
+        "help": "1 = mono (archivo más pequeño), 2 = estéreo."
+      }
+    }
+  },
+  "gemini": {
+    "apiKey": "Clave de API",
+    "apiBase": "URL base de la API",
+    "voice": "Voz",
+    "model": "Modelo",
+    "multiSpeaker": "Varios hablantes",
+    "multiSpeakerHint": "Se admiten hasta 2 hablantes",
+    "audioTags": "Etiquetas de audio",
+    "audioTagsHint": "Inserta etiquetas expresivas como [laughs] directamente en tu texto",
+    "speakerName": "Nombre del hablante",
+    "speakerVoice": "Voz del hablante",
+    "addSpeaker": "Agregar hablante",
+    "removeSpeaker": "Quitar",
+    "maxSpeakersReached": "Se alcanzó el máximo de 2 hablantes",
+    "filterAll": "Todas",
+    "filterEmotion": "Emoción",
+    "filterPacing": "Ritmo",
+    "filterEffect": "Efecto",
+    "filterVoiceQuality": "Calidad de voz",
+    "searchPlaceholder": "Buscar etiquetas…",
+    "insertTag": "Insertar",
+    "multiSpeakerMode": {
+      "title": "Modo de varios hablantes",
+      "addSpeaker": "Agregar hablante",
+      "speakerName": "Nombre del hablante",
+      "speakerVoice": "Voz",
+      "removeSpeaker": "Quitar",
+      "limitReached": "Máximo 2 hablantes"
+    },
+    "audioTagsPanel": {
+      "title": "Etiquetas de audio",
+      "search": "Buscar etiquetas",
+      "categoryEmotion": "Emoción",
+      "categoryPacing": "Ritmo",
+      "categoryEffect": "Efecto",
+      "categoryVoiceQuality": "Calidad de voz",
+      "insertHint": "Haz clic en una etiqueta para insertarla en el cursor"
+    },
+    "previewBadge": "Vista previa"
+  },
+  "voice_label": "Voz",
+  "voice_placeholder": "Selecciona una voz…",
+  "voice_picker": {
+    "requires_provider": "Configura primero un proveedor de TTS",
+    "enter_voice_id": "Escribe voice_id manualmente"
+  },
+  "voice_refresh": "Actualizar",
+  "voice_preview": "Vista previa",
+  "voice_stop_preview": "Detener",
+  "voice_no_voices": "No hay voces disponibles",
+  "voice_save_config_first": "Guarda primero la clave de API para cargar las voces",
+  "voice_loading": "Cargando voces…",
+  "voice_preview_error": "Falló la vista previa; actualizando la lista",
+  "model_label": "Modelo",
+  "model_placeholder": "Predeterminado (tenant/sistema)",
+  "empty_state": {
+    "title": "TTS no configurado",
+    "description": "Configura un proveedor de TTS para habilitar la voz en los agentes.",
+    "cta": "Configurar TTS",
+    "non_owner_hint": "Contacta al propietario del espacio de trabajo para configurar TTS."
+  },
+  "override": {
+    "label": "Anular la voz para este agente",
+    "inherits": "Hereda: {{provider}} · {{voice}} · {{model}}",
+    "params": {
+      "title": "Ajuste fino"
+    }
+  },
+  "test": {
+    "button": "Probar esta voz",
+    "sample_text": "Hola, esta es una prueba de voz."
+  },
+  "testConnection": {
+    "label": "Probar conexión",
+    "testing": "Probando…",
+    "success": "Conexión correcta",
+    "failed": "Falló la conexión"
+  },
+  "playground": {
+    "title": "Zona de pruebas",
+    "inputLabel": "Texto a sintetizar",
+    "placeholder": "Escribe un texto para escucharlo…",
+    "play": "Reproducir",
+    "stop": "Detener",
+    "synthesizing": "Sintetizando…",
+    "playbackFailed": "Falló la reproducción",
+    "requiresProvider": "Selecciona un proveedor arriba para habilitar la reproducción de prueba."
+  },
+  "advanced": {
+    "title": "Ajustes avanzados",
+    "count": "{{count}} ajustes avanzados",
+    "count_one": "{{count}} ajuste avanzado"
+  }
+}

@@ -164,9 +164,9 @@ func TestIsSupportedLocale(t *testing.T) {
 			wantBool: false,
 		},
 		{
-			name:     "Spanish is not supported",
-			locale:   "es",
-			wantBool: false,
+			name:     "Spanish is supported",
+			locale:   LocaleES,
+			wantBool: true,
 		},
 		{
 			name:     "German is not supported",

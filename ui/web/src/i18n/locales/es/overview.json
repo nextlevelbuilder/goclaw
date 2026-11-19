@@ -1,0 +1,93 @@
+{
+  "title": "Panel",
+  "description": "Resumen del gateway y consumo de cuota",
+  "tabs": {
+    "overview": "Resumen",
+    "usage": "Uso"
+  },
+  "statCards": {
+    "requestsToday": "Solicitudes de hoy",
+    "tokensToday": "Tokens de hoy",
+    "costToday": "Costo de hoy",
+    "agents": "Agentes",
+    "channels": "Canales",
+    "channelsAttention": "{{count}} requieren atención",
+    "running": "activos",
+    "online": "en línea",
+    "users": "{{count}} usuarios",
+    "inOut": "{{input}} entrada / {{output}} salida"
+  },
+  "providers": {
+    "noProvidersTitle": "No hay proveedores LLM configurados",
+    "noEnabledTitle": "No hay proveedores LLM habilitados",
+    "noProvidersDesc": "Necesitas agregar al menos un proveedor LLM antes de que los agentes puedan funcionar. ",
+    "noEnabledDesc": "Todos los proveedores están deshabilitados. Habilita al menos uno para empezar a usar agentes. ",
+    "goToSettings": "Ir a configuración de proveedores"
+  },
+  "systemHealth": {
+    "title": "Salud del sistema",
+    "uptime": "Tiempo activo",
+    "version": "Versión",
+    "database": "Base de datos",
+    "providers": "Proveedores",
+    "tools": "Herramientas",
+    "sessions": "Sesiones",
+    "clients": "Clientes",
+    "channels": "Canales",
+    "needsAttention": "Requiere atención",
+    "channelsNeedingAttention": "{{count}} canales",
+    "failedCount": "{{count}} fallidos",
+    "warningCountOne": "{{count}} advertencia",
+    "warningCountOther": "{{count}} advertencias",
+    "moreAttention": "+{{count}} más",
+    "active": "{{count}} activos",
+    "none": "ninguno",
+    "runtimes": "Runtimes"
+  },
+  "connectedClients": {
+    "title": "Clientes conectados",
+    "noClients": "No hay clientes conectados",
+    "columns": {
+      "ip": "IP",
+      "user": "Usuario",
+      "role": "Rol",
+      "connected": "Conectado"
+    },
+    "you": "tú"
+  },
+  "cronJobs": {
+    "title": "Tareas cron",
+    "manage": "Administrar",
+    "noJobs": "No hay tareas cron configuradas",
+    "disabled": "deshabilitada"
+  },
+  "recentRequests": {
+    "title": "Solicitudes recientes",
+    "viewAll": "Ver todo",
+    "noRequests": "No hay solicitudes recientes",
+    "columns": {
+      "time": "Hora",
+      "name": "Nombre",
+      "user": "Usuario",
+      "channel": "Canal",
+      "tokens": "Tokens",
+      "duration": "Duración",
+      "status": "Estado"
+    }
+  },
+  "quotaUsage": {
+    "title": "Uso de cuota",
+    "columns": {
+      "userGroup": "Usuario / Grupo",
+      "hour": "Hora",
+      "day": "Día",
+      "week": "Semana"
+    },
+    "noLimit": "sin límite"
+  },
+  "embedding": {
+    "title": "Embedding",
+    "notConfigured": "No configurado",
+    "configure": "Configurar en Proveedores →"
+  }
+}

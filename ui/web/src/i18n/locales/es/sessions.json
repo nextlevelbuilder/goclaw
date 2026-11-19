@@ -1,0 +1,57 @@
+{
+  "title": "Sesiones",
+  "description": "Explora las sesiones de conversación",
+  "searchPlaceholder": "Buscar sesiones...",
+  "emptyTitle": "Aún no hay sesiones",
+  "emptyDescription": "Las sesiones aparecerán aquí cuando empieces a chatear.",
+  "noMatchTitle": "Sin sesiones coincidentes",
+  "noMatchDescription": "Prueba con otro término de búsqueda.",
+  "columns": {
+    "session": "Sesión",
+    "agent": "Agente",
+    "context": "Contexto",
+    "messages": "Mensajes",
+    "updated": "Actualizada"
+  },
+  "contextBar": {
+    "compacted": "Compactada {{count}} vez(es)"
+  },
+  "detail": {
+    "reset": "Restablecer",
+    "delete": "Eliminar",
+    "deleteTitle": "Eliminar sesión",
+    "deleteDescription": "Esto eliminará permanentemente todos los mensajes de esta sesión.",
+    "resetTitle": "Restablecer sesión",
+    "resetDescription": "Esto borrará todos los mensajes pero conservará la sesión.",
+    "confirmDelete": "Eliminar",
+    "confirmReset": "Restablecer",
+    "noMessages": "No hay mensajes en esta sesión",
+    "summary": "Resumen",
+    "showMore": "Mostrar más",
+    "showLess": "Mostrar menos",
+    "showDetails": "ver detalles",
+    "hide": "ocultar",
+    "systemMessage": "Mensaje del sistema",
+    "messages": "mensajes",
+    "timeline": {
+      "title": "Línea de tiempo de la ejecución",
+      "loading": "cargando",
+      "count": "{{count}} elementos",
+      "runStatus": "ejecución",
+      "assistant": "asistente",
+      "toolCall": "llamada a herramienta",
+      "toolResult": "resultado de herramienta",
+      "trace": "traza",
+      "activity": "actividad",
+      "failed": "fallido"
+    }
+  },
+  "toast": {
+    "deleted": "Sesión eliminada",
+    "deleteFailed": "No se pudo eliminar la sesión",
+    "reset": "Sesión restablecida",
+    "resetFailed": "No se pudo restablecer la sesión",
+    "updated": "Sesión actualizada",
+    "updateFailed": "No se pudo actualizar la sesión"
+  }
+}

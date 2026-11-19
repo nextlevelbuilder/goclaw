@@ -213,16 +213,60 @@ import ruHooks from "./locales/ru/hooks.json";
 import ruWebhooks from "./locales/ru/webhooks.json";
 import ruWorkstations from "./locales/ru/workstations.json";
 
+// --- ES namespaces ---
+import esCommon from "./locales/es/common.json";
+import esSidebar from "./locales/es/sidebar.json";
+import esTopbar from "./locales/es/topbar.json";
+import esLogin from "./locales/es/login.json";
+import esOverview from "./locales/es/overview.json";
+import esChat from "./locales/es/chat.json";
+import esAgents from "./locales/es/agents.json";
+import esTeams from "./locales/es/teams.json";
+import esSessions from "./locales/es/sessions.json";
+import esSkills from "./locales/es/skills.json";
+import esCron from "./locales/es/cron.json";
+import esConfig from "./locales/es/config.json";
+import esChannels from "./locales/es/channels.json";
+import esProviders from "./locales/es/providers.json";
+import esTraces from "./locales/es/traces.json";
+import esEvents from "./locales/es/events.json";
+import esUsage from "./locales/es/usage.json";
+import esApprovals from "./locales/es/approvals.json";
+import esNodes from "./locales/es/nodes.json";
+import esLogs from "./locales/es/logs.json";
+import esTools from "./locales/es/tools.json";
+import esMcp from "./locales/es/mcp.json";
+import esTts from "./locales/es/tts.json";
+import esSetup from "./locales/es/setup.json";
+import esMemory from "./locales/es/memory.json";
+import esVault from "./locales/es/vault.json";
+import esStorage from "./locales/es/storage.json";
+import esPendingMessages from "./locales/es/pending-messages.json";
+import esContacts from "./locales/es/contacts.json";
+import esActivity from "./locales/es/activity.json";
+import esApiKeys from "./locales/es/api-keys.json";
+import esCliCredentials from "./locales/es/cli-credentials.json";
+import esPackages from "./locales/es/packages.json";
+import esTenants from "./locales/es/tenants.json";
+import esSystemSettings from "./locales/es/system-settings.json";
+import esImportExport from "./locales/es/import-export.json";
+import esV3Capabilities from "./locales/es/v3-capabilities.json";
+import esBackup from "./locales/es/backup.json";
+import esHooks from "./locales/es/hooks.json";
+import esWebhooks from "./locales/es/webhooks.json";
+import esWorkstations from "./locales/es/workstations.json";
+
 const STORAGE_KEY = "goclaw:language";
 
 function getInitialLanguage(): string {
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "en" || stored === "vi" || stored === "zh" || stored === "ko" || stored === "ru") return stored;
+  if (stored === "en" || stored === "vi" || stored === "zh" || stored === "ko" || stored === "ru" || stored === "es") return stored;
   const lang = navigator.language.toLowerCase();
   if (lang.startsWith("vi")) return "vi";
   if (lang.startsWith("zh")) return "zh";
   if (lang.startsWith("ko")) return "ko";
   if (lang.startsWith("ru")) return "ru";
+  if (lang.startsWith("es")) return "es";
   return "en";
 }
 
@@ -343,6 +387,49 @@ i18n.use(initReactI18next).init({
       hooks: ruHooks,
       webhooks: ruWebhooks,
       workstations: ruWorkstations,
+    },
+    es: {
+      common: esCommon,
+      sidebar: esSidebar,
+      topbar: esTopbar,
+      login: esLogin,
+      overview: esOverview,
+      chat: esChat,
+      agents: esAgents,
+      teams: esTeams,
+      sessions: esSessions,
+      skills: esSkills,
+      cron: esCron,
+      config: esConfig,
+      channels: esChannels,
+      providers: esProviders,
+      traces: esTraces,
+      events: esEvents,
+      usage: esUsage,
+      approvals: esApprovals,
+      nodes: esNodes,
+      logs: esLogs,
+      tools: esTools,
+      mcp: esMcp,
+      tts: esTts,
+      setup: esSetup,
+      memory: esMemory,
+      vault: esVault,
+      storage: esStorage,
+      "pending-messages": esPendingMessages,
+      contacts: esContacts,
+      activity: esActivity,
+      "api-keys": esApiKeys,
+      "cli-credentials": esCliCredentials,
+      packages: esPackages,
+      tenants: esTenants,
+      "system-settings": esSystemSettings,
+      "import-export": esImportExport,
+      "v3-capabilities": esV3Capabilities,
+      backup: esBackup,
+      hooks: esHooks,
+      webhooks: esWebhooks,
+      workstations: esWorkstations,
     },
   },
   ns: [...ns],

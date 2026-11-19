@@ -20,7 +20,7 @@ export const LOCAL_STORAGE_KEYS = {
   TIMEZONE: "goclaw:timezone",
 } as const;
 
-export const SUPPORTED_LANGUAGES = ["en", "vi", "zh", "ko", "ru"] as const;
+export const SUPPORTED_LANGUAGES = ["en", "vi", "zh", "ko", "ru", "es"] as const;
 export type Language = (typeof SUPPORTED_LANGUAGES)[number];
 
 export const LANGUAGE_LABELS: Record<Language, string> = {
@@ -29,4 +29,5 @@ export const LANGUAGE_LABELS: Record<Language, string> = {
   zh: "中文",
   ko: "한국어",
   ru: "Русский",
+  es: "Español",
 };

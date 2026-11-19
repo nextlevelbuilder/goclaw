@@ -31,7 +31,7 @@ var gitKeys = []string{
 }
 
 func TestI18nCatalogs_HasGitKeys(t *testing.T) {
-	for _, locale := range []string{LocaleEN, LocaleVI, LocaleZH, LocaleRU} {
+	for _, locale := range []string{LocaleEN, LocaleVI, LocaleZH, LocaleRU, LocaleES} {
 		for _, key := range gitKeys {
 			msg := lookup(locale, key)
 			if msg == key {

@@ -1,0 +1,26 @@
+{
+  "title": "Registro de actividad",
+  "description": "Historial de auditoría de cambios de administración y configuración.",
+  "filters": {
+    "action": "Acción",
+    "allActions": "Todas las acciones",
+    "agentCreated": "Agente creado",
+    "agentUpdated": "Agente actualizado",
+    "agentDeleted": "Agente eliminado",
+    "entityType": "Tipo de entidad",
+    "allEntities": "Todas las entidades",
+    "agent": "Agente"
+  },
+  "table": {
+    "action": "Acción",
+    "actor": "Actor",
+    "entity": "Entidad",
+    "entityId": "ID de entidad",
+    "ip": "Dirección IP",
+    "time": "Hora"
+  },
+  "empty": {
+    "title": "Sin registros de actividad",
+    "description": "Los registros de actividad aparecerán aquí cuando se realicen acciones de administración."
+  }
+}

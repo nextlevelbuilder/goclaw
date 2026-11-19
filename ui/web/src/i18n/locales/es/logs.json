@@ -1,0 +1,15 @@
+{
+  "title": "Registros",
+  "description": "Seguimiento de registros en vivo",
+  "descriptionLive": "Seguimiento en vivo en nivel {{level}}",
+  "live": "En vivo",
+  "start": "Iniciar",
+  "stop": "Detener",
+  "clear": "Limpiar",
+  "filterPlaceholder": "Filtrar registros...",
+  "logLevelTitle": "Nivel de registro",
+  "emptyWaiting": "Esperando registros...",
+  "emptyFilter": "Ningún registro coincide con el filtro.",
+  "emptyStart": "Haz clic en \"Iniciar\" para comenzar a transmitir registros.",
+  "count": "{{filtered}}/{{total}}"
+}
