@@ -686,3 +686,5 @@ Subagents share the same `SecureCLIStore` as their parent — the credentialed b
 | Team tools | `internal/tools/` (`team_tasks_tool.go`, `team_tool_*.go`) | Task board backend, team tool dispatch and cache |
 
 Use `grep` or your editor's symbol search for specific files.
+
+An optional operator setup for local code tools is documented in [Sem and Weave MCP](sem-weave-mcp.md).
