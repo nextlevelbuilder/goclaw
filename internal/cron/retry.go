@@ -3,6 +3,7 @@ package cron
 import (
 	"math/rand/v2"
 	"time"
+	"unicode/utf8"
 )
 
 // RetryConfig controls exponential backoff retry for failed cron jobs.
@@ -63,5 +64,9 @@ func TruncateOutput(s string) string {
 	if len(s) <= maxOutputBytes {
 		return s
 	}
-	return s[:maxOutputBytes] + "...[truncated]"
+	end := maxOutputBytes
+	for end > 0 && !utf8.RuneStart(s[end]) {
+		end--
+	}
+	return s[:end] + "...[truncated]"
 }
