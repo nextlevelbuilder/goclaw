@@ -200,8 +200,9 @@ User-facing parameter schemas for the most commonly configured tools.
 ### `web_search` tenant config shape
 ```json
 {
-  "provider_order": ["brave", "exa"],
+  "provider_order": ["brave", "keenable", "exa"],
   "brave": { "enabled": true, "max_results": 5 },
+  "keenable": { "enabled": true },
   "exa": { "enabled": false },
   "duckduckgo": { "enabled": false }
 }
@@ -209,6 +210,7 @@ User-facing parameter schemas for the most commonly configured tools.
 - `provider_order`: provider preference list; unknown names silently ignored.
 - Per-provider: `enabled` (bool) + `max_results` (int). DuckDuckGo `enabled: false` is ignored — it is always the final fallback.
 - API keys go in `config_secrets`, never in settings JSON.
+- Keyless providers (`parallel`, `keenable`) stay out of the default order and run only when named in `provider_order`. Keenable reads an optional `tools.web.keenable.api_key`; without one it uses a keyless quota shared by every tenant behind the install's egress IP.
 
 ### `web_fetch` tenant config shape
 ```json

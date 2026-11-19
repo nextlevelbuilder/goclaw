@@ -215,6 +215,32 @@ func TestBuildChainFromStorage(t *testing.T) {
 			wantNames: []string{"duckduckgo"},
 			wantLen:   1,
 		},
+		{
+			name:      "explicit Keenable needs no secret and stays before DDG",
+			tenantID:  uuid.New(),
+			override:  `{"provider_order":["keenable"],"keenable":{"enabled":true,"max_results":3}}`,
+			secrets:   map[string]string{},
+			wantNames: []string{"keenable", "duckduckgo"},
+			wantLen:   2,
+		},
+		{
+			name:     "Keenable key alone does not add it to the default order",
+			tenantID: uuid.New(),
+			override: "",
+			secrets: map[string]string{
+				"tools.web.keenable.api_key": "test-key-keenable",
+			},
+			wantNames: []string{"duckduckgo"},
+			wantLen:   1,
+		},
+		{
+			name:      "explicitly disabled Keenable is skipped",
+			tenantID:  uuid.New(),
+			override:  `{"provider_order":["keenable"],"keenable":{"enabled":false}}`,
+			secrets:   map[string]string{},
+			wantNames: []string{"duckduckgo"},
+			wantLen:   1,
+		},
 	}
 
 	for _, tt := range tests {
