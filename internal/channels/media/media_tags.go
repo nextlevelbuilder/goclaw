@@ -123,7 +123,7 @@ func ExtractDocumentContent(filePath, fileName string) (string, error) {
 	// XML escape content to prevent injection
 	escaped := html.EscapeString(content)
 
-	return fmt.Sprintf("<file name=%q mime=%q>\n%s\n</file>", fileName, mime, escaped), nil
+	return fmt.Sprintf("<file name=\"%s\" mime=%q>\n%s\n</file>", html.EscapeString(fileName), mime, escaped), nil
 }
 
 func isArchiveFileName(fileName string) bool {
