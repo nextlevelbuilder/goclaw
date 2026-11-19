@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/agent"
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
@@ -30,6 +31,10 @@ type EvolutionHandler struct {
 
 	// Optional: tenant tool config for disabling tools on SuggestToolOrder approval.
 	toolTenantCfgs store.BuiltinToolTenantConfigStore
+
+	// Tenant membership store used to authorize suggestion review. When nil,
+	// review is fail-closed for everyone except system owners.
+	tenants store.TenantStore
 }
 
 // EvolutionHandlerOpt configures optional EvolutionHandler dependencies.
@@ -54,6 +59,12 @@ func WithToolTenantCfgs(tc store.BuiltinToolTenantConfigStore) EvolutionHandlerO
 	return func(h *EvolutionHandler) { h.toolTenantCfgs = tc }
 }
 
+// WithEvolutionTenantStore sets the tenant store used to verify that
+// suggestion reviewers are tenant owners/admins.
+func WithEvolutionTenantStore(ts store.TenantStore) EvolutionHandlerOpt {
+	return func(h *EvolutionHandler) { h.tenants = ts }
+}
+
 func NewEvolutionHandler(m store.EvolutionMetricsStore, s store.EvolutionSuggestionStore, opts ...EvolutionHandlerOpt) *EvolutionHandler {
 	h := &EvolutionHandler{metrics: m, suggestions: s}
 	for _, opt := range opts {
@@ -65,11 +76,26 @@ func NewEvolutionHandler(m store.EvolutionMetricsStore, s store.EvolutionSuggest
 func (h *EvolutionHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/agents/{agentID}/evolution/metrics", h.auth(h.handleGetMetrics))
 	mux.HandleFunc("GET /v1/agents/{agentID}/evolution/suggestions", h.auth(h.handleListSuggestions))
-	mux.HandleFunc("PATCH /v1/agents/{agentID}/evolution/suggestions/{suggestionID}", h.auth(h.handleUpdateSuggestion))
+	mux.HandleFunc("PATCH /v1/agents/{agentID}/evolution/suggestions/{suggestionID}", h.tenantAdmin(h.handleUpdateSuggestion))
 }
 
 func (h *EvolutionHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 	return requireAuth("", next)
+}
+
+// tenantAdmin guards suggestion review. Approving a suggestion can change
+// tenant-wide state (tool_order disables a builtin tool for the tenant,
+// threshold rewrites agent config, skill_add creates a skill), so it must be
+// limited to tenant owners/admins — matching the skill evolution review
+// routes. RoleAdmin alone is insufficient because the gateway token grants
+// RoleAdmin to any tenant member (#1120).
+func (h *EvolutionHandler) tenantAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return requireAuth(permissions.RoleAdmin, func(w http.ResponseWriter, r *http.Request) {
+		if !requireTenantAdmin(w, r, h.tenants) {
+			return
+		}
+		next(w, r)
+	})
 }
 
 // handleGetMetrics returns raw or aggregated evolution metrics for an agent.

@@ -278,6 +278,7 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 		if d.pgStores.BuiltinToolTenantCfgs != nil {
 			evoOpts = append(evoOpts, httpapi.WithToolTenantCfgs(d.pgStores.BuiltinToolTenantCfgs))
 		}
+		evoOpts = append(evoOpts, httpapi.WithEvolutionTenantStore(d.pgStores.Tenants))
 		d.server.SetEvolutionHandler(httpapi.NewEvolutionHandler(d.pgStores.EvolutionMetrics, d.pgStores.EvolutionSuggestions, evoOpts...))
 	}
 
