@@ -1,0 +1,102 @@
+{
+  "title": "Workstation",
+  "description": "Gestisci le connessioni alle workstation remote (SSH, Docker) per l'esecuzione dei comandi da parte degli agenti.",
+  "addWorkstation": "Aggiungi workstation",
+  "emptyTitle": "Nessuna workstation configurata",
+  "emptyDescription": "Aggiungi una workstation per consentire agli agenti di eseguire comandi su macchine remote.",
+  "backend": {
+    "ssh": "SSH",
+    "docker": "Docker"
+  },
+  "status": {
+    "active": "Attiva",
+    "inactive": "Inattiva"
+  },
+  "columns": {
+    "name": "Nome",
+    "key": "Chiave",
+    "backend": "Backend",
+    "status": "Stato",
+    "created": "Creata il",
+    "actions": "Azioni"
+  },
+  "actions": {
+    "edit": "Modifica",
+    "delete": "Elimina",
+    "test": "Verifica connessione",
+    "activate": "Attiva",
+    "deactivate": "Disattiva"
+  },
+  "createDialog": {
+    "title": "Aggiungi workstation",
+    "description": "Configura una nuova connessione a una workstation remota.",
+    "nameLabel": "Nome visualizzato",
+    "namePlaceholder": "Il mio server di sviluppo",
+    "keyLabel": "Chiave della workstation",
+    "keyPlaceholder": "dev-server",
+    "keyHint": "Lettere minuscole, cifre, trattini. Utilizzata dagli agenti per fare riferimento a questa workstation.",
+    "backendLabel": "Tipo di backend",
+    "sshOption": "SSH",
+    "dockerOption": "Docker",
+    "hostLabel": "Host",
+    "hostPlaceholder": "192.168.1.100",
+    "portLabel": "Porta",
+    "userLabel": "Utente SSH",
+    "userPlaceholder": "ubuntu",
+    "authMethodLabel": "Autenticazione",
+    "authPrivateKeyOption": "Chiave privata",
+    "authPasswordOption": "Password",
+    "privateKeyLabel": "Chiave privata (PEM)",
+    "privateKeyPlaceholder": "-----BEGIN OPENSSH PRIVATE KEY-----",
+    "privateKeyHint": "Il testo della chiave incollata viene crittografato a riposo e non viene mai restituito dalle API.",
+    "passwordLabel": "Password SSH",
+    "passwordPlaceholder": "Password per l'utente SSH",
+    "passwordHint": "Prediligi l'autenticazione basata su chiavi ove possibile.",
+    "containerLabel": "Nome / ID del container",
+    "containerPlaceholder": "mio-container",
+    "imageLabel": "Immagine",
+    "imagePlaceholder": "ubuntu:24.04",
+    "socketPathLabel": "Percorso del socket Docker (opzionale)",
+    "socketPathPlaceholder": "unix:///var/run/docker.sock",
+    "cancel": "Annulla",
+    "create": "Crea",
+    "errors": {
+      "keyRequired": "La chiave della workstation è obbligatoria.",
+      "nameRequired": "Il nome visualizzato è obbligatorio.",
+      "sshHostUserRequired": "L'host e l'utente SSH sono obbligatori per il backend SSH.",
+      "sshPortRange": "La porta deve essere compresa tra 1 e 65535.",
+      "sshPrivateKeyRequired": "È richiesta una chiave privata per l'autenticazione basata su chiavi.",
+      "sshPasswordRequired": "È richiesta una password per l'autenticazione tramite password.",
+      "dockerContainerRequired": "Il nome del container è obbligatorio per il backend Docker.",
+      "dockerImageRequired": "L'immagine è obbligatoria per il backend Docker.",
+      "createFailed": "Impossibile creare la workstation."
+    }
+  },
+  "deleteDialog": {
+    "title": "Elimina workstation",
+    "description": "Sei sicuro di voler eliminare \"{{name}}\"? L'azione non può essere annullata.",
+    "confirmLabel": "Elimina"
+  },
+  "testResult": {
+    "success": "Connessione riuscita",
+    "notImplemented": "La verifica della connessione non è ancora disponibile"
+  },
+  "activity": {
+    "title": "Attività recente",
+    "emptyTitle": "Ancora nessuna attività",
+    "emptyDescription": "Gli eventi di esecuzione appariranno qui non appena gli agenti avvieranno dei comandi.",
+    "columns": {
+      "action": "Azione",
+      "cmdPreview": "Comando",
+      "exitCode": "Exit Code",
+      "duration": "Durata",
+      "agent": "Agente",
+      "timestamp": "Ora"
+    },
+    "actions": {
+      "exec": "Exec",
+      "deny": "Negato"
+    },
+    "loadMore": "Carica altri"
+  }
+}

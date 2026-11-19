@@ -1,0 +1,172 @@
+{
+  "title": "Utilizzo",
+  "description": "Utilizzo dei token e costi per singolo agente",
+  "emptyTitle": "Nessun dato di utilizzo",
+  "emptyDescription": "I dati di utilizzo appariranno qui dopo che gli agenti avranno elaborato le richieste.",
+  "summary": {
+    "sessions": "{{count}} sessioni",
+    "inputTokens": "Token di input",
+    "outputTokens": "Token di output",
+    "total": "Totale"
+  },
+  "recentRecords": "Record recenti",
+  "columns": {
+    "agent": "Agente",
+    "model": "Modello",
+    "provider": "Provider",
+    "input": "Input",
+    "output": "Output",
+    "total": "Totale",
+    "channel": "Canale",
+    "cost": "Costo",
+    "status": "Stato",
+    "actions": "Azioni"
+  },
+  "caps": {
+    "title": "Tetti di utilizzo",
+    "description": "Limita il budget dell'IA per token e costo all'interno degli ambiti tenant, agente, provider e modello.",
+    "window": "Intervallo",
+    "windows": {
+      "hour": "Orario",
+      "day": "Giornaliero",
+      "week": "Settimanale",
+      "month": "Mensile"
+    },
+    "agent": "Agente",
+    "provider": "Provider",
+    "model": "Modello",
+    "allAgents": "Tutti gli agenti",
+    "allProviders": "Tutti i provider",
+    "maxTokens": "Token massimi",
+    "maxCost": "Costo massimo (USD)",
+    "create": "Crea tetto",
+    "edit": "Modifica tetto",
+    "save": "Salva tetto",
+    "cancel": "Annulla modifica",
+    "scope": "Ambito",
+    "tokens": "Token",
+    "cost": "Costo",
+    "empty": "Nessun criterio sui tetti configurato.",
+    "tenantScope": "Tetto del tenant",
+    "tenantScoped": "Ambito tenant",
+    "agentScoped": "Ambito agente",
+    "agentBudgetSource": "Budget dell'agente",
+    "agentBudgetManaged": "Cancella questa voce dal campo del budget mensile dell'agente.",
+    "enabled": "Abilitato",
+    "disabled": "Disabilitato",
+    "delete": "Elimina tetto",
+    "recentBlocks": "Blocchi recenti",
+    "blocked": "Bloccato",
+    "toast": {
+      "created": "Tetto di utilizzo creato",
+      "updated": "Tetto di utilizzo aggiornato",
+      "createFailed": "Impossibile creare il tetto di utilizzo",
+      "updateFailed": "Impossibile aggiornare il tetto di utilizzo",
+      "deleted": "Tetto di utilizzo eliminato",
+      "deleteFailed": "Impossibile eliminare il tetto di utilizzo"
+    }
+  },
+  "analytics": {
+    "title": "Analisi di utilizzo",
+    "period24h": "24 ore",
+    "period7d": "7 giorni",
+    "period30d": "30 giorni",
+    "periodCustom": "Personalizzato",
+    "allAgents": "Tutti gli agenti",
+    "allProviders": "Tutti i provider",
+    "allChannels": "Tutti i canali",
+    "activeFilters": "Filtri attivi",
+    "clearAll": "Cancella tutto",
+    "exportCsv": "Esporta CSV",
+    "requests": "Richieste",
+    "tokens": "Token",
+    "cost": "Costo",
+    "errors": "Errori",
+    "uniqueUsers": "Utenti unici",
+    "llmCalls": "Chiamate LLM",
+    "toolCalls": "Chiamate strumento",
+    "trendUp": "+{{value}}%",
+    "trendDown": "{{value}}%",
+    "vsPrevious": "rispetto al periodo precedente",
+    "configurePricing": "Configura le tariffe del modello per il tracciamento dei costi",
+    "noData": "Nessun dato per il periodo selezionato",
+    "tokenChart": {
+      "title": "Utilizzo dei token nel tempo",
+      "input": "Token di input",
+      "output": "Token di output",
+      "cache": "Token di lettura della cache",
+      "thinking": "Token di riflessione (thinking)",
+      "total": "Totale"
+    },
+    "requestChart": {
+      "title": "Volume delle richieste ed errori",
+      "requests": "Richieste",
+      "errors": "Errori",
+      "errorRate": "Tasso di errore"
+    },
+    "distribution": {
+      "provider": "Distribuzione provider",
+      "model": "Distribuzione modelli",
+      "channel": "Distribuzione canali",
+      "other": "Altro",
+      "calls": "chiamate"
+    },
+    "durationChart": {
+      "title": "Durata e prestazioni",
+      "avgDuration": "Durata media",
+      "errorRate": "Tasso di errore %"
+    },
+    "knowledgeChart": {
+      "title": "Crescita della memoria e del grafo della conoscenza",
+      "memoryDocs": "Documenti di memoria",
+      "memoryChunks": "Chunk di memoria",
+      "kgEntities": "Entità del grafo",
+      "kgRelations": "Relazioni del grafo"
+    },
+    "topModels": {
+      "title": "Modelli principali",
+      "model": "Modello",
+      "provider": "Provider",
+      "llmCalls": "Chiamate LLM",
+      "inputTokens": "Token di input",
+      "outputTokens": "Token di output",
+      "avgDuration": "Durata media",
+      "cost": "Costo"
+    },
+    "events": {
+      "title": "Analisi degli eventi delle risorse",
+      "description": "Conteggia l'attività di strumenti, competenze, MCP e runtime a partire dalle esecuzioni tracciate.",
+      "tabs": {
+        "tool": "Strumenti",
+        "skill": "Competenze",
+        "mcp_tool": "MCP",
+        "runtime_tool": "Runtime"
+      },
+      "metrics": {
+        "calls": "Chiamate",
+        "errorRate": "Tasso di errore",
+        "tokens": "Token",
+        "avgDuration": "Durata media",
+        "cost": "Costo"
+      },
+      "activeBuckets": "{{count}} raggruppamenti attivi",
+      "unknownSource": "Sconosciuto",
+      "empty": "Nessun dato di evento per questa selezione.",
+      "table": {
+        "resource": "Risorsa",
+        "source": "Sorgente",
+        "calls": "Chiamate",
+        "errors": "Errori",
+        "errorRate": "Tasso di errore",
+        "avgDuration": "Durata media",
+        "tokens": "Token",
+        "cost": "Costo"
+      }
+    },
+    "tooltip": {
+      "date": "Data",
+      "total": "Totale",
+      "errorRate": "Tasso di errore {{value}}%"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "title": "Archiviazione",
+  "description": "Sfoglia i file dello spazio di lavoro",
+  "descriptionWithPath": "{{path}} — {{size}}",
+  "sizeCacheInfo": "La dimensione dello spazio di archiviazione rimane in cache per 60 metri",
+  "unsupportedFile": "L'anteprima non è supportata per questo tipo di file",
+  "download": "Scarica",
+  "delete": {
+    "fileTitle": "Elimina file",
+    "folderTitle": "Elimina cartella",
+    "description": "Sei sicuro di voler eliminare {{name}}?",
+    "folderWarning": "Tutti i contenuti verranno rimossi in modo ricorsivo.",
+    "undone": "Questa azione non può essere annullata.",
+    "deleting": "Eliminazione in corso...",
+    "confirmLabel": "Elimina"
+  },
+  "upload": {
+    "title": "Carica in archiviazione",
+    "description": "Carica i file nella directory dei dati"
+  },
+  "toast": {
+    "deleted": "File eliminato",
+    "deleteFailed": "Impossibile eliminare il file"
+  }
+}

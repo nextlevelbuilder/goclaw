@@ -1,0 +1,107 @@
+{
+  "title": "Impostazioni di sistema",
+  "save": "Salva",
+  "cancel": "Annulla",
+  "saving": "Salvataggio in corso...",
+  "saved": "Impostazioni salvate",
+  "loadFailed": "Impossibile caricare le impostazioni",
+  "saveFailed": "Impossibile salvare le impostazioni",
+  "embedding": {
+    "title": "Embedding",
+    "description": "Provider e modello per l'embedding vettoriale e la ricerca semantica.",
+    "importance": "L'embedding è fondamentale per il richiamo della memoria, la ricerca delle competenze, il grafo della conoscenza e l'accuratezza nell'abbinamento delle attività. Le modifiche influiscono sull'intero sistema.",
+    "provider": "Provider di embedding",
+    "model": "Modello di embedding",
+    "providerTip": "Il provider LLM utilizzato per generare gli embedding del testo.",
+    "modelTip": "Modello di embedding (es. text-embedding-3-small). Deve supportare l'endpoint /embeddings.",
+    "providerPlaceholder": "Seleziona provider",
+    "modelPlaceholder": "text-embedding-3-small",
+    "supportedProviders": "Verificati a 1536d: OpenAI (text-embedding-3-small/large), Gemini (gemini-embedding-001 + dimensioni), Mistral (codestral-embed), Cohere (embed-v4), DashScope (text-embedding-v3 + dimensioni). Configura le dimensioni nelle impostazioni del provider per i modelli con dimensioni native > 1536.",
+    "verify": "Verifica embedding",
+    "verifyRequired": "Verifica il modello di embedding prima di salvare.",
+    "verifyFailed": "Verifica non riuscita",
+    "dimensions": "{{count}} dimensioni",
+    "dimensionsMismatch": "{{count}} dimensioni — non corrisponde alle 1536 richieste",
+    "maxChunkLen": "Lunghezza massima del chunk",
+    "maxChunkLenHint": "Numero massimo di caratteri per ciascun chunk di memoria prima della suddivisione.",
+    "chunkOverlap": "Sovrapposizione chunk (Overlap)",
+    "chunkOverlapHint": "Caratteri di sovrapposizione tra chunk consecutivi per garantire la continuità del contesto."
+  },
+  "ux": {
+    "title": "Comportamento UX",
+    "description": "Controlla il modo in cui il gateway mostra l'attività dell'agente agli utenti.",
+    "intentClassify": "Classificazione dei messaggi con agente occupato",
+    "intentClassifyHint": "Quando l'agente sta già elaborando un turno precedente, classifica i nuovi messaggi come domande sullo stato, richieste di annullamento, istruzioni di guida o nuove richieste.",
+    "intentClassifyInfo": "Questo si applica solo mentre una sessione è occupata; non decide se una richiesta necessiti del flusso di lavoro del team.",
+    "teamWorkClassify": "Classificazione del lavoro di team",
+    "teamWorkClassifyHint": "Classifica le nuove richieste come gestione diretta o come flusso di lavoro del team/delegato.",
+    "teamWorkClassifyInfo": "Quando una richiesta supera l'ambito dell'agente attuale o dovrebbe essere suddivisa, il sistema utilizza gli embedding come evidenza e chiede al modello di decidere tra la gestione diretta e il flusso di lavoro del team/delegato. Il sistema verifica anche i permessi dei responsabili/membri; i membri possono creare richieste di aiuto solo quando il team ha abilitato le richieste dei membri e il rinvio automatico.",
+    "teamWorkClassifyEmbeddingRequired": "Configura gli embedding prima di abilitare la Classificazione del lavoro di team."
+  },
+  "kg": {
+    "title": "Grafo della conoscenza",
+    "description": "Estrai entità e relazioni dalla memoria dell'agente in un grafo della conoscenza ricercabile.",
+    "provider": "Provider di estrazione",
+    "model": "Modello di estrazione",
+    "providerTip": "Il provider LLM utilizzato per estrarre le entità dalla memoria.",
+    "modelTip": "Modello per l'estrazione di entità/relazioni (es. claude-sonnet-4-20250514).",
+    "providerPlaceholder": "Seleziona provider",
+    "modelPlaceholder": "Seleziona modello",
+    "minConfidence": "Fiducia minima (Confidence)",
+    "minConfidenceHint": "Soglia minima di fiducia (0–1) per le entità estratte.",
+    "info": "Estrae automaticamente entità e relazioni quando gli agenti scrivono nella memoria. Lascia il provider vuoto per disabilitare."
+  },
+  "bg": {
+    "title": "Worker in background",
+    "description": "Provider e modello per le attività in background (arricchimento del vault, consolidamento, dreaming).",
+    "provider": "Provider",
+    "model": "Modello",
+    "providerTip": "Provider LLM per le attività in background. Lascia vuoto per utilizzare il valore predefinito dell'agente.",
+    "modelTip": "Modello per le attività in background. Lascia vuoto per utilizzare il valore predefinito del provider.",
+    "providerPlaceholder": "(predefinito dell'agente)",
+    "modelPlaceholder": "(predefinito)",
+    "info": "Utilizzato per l'arricchimento del vault (riepilogo dei documenti), il consolidamento (riepiloghi delle sessioni) e il dreaming. Lascia vuoto per utilizzare il provider predefinito dell'agente."
+  },
+  "providers": {
+    "requestTimeout": "Timeout della richiesta del provider (secondi)",
+    "requestTimeoutHint": "Timeout per la verifica del modello e per l'elenco dei modelli disponibili (predefinito 30). Aumenta per i modelli lenti. Lascia vuoto per utilizzare il valore predefinito."
+  },
+  "skills": {
+    "title": "Competenze",
+    "description": "Pacchetto delle competenze del tenant e impostazioni dei comandi con barra (slash).",
+    "maxUploadSize": "Dimensione massima di caricamento",
+    "maxUploadSizeHint": "Limite del file ZIP in MB. Intervallo consentito: 1-500.",
+    "slashEnabled": "Abilita i comandi con barra (slash)",
+    "slashEnabledHint": "Rileva /nome-competenza e /use nome-competenza all'inizio dei prompt dell'utente.",
+    "slashSuggest": "Suggerisci competenze simili",
+    "slashSuggestHint": "Mostra le corrispondenze più vicine quando una competenza richiesta non viene trovata.",
+    "slashPartial": "Consenti corrispondenza parziale",
+    "slashPartialHint": "Consente a prefissi univoci come /frontend di attivare le competenze corrispondenti.",
+    "slashPrefix": "Prefisso del comando",
+    "slashPrefixHint": "Singolo carattere utilizzato prima dei comandi delle competenze."
+  },
+  "compaction": {
+    "title": "Compattazione messaggi in attesa",
+    "description": "Riassumi la cronologia dei messaggi in attesa più lunghi per rimanere entro i limiti del contesto.",
+    "providerPlaceholder": "(auto)",
+    "threshold": "Soglia",
+    "thresholdHint": "Numero di messaggi prima che si attivi la compattazione.",
+    "keepRecent": "Mantieni recenti",
+    "keepRecentHint": "Numero di messaggi preservati dopo la compattazione.",
+    "maxTokens": "Token massimi",
+    "maxTokensHint": "Limite di token per il riepilogo compattato.",
+    "info": "Quando una chat di gruppo supera la soglia, l'LLM riassume automaticamente i messaggi più vecchi in una singola voce compatta, mantenendo intatti quelli più recenti per il contesto."
+  },
+  "moreConfig": "Ulteriori configurazioni",
+  "alert": {
+    "message": "I worker in background non sono riusciti: {{reason}}. Funzionalità come il consolidamento della memoria e l'arricchimento del vault potrebbero non funzionare.",
+    "openSettings": "Risolvi nelle Impostazioni",
+    "reason": {
+      "auth": "Autenticazione non riuscita (chiave API non valida o scaduta)",
+      "auth_permanent": "Chiave API revocata o disabilitata",
+      "billing": "Problema di fatturazione (credito esaurito o pagamento richiesto)",
+      "model_not_found": "Modello non trovato (nome del modello non valido o non disponibile)",
+      "unknown": "Errore del provider sconosciuto"
+    }
+  }
+}

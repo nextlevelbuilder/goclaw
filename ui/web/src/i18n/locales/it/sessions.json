@@ -1,0 +1,57 @@
+{
+  "title": "Sessioni",
+  "description": "Sfoglia le sessioni delle conversazioni",
+  "searchPlaceholder": "Cerca sessioni...",
+  "emptyTitle": "Nessuna sessione presente",
+  "emptyDescription": "Le sessioni appariranno qui una volta avviata una chat.",
+  "noMatchTitle": "Nessuna sessione corrispondente",
+  "noMatchDescription": "Prova con un termine di ricerca diverso.",
+  "columns": {
+    "session": "Sessione",
+    "agent": "Agente",
+    "context": "Contesto",
+    "messages": "Messaggi",
+    "updated": "Aggiornato"
+  },
+  "contextBar": {
+    "compacted": "Compattato {{count}} volte"
+  },
+  "detail": {
+    "reset": "Reimposta",
+    "delete": "Elimina",
+    "deleteTitle": "Elimina sessione",
+    "deleteDescription": "Questo eliminerà permanentemente tutti i messaggi presenti in questa sessione.",
+    "resetTitle": "Reimposta sessione",
+    "resetDescription": "Questo cancellerà tutti i messaggi mantenendo attiva la sessione.",
+    "confirmDelete": "Elimina",
+    "confirmReset": "Reimposta",
+    "noMessages": "Nessun messaggio in questa sessione",
+    "summary": "Riepilogo",
+    "showMore": "Mostra altro",
+    "showLess": "Mostra meno",
+    "showDetails": "mostra dettagli",
+    "hide": "nascondi",
+    "systemMessage": "Messaggio di sistema",
+    "messages": "messaggi",
+    "timeline": {
+      "title": "Cronologia di esecuzione",
+      "loading": "caricamento in corso",
+      "count": "{{count}} elementi",
+      "runStatus": "esecuzione",
+      "assistant": "assistente",
+      "toolCall": "chiamata strumento",
+      "toolResult": "risultato strumento",
+      "trace": "traccia",
+      "activity": "attività",
+      "failed": "non riuscito"
+    }
+  },
+  "toast": {
+    "deleted": "Sessione eliminata",
+    "deleteFailed": "Impossibile eliminare la sessione",
+    "reset": "Sessione reimpostata",
+    "resetFailed": "Impossibile reimpostare la sessione",
+    "updated": "Sessione aggiornata",
+    "updateFailed": "Impossibile aggiornare la sessione"
+  }
+}

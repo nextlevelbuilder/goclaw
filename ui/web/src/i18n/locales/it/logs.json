@@ -1,0 +1,15 @@
+{
+  "title": "Log",
+  "description": "Tracciamento dei log in tempo reale",
+  "descriptionLive": "Tracciamento in tempo reale al livello {{level}}",
+  "live": "Dal vivo",
+  "start": "Avvia",
+  "stop": "Arresta",
+  "clear": "Cancella",
+  "filterPlaceholder": "Filtra i log...",
+  "logLevelTitle": "Livello del log",
+  "emptyWaiting": "In attesa dei log...",
+  "emptyFilter": "Nessun log corrisponde al filtro.",
+  "emptyStart": "Fai clic su \"Avvia\" per iniziare lo streaming dei log.",
+  "count": "{{filtered}}/{{total}}"
+}
