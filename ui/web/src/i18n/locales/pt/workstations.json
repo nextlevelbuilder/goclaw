@@ -1,0 +1,102 @@
+{
+  "title": "Workstations",
+  "description": "Gerencie conexões com workstations remotas (SSH, Docker) para os agentes executarem comandos.",
+  "addWorkstation": "Adicionar workstation",
+  "emptyTitle": "Nenhuma workstation configurada",
+  "emptyDescription": "Adicione uma workstation para permitir que os agentes executem comandos em máquinas remotas.",
+  "backend": {
+    "ssh": "SSH",
+    "docker": "Docker"
+  },
+  "status": {
+    "active": "Ativa",
+    "inactive": "Inativa"
+  },
+  "columns": {
+    "name": "Nome",
+    "key": "Chave",
+    "backend": "Backend",
+    "status": "Status",
+    "created": "Criada em",
+    "actions": "Ações"
+  },
+  "actions": {
+    "edit": "Editar",
+    "delete": "Excluir",
+    "test": "Testar conexão",
+    "activate": "Ativar",
+    "deactivate": "Desativar"
+  },
+  "createDialog": {
+    "title": "Adicionar workstation",
+    "description": "Configure uma nova conexão com uma workstation remota.",
+    "nameLabel": "Nome de exibição",
+    "namePlaceholder": "Meu servidor de desenvolvimento",
+    "keyLabel": "Chave da workstation",
+    "keyPlaceholder": "servidor-dev",
+    "keyHint": "Letras minúsculas, dígitos e hífens. Usada pelos agentes para referenciar esta workstation.",
+    "backendLabel": "Tipo de backend",
+    "sshOption": "SSH",
+    "dockerOption": "Docker",
+    "hostLabel": "Host",
+    "hostPlaceholder": "192.168.1.100",
+    "portLabel": "Porta",
+    "userLabel": "Usuário SSH",
+    "userPlaceholder": "ubuntu",
+    "authMethodLabel": "Autenticação",
+    "authPrivateKeyOption": "Chave privada",
+    "authPasswordOption": "Senha",
+    "privateKeyLabel": "Chave privada (PEM)",
+    "privateKeyPlaceholder": "-----BEGIN OPENSSH PRIVATE KEY-----",
+    "privateKeyHint": "O conteúdo da chave colada é criptografado em repouso e nunca é retornado pela API.",
+    "passwordLabel": "Senha SSH",
+    "passwordPlaceholder": "Senha do usuário SSH",
+    "passwordHint": "Prefira autenticação por chave sempre que possível.",
+    "containerLabel": "Nome / ID do contêiner",
+    "containerPlaceholder": "meu-conteiner",
+    "imageLabel": "Imagem",
+    "imagePlaceholder": "ubuntu:24.04",
+    "socketPathLabel": "Caminho do socket do Docker (opcional)",
+    "socketPathPlaceholder": "unix:///var/run/docker.sock",
+    "cancel": "Cancelar",
+    "create": "Criar",
+    "errors": {
+      "keyRequired": "A chave da workstation é obrigatória.",
+      "nameRequired": "O nome de exibição é obrigatório.",
+      "sshHostUserRequired": "Host e usuário SSH são obrigatórios para o backend SSH.",
+      "sshPortRange": "A porta deve estar entre 1 e 65535.",
+      "sshPrivateKeyRequired": "Uma chave privada é obrigatória para a autenticação por chave.",
+      "sshPasswordRequired": "Uma senha é obrigatória para a autenticação por senha.",
+      "dockerContainerRequired": "O nome do contêiner é obrigatório para o backend Docker.",
+      "dockerImageRequired": "A imagem é obrigatória para o backend Docker.",
+      "createFailed": "Falha ao criar a workstation."
+    }
+  },
+  "deleteDialog": {
+    "title": "Excluir workstation",
+    "description": "Tem certeza de que deseja excluir \"{{name}}\"? Esta ação não pode ser desfeita.",
+    "confirmLabel": "Excluir"
+  },
+  "testResult": {
+    "success": "Conexão bem-sucedida",
+    "notImplemented": "O teste de conexão ainda não está disponível"
+  },
+  "activity": {
+    "title": "Atividade recente",
+    "emptyTitle": "Nenhuma atividade ainda",
+    "emptyDescription": "Os eventos de execução aparecerão aqui quando os agentes executarem comandos.",
+    "columns": {
+      "action": "Ação",
+      "cmdPreview": "Comando",
+      "exitCode": "Código de saída",
+      "duration": "Duração",
+      "agent": "Agente",
+      "timestamp": "Horário"
+    },
+    "actions": {
+      "exec": "Execução",
+      "deny": "Negado"
+    },
+    "loadMore": "Carregar mais"
+  }
+}

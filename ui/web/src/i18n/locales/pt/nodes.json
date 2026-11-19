@@ -1,0 +1,54 @@
+{
+  "title": "Nós",
+  "description": "Gerencie dispositivos pareados e solicitações de pareamento pendentes",
+  "emptyTitle": "Nenhum dispositivo",
+  "emptyDescription": "Nenhum dispositivo pareado ou solicitação de pareamento pendente.",
+  "pendingRequests": "Solicitações pendentes ({{count}})",
+  "pairedDevices": "Dispositivos pareados ({{count}})",
+  "sender": "Remetente:",
+  "chat": "Chat:",
+  "columns": {
+    "channel": "Canal",
+    "senderId": "ID do remetente",
+    "paired": "Pareado em",
+    "by": "Por",
+    "expires": "Expira em",
+    "actions": "Ações"
+  },
+  "approve": "Aprovar",
+  "deny": "Negar",
+  "revoke": "Revogar",
+  "never": "Nunca",
+  "makePermanent": "Tornar permanente",
+  "makeExpiring": "Definir validade",
+  "confirmApprove": {
+    "title": "Aprovar pareamento",
+    "description": "Aprovar a solicitação de pareamento de {{channel}}:{{senderId}} (código: {{code}})? Este dispositivo poderá interagir com os agentes.",
+    "confirmLabel": "Aprovar",
+    "permanent": "Nunca expira (caso contrário, 30 dias)"
+  },
+  "confirmDeny": {
+    "title": "Negar pareamento",
+    "description": "Negar a solicitação de pareamento de {{channel}}:{{senderId}} (código: {{code}})? A solicitação será removida.",
+    "confirmLabel": "Negar"
+  },
+  "confirmRevoke": {
+    "title": "Revogar dispositivo",
+    "description": "Revogar o pareamento de {{channel}}:{{senderId}}? O dispositivo precisará ser pareado novamente.",
+    "confirmLabel": "Revogar"
+  },
+  "confirmPermanent": {
+    "title": "Tornar pareamento permanente",
+    "description": "Tornar permanente o pareamento de {{channel}}:{{senderId}}? Ele permanecerá até ser revogado manualmente.",
+    "confirmLabel": "Tornar permanente"
+  },
+  "confirmExpiring": {
+    "title": "Definir validade do pareamento",
+    "description": "Devolver o pareamento de {{channel}}:{{senderId}} ao prazo padrão? Ele expirará em 30 dias a partir de agora.",
+    "confirmLabel": "Definir validade"
+  },
+  "toast": {
+    "approveFailed": "Não foi possível aprovar o pareamento",
+    "updateFailed": "Não foi possível alterar a validade do pareamento"
+  }
+}

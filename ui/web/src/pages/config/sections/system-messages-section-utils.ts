@@ -20,6 +20,7 @@ export const SYSTEM_MESSAGE_LOCALES = [
   { code: "zh", labelKey: "systemMessages.locale.zh" },
   { code: "ko", labelKey: "systemMessages.locale.ko" },
   { code: "ru", labelKey: "systemMessages.locale.ru" },
+  { code: "pt", labelKey: "systemMessages.locale.pt" },
 ] as const;
 
 export function systemMessageDefinitionsFromSchema(schema: Record<string, any> | null | undefined): SystemMessageDefinition[] {

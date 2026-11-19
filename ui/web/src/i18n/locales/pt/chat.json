@@ -1,0 +1,34 @@
+{
+  "deleteChat": "Excluir chat",
+  "deleteChatConfirm": "Isso excluirá permanentemente esta conversa e todas as suas mensagens.",
+  "newChat": "Novo chat",
+  "openSessions": "Abrir sessões",
+  "readOnly": "Somente leitura — esta sessão pertence a outro usuário",
+  "contextUsage": {
+    "tooltip": "{{used}} / {{max}} tokens ({{percent}}%) · {{compactions}} compactações · última: {{lastCompact}}",
+    "never": "nunca"
+  },
+  "empty": {
+    "title": "Inicie uma conversa",
+    "description": "Envie uma mensagem para começar a conversar com o agente."
+  },
+  "media": {
+    "image": "Imagem",
+    "video": "Vídeo",
+    "audio": "Áudio",
+    "voice": "Mensagem de voz",
+    "document": "Documento",
+    "animation": "Animação",
+    "attached": "anexado"
+  },
+  "forwardedFrom": "Encaminhada de",
+  "replyingTo": "Respondendo a",
+  "error": {
+    "notConnected": "Não conectado. Aguarde o estabelecimento da conexão."
+  },
+  "selectAgent": {
+    "title": "Selecione um agente",
+    "description": "Escolha um agente para começar a conversar"
+  },
+  "imageGenDownloadName": "gerada-{{timestamp}}.png"
+}

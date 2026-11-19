@@ -1,0 +1,172 @@
+{
+  "title": "Uso",
+  "description": "Uso de tokens e custos por agente",
+  "emptyTitle": "Nenhum dado de uso",
+  "emptyDescription": "Os dados de uso aparecerão aqui depois que os agentes processarem requisições.",
+  "summary": {
+    "sessions": "{{count}} sessões",
+    "inputTokens": "Tokens de entrada",
+    "outputTokens": "Tokens de saída",
+    "total": "Total"
+  },
+  "recentRecords": "Registros recentes",
+  "columns": {
+    "agent": "Agente",
+    "model": "Modelo",
+    "provider": "Provedor",
+    "input": "Entrada",
+    "output": "Saída",
+    "total": "Total",
+    "channel": "Canal",
+    "cost": "Custo",
+    "status": "Status",
+    "actions": "Ações"
+  },
+  "caps": {
+    "title": "Limites de uso",
+    "description": "Limite o orçamento de IA por tokens e custo nos escopos de tenant, agente, provedor e modelo.",
+    "window": "Janela",
+    "windows": {
+      "hour": "Por hora",
+      "day": "Diário",
+      "week": "Semanal",
+      "month": "Mensal"
+    },
+    "agent": "Agente",
+    "provider": "Provedor",
+    "model": "Modelo",
+    "allAgents": "Todos os agentes",
+    "allProviders": "Todos os provedores",
+    "maxTokens": "Máx. de tokens",
+    "maxCost": "Custo máx. em USD",
+    "create": "Criar limite",
+    "edit": "Editar limite",
+    "save": "Salvar limite",
+    "cancel": "Cancelar edição",
+    "scope": "Escopo",
+    "tokens": "Tokens",
+    "cost": "Custo",
+    "empty": "Nenhuma política de limite ainda.",
+    "tenantScope": "Limite do tenant",
+    "tenantScoped": "Escopo do tenant",
+    "agentScoped": "Escopo do agente",
+    "agentBudgetSource": "Orçamento do agente",
+    "agentBudgetManaged": "Limpe isto no campo de orçamento mensal do agente.",
+    "enabled": "Ativado",
+    "disabled": "Desativado",
+    "delete": "Excluir limite",
+    "recentBlocks": "Bloqueios recentes",
+    "blocked": "Bloqueado",
+    "toast": {
+      "created": "Limite de uso criado",
+      "updated": "Limite de uso atualizado",
+      "createFailed": "Não foi possível criar o limite de uso",
+      "updateFailed": "Não foi possível atualizar o limite de uso",
+      "deleted": "Limite de uso excluído",
+      "deleteFailed": "Não foi possível excluir o limite de uso"
+    }
+  },
+  "analytics": {
+    "title": "Análise de uso",
+    "period24h": "24h",
+    "period7d": "7 dias",
+    "period30d": "30 dias",
+    "periodCustom": "Personalizado",
+    "allAgents": "Todos os agentes",
+    "allProviders": "Todos os provedores",
+    "allChannels": "Todos os canais",
+    "activeFilters": "Filtros ativos",
+    "clearAll": "Limpar tudo",
+    "exportCsv": "Exportar CSV",
+    "requests": "Requisições",
+    "tokens": "Tokens",
+    "cost": "Custo",
+    "errors": "Erros",
+    "uniqueUsers": "Usuários únicos",
+    "llmCalls": "Chamadas de LLM",
+    "toolCalls": "Chamadas de ferramenta",
+    "trendUp": "+{{value}}%",
+    "trendDown": "{{value}}%",
+    "vsPrevious": "vs. período anterior",
+    "configurePricing": "Configure os preços dos modelos para acompanhar os custos",
+    "noData": "Sem dados para o período selecionado",
+    "tokenChart": {
+      "title": "Uso de tokens ao longo do tempo",
+      "input": "Tokens de entrada",
+      "output": "Tokens de saída",
+      "cache": "Tokens de leitura de cache",
+      "thinking": "Tokens de raciocínio",
+      "total": "Total"
+    },
+    "requestChart": {
+      "title": "Volume de requisições e erros",
+      "requests": "Requisições",
+      "errors": "Erros",
+      "errorRate": "Taxa de erro"
+    },
+    "distribution": {
+      "provider": "Distribuição por provedor",
+      "model": "Distribuição por modelo",
+      "channel": "Distribuição por canal",
+      "other": "Outros",
+      "calls": "chamadas"
+    },
+    "durationChart": {
+      "title": "Duração e desempenho",
+      "avgDuration": "Duração média",
+      "errorRate": "Taxa de erro %"
+    },
+    "knowledgeChart": {
+      "title": "Crescimento da memória e do grafo de conhecimento",
+      "memoryDocs": "Documentos de memória",
+      "memoryChunks": "Trechos de memória",
+      "kgEntities": "Entidades do KG",
+      "kgRelations": "Relações do KG"
+    },
+    "topModels": {
+      "title": "Principais modelos",
+      "model": "Modelo",
+      "provider": "Provedor",
+      "llmCalls": "Chamadas de LLM",
+      "inputTokens": "Tokens de entrada",
+      "outputTokens": "Tokens de saída",
+      "avgDuration": "Duração média",
+      "cost": "Custo"
+    },
+    "events": {
+      "title": "Análise de eventos de recursos",
+      "description": "Conta a atividade de ferramentas, skills, MCP e runtime a partir das execuções rastreadas.",
+      "tabs": {
+        "tool": "Ferramentas",
+        "skill": "Skills",
+        "mcp_tool": "MCP",
+        "runtime_tool": "Runtime"
+      },
+      "metrics": {
+        "calls": "Chamadas",
+        "errorRate": "Taxa de erro",
+        "tokens": "Tokens",
+        "avgDuration": "Duração média",
+        "cost": "Custo"
+      },
+      "activeBuckets": "{{count}} intervalos ativos",
+      "unknownSource": "Desconhecida",
+      "empty": "Nenhum dado de evento para esta seleção.",
+      "table": {
+        "resource": "Recurso",
+        "source": "Origem",
+        "calls": "Chamadas",
+        "errors": "Erros",
+        "errorRate": "Taxa de erro",
+        "avgDuration": "Duração média",
+        "tokens": "Tokens",
+        "cost": "Custo"
+      }
+    },
+    "tooltip": {
+      "date": "Data",
+      "total": "Total",
+      "errorRate": "{{value}}% de taxa de erro"
+    }
+  }
+}

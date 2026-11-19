@@ -1,0 +1,50 @@
+{
+  "title": "Mensagens pendentes",
+  "description": "Mensagens de canais em buffer aguardando processamento pelo agente",
+  "emptyTitle": "Nenhuma mensagem pendente",
+  "emptyDescription": "Nenhum grupo de mensagens em buffer encontrado. As mensagens aparecem aqui quando os canais mantêm em buffer as mensagens recebidas antes do processamento pelo agente.",
+  "howItWorks": {
+    "title": "Como funciona",
+    "step1": "As mensagens dos canais (Telegram, Discord etc.) ficam em buffer aqui enquanto o agente está ocupado ou offline.",
+    "step2": "Quando o buffer atinge o limite (padrão: 50 mensagens), a compactação automática entra em ação — um LLM resume as mensagens mais antigas, mantendo apenas as 15 mais recentes.",
+    "step3": "No próximo turno do agente, o resumo compactado e as mensagens recentes são injetados como contexto, para que o agente se atualize sem ficar sobrecarregado.",
+    "compactAction": "Compactar — Aciona manualmente a sumarização por LLM agora. Útil quando você quer que o agente processe um resumo limpo em vez de uma enxurrada de mensagens brutas.",
+    "clearAction": "Limpar — Exclui permanentemente todas as mensagens em buffer de um grupo. Use quando as mensagens não forem mais relevantes."
+  },
+  "columns": {
+    "channel": "Canal",
+    "group": "Grupo",
+    "messages": "Mensagens",
+    "status": "Status",
+    "lastActivity": "Última atividade",
+    "actions": "Ações"
+  },
+  "status": {
+    "compacted": "Compactadas",
+    "raw": "Brutas"
+  },
+  "compact": "Compactar",
+  "compacting": "Compactando…",
+  "clear": "Limpar",
+  "confirmClear": {
+    "title": "Limpar mensagens?",
+    "description": "Isso excluirá permanentemente todas as mensagens em {{channel}} / {{key}}. Esta ação não pode ser desfeita.",
+    "cancel": "Cancelar",
+    "confirm": "Limpar"
+  },
+  "dialog": {
+    "title": "Mensagens — {{name}}",
+    "noMessages": "Nenhuma mensagem encontrada.",
+    "summary": "Resumo"
+  },
+  "toast": {
+    "compacted": "Compactação concluída",
+    "compactedSummarized": "Resumidas em {{count}} mensagens",
+    "compactedDeleted": "Todas as mensagens foram excluídas (nenhum provedor de LLM disponível)",
+    "compacting": "Compactando…",
+    "compactingDesc": "A sumarização por LLM está em execução em segundo plano. A lista será atualizada automaticamente.",
+    "failedCompact": "Falha na compactação",
+    "cleared": "Mensagens limpas",
+    "failedClear": "Falha ao limpar as mensagens"
+  }
+}

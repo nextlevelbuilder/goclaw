@@ -1,0 +1,56 @@
+{
+  "title": "Capacidades do agente V3",
+  "subtitle": "Os sistemas centrais que dão inteligência ao seu agente",
+  "note": "Todas as capacidades estão sempre ativas nos agentes v3.",
+  "tabs": {
+    "pipeline": "Pipeline",
+    "memory": "Memória",
+    "knowledge": "Conhecimento",
+    "orchestration": "Orquestração"
+  },
+  "pipeline": {
+    "title": "Pipeline de execução em 8 etapas",
+    "description": "Toda mensagem passa por 8 etapas estruturadas, divididas em 3 fases.",
+    "setup": "Preparação",
+    "setupDesc": "Enriquece o contexto com a configuração do agente, metadados do workspace, histórico do usuário e memórias de sessões anteriores injetadas automaticamente.",
+    "iteration": "Laço de iteração",
+    "iterationDesc": "Repete até a tarefa ser concluída ou o máximo de iterações ser atingido.",
+    "think": "Pensar",
+    "thinkDesc": "Raciocínio do LLM com o contexto completo",
+    "prune": "Podar",
+    "pruneDesc": "Gerenciamento de tokens e compactação",
+    "tools": "Ferramentas",
+    "toolsDesc": "Executa as chamadas de ferramenta do LLM",
+    "observe": "Observar",
+    "observeDesc": "Captura e valida a saída",
+    "checkpoint": "Checkpoint",
+    "checkpointDesc": "Salva o estado intermediário",
+    "finalize": "Finalizar",
+    "finalizeDesc": "Persiste os metadados, emite eventos para a consolidação de memória e limpa a execução."
+  },
+  "memory": {
+    "title": "Sistema de memória em 3 camadas",
+    "description": "Memória progressiva, da conversa ao conhecimento de longo prazo.",
+    "l0Title": "Memória de trabalho L0",
+    "l0Desc": "Histórico da sessão com compactação automática baseada em tokens. Quando o histórico excede o limite da janela de contexto, as mensagens mais antigas são resumidas por um LLM e truncadas. O flush de memória extrai os fatos principais para arquivos persistentes antes da compactação.",
+    "l1Title": "Memória episódica L1",
+    "l1Desc": "Resumos de sessão criados após cada execução de conversa. Cada um recebe um resumo curto L0 (~50 tokens) para injeção rápida. Busca híbrida FTS + vetorial com TTL de 90 dias. Os resumos relevantes são injetados automaticamente no prompt do sistema a cada turno.",
+    "l2Title": "Memória semântica L2",
+    "l2Desc": "Grafo de conhecimento com entidades e relações extraídas por LLM (limite de confiança 0,75). A desduplicação automática mescla entidades semelhantes. O Dreaming consolida 5 ou mais entradas episódicas em documentos de fatos de longo prazo, pesquisáveis pelas ferramentas de memória.",
+    "eventFlow": "Orientado a eventos: session.completed dispara a criação da L1, que dispara a extração da L2 e o Dreaming."
+  },
+  "knowledge": {
+    "kgTitle": "Grafo de conhecimento",
+    "kgDesc": "Entidades (pessoas, projetos, tecnologias) e suas relações são extraídas dos resumos de sessão por LLM. O versionamento temporal registra quando os fatos eram válidos. Pesquisável pela ferramenta knowledge_graph_search, com travessia de múltiplos saltos de até 5 níveis de profundidade.",
+    "vaultTitle": "Vault de conhecimento",
+    "vaultDesc": "Registro de documentos com resolução de [[wikilink]]. A busca unificada combina documentos do vault (40%), memórias episódicas (30%) e entidades do KG (30%) em um único conjunto de resultados ordenado. O hash SHA-256 detecta mudanças de conteúdo para indexação incremental.",
+    "dreamingTitle": "Dreaming",
+    "dreamingDesc": "Quando 5 ou mais resumos de sessão se acumulam, o LLM sintetiza fatos de longo prazo: preferências do usuário, arquitetura de projetos, padrões recorrentes e decisões importantes com suas justificativas. Armazenados como documentos de memória pesquisáveis. Com debounce de 10 minutos por agente."
+  },
+  "orchestration": {
+    "delegateTitle": "Delegação entre agentes",
+    "delegateDesc": "Os agentes delegam tarefas a agentes vinculados por meio de agent_links, com verificação de permissões. O modo síncrono bloqueia até um tempo limite configurável aguardando os resultados. O modo assíncrono dispara imediatamente e anuncia os resultados pelo barramento de mensagens quando concluído.",
+    "evolutionTitle": "Autoevolução",
+    "evolutionDesc": "Acompanha o uso de ferramentas e as métricas de recuperação em ciclos semanais. Detecta três padrões: baixo uso de recuperação (< 20%), altas taxas de falha de ferramentas (< 10% de sucesso) e padrões repetidos de ferramentas (> 100 chamadas/semana). Sugere ajustes de configuração, com aplicação automática protegida por guardrails e reversão."
+  }
+}

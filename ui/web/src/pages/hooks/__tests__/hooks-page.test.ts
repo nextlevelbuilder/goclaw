@@ -144,7 +144,7 @@ describe("hooks i18n key contracts", () => {
   });
 
   it("decision keys exist in all locales", async () => {
-    for (const locale of ["en", "vi", "zh", "ru"]) {
+    for (const locale of ["en", "vi", "zh", "ru", "pt"]) {
       const mod = await import(`@/i18n/locales/${locale}/hooks.json`);
       const data = mod as unknown as Record<string, Record<string, string>>;
       expect(data.decision?.allow).toBeTruthy();
@@ -155,7 +155,7 @@ describe("hooks i18n key contracts", () => {
   });
 
   it("prompt provider/model keys exist in all locales", async () => {
-    for (const locale of ["en", "vi", "zh", "ru"]) {
+    for (const locale of ["en", "vi", "zh", "ru", "pt"]) {
       const mod = await import(`@/i18n/locales/${locale}/hooks.json`);
       const data = mod as unknown as Record<string, Record<string, string>>;
       expect(data.form?.provider).toBeTruthy();

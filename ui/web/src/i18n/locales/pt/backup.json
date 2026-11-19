@@ -1,0 +1,129 @@
+{
+  "title": "Backup e restauração",
+  "description": "Crie backups do sistema, restaure a partir de arquivos e gerencie o armazenamento S3",
+  "tabs": {
+    "systemBackup": "Backup do sistema",
+    "systemRestore": "Restauração do sistema",
+    "s3Config": "Armazenamento S3",
+    "tenantBackup": "Backup de tenant"
+  },
+  "backup": {
+    "preflight": {
+      "title": "Verificação do sistema",
+      "pgDump": "pg_dump disponível",
+      "diskSpace": "Espaço em disco suficiente",
+      "dbSize": "Tamanho do banco de dados",
+      "dataDir": "Diretório de dados",
+      "workspace": "Workspace",
+      "freeDisk": "Espaço livre em disco",
+      "warnings": "Avisos",
+      "refresh": "Atualizar",
+      "pgDumpMissing": "pg_dump indisponível ou incompatível",
+      "goToPackages": "Ir para Pacotes"
+    },
+    "options": {
+      "includeDb": "Incluir banco de dados",
+      "includeFiles": "Incluir arquivos",
+      "destination": "Destino do backup",
+      "local": "Baixar localmente",
+      "s3": "Enviar para o S3"
+    },
+    "start": "Iniciar backup",
+    "running": "Fazendo backup...",
+    "complete": "Backup concluído",
+    "download": "Baixar backup",
+    "uploadS3": "Enviar para o S3",
+    "newBackup": "Novo backup",
+    "fileSize": "Tamanho do arquivo",
+    "schemaVersion": "Versão do schema",
+    "s3History": {
+      "title": "Backups no S3",
+      "empty": "Nenhum backup encontrado no S3",
+      "name": "Arquivo",
+      "size": "Tamanho",
+      "date": "Data"
+    },
+    "errorTitle": "Falha no backup"
+  },
+  "restore": {
+    "warning": "A restauração sobrescreverá os dados existentes. Esta ação não pode ser desfeita. Faça um backup antes.",
+    "dropzone": "Solte aqui o arquivo de backup .tar.gz",
+    "dropzoneHint": "ou clique para procurar",
+    "options": {
+      "restoreDb": "Restaurar banco de dados",
+      "restoreFiles": "Restaurar arquivos",
+      "dryRun": "Simulação (apenas pré-visualização)"
+    },
+    "start": "Restaurar",
+    "confirmTitle": "Confirmar restauração do sistema",
+    "confirmDesc": "Isso sobrescreverá o banco de dados e os arquivos atuais com o conteúdo do backup. Tem certeza?",
+    "running": "Restaurando...",
+    "doNotClose": "Não feche esta página durante a restauração",
+    "complete": "Restauração concluída",
+    "dryRunNote": "Esta foi uma simulação. Nenhuma alteração foi feita.",
+    "dbRestored": "Banco de dados restaurado",
+    "filesExtracted": "Arquivos extraídos",
+    "bytesExtracted": "Dados restaurados",
+    "schemaVersion": "Versão do schema",
+    "warnings": "Avisos",
+    "newRestore": "Nova restauração",
+    "errorTitle": "Falha na restauração",
+    "tryAgain": "Tentar novamente"
+  },
+  "s3": {
+    "title": "Configuração do armazenamento S3",
+    "description": "Configure um armazenamento compatível com S3 para backups remotos",
+    "status": {
+      "configured": "Configurado",
+      "notConfigured": "Não configurado"
+    },
+    "fields": {
+      "accessKeyId": "ID da chave de acesso",
+      "secretAccessKey": "Chave de acesso secreta",
+      "secretPlaceholder": "Digite para atualizar",
+      "bucket": "Bucket",
+      "region": "Região",
+      "endpoint": "Endpoint (opcional)",
+      "endpointHint": "Para serviços compatíveis com S3 (MinIO, R2 etc.)",
+      "prefix": "Prefixo da chave"
+    },
+    "save": "Salvar e testar conexão",
+    "saving": "Testando conexão...",
+    "saveSuccess": "Configuração do S3 salva e conexão verificada",
+    "saveError": "Falha ao salvar a configuração do S3"
+  },
+  "tenant": {
+    "title": "Backup e restauração de tenant",
+    "description": "Faça backup ou restaure os dados de um tenant específico",
+    "selectTenant": "Selecionar tenant",
+    "selectTenantPlaceholder": "Escolha um tenant...",
+    "backup": {
+      "start": "Fazer backup do tenant",
+      "running": "Fazendo backup do tenant...",
+      "complete": "Backup do tenant concluído",
+      "download": "Baixar",
+      "tableCounts": "Tabelas incluídas no backup",
+      "newBackup": "Novo backup"
+    },
+    "restore": {
+      "mode": "Modo de restauração",
+      "modeUpsert": "Mesclar (upsert)",
+      "modeReplace": "Substituir tudo",
+      "modeNew": "Novo tenant",
+      "newTenantSlug": "Slug do novo tenant",
+      "newTenantSlugPlaceholder": "Informe um slug exclusivo para o novo tenant",
+      "dropzone": "Solte aqui o arquivo de backup do tenant",
+      "dryRun": "Simulação (apenas pré-visualização)",
+      "start": "Restaurar tenant",
+      "confirmTitle": "Confirmar restauração do tenant",
+      "confirmDesc": "Isso modificará os dados do tenant selecionado. Tem certeza?",
+      "confirmDescNew": "Isso criará um novo tenant e restaurará o arquivo nele. Tem certeza?",
+      "running": "Restaurando o tenant...",
+      "complete": "Restauração do tenant concluída",
+      "tablesRestored": "Tabelas restauradas",
+      "filesExtracted": "Arquivos extraídos",
+      "dryRunNote": "Simulação — nenhuma alteração foi feita",
+      "newRestore": "Nova restauração"
+    }
+  }
+}

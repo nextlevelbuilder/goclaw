@@ -1,0 +1,57 @@
+{
+  "title": "Sessões",
+  "description": "Navegue pelas sessões de conversa",
+  "searchPlaceholder": "Pesquisar sessões...",
+  "emptyTitle": "Nenhuma sessão ainda",
+  "emptyDescription": "As sessões aparecerão aqui assim que você começar a conversar.",
+  "noMatchTitle": "Nenhuma sessão encontrada",
+  "noMatchDescription": "Tente outro termo de pesquisa.",
+  "columns": {
+    "session": "Sessão",
+    "agent": "Agente",
+    "context": "Contexto",
+    "messages": "Mensagens",
+    "updated": "Atualizada"
+  },
+  "contextBar": {
+    "compacted": "Compactada {{count}} vez(es)"
+  },
+  "detail": {
+    "reset": "Redefinir",
+    "delete": "Excluir",
+    "deleteTitle": "Excluir sessão",
+    "deleteDescription": "Isso excluirá permanentemente todas as mensagens desta sessão.",
+    "resetTitle": "Redefinir sessão",
+    "resetDescription": "Isso apagará todas as mensagens, mas manterá a sessão.",
+    "confirmDelete": "Excluir",
+    "confirmReset": "Redefinir",
+    "noMessages": "Nenhuma mensagem nesta sessão",
+    "summary": "Resumo",
+    "showMore": "Mostrar mais",
+    "showLess": "Mostrar menos",
+    "showDetails": "mostrar detalhes",
+    "hide": "ocultar",
+    "systemMessage": "Mensagem do sistema",
+    "messages": "mensagens",
+    "timeline": {
+      "title": "Linha do tempo da execução",
+      "loading": "carregando",
+      "count": "{{count}} itens",
+      "runStatus": "execução",
+      "assistant": "assistente",
+      "toolCall": "chamada de ferramenta",
+      "toolResult": "resultado da ferramenta",
+      "trace": "trace",
+      "activity": "atividade",
+      "failed": "falhou"
+    }
+  },
+  "toast": {
+    "deleted": "Sessão excluída",
+    "deleteFailed": "Falha ao excluir a sessão",
+    "reset": "Sessão redefinida",
+    "resetFailed": "Falha ao redefinir a sessão",
+    "updated": "Sessão atualizada",
+    "updateFailed": "Falha ao atualizar a sessão"
+  }
+}
