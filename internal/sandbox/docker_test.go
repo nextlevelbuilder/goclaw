@@ -88,6 +88,20 @@ func TestDefaultConfig_MaxOutputBytes(t *testing.T) {
 	}
 }
 
+func TestSanitizeKeyLongKeysStayDistinct(t *testing.T) {
+	a := sanitizeKey("w0123456789abcdef:agent:demo:team:11111111-2222-3333-4444-555555555555:system")
+	b := sanitizeKey("w0123456789abcdef:agent:demo:team:11111111-2222-3333-4444-555555555555:-100123:topic:28")
+	if len(a) != 50 || len(b) != 50 {
+		t.Fatalf("want 50 chars, got %d and %d", len(a), len(b))
+	}
+	if a == b {
+		t.Fatalf("keys sharing a long prefix collide: %q", a)
+	}
+	if got := sanitizeKey(strings.Repeat("x", 100)); got[:41] != strings.Repeat("x", 41) {
+		t.Errorf("long key lost its readable prefix: %q", got)
+	}
+}
+
 func TestSanitizeKey(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -98,7 +112,6 @@ func TestSanitizeKey(t *testing.T) {
 		{"has/slash", "has-slash"},
 		{"has space", "has-space"},
 		{"agent:chloe:whatsapp:551152861098:5@s.whatsapp.net", "agent-chloe-whatsapp-551152861098-5-s-whatsapp-net"},
-		{strings.Repeat("x", 100), strings.Repeat("x", 50)},
 	}
 	for _, tc := range tests {
 		got := sanitizeKey(tc.input)
