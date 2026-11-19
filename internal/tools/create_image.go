@@ -41,7 +41,7 @@ var imageGenProviderPriority = []string{"openrouter", "gemini", "openai", "minim
 // imageGenModelDefaults maps provider names to default image generation models.
 var imageGenModelDefaults = map[string]string{
 	"openrouter": "google/gemini-2.5-flash-image",
-	"openai":     "gpt-image-1.5",
+	"openai":     "gpt-image-2.5-flare",
 	"gemini":     "gemini-2.5-flash-image",
 	"minimax":    "image-01",
 	"dashscope":  "wan2.6-image",
