@@ -13,6 +13,7 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/pipeline"
 	"github.com/nextlevelbuilder/goclaw/internal/providers"
+	"github.com/nextlevelbuilder/goclaw/internal/store"
 	"github.com/nextlevelbuilder/goclaw/internal/tools"
 	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
@@ -159,6 +160,34 @@ func TestMakeCallLLMPropagatesDelegationArtifactBridgeOptions(t *testing.T) {
 	if provider.request.Options[providers.OptDelegationID] != "delegation-id" ||
 		provider.request.Options[providers.OptDelegationInputs] != "/runtime/inputs" {
 		t.Fatalf("delegation options = %#v", provider.request.Options)
+	}
+}
+
+func TestMakeCallLLMPropagatesSenderAndRoleBridgeOptions(t *testing.T) {
+	provider := &requestCaptureProvider{}
+	loop := &Loop{id: "target-agent", agentUUID: uuid.New()}
+	req := &RunRequest{RunID: "run-1", SessionKey: "agent:main:telegram:group:-100123"}
+	state := &pipeline.RunState{Provider: provider, Model: "test-model"}
+	ctx := store.WithSenderID(context.Background(), "424242|alice")
+	ctx = store.WithRole(ctx, "admin")
+
+	if _, err := loop.makeCallLLM(req, func(AgentEvent) {})(ctx, state, providers.ChatRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if provider.request.Options[providers.OptSenderID] != "424242|alice" ||
+		provider.request.Options[providers.OptRole] != "admin" {
+		t.Fatalf("identity options = %#v", provider.request.Options)
+	}
+
+	provider.request = providers.ChatRequest{}
+	if _, err := loop.makeCallLLM(req, func(AgentEvent) {})(context.Background(), state, providers.ChatRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := provider.request.Options[providers.OptSenderID]; ok {
+		t.Fatal("sender option set without a sender in context")
+	}
+	if _, ok := provider.request.Options[providers.OptRole]; ok {
+		t.Fatal("role option set without a role in context")
 	}
 }
 

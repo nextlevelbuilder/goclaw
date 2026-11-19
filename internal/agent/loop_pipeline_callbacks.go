@@ -400,6 +400,12 @@ func (l *Loop) makeCallLLM(req *RunRequest, emitRun func(AgentEvent)) func(ctx c
 		chatReq.Options[providers.OptPeerKind] = req.PeerKind
 		chatReq.Options[providers.OptLocalKey] = req.LocalKey
 		chatReq.Options[providers.OptWorkspace] = tools.ToolWorkspaceFromCtx(ctx)
+		if senderID := store.SenderIDFromContext(ctx); senderID != "" {
+			chatReq.Options[providers.OptSenderID] = senderID
+		}
+		if role := store.RoleFromContext(ctx); role != "" {
+			chatReq.Options[providers.OptRole] = role
+		}
 		if delegationID := tools.DelegationIDFromCtx(ctx); delegationID != "" {
 			chatReq.Options[providers.OptDelegationID] = delegationID
 		}
