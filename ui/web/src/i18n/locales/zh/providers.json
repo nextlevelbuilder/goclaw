@@ -406,5 +406,8 @@
     "failedCreate": "创建Provider失败",
     "failedUpdate": "更新Provider失败",
     "failedDelete": "删除Provider失败"
+  },
+  "providerTypes": {
+    "custom": "自定义提供商（兼容 OpenAI）"
   }
 }

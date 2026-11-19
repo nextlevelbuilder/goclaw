@@ -3,6 +3,8 @@ import { slugify } from "@/lib/slug";
 export interface ProviderTypeInfo {
   value: string;
   label: string;
+  /** i18n key (providers namespace) for options whose label must be translated. */
+  labelKey?: string;
   apiBase: string;
   placeholder: string;
 }
@@ -17,6 +19,9 @@ export const PROVIDER_TYPES: ProviderTypeInfo[] = [
   { value: "chatgpt_oauth", label: "ChatGPT Subscription (OAuth)", apiBase: "", placeholder: "" },
   { value: "anthropic_native", label: "Anthropic (Native)", apiBase: "", placeholder: "https://api.anthropic.com" },
   { value: "openai_compat", label: "OpenAI Compatible", apiBase: "", placeholder: "https://api.openai.com/v1" },
+  // Create-time alias only: the backend stores "custom" as "openai_compat", so saved
+  // providers are displayed with the OpenAI Compatible badge afterwards.
+  { value: "custom", label: "Custom Provider (OpenAI-compatible)", labelKey: "providerTypes.custom", apiBase: "", placeholder: "https://your-endpoint.example.com/v1" },
   { value: "gemini_native", label: "Google Gemini", apiBase: "https://generativelanguage.googleapis.com/v1beta/openai", placeholder: "" },
   { value: "vertex", label: "Google Vertex AI", apiBase: "", placeholder: "Auto-computed from project_id + region (settings)" },
   { value: "openrouter", label: "OpenRouter", apiBase: "https://openrouter.ai/api/v1", placeholder: "" },
@@ -64,4 +69,15 @@ export function suggestUniqueProviderAlias(
     suffix += 1;
   }
   return `${baseAlias}-${suffix}`;
+}
+
+/**
+ * Display label for a provider type option. Options with a labelKey are translated
+ * through the providers namespace; vendor names stay as static labels.
+ */
+export function providerTypeLabel(
+  pt: Pick<ProviderTypeInfo, "label" | "labelKey">,
+  translate: (key: string) => string,
+): string {
+  return pt.labelKey ? translate(pt.labelKey) : pt.label;
 }

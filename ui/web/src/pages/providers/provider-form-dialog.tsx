@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import type { ProviderData, ProviderInput } from "./hooks/use-providers";
 import { slugify } from "@/lib/slug";
-import { DEFAULT_CODEX_OAUTH_ALIAS, PROVIDER_TYPES, suggestUniqueProviderAlias } from "@/constants/providers";
+import { DEFAULT_CODEX_OAUTH_ALIAS, PROVIDER_TYPES, providerTypeLabel, suggestUniqueProviderAlias } from "@/constants/providers";
 import { OAuthSection } from "./provider-oauth-section";
 import { CLISection } from "./provider-cli-section";
 import { ACPSection } from "./provider-acp-section";
@@ -142,7 +142,7 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
             value={providerType}
             hasClaudeCLI={hasClaudeCLI}
             alreadyAddedLabel={t("form.alreadyAdded")}
-            providerTypeLabel={t("form.providerType")}
+            typeFieldLabel={t("form.providerType")}
             onChange={handleProviderTypeChange}
           />
 
@@ -277,16 +277,17 @@ export function ProviderFormDialog({ open, onOpenChange, onSubmit, existingProvi
   );
 }
 
-function ProviderTypeSelect({ value, hasClaudeCLI, alreadyAddedLabel, providerTypeLabel, onChange }: {
+function ProviderTypeSelect({ value, hasClaudeCLI, alreadyAddedLabel, typeFieldLabel, onChange }: {
   value: string;
   hasClaudeCLI: boolean;
   alreadyAddedLabel: string;
-  providerTypeLabel: string;
+  typeFieldLabel: string;
   onChange: (value: string) => void;
 }) {
+  const { t } = useTranslation("providers");
   return (
     <div className="space-y-2">
-      <Label>{providerTypeLabel}</Label>
+      <Label>{typeFieldLabel}</Label>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger>
           <SelectValue />
@@ -298,7 +299,7 @@ function ProviderTypeSelect({ value, hasClaudeCLI, alreadyAddedLabel, providerTy
               value={pt.value}
               disabled={pt.value === "claude_cli" && hasClaudeCLI}
             >
-              {pt.label}
+              {providerTypeLabel(pt, (key) => t(key))}
               {pt.value === "claude_cli" && hasClaudeCLI && (
                 <span className="ml-1 text-xs opacity-60">{alreadyAddedLabel}</span>
               )}

@@ -352,5 +352,8 @@
     "failedCreate": "공급자 생성 실패",
     "failedUpdate": "공급자 업데이트 실패",
     "failedDelete": "공급자 삭제 실패"
+  },
+  "providerTypes": {
+    "custom": "사용자 지정 공급자 (OpenAI 호환)"
   }
 }

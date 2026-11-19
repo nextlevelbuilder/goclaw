@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PROVIDER_TYPES, suggestUniqueProviderAlias } from "@/constants/providers";
+import { PROVIDER_TYPES, providerTypeLabel, suggestUniqueProviderAlias } from "@/constants/providers";
 import { useProviders } from "@/pages/providers/hooks/use-providers";
 import { CLISection } from "@/pages/providers/provider-cli-section";
 import { OAuthSection } from "@/pages/providers/provider-oauth-section";
@@ -28,6 +28,7 @@ interface StepProviderProps {
 
 export function StepProvider({ onComplete, existingProvider }: StepProviderProps) {
   const { t } = useTranslation("setup");
+  const { t: tProviders } = useTranslation("providers");
   const http = useHttp();
   const { providers, createProvider, updateProvider } = useProviders();
 
@@ -153,7 +154,7 @@ export function StepProvider({ onComplete, existingProvider }: StepProviderProps
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {PROVIDER_TYPES.map((t) => (
-                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    <SelectItem key={t.value} value={t.value}>{providerTypeLabel(t, (key) => tProviders(key))}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
