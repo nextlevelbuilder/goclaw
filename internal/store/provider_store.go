@@ -9,36 +9,37 @@ import (
 
 // Provider type constants.
 const (
-	ProviderAnthropicNative = "anthropic_native"
-	ProviderOpenAICompat    = "openai_compat"
-	ProviderGeminiNative    = "gemini_native"
-	ProviderOpenRouter      = "openrouter"
-	ProviderAIMLAPI         = "aimlapi"
-	ProviderGroq            = "groq"
-	ProviderDeepSeek        = "deepseek"
-	ProviderMistral         = "mistral"
-	ProviderXAI             = "xai"
-	ProviderMiniMax         = "minimax_native"
-	ProviderCohere          = "cohere"
-	ProviderPerplexity      = "perplexity"
-	ProviderDashScope       = "dashscope"
-	ProviderBailian         = "bailian"
-	ProviderChatGPTOAuth    = "chatgpt_oauth"
-	ProviderClaudeCLI       = "claude_cli"
-	ProviderYesScale        = "yescale"
-	ProviderZai             = "zai"
-	ProviderZaiCoding       = "zai_coding"
-	ProviderOllama          = "ollama"          // local or self-hosted Ollama (no API key)
-	ProviderOllamaCloud     = "ollama_cloud"    // Ollama Cloud (Bearer token required)
-	ProviderACP             = "acp"             // ACP (Agent Client Protocol) agent subprocess
-	ProviderNovita          = "novita"          // Novita AI (OpenAI-compatible endpoint)
-	ProviderBytePlus        = "byteplus"        // BytePlus ModelArk (Seed 2.0 models)
-	ProviderBytePlusCoding  = "byteplus_coding" // BytePlus ModelArk Coding Plan
-	ProviderVertex          = "vertex"          // Google Cloud Vertex AI (OAuth2 service account + ADC)
-	ProviderKimiCoding      = "kimi_coding"     // Moonshot Kimi Coding (OpenAI-compat, requires fixed User-Agent)
-	ProviderAtlasCloud      = "atlascloud"      // Atlas Cloud (OpenAI-compatible endpoint)
-	ProviderAPIRoute        = "api_route"       // API Route (OpenAI-compatible endpoint)
-	ProviderRequesty        = "requesty"        // Requesty (OpenAI-compatible router)
+	ProviderAnthropicNative  = "anthropic_native"
+	ProviderOpenAICompat     = "openai_compat"
+	ProviderGeminiNative     = "gemini_native"
+	ProviderOpenRouter       = "openrouter"
+	ProviderAIMLAPI          = "aimlapi"
+	ProviderGroq             = "groq"
+	ProviderDeepSeek         = "deepseek"
+	ProviderMistral          = "mistral"
+	ProviderXAI              = "xai"
+	ProviderMiniMax          = "minimax_native"
+	ProviderCohere           = "cohere"
+	ProviderPerplexity       = "perplexity"
+	ProviderDashScope        = "dashscope"
+	ProviderBailian          = "bailian"
+	ProviderChatGPTOAuth     = "chatgpt_oauth"
+	ProviderClaudeCLI        = "claude_cli"
+	ProviderYesScale         = "yescale"
+	ProviderZai              = "zai"
+	ProviderZaiCoding        = "zai_coding"
+	ProviderOllama           = "ollama"           // local or self-hosted Ollama (no API key)
+	ProviderOllamaCloud      = "ollama_cloud"     // Ollama Cloud (Bearer token required)
+	ProviderACP              = "acp"              // ACP (Agent Client Protocol) agent subprocess
+	ProviderNovita           = "novita"           // Novita AI (OpenAI-compatible endpoint)
+	ProviderBytePlus         = "byteplus"         // BytePlus ModelArk (Seed 2.0 models)
+	ProviderBytePlusCoding   = "byteplus_coding"  // BytePlus ModelArk Coding Plan
+	ProviderVertex           = "vertex"           // Google Cloud Vertex AI (OAuth2 service account + ADC)
+	ProviderKimiCoding       = "kimi_coding"      // Moonshot Kimi Coding (OpenAI-compat, requires fixed User-Agent)
+	ProviderAtlasCloud       = "atlascloud"       // Atlas Cloud (OpenAI-compatible endpoint)
+	ProviderAPIRoute         = "api_route"        // API Route (OpenAI-compatible endpoint)
+	ProviderRequesty         = "requesty"         // Requesty (OpenAI-compatible router)
+	ProviderCheaperInference = "cheaperinference" // Cheaper Inference (OpenAI-compatible gateway)
 
 	// MiniMax defaults.
 	MiniMaxDefaultAPIBase = "https://api.minimax.io/v1"
@@ -77,6 +78,10 @@ const (
 	// can be set through api_base.
 	RequestyDefaultAPIBase = "https://router.requesty.ai/v1"
 	RequestyDefaultModel   = "openai/gpt-4o-mini"
+
+	// Cheaper Inference defaults. Model ids have no vendor prefix.
+	CheaperInferenceDefaultAPIBase = "https://api.cheaperinference.com/v1"
+	CheaperInferenceDefaultModel   = "gpt-5.4-mini"
 )
 
 // Vertex AI constants live in internal/providers/vertex.go to avoid a store→providers import cycle
@@ -85,36 +90,37 @@ const (
 
 // ValidProviderTypes lists all accepted provider_type values.
 var ValidProviderTypes = map[string]bool{
-	ProviderAnthropicNative: true,
-	ProviderOpenAICompat:    true,
-	ProviderGeminiNative:    true,
-	ProviderOpenRouter:      true,
-	ProviderAIMLAPI:         true,
-	ProviderGroq:            true,
-	ProviderDeepSeek:        true,
-	ProviderMistral:         true,
-	ProviderXAI:             true,
-	ProviderMiniMax:         true,
-	ProviderCohere:          true,
-	ProviderPerplexity:      true,
-	ProviderDashScope:       true,
-	ProviderBailian:         true,
-	ProviderChatGPTOAuth:    true,
-	ProviderClaudeCLI:       true,
-	ProviderYesScale:        true,
-	ProviderZai:             true,
-	ProviderZaiCoding:       true,
-	ProviderOllama:          true,
-	ProviderOllamaCloud:     true,
-	ProviderACP:             true,
-	ProviderNovita:          true,
-	ProviderBytePlus:        true,
-	ProviderBytePlusCoding:  true,
-	ProviderVertex:          true,
-	ProviderKimiCoding:      true,
-	ProviderAtlasCloud:      true,
-	ProviderAPIRoute:        true,
-	ProviderRequesty:        true,
+	ProviderAnthropicNative:  true,
+	ProviderOpenAICompat:     true,
+	ProviderGeminiNative:     true,
+	ProviderOpenRouter:       true,
+	ProviderAIMLAPI:          true,
+	ProviderGroq:             true,
+	ProviderDeepSeek:         true,
+	ProviderMistral:          true,
+	ProviderXAI:              true,
+	ProviderMiniMax:          true,
+	ProviderCohere:           true,
+	ProviderPerplexity:       true,
+	ProviderDashScope:        true,
+	ProviderBailian:          true,
+	ProviderChatGPTOAuth:     true,
+	ProviderClaudeCLI:        true,
+	ProviderYesScale:         true,
+	ProviderZai:              true,
+	ProviderZaiCoding:        true,
+	ProviderOllama:           true,
+	ProviderOllamaCloud:      true,
+	ProviderACP:              true,
+	ProviderNovita:           true,
+	ProviderBytePlus:         true,
+	ProviderBytePlusCoding:   true,
+	ProviderVertex:           true,
+	ProviderKimiCoding:       true,
+	ProviderAtlasCloud:       true,
+	ProviderAPIRoute:         true,
+	ProviderRequesty:         true,
+	ProviderCheaperInference: true,
 }
 
 // VertexProviderSettings holds Vertex-specific config stored in llm_providers.settings JSONB.
