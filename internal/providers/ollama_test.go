@@ -134,3 +134,52 @@ func TestOllamaChatStream_ToolCallRepeatedInDoneChunkIsNotDuplicated(t *testing.
 	require.NoError(t, err)
 	require.Len(t, resp.ToolCalls, 1)
 }
+
+// TestOllamaBuildRequest_ToolSchemaPreserved verifies that buildRequest keeps
+// enum/items/nested properties and accepts a []any "required" list (as produced
+// by JSON-decoded MCP schemas), instead of only copying type and description.
+func TestOllamaBuildRequest_ToolSchemaPreserved(t *testing.T) {
+	p := NewOllamaProvider("ollama", "http://localhost:11434", "llama3.3", nil, nil)
+	req := ChatRequest{
+		Messages: []Message{{Role: "user", Content: "hi"}},
+		Tools: []ToolDefinition{{
+			Type: "function",
+			Function: &ToolFunctionSchema{
+				Name: "t",
+				Parameters: map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"mode": map[string]any{"type": "string", "enum": []any{"a", "b"}},
+						"tags": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+						"opts": map[string]any{
+							"type":       "object",
+							"properties": map[string]any{"x": map[string]any{"type": "integer"}},
+							"required":   []any{"x"},
+						},
+					},
+					"required": []any{"mode"},
+				},
+			},
+		}},
+	}
+	ollamaReq := p.buildRequest(context.Background(), req, false)
+	require.Len(t, ollamaReq.Tools, 1)
+	params := ollamaReq.Tools[0].Function.Parameters
+
+	assert.Equal(t, []string{"mode"}, params.Required)
+
+	mode, ok := params.Properties.Get("mode")
+	require.True(t, ok)
+	assert.Equal(t, []any{"a", "b"}, mode.Enum)
+
+	tags, ok := params.Properties.Get("tags")
+	require.True(t, ok)
+	assert.NotNil(t, tags.Items)
+
+	opts, ok := params.Properties.Get("opts")
+	require.True(t, ok)
+	require.NotNil(t, opts.Properties)
+	_, ok = opts.Properties.Get("x")
+	assert.True(t, ok)
+	assert.Equal(t, []string{"x"}, opts.Required)
+}
