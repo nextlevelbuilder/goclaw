@@ -312,7 +312,7 @@ export function StepAgent({ provider, model, onComplete, onBack, existingAgent }
                 value={description}
                 onChange={(e) => handleDescriptionChange(e.target.value)}
                 placeholder={t("agent.personalityPlaceholder")}
-                className="min-h-[120px]"
+                className="max-h-64 min-h-[120px] overflow-y-auto"
               />
               <p className="text-xs text-muted-foreground">
                 {t("agent.personalityHintBottom")}
