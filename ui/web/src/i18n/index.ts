@@ -213,16 +213,60 @@ import ruHooks from "./locales/ru/hooks.json";
 import ruWebhooks from "./locales/ru/webhooks.json";
 import ruWorkstations from "./locales/ru/workstations.json";
 
+// --- IT namespaces ---
+import itCommon from "./locales/it/common.json";
+import itSidebar from "./locales/it/sidebar.json";
+import itTopbar from "./locales/it/topbar.json";
+import itLogin from "./locales/it/login.json";
+import itOverview from "./locales/it/overview.json";
+import itChat from "./locales/it/chat.json";
+import itAgents from "./locales/it/agents.json";
+import itTeams from "./locales/it/teams.json";
+import itSessions from "./locales/it/sessions.json";
+import itSkills from "./locales/it/skills.json";
+import itCron from "./locales/it/cron.json";
+import itConfig from "./locales/it/config.json";
+import itChannels from "./locales/it/channels.json";
+import itProviders from "./locales/it/providers.json";
+import itTraces from "./locales/it/traces.json";
+import itEvents from "./locales/it/events.json";
+import itUsage from "./locales/it/usage.json";
+import itApprovals from "./locales/it/approvals.json";
+import itNodes from "./locales/it/nodes.json";
+import itLogs from "./locales/it/logs.json";
+import itTools from "./locales/it/tools.json";
+import itMcp from "./locales/it/mcp.json";
+import itTts from "./locales/it/tts.json";
+import itSetup from "./locales/it/setup.json";
+import itMemory from "./locales/it/memory.json";
+import itVault from "./locales/it/vault.json";
+import itStorage from "./locales/it/storage.json";
+import itPendingMessages from "./locales/it/pending-messages.json";
+import itContacts from "./locales/it/contacts.json";
+import itActivity from "./locales/it/activity.json";
+import itApiKeys from "./locales/it/api-keys.json";
+import itCliCredentials from "./locales/it/cli-credentials.json";
+import itPackages from "./locales/it/packages.json";
+import itTenants from "./locales/it/tenants.json";
+import itSystemSettings from "./locales/it/system-settings.json";
+import itImportExport from "./locales/it/import-export.json";
+import itV3Capabilities from "./locales/it/v3-capabilities.json";
+import itBackup from "./locales/it/backup.json";
+import itHooks from "./locales/it/hooks.json";
+import itWebhooks from "./locales/it/webhooks.json";
+import itWorkstations from "./locales/it/workstations.json";
+
 const STORAGE_KEY = "goclaw:language";
 
 function getInitialLanguage(): string {
   const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "en" || stored === "vi" || stored === "zh" || stored === "ko" || stored === "ru") return stored;
+  if (stored === "en" || stored === "vi" || stored === "zh" || stored === "ko" || stored === "ru" || stored === "it") return stored;
   const lang = navigator.language.toLowerCase();
   if (lang.startsWith("vi")) return "vi";
   if (lang.startsWith("zh")) return "zh";
   if (lang.startsWith("ko")) return "ko";
   if (lang.startsWith("ru")) return "ru";
+  if (lang.startsWith("it")) return "it";
   return "en";
 }
 
@@ -344,6 +388,45 @@ i18n.use(initReactI18next).init({
       webhooks: ruWebhooks,
       workstations: ruWorkstations,
     },
+    it: {
+      common: itCommon, sidebar: itSidebar, topbar: itTopbar, login: itLogin,
+      overview: itOverview, chat: itChat, agents: itAgents, teams: itTeams,
+      sessions: itSessions, skills: itSkills, cron: itCron, config: itConfig,
+      channels: itChannels, providers: itProviders, traces: itTraces,
+      events: itEvents, usage: itUsage,
+      approvals: itApprovals, nodes: itNodes, logs: itLogs, tools: itTools,
+      mcp: itMcp, tts: itTts, setup: itSetup, memory: itMemory, vault: itVault, storage: itStorage,
+      "pending-messages": itPendingMessages,
+      contacts: itContacts, activity: itActivity, "api-keys": itApiKeys,
+      "cli-credentials": itCliCredentials,
+      packages: itPackages,
+      tenants: itTenants,
+      "system-settings": itSystemSettings,
+      "import-export": itImportExport,
+      "v3-capabilities": itV3Capabilities,
+      backup: itBackup,
+      hooks: itHooks,
+      webhooks: itWebhooks,
+      workstations: itWorkstations,Common, sidebar: itSidebar, topbar: itTopbar, login: itLogin,
+      overview: itOverview, chat: itChat, agents: itAgents, teams: itTeams,
+      sessions: itSessions, skills: itSkills, cron: itCron, config: itConfig,
+      channels: itChannels, providers: itProviders, traces: itTraces,
+      events: itEvents, usage: itUsage,
+      approvals: itApprovals, nodes: itNodes, logs: itLogs, tools: itTools,
+      mcp: itMcp, tts: itTts, setup: itSetup, memory: itMemory, vault: itVault, storage: itStorage,
+      "pending-messages": itPendingMessages,
+      contacts: itContacts, activity: itActivity, "api-keys": itApiKeys,
+      "cli-credentials": itCliCredentials,
+      packages: itPackages,
+      tenants: itTenants,
+      "system-settings": itSystemSettings,
+      "import-export": itImportExport,
+      "v3-capabilities": itV3Capabilities,
+      backup: itBackup,
+      hooks: itHooks,
+      webhooks: itWebhooks,
+      workstations: itWorkstations,
+    },    
   },
   ns: [...ns],
   defaultNS: "common",
