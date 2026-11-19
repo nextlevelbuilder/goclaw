@@ -3,7 +3,9 @@ package acp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -171,25 +173,84 @@ func (tb *ToolBridge) handlePermission(req RequestPermissionRequest) (*RequestPe
 }
 
 // resolvePath validates that a path stays within the workspace boundary.
+//
+// The returned path is canonical: every symlink in it has been resolved,
+// including dangling symlinks and symlinked ancestors of not-yet-existing
+// files. Falling back to the lexical path is unsafe because os.MkdirAll and
+// os.WriteFile follow symlinks, so a dangling link inside the workspace could
+// otherwise redirect a write outside it (#1201).
 func (tb *ToolBridge) resolvePath(path string) (string, error) {
 	cleaned := filepath.Clean(path)
 	if !filepath.IsAbs(cleaned) {
 		cleaned = filepath.Join(tb.workspace, cleaned)
 	}
-	// Resolve symlinks for the target (may not exist yet for writes)
-	real, err := filepath.EvalSymlinks(cleaned)
-	if err != nil {
-		real = cleaned // file may not exist yet — validate parent
+	wsReal, err := filepath.EvalSymlinks(tb.workspace)
+	if err != nil || wsReal == "" {
+		wsReal = filepath.Clean(tb.workspace)
 	}
-	wsReal, _ := filepath.EvalSymlinks(tb.workspace)
-	if wsReal == "" {
-		wsReal = tb.workspace
+	real, err := resolveCanonicalPath(cleaned, 0)
+	if err != nil {
+		slog.Warn("security.acp_path_resolve_failed", "path", path, "error", err)
+		return "", fmt.Errorf("access denied: cannot resolve path")
 	}
 	if real != wsReal && !strings.HasPrefix(real, wsReal+string(filepath.Separator)) {
 		slog.Warn("security.acp_path_escape", "path", path, "resolved", real, "workspace", wsReal)
 		return "", fmt.Errorf("access denied: path outside workspace")
 	}
 	return real, nil
+}
+
+// maxSymlinkHops bounds dangling-symlink resolution (mirrors the kernel's
+// ELOOP limit) so symlink cycles cannot recurse forever.
+const maxSymlinkHops = 40
+
+// resolveCanonicalPath returns the fully symlink-resolved form of an absolute,
+// cleaned path whose trailing components may not exist yet.
+//   - existing path: EvalSymlinks result
+//   - path is a dangling symlink: resolve its target (recursively)
+//   - otherwise: canonicalize the parent and append the base name
+//
+// Any error other than "does not exist" (permission denied, ELOOP, ...) is
+// returned so the caller rejects the path instead of trusting it lexically.
+func resolveCanonicalPath(p string, hops int) (string, error) {
+	if hops > maxSymlinkHops {
+		return "", fmt.Errorf("too many levels of symbolic links: %s", p)
+	}
+	real, err := filepath.EvalSymlinks(p)
+	if err == nil {
+		return real, nil
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return "", err
+	}
+
+	if info, lerr := os.Lstat(p); lerr == nil {
+		if info.Mode()&os.ModeSymlink == 0 {
+			// Exists but EvalSymlinks reported not-exist: an ancestor is
+			// unresolvable. Never fall back to the lexical path.
+			return "", err
+		}
+		target, rerr := os.Readlink(p)
+		if rerr != nil {
+			return "", rerr
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(p), target)
+		}
+		return resolveCanonicalPath(filepath.Clean(target), hops+1)
+	} else if !errors.Is(lerr, fs.ErrNotExist) {
+		return "", lerr
+	}
+
+	parent := filepath.Dir(p)
+	if parent == p {
+		return p, nil
+	}
+	parentReal, err := resolveCanonicalPath(parent, hops)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(parentReal, filepath.Base(p)), nil
 }
 
 // Close kills all active terminals.
