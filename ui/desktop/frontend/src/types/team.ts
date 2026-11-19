@@ -60,6 +60,26 @@ export interface TeamTaskAttachment {
   download_url?: string
 }
 
+/** Per-member routing rule stored in team.settings.routing.rules */
+export interface RoutingRule {
+  agent_key: string
+  keywords?: string[]
+  file_patterns?: string[]
+  criteria?: string
+  enabled?: boolean
+}
+
+/** Typed view of team.settings; other keys pass through untouched */
+export interface TeamAccessSettings {
+  routing?: {
+    enabled?: boolean
+    fallback_to_self?: boolean
+    confidence_threshold?: number
+    rules?: RoutingRule[]
+  }
+  [key: string]: unknown
+}
+
 /** Notification config stored in team.settings.notifications */
 export interface TeamNotifyConfig {
   dispatched?: boolean

@@ -307,7 +307,21 @@
       "downgradeNote": "Downgrade is safe — V2 data is preserved but hidden.",
       "betaNote": "Some features are currently in Beta.",
       "gotIt": "Got it"
-    }
+    },
+    "routing": "Routing Rules",
+    "routingEnabled": "Enable member routing",
+    "routingEnabledDesc": "Route matching messages to specific members before embedding classification",
+    "routingFallbackToSelf": "Fallback to self",
+    "routingFallbackToSelfDesc": "Route to self when no rule matches (recommended)",
+    "routingConfidence": "Confidence threshold",
+    "routingConfidenceDesc": "Minimum confidence for a rule-driven route (0.01–1.00)",
+    "routingRuleOrderHint": "First matching rule wins — set rule order via list position",
+    "routingKeywords": "Keywords",
+    "routingKeywordsHint": "Word-boundary substring match (e.g. golang, deploy)",
+    "routingFilePatterns": "File patterns",
+    "routingFilePatternsHint": "Extensions like .go, dockerfile, *.ts",
+    "routingCriteria": "Decision criteria",
+    "routingCriteriaHint": "Natural-language rubric for the decision model (optional)"
   },
   "create": {
     "title": "Create Team",

@@ -5,16 +5,18 @@ import { useTranslation } from "react-i18next";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CHANNEL_TYPES } from "@/constants/channels";
-import type { TeamData, TeamAccessSettings, TeamNotifyConfig, EscalationMode, EscalationAction } from "@/types/team";
+import type { TeamData, TeamAccessSettings, TeamNotifyConfig, TeamMemberData, EscalationMode, EscalationAction } from "@/types/team";
 import { useTeams } from "./hooks/use-teams";
 import { TeamNotificationsSection } from "./team-notifications-section";
 import { TeamAccessControlSection } from "./team-access-control-section";
 import { TeamOrchestrationSection } from "./team-orchestration-section";
+import { TeamRoutingSection } from "./team-routing-section";
 import { teamSettingsSchema, type TeamSettingsFormData } from "@/schemas/team-settings.schema";
 
 interface TeamSettingsTabProps {
   teamId: string;
   team: TeamData;
+  members: TeamMemberData[];
   onSaved: () => void;
 }
 
@@ -23,6 +25,7 @@ function deriveDefaults(team: TeamData): TeamSettingsFormData {
   const sn = s.notifications ?? {};
   const smr = s.member_requests ?? {};
   const sbe = s.blocker_escalation ?? {};
+  const sr = s.routing ?? {};
   return {
     notifyDispatched: sn.dispatched ?? true,
     notifyProgress: sn.progress ?? false,
@@ -42,10 +45,20 @@ function deriveDefaults(team: TeamData): TeamSettingsFormData {
     denyUserIds: s.deny_user_ids ?? [],
     allowChannels: s.allow_channels ?? [],
     denyChannels: s.deny_channels ?? [],
+    routingEnabled: sr.enabled ?? false,
+    routingFallbackToSelf: sr.fallback_to_self ?? true,
+    routingConfidenceThreshold: sr.confidence_threshold ?? 0.65,
+    routingRules: (sr.rules ?? []).map((r) => ({
+      agent_key: r.agent_key,
+      keywords: r.keywords ?? [],
+      file_patterns: r.file_patterns ?? [],
+      criteria: r.criteria ?? "",
+      enabled: r.enabled ?? true,
+    })),
   };
 }
 
-export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps) {
+export function TeamSettingsTab({ teamId, team, members, onSaved }: TeamSettingsTabProps) {
   const { t } = useTranslation("teams");
   const { updateTeam } = useTeams();
 
@@ -83,6 +96,8 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
   const denyUserIds = watch("denyUserIds");
   const allowChannels = watch("allowChannels");
   const denyChannels = watch("denyChannels");
+  const routingEnabled = watch("routingEnabled");
+  const routingRules = watch("routingRules");
 
   // escalationMode / escalationActions remain uncontrolled (not in schema) — read from team settings directly
   const initial = (team.settings ?? {}) as TeamAccessSettings;
@@ -120,6 +135,20 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
       settings.followup_interval_minutes = data.followupInterval;
       settings.followup_max_reminders = data.followupMaxReminders;
       settings.workspace_scope = data.workspaceScope || "isolated";
+      if (data.routingEnabled || data.routingRules.length > 0) {
+        settings.routing = {
+          enabled: data.routingEnabled,
+          fallback_to_self: data.routingFallbackToSelf,
+          confidence_threshold: data.routingConfidenceThreshold,
+          rules: data.routingRules.filter((r) => r.agent_key).map((r) => ({
+            agent_key: r.agent_key,
+            keywords: r.keywords,
+            file_patterns: r.file_patterns,
+            criteria: r.criteria,
+            enabled: r.enabled,
+          })),
+        };
+      }
       await updateTeam(teamId, { settings });
       onSaved();
     } catch { // toast shown by hook
@@ -158,6 +187,12 @@ export function TeamSettingsTab({ teamId, team, onSaved }: TeamSettingsTabProps)
         allowChannels={allowChannels} setAllowChannels={(v) => setValue("allowChannels", v)}
         denyChannels={denyChannels} setDenyChannels={(v) => setValue("denyChannels", v)}
         channelOptions={channelOptions}
+      />
+
+      <TeamRoutingSection
+        members={members}
+        enabled={routingEnabled} onEnabledChange={(v) => setValue("routingEnabled", v)}
+        rules={routingRules} onRulesChange={(v) => setValue("routingRules", v)}
       />
 
       {/* Save button */}

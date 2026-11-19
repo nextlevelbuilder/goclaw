@@ -9,7 +9,7 @@ import (
 
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
-	"github.com/nextlevelbuilder/goclaw/internal/tools"
+	"github.com/nextlevelbuilder/goclaw/internal/teamconfig"
 )
 
 // buildTeamMD generates compact TEAM.md content for an agent that is part of a team.
@@ -131,7 +131,7 @@ func buildTeamMD(team *store.TeamData, members []store.TeamMemberData, selfID uu
 		sb.WriteString("- The task_id is auto-resolved — you don't need to specify it\n")
 		sb.WriteString("- Task completion is automatic when your run finishes\n")
 
-		memberCfg := tools.ParseMemberRequestConfig(team.Settings)
+		memberCfg := teamconfig.ParseMemberRequest(team.Settings)
 		if memberCfg.Enabled {
 			sb.WriteString("\n## Requesting Help\n\n")
 			sb.WriteString("Need help from another teammate? Create a request:\n")

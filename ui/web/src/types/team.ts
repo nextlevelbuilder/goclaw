@@ -16,6 +16,14 @@ export interface TeamNotifyConfig {
   mode?: "direct" | "leader";
 }
 
+export interface RoutingRule {
+  agent_key: string;
+  keywords?: string[];
+  file_patterns?: string[];
+  criteria?: string;
+  enabled?: boolean;
+}
+
 export interface TeamAccessSettings {
   version?: number;
   allow_user_ids?: string[];
@@ -35,6 +43,12 @@ export interface TeamAccessSettings {
   };
   blocker_escalation?: {
     enabled?: boolean;
+  };
+  routing?: {
+    enabled?: boolean;
+    fallback_to_self?: boolean;
+    confidence_threshold?: number;
+    rules?: RoutingRule[];
   };
 }
 
