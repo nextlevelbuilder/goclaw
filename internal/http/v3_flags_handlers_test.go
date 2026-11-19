@@ -95,3 +95,24 @@ func TestV3FlagsGet_ViewerAllowed(t *testing.T) {
 		t.Fatalf("GET status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
 }
+
+// Local/dev mode (no gateway token, no-auth fallback) has no tenant
+// membership rows; the master-tenant admin must still be able to toggle flags.
+func TestV3FlagsPatch_DevModeAllowed(t *testing.T) {
+	mux, as, agentID := newV3FlagsTestMux(t)
+	setupTestToken(t, "")
+	setupTestNoAuthFallback(t, true)
+
+	req := httptest.NewRequest(http.MethodPatch, "/v1/agents/"+agentID.String()+"/v3-flags",
+		strings.NewReader(`{"self_evolution_suggestions":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("dev-mode PATCH status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+	if as.updated == nil {
+		t.Fatal("dev-mode PATCH did not update the agent")
+	}
+}

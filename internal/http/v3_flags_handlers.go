@@ -37,6 +37,13 @@ func (h *V3FlagsHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 // regardless of their tenant role (#1119).
 func (h *V3FlagsHandler) tenantAdmin(next http.HandlerFunc) http.HandlerFunc {
 	return requireAuth(permissions.RoleAdmin, func(w http.ResponseWriter, r *http.Request) {
+		// Local/dev mode (no gateway token) has no per-user identity: every
+		// caller is the master-tenant admin. Same rule as storage.go and
+		// tts_config.go.
+		if pkgGatewayToken == "" && store.TenantIDFromContext(r.Context()) == store.MasterTenantID {
+			next(w, r)
+			return
+		}
 		if !requireTenantAdmin(w, r, h.tenants) {
 			return
 		}
