@@ -182,6 +182,71 @@ func TestComplete(t *testing.T) {
 		}
 	})
 
+	// Stale recovery resets a task to pending but keeps owner_agent_id. A
+	// teammate must not be able to re-assign it to itself and complete it.
+	t.Run("StaleRecoveredNonOwnerRejected", func(t *testing.T) {
+		mb, tool, _, memberID, ctx := newTestTeamSetup()
+		taskID := uuid.New()
+		owner := testMember2ID
+		preloadTask(mb, &store.TeamTaskData{
+			BaseModel:    store.BaseModel{ID: taskID},
+			TeamID:       testTeamID,
+			Subject:      "member2's recovered task",
+			Status:       store.TeamTaskStatusPending,
+			OwnerAgentID: &owner,
+		})
+
+		mCtx := store.WithAgentID(ctx, memberID)
+		mCtx = WithTaskActionFlags(mCtx, &TaskActionFlags{})
+		result := tool.Execute(mCtx, map[string]any{
+			"action":  "complete",
+			"task_id": taskID.String(),
+			"result":  "hijack",
+		})
+
+		if !result.IsError {
+			t.Fatalf("expected error when completing another agent's recovered task, got: %v", result.ForLLM)
+		}
+		task := readTask(mb, taskID)
+		if task.Status != store.TeamTaskStatusPending {
+			t.Errorf("expected pending, got %q", task.Status)
+		}
+		if task.Result != nil {
+			t.Errorf("result written by non-owner: %q", *task.Result)
+		}
+		if task.OwnerAgentID == nil || *task.OwnerAgentID != owner {
+			t.Errorf("owner changed: %v", task.OwnerAgentID)
+		}
+	})
+
+	t.Run("StaleRecoveredOwnerCompletes", func(t *testing.T) {
+		mb, tool, _, memberID, ctx := newTestTeamSetup()
+		taskID := uuid.New()
+		owner := memberID
+		preloadTask(mb, &store.TeamTaskData{
+			BaseModel:    store.BaseModel{ID: taskID},
+			TeamID:       testTeamID,
+			Subject:      "own recovered task",
+			Status:       store.TeamTaskStatusPending,
+			OwnerAgentID: &owner,
+		})
+
+		mCtx := store.WithAgentID(ctx, memberID)
+		mCtx = WithTaskActionFlags(mCtx, &TaskActionFlags{})
+		result := tool.Execute(mCtx, map[string]any{
+			"action":  "complete",
+			"task_id": taskID.String(),
+			"result":  "done",
+		})
+
+		if result.IsError {
+			t.Fatalf("owner should complete its recovered task, got: %v", result.ForLLM)
+		}
+		if task := readTask(mb, taskID); task.Status != store.TeamTaskStatusCompleted {
+			t.Errorf("expected completed, got %q", task.Status)
+		}
+	})
+
 	t.Run("MissingResult", func(t *testing.T) {
 		_, tool, _, memberID, ctx := newTestTeamSetup()
 		mCtx := store.WithAgentID(ctx, memberID)

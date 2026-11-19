@@ -73,7 +73,14 @@ func (t *TeamTasksTool) executeComplete(ctx context.Context, args map[string]any
 					return ErrorResult("only the task owner can complete this task")
 				}
 			case store.TeamTaskStatusPending:
-				// Task was reset by stale recovery — re-assign and retry once.
+				// Task was reset by stale recovery. Stale recovery keeps
+				// owner_agent_id, so only that owner may re-assign it to
+				// itself; otherwise AssignTask would let any teammate take
+				// over and complete another agent's task (#1133).
+				if current.OwnerAgentID != nil && *current.OwnerAgentID != agentID {
+					return ErrorResult("only the task owner can complete this task")
+				}
+				// Re-assign and retry once.
 				if t.manager.Store().AssignTask(ctx, taskID, agentID, team.ID) == nil {
 					if t.manager.Store().CompleteTask(ctx, taskID, team.ID, agentID, result) == nil {
 						slog.Info("executeComplete: re-assigned stale-recovered task", "task_id", taskID)

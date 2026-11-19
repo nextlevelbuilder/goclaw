@@ -203,14 +203,19 @@ func resolveTeamTaskOutcome(
 		if len(result) > 100_000 {
 			result = result[:100_000] + "\n[truncated]"
 		}
-		// Auto-complete only on behalf of the task's current owner. CompleteTask
-		// enforces owner_agent_id, so a task reassigned meanwhile is left alone.
+		// Auto-complete only when the agent that ran this turn still owns the
+		// task. If the task was recovered and handed to another agent while
+		// this run was in flight, its result must not overwrite theirs (#1133).
+		// CompleteTask additionally enforces owner_agent_id atomically.
 		var ownerAgentID uuid.UUID
 		if currentTask != nil && currentTask.OwnerAgentID != nil {
 			ownerAgentID = *currentTask.OwnerAgentID
 		}
 		if ownerAgentID == uuid.Nil {
 			slog.Warn("auto-complete: task has no owner, skipping", "task_id", meta.TaskID, "agent", toAgent)
+		} else if toAgent != "" && currentTask.OwnerAgentKey != "" && currentTask.OwnerAgentKey != toAgent {
+			slog.Warn("auto-complete: task now owned by another agent, skipping",
+				"task_id", meta.TaskID, "agent", toAgent, "owner", currentTask.OwnerAgentKey)
 		} else if err := deps.TeamStore.CompleteTask(ctx, meta.TaskID, meta.TeamID, ownerAgentID, result); err != nil {
 			slog.Warn("auto-complete: CompleteTask error", "task_id", meta.TaskID, "error", err)
 		} else {
