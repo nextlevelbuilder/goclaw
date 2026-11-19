@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -23,9 +24,11 @@ func CheckSkillDeps(m *SkillManifest) (bool, []string) {
 
 	var missing []string
 
-	// Check system binaries
+	// Check system binaries. Windows commonly exposes the Python 3
+	// interpreter as `python`, while Unix distributions conventionally use
+	// `python3`; treat those names as aliases for this runtime dependency.
 	for _, bin := range m.Requires {
-		if _, err := exec.LookPath(bin); err != nil {
+		if _, err := lookPathForDependency(bin); err != nil {
 			missing = append(missing, bin)
 		}
 	}
@@ -34,8 +37,8 @@ func CheckSkillDeps(m *SkillManifest) (bool, []string) {
 	// If python3 binary is absent, skip per-package listing — the "python3" binary
 	// is already reported via m.Requires and is the root cause.
 	if len(m.RequiresPython) > 0 {
-		if _, err := exec.LookPath("python3"); err == nil {
-			missing = append(missing, checkPythonPackages(m.RequiresPython, m.ScriptsDir)...)
+		if python, err := pythonCommand(); err == nil {
+			missing = append(missing, checkPythonPackages(python, m.RequiresPython, m.ScriptsDir)...)
 		}
 	}
 
@@ -53,7 +56,21 @@ func CheckSkillDeps(m *SkillManifest) (bool, []string) {
 // checkPythonPackages checks which Python import names are importable.
 // Sets PYTHONPATH=scriptsDir so local modules resolve natively (no false positives).
 // Returns missing deps as "pip:<pip-package-name>".
-func checkPythonPackages(importNames []string, scriptsDir string) []string {
+func lookPathForDependency(name string) (string, error) {
+	if name == "python3" && runtime.GOOS == "windows" {
+		if path, err := exec.LookPath("python3"); err == nil {
+			return path, nil
+		}
+		return exec.LookPath("python")
+	}
+	return exec.LookPath(name)
+}
+
+func pythonCommand() (string, error) {
+	return lookPathForDependency("python3")
+}
+
+func checkPythonPackages(python string, importNames []string, scriptsDir string) []string {
 	if len(importNames) == 0 {
 		return nil
 	}
@@ -67,7 +84,7 @@ func checkPythonPackages(importNames []string, scriptsDir string) []string {
 	ctx, cancel := context.WithTimeout(context.Background(), depCheckTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "python3", "-c", sb.String())
+	cmd := exec.CommandContext(ctx, python, "-c", sb.String())
 	// PYTHONPATH lets Python find local modules in scriptsDir — stdlib and local dirs
 	// resolve natively, so only truly missing pip packages produce ImportError.
 	// We filter the existing PYTHONPATH from os.Environ() to avoid duplicate-key issues

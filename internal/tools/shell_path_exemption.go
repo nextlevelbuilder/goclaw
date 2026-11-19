@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -158,10 +159,22 @@ func hasPathPrefix(path, prefix string) bool {
 	return strings.HasPrefix(path, prefix+"/")
 }
 
-// parseExecCommandWords splits a shell command into words using go-shellwords,
+// parseExecCommandWords splits a shell command into words for per-field deny
+// exemption checks. ok=false means the command uses syntax the parser cannot
+// reason about safely; callers must then refuse to apply any path exemption.
+// On POSIX hosts it always returns ok=true. On Windows (cmd.exe) see
+// parseWindowsCommandWords.
+func parseExecCommandWords(command string) (words []string, ok bool) {
+	if runtime.GOOS == "windows" {
+		return parseWindowsCommandWords(command)
+	}
+	return parsePosixCommandWords(command), true
+}
+
+// parsePosixCommandWords splits a shell command into words using go-shellwords,
 // handling quoted strings correctly. The command is first segmented by shell
 // operators (;|&<>) to avoid cross-segment quoting confusion.
-func parseExecCommandWords(command string) []string {
+func parsePosixCommandWords(command string) []string {
 	var words []string
 	for _, segment := range splitExecCommandSegments(command) {
 		parser := shellwords.NewParser()
@@ -181,9 +194,82 @@ func parseExecCommandWords(command string) []string {
 	return words
 }
 
-// splitExecCommandSegments splits a command string at shell operators (;|&<>)
-// while respecting single and double quotes. Each segment can then be safely
-// parsed by go-shellwords independently.
+// parseWindowsCommandWords splits a cmd.exe command line into words, keeping
+// backslashes literal (POSIX escaping would drop the separators of drive
+// paths). It follows cmd.exe semantics conservatively and fails closed
+// (ok=false) whenever the result might not match what cmd.exe executes:
+//   - only double quotes quote; single quotes are literal characters
+//   - an unterminated double quote fails closed
+//   - ^ (escape), % and ! (variable expansion), and CR/LF anywhere fail closed
+//   - ( and ) outside quotes (command blocks) fail closed
+//   - &, |, <, > inside quotes fail closed (nested shell command strings)
+//   - &, |, <, > outside quotes separate commands/redirections
+//   - space, tab, comma, semicolon and equals outside quotes separate words
+func parseWindowsCommandWords(command string) (words []string, ok bool) {
+	if strings.ContainsAny(command, "^%!\r\n") {
+		return nil, false
+	}
+	var word strings.Builder
+	inQuote := false
+	flush := func() {
+		if word.Len() > 0 {
+			words = append(words, word.String())
+			word.Reset()
+		}
+	}
+	for _, ch := range command {
+		if inQuote {
+			switch ch {
+			case '"':
+				inQuote = false
+			case '&', '|', '<', '>':
+				return nil, false
+			default:
+				word.WriteRune(ch)
+			}
+			continue
+		}
+		switch ch {
+		case '"':
+			inQuote = true
+		case '(', ')':
+			return nil, false
+		case ' ', '\t', ',', ';', '=', '&', '|', '<', '>':
+			flush()
+		default:
+			word.WriteRune(ch)
+		}
+	}
+	if inQuote {
+		return nil, false
+	}
+	flush()
+	return words, true
+}
+
+// windowsPathDenyPattern compiles a deny pattern for a Windows path that is
+// case-insensitive and treats any run of \ or / as one separator.
+func windowsPathDenyPattern(path string) *regexp.Regexp {
+	var b strings.Builder
+	b.WriteString("(?i)")
+	inSep := false
+	for _, ch := range path {
+		if ch == '\\' || ch == '/' {
+			if !inSep {
+				b.WriteString(`[\\/]+`)
+				inSep = true
+			}
+			continue
+		}
+		inSep = false
+		b.WriteString(regexp.QuoteMeta(string(ch)))
+	}
+	return regexp.MustCompile(b.String())
+}
+
+// splitExecCommandSegments splits a POSIX shell command string at shell
+// operators (;|&<>) while respecting single and double quotes. Each segment
+// can then be safely parsed by go-shellwords independently.
 func splitExecCommandSegments(command string) []string {
 	var segments []string
 	start := 0

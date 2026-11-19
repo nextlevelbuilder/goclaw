@@ -3,6 +3,7 @@
 Filled against [AnySearch 内置接入资料与审查清单](./anysearch-integration-guide.md snapshot, 2026-09-14) for GoClaw Claim `goclaw#001`.
 
 **Evidence date:** 2026-09-24 (anonymous live smoke + offline fixtures)  
+**Request ID verification:** 2026-10-13 (Python/Node local contract tests; search, get_sub_domains, batch_search and extract success output, plus error paths)  
 **Integration channel:** REST via bundled skill CLIs (`skills/anysearch/scripts/anysearch_cli.{py,js}`)  
 **Client header:** `X-Anysearch-Client: skill/3.1.1`  
 **Auth:** `Authorization: Bearer <key>` only when key is non-empty; empty key → anonymous (no empty header)
@@ -41,7 +42,7 @@ Filled against [AnySearch 内置接入资料与审查清单](./anysearch-integra
 | 4 | 批量保留查询-结果对应，单条失败不丢其他 | ✅ 已接入+实测 | `batch_search` Query1/Query2 分别成对输出 |
 | 5 | 正文提取 + 失败/格式/截断边界 | ✅ 已接入+实测（基础） | `extract https://example.com` 成功；文档声明 HTML/文本 50k 截断、PDF 等不支持 |
 | 6 | 区域、语言等选项传到 AnySearch | ✅ 已接入 | `--zone` / `--language` → REST `zone`/`language` |
-| 7 | 脱敏日志/诊断可见 `request_id` | ⚠️ 部分 | 错误信息附 `request_id`；成功响应未强制展示 |
+| 7 | 脱敏日志/诊断可见 `request_id` | ✅ 已接入+测试 | 服务端返回 `request_id` 时，成功搜索、目录（含无匹配子领域的空目录）、批量每条成功结果和提取响应展示 `Request ID`；API 错误及 200 但响应体格式异常的单条/批量搜索错误保留 `(request_id: …)`。Python/Node 契约测试覆盖上述成功路径、API 错误和格式异常路径 |
 
 ## Live smoke（2026-09-24，匿名，无 `ANYSEARCH_API_KEY`）
 
@@ -66,7 +67,7 @@ Filled against [AnySearch 内置接入资料与审查清单](./anysearch-integra
 
 - 非 MCP 通道（本集成走 REST CLI；MCP 可另行接入）
 - 161 个参数的逐项真实数据源可用性
-- 成功响应默认打印全部 `request_id`（可按维护者要求增强）
+- 服务端未返回 `request_id` 时由客户端生成 ID（客户端仅展示服务端返回的 ID）
 
 ## 维护文档
 

@@ -5,3 +5,4 @@
 # Last reviewed: 2026-04-03
 
 edge-tts~=7.2.8
+requests>=2.20,<3
