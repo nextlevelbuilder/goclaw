@@ -100,6 +100,7 @@ Supported price units: input, output, cache read, cache write, reasoning, reques
 | api_route | `https://global.api-route.com/v1` | `gpt-5.4-mini` | API Route branded OpenAI-compatible endpoint |
 | openrouter | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4-5-20250929` | Model must contain `/` |
 | requesty | `https://router.requesty.ai/v1` | `openai/gpt-4o-mini` | Requesty router; regional bases such as `https://router.eu.requesty.ai/v1` |
+| llmtr | `https://llmtr.com/v1` | `qwen/qwen3.8-27b-free` | LLMTR gateway. Ids such as `llmtr/qwen3-8-27b` keep the `llmtr/` prefix |
 | groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` | |
 | deepseek | `https://api.deepseek.com/v1` | `deepseek-chat` | |
 | gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.0-flash` | Skips empty content fields |
@@ -152,6 +153,27 @@ Set `GOCLAW_REQUESTY_API_KEY` in the environment (keys are created at https://ap
     defaults: {
       provider: "requesty",
       model: "openai/gpt-4o-mini"
+    }
+  }
+}
+```
+
+### LLMTR setup
+
+Set `GOCLAW_LLMTR_API_KEY` in the environment (keys start with `llmtr-` and are created at https://llmtr.com), or add the key through the setup wizard. Set `GOCLAW_LLMTR_BASE_URL` or `api_base` to override `https://llmtr.com/v1`. Model ids are sent as catalog ids. `llmtr/qwen3-8-27b` is one model id; the `llmtr/` segment is not stripped.
+
+```json5
+{
+  providers: {
+    llmtr: {
+      api_key: "llmtr-...",
+      api_base: "https://llmtr.com/v1"
+    }
+  },
+  agents: {
+    defaults: {
+      provider: "llmtr",
+      model: "qwen/qwen3.8-27b-free"
     }
   }
 }
