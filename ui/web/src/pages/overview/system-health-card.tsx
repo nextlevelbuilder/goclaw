@@ -67,7 +67,8 @@ export function SystemHealthCard({
 }: {
   health: HealthPayload | null;
   liveUptime: number | undefined;
-  enabledProviderCount: number;
+  /** Omitted for roles that cannot read providers. */
+  enabledProviderCount?: number;
   sessions: number;
   clientCount: number;
   channelEntries: [string, ChannelStatusEntry][];
@@ -132,16 +133,18 @@ export function SystemHealthCard({
               statusOk={health.database === "ok"}
             />
           )}
-          <HealthCell
-            label={t("systemHealth.providers")}
-            icon={Radio}
-            value={
-              enabledProviderCount > 0
-                ? t("systemHealth.active", { count: enabledProviderCount })
-                : t("systemHealth.none")
-            }
-            statusOk={enabledProviderCount > 0}
-          />
+          {enabledProviderCount !== undefined && (
+            <HealthCell
+              label={t("systemHealth.providers")}
+              icon={Radio}
+              value={
+                enabledProviderCount > 0
+                  ? t("systemHealth.active", { count: enabledProviderCount })
+                  : t("systemHealth.none")
+              }
+              statusOk={enabledProviderCount > 0}
+            />
+          )}
           <HealthCell
             label={t("systemHealth.tools")}
             icon={Wrench}

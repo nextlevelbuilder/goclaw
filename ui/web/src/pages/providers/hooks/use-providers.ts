@@ -12,15 +12,21 @@ export function useProviders(enabled = true) {
   const http = useHttp();
   const queryClient = useQueryClient();
 
-  const { data: providers = [], isLoading: loading } = useQuery({
+  const { data, isLoading: loading, isError } = useQuery({
     queryKey: queryKeys.providers.all,
     enabled,
+    // A failed load must not restart whenever another consumer mounts. Without
+    // this, a page that shows a loader while this query is pending unmounts the
+    // consumer, the load fails, the consumer remounts, and the cycle never ends.
+    retryOnMount: false,
     queryFn: async () => {
       const res = await http.get<{ providers: ProviderData[] }>("/v1/providers");
       return res.providers ?? [];
     },
     staleTime: 60_000,
   });
+  const providers = data ?? [];
+  const loadFailed = isError && data === undefined;
 
   const invalidate = useCallback(
     () => queryClient.invalidateQueries({ queryKey: queryKeys.providers.all }),
@@ -76,6 +82,7 @@ export function useProviders(enabled = true) {
   return {
     providers,
     loading,
+    loadFailed,
     refresh: invalidate,
     createProvider,
     updateProvider,
