@@ -215,6 +215,77 @@ func (m *Manager) GetEnabledChannels() []string {
 	return names
 }
 
+// StartChannel starts a specific channel by name.
+// Returns error if channel not found or already running.
+func (m *Manager) StartChannel(ctx context.Context, name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	channel, ok := m.channels[name]
+	if !ok {
+		return fmt.Errorf("channel %q not found", name)
+	}
+
+	if channel.IsRunning() {
+		return fmt.Errorf("channel %q is already running", name)
+	}
+
+	slog.Info("starting channel", "channel", name)
+	if hc, ok := channel.(interface{ MarkStarting(string) }); ok {
+		hc.MarkStarting("Starting")
+	}
+	m.syncChannelHealthLocked(name, channel)
+	if err := channel.Start(ctx); err != nil {
+		m.recordChannelStartFailureLocked(name, channel, "", err)
+		slog.Error("failed to start channel", "channel", name, "error", err)
+		return err
+	}
+	m.syncChannelHealthLocked(name, channel)
+	slog.Info("channel started", "channel", name)
+	return nil
+}
+
+// StopChannel stops a specific channel by name.
+// Returns error if channel not found or not running.
+func (m *Manager) StopChannel(ctx context.Context, name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	channel, ok := m.channels[name]
+	if !ok {
+		return fmt.Errorf("channel %q not found", name)
+	}
+
+	if !channel.IsRunning() {
+		return fmt.Errorf("channel %q is not running", name)
+	}
+
+	slog.Info("stopping channel", "channel", name)
+	if err := channel.Stop(ctx); err != nil {
+		m.recordHealthLocked(name, NewFailedChannelHealth("Failed to stop channel", err))
+		slog.Error("error stopping channel", "channel", name, "error", err)
+		return err
+	}
+	if hc, ok := channel.(interface{ MarkStopped(string) }); ok {
+		hc.MarkStopped("Stopped")
+	}
+	m.syncChannelHealthLocked(name, channel)
+	slog.Info("channel stopped", "channel", name)
+	return nil
+}
+
+// IsChannelRunning returns whether a specific channel is running.
+func (m *Manager) IsChannelRunning(name string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	channel, ok := m.channels[name]
+	if !ok {
+		return false
+	}
+	return channel.IsRunning()
+}
+
 // RegisterChannel adds a channel to the manager.
 func (m *Manager) RegisterChannel(name string, channel Channel) {
 	m.mu.Lock()
