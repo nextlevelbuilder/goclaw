@@ -127,3 +127,32 @@ type evoAuthListStore struct{ store.EvolutionSuggestionStore }
 func (evoAuthListStore) ListSuggestions(context.Context, uuid.UUID, string, int) ([]store.EvolutionSuggestion, error) {
 	return nil, nil
 }
+
+// Local/dev mode (no gateway token, no-auth fallback) has no tenant
+// membership rows; the master-tenant admin must still be able to review.
+func TestEvolutionSuggestionPatch_DevModeAllowed(t *testing.T) {
+	setupTestToken(t, "")
+	setupTestNoAuthFallback(t, true)
+	agentID, sugID := uuid.New(), uuid.New()
+	ss := &evoAuthSuggestionStore{s: store.EvolutionSuggestion{
+		ID: sugID, TenantID: store.MasterTenantID, AgentID: agentID,
+		SuggestionType: store.SuggestToolOrder, Status: "pending",
+	}}
+	h := NewEvolutionHandler(nil, ss, WithEvolutionTenantStore(evoAuthTenantStore()))
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux)
+
+	req := httptest.NewRequest(http.MethodPatch,
+		"/v1/agents/"+agentID.String()+"/evolution/suggestions/"+sugID.String(),
+		strings.NewReader(`{"status":"rejected"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("dev-mode PATCH status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+	if ss.statusTo != "rejected" {
+		t.Fatalf("dev-mode PATCH did not update suggestion: %q", ss.statusTo)
+	}
+}

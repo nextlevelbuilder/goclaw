@@ -91,6 +91,13 @@ func (h *EvolutionHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 // RoleAdmin to any tenant member (#1120).
 func (h *EvolutionHandler) tenantAdmin(next http.HandlerFunc) http.HandlerFunc {
 	return requireAuth(permissions.RoleAdmin, func(w http.ResponseWriter, r *http.Request) {
+		// Local/dev mode (no gateway token) has no per-user identity: every
+		// caller is the master-tenant admin. Same rule as storage.go and
+		// tts_config.go.
+		if pkgGatewayToken == "" && store.TenantIDFromContext(r.Context()) == store.MasterTenantID {
+			next(w, r)
+			return
+		}
 		if !requireTenantAdmin(w, r, h.tenants) {
 			return
 		}
