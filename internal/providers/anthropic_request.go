@@ -269,9 +269,13 @@ func (p *AnthropicProvider) buildRequestBody(model string, req ChatRequest, stre
 
 // anthropicSkipsTemperature reports whether the Messages API rejects sampling
 // parameters for this model. Claude Opus/Sonnet 4.6+ return HTTP 400 when
-// temperature (and top_p/top_k) are included; omit them entirely.
+// temperature (and top_p/top_k) are included; omit them entirely. Haiku 5+
+// rejects them too, while Haiku 4.5 still accepts them.
 func anthropicSkipsTemperature(model string) bool {
 	m := strings.ToLower(model)
+	if anthropicHaikuAtLeast5(m) {
+		return true
+	}
 	for _, family := range []string{"claude-opus-", "claude-sonnet-"} {
 		after, ok := strings.CutPrefix(m, family)
 		if !ok {
@@ -301,9 +305,12 @@ func anthropicSkipsTemperature(model string) bool {
 
 // anthropicUsesAdaptiveThinking reports models that reject thinking.type=enabled
 // and require thinking.type=adaptive. Opus 4.7+ and the Claude 5 family
-// (Sonnet 5, Opus 5, Fable, Mythos) return HTTP 400 for a manual budget.
+// (Sonnet 5, Opus 5, Haiku 5, Fable, Mythos) return HTTP 400 for a manual budget.
 func anthropicUsesAdaptiveThinking(model string) bool {
 	m := strings.ToLower(model)
+	if anthropicHaikuAtLeast5(m) {
+		return true
+	}
 	if strings.Contains(m, "claude-fable") || strings.Contains(m, "claude-mythos") {
 		return true
 	}
@@ -333,6 +340,18 @@ func anthropicUsesAdaptiveThinking(model string) bool {
 		}
 	}
 	return false
+}
+
+// anthropicHaikuAtLeast5 reports Claude Haiku 5 and newer. Haiku 4.5 (and its
+// dated snapshots) still takes temperature and manual thinking budgets.
+func anthropicHaikuAtLeast5(m string) bool {
+	after, ok := strings.CutPrefix(m, "claude-haiku-")
+	if !ok {
+		return false
+	}
+	majorPart, _, _ := strings.Cut(after, "-")
+	major, err := strconv.Atoi(majorPart)
+	return err == nil && major >= 5
 }
 
 // anthropicManualThinking reports whether the body uses legacy
