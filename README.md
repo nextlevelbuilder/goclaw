@@ -1,8 +1,11 @@
+> [!NOTE]
+> This repository is a customized fork of GoClaw maintained by **trwng-thdat**, serving as the execution runtime container for the **AI Claw** SaaS platform ([ai-claw](file:///C:/HCMUS/Jarvis/ai-claw)).
+
 <p align="center">
   <img src="_statics/goclaw-logo.svg" alt="GoClaw" height="200" />
 </p>
 
-<p align="center"><strong>Multi-Tenant AI Agent Platform</strong></p>
+<p align="center"><strong>Multi-Tenant AI Agent Platform (Custom Fork)</strong></p>
 
 <p align="center">
 Multi-agent AI gateway built in Go. 20+ LLM providers. 7 channels. Multi-tenant PostgreSQL.<br/>
@@ -149,13 +152,13 @@ git tag lite-v0.1.0 && git push origin lite-v0.1.0
 ### From Source
 
 ```bash
-git clone -b main https://github.com/nextlevelbuilder/goclaw.git && cd goclaw
+git clone -b dev https://github.com/trwng-thdat/goclaw.git && cd goclaw
 make build
 ./goclaw onboard        # Interactive setup wizard
 source .env.local && ./goclaw
 ```
 
-> **Note:** The default branch is `dev` (active development). Use `-b main` to clone the stable release branch.
+> **Note:** The default branch is `dev` (active development). We use the `dev` branch to build and align with the `ai-claw` parent repository.
 
 ### With Docker
 
