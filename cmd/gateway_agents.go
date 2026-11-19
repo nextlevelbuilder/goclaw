@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/audio/elevenlabs"
 	geminiaudio "github.com/nextlevelbuilder/goclaw/internal/audio/gemini"
 	minimaxaudio "github.com/nextlevelbuilder/goclaw/internal/audio/minimax"
@@ -302,6 +303,19 @@ func inheritParentPathPolicy(
 			execTool.InheritSecurityPolicy(parent)
 		}
 	}
+}
+
+// buildAudioManager builds the full audio manager from cfg: TTS providers,
+// the Music/SFX extras, the STT chain and the legacy per-channel STT bridge.
+// Always returns a non-nil manager.
+func buildAudioManager(cfg *config.Config) *tts.Manager {
+	mgr := setupTTS(cfg)
+	if mgr == nil {
+		mgr = tts.NewManager(tts.ManagerConfig{})
+	}
+	setupAudioExtras(cfg, mgr)      // registers Music + SFX providers and the STT chain.
+	audio.BridgeLegacySTT(mgr, cfg) // bridges per-channel STTProxyURL to channel-scoped providers.
+	return mgr
 }
 
 // setupTTS creates the TTS manager from config and registers providers.

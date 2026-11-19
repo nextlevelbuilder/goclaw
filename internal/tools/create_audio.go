@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/nextlevelbuilder/goclaw/internal/audio"
@@ -15,6 +16,7 @@ import (
 // CreateAudioTool generates music or sound effects using the audio.Manager.
 // Provider selection and fallback are handled by the Manager's chain logic.
 type CreateAudioTool struct {
+	mu        sync.RWMutex
 	audioMgr  *audio.Manager
 	vaultIntc *VaultInterceptor
 }
@@ -24,6 +26,14 @@ func (t *CreateAudioTool) SetVaultInterceptor(v *VaultInterceptor) { t.vaultIntc
 // NewCreateAudioTool creates a CreateAudioTool backed by the audio.Manager.
 func NewCreateAudioTool(audioMgr *audio.Manager) *CreateAudioTool {
 	return &CreateAudioTool{audioMgr: audioMgr}
+}
+
+// UpdateManager swaps the underlying audio manager. The gateway rebuilds the
+// manager once DB secrets and system_configs are applied at startup.
+func (t *CreateAudioTool) UpdateManager(mgr *audio.Manager) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.audioMgr = mgr
 }
 
 func (t *CreateAudioTool) Name() string { return "create_audio" }
@@ -85,12 +95,16 @@ func (t *CreateAudioTool) Execute(ctx context.Context, args map[string]any) *Res
 	instrumental, _ := args["instrumental"].(bool)
 	filenameHint, _ := args["filename_hint"].(string)
 
+	t.mu.RLock()
+	audioMgr := t.audioMgr
+	t.mu.RUnlock()
+
 	var res *audio.AudioResult
 	var err error
 
 	switch audioType {
 	case "sound_effect":
-		res, err = t.audioMgr.GenerateSFX(ctx, audio.SFXOptions{
+		res, err = audioMgr.GenerateSFX(ctx, audio.SFXOptions{
 			Prompt:   prompt,
 			Duration: duration,
 		})
@@ -98,7 +112,7 @@ func (t *CreateAudioTool) Execute(ctx context.Context, args map[string]any) *Res
 			return ErrorResult(fmt.Sprintf("sound effect generation failed: %v", err))
 		}
 	case "music":
-		res, err = t.audioMgr.GenerateMusic(ctx, audio.MusicOptions{
+		res, err = audioMgr.GenerateMusic(ctx, audio.MusicOptions{
 			Prompt:       prompt,
 			Lyrics:       lyrics,
 			Instrumental: instrumental,

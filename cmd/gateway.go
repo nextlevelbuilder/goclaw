@@ -400,6 +400,16 @@ func runGateway() {
 		applyUserAllowedPaths(toolsReg, paths)
 		slog.Info("filesystem allowed paths reapplied from system_configs", "paths", len(paths))
 	}
+
+	// Rebuild the audio manager for the same reason: setupToolRegistry built it
+	// from the JSON5 config before DB secrets and system_configs were applied,
+	// so dashboard-only TTS providers were missing and the primary fell back to
+	// Edge. Runs even without system_configs, since DB secrets alone can add
+	// providers. Must stay above the first audioMgr consumer below. Safe: server
+	// has not started, no in-flight tool calls.
+	audioMgr = reapplyAudioManager(cfg, toolsReg, ttsTool)
+	slog.Info("tts enabled", "provider", audioMgr.PrimaryProvider(), "auto", string(audioMgr.AutoMode()))
+
 	// MCP servers: load from database (single source of truth).
 	// pgStores.MCP is nil on SQLite/desktop builds that don't support MCP tables.
 	// Apply store to MCP manager so ListToolsForAgent can query DB.

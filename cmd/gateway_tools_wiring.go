@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nextlevelbuilder/goclaw/internal/audio"
 	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/edition"
@@ -187,6 +188,29 @@ func applyUserAllowedPaths(toolsReg *tools.Registry, allowedPaths []string) {
 			}
 		}
 	}
+}
+
+// reapplyAudioManager rebuilds the audio manager from cfg and swaps it into the
+// tts and create_audio tools, returning the new manager for the remaining
+// startup wiring (channels, HTTP handlers, gateway methods).
+//
+// Called from cmd/gateway.go after ApplySystemConfigs. setupToolRegistry builds
+// the manager from config.json before DB secrets (tts.*.api_key) and
+// system_configs (tts.provider, tts.auto, ...) are applied, so a provider set
+// only in the dashboard was missing and the primary fell back to Edge. The tool
+// objects stay registered; only their manager is replaced, so wiring already
+// done on them (vault interceptor, system_configs store) is kept.
+func reapplyAudioManager(cfg *config.Config, toolsReg *tools.Registry, ttsTool *tools.TtsTool) *audio.Manager {
+	mgr := buildAudioManager(cfg)
+	if ttsTool != nil {
+		ttsTool.UpdateManager(mgr)
+	}
+	if t, ok := toolsReg.Get("create_audio"); ok {
+		if at, ok := t.(*tools.CreateAudioTool); ok {
+			at.UpdateManager(mgr)
+		}
+	}
+	return mgr
 }
 
 // wireWorkstationTools registers workstation_exec and claude_remote tools (Standard edition only).
