@@ -868,6 +868,7 @@ type skillManageStoreStub struct {
 	userGrantCalls []skillUserGrantCall
 	grantErrors    map[uuid.UUID]error
 	lastUpdates    map[uuid.UUID]map[string]any
+	updateError    error
 	agentGrants    map[uuid.UUID][]store.SkillAgentGrantInfo
 	userGrants     map[uuid.UUID][]store.SkillUserGrantInfo
 }
@@ -1049,12 +1050,27 @@ func (s *skillManageStoreStub) GetSkillHashBySlug(_ context.Context, slug string
 }
 
 func (s *skillManageStoreStub) UpdateSkill(ctx context.Context, id uuid.UUID, updates map[string]any) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s.updateError != nil {
+		return s.updateError
+	}
 	skill, ok := s.skills[id]
 	if !ok {
 		return nil
 	}
 	if !s.canAccessSkill(ctx, skill) {
 		return nil
+	}
+	if encoded, ok := updates["deps"].(string); ok {
+		var deps struct {
+			Missing []string `json:"missing"`
+		}
+		if err := json.Unmarshal([]byte(encoded), &deps); err != nil {
+			return err
+		}
+		skill.MissingDeps = append([]string(nil), deps.Missing...)
 	}
 	if status, ok := updates["status"].(string); ok {
 		skill.Status = status

@@ -7,18 +7,38 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/skills"
 )
 
-func lifecycleCheckSkillDeps(m *skills.SkillManifest) (bool, []string) {
-	ok, missing := checkSkillDeps(m)
-	missing = appendUniqueDeps(missing, missingGitHubSkillDeps(m)...)
-	return ok && len(missing) == 0, missing
+func lifecycleCheckSkillDeps(ctx context.Context, m *skills.SkillManifest) skills.DepCheckResult {
+	result := checkSkillDepsContext(ctx, m)
+	if ctx.Err() != nil {
+		result.Incomplete = true
+		if len(result.Missing) == 0 {
+			result.Status = skills.DepCheckUnknown
+		}
+		return result
+	}
+	result.Missing = appendUniqueDeps(result.Missing, missingGitHubSkillDeps(ctx, m)...)
+	if ctx.Err() != nil {
+		result.Incomplete = true
+	}
+	if len(result.Missing) > 0 {
+		result.Status = skills.DepCheckMissing
+	} else if result.Incomplete || result.Status == skills.DepCheckUnknown {
+		result.Status = skills.DepCheckUnknown
+	} else {
+		result.Status = skills.DepCheckPresent
+	}
+	return result
 }
 
-func missingGitHubSkillDeps(m *skills.SkillManifest) []string {
+func missingGitHubSkillDeps(ctx context.Context, m *skills.SkillManifest) []string {
 	if m == nil {
 		return nil
 	}
 	var missing []string
 	for _, raw := range m.Explicit {
+		if ctx.Err() != nil {
+			break
+		}
 		if strings.HasPrefix(raw, "github:") && !githubSkillDependencyInstalled(raw) {
 			missing = append(missing, raw)
 		}
@@ -94,11 +114,14 @@ func mergeInstallResult(dst, src *skills.InstallResult) {
 	dst.Errors = append(dst.Errors, src.Errors...)
 }
 
-func dependencyItems(m *skills.SkillManifest, missing []string) []skillDependencyItem {
+func dependencyItems(m *skills.SkillManifest, missing []string, incomplete bool) []skillDependencyItem {
 	missingSet := dependencyMissingSet(missing)
 	var out []skillDependencyItem
 	add := func(source, name string) {
 		status := "installed"
+		if incomplete {
+			status = "unknown"
+		}
 		if missingSet[dependencyKey(source, name)] {
 			status = "missing"
 		}
@@ -154,11 +177,4 @@ func appendUniqueDeps(dst []string, src ...string) []string {
 		seen[dep] = true
 	}
 	return dst
-}
-
-func dependencyStatus(ok bool) string {
-	if ok {
-		return "ok"
-	}
-	return "missing"
 }

@@ -13,17 +13,21 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/bus"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
+	"github.com/nextlevelbuilder/goclaw/pkg/protocol"
 )
 
 type customSlugConflictStore struct {
-	customID    uuid.UUID
-	nextVersion int
-	conflictErr error
-	updatedID   uuid.UUID
-	updatedCtx  context.Context
-	updates     map[string]any
-	updateErr   error
+	customID       uuid.UUID
+	nextVersion    int
+	conflictErr    error
+	updatedID      uuid.UUID
+	updatedCtx     context.Context
+	updates        map[string]any
+	updateErr      error
+	bumps          int
+	updateAttempts int
 }
 
 func (s *customSlugConflictStore) UpsertSystemSkill(context.Context, store.SkillCreateParams) (uuid.UUID, bool, string, error) {
@@ -31,17 +35,17 @@ func (s *customSlugConflictStore) UpsertSystemSkill(context.Context, store.Skill
 }
 
 func (s *customSlugConflictStore) GetNextVersion(context.Context, string) int { return s.nextVersion }
-func (s *customSlugConflictStore) BumpVersion()                               {}
+func (s *customSlugConflictStore) BumpVersion()                               { s.bumps++ }
 
 func (s *customSlugConflictStore) UpdateSkill(ctx context.Context, id uuid.UUID, updates map[string]any) error {
+	s.updateAttempts++
+	if s.updateErr != nil {
+		return s.updateErr
+	}
 	s.updatedID = id
 	s.updatedCtx = ctx
 	s.updates = updates
 	return s.updateErr
-}
-
-func (s *customSlugConflictStore) StoreMissingDeps(context.Context, uuid.UUID, []string) error {
-	return nil
 }
 
 func TestSeeder_RestoresCustomMetadataWhenBundledSlugConflicts(t *testing.T) {
@@ -235,6 +239,83 @@ func TestSeeder_PropagatesCustomRecoveryUpdateFailure(t *testing.T) {
 	}
 }
 
+func TestSeeder_CheckDepsRestoresArchivedSkillOnKnownSuccess(t *testing.T) {
+	slug := "no-deps"
+	skillDir := filepath.Join(t.TempDir(), slug)
+	writeSeederSkillFile(t, filepath.Join(skillDir, "SKILL.md"), "---\nname: no-deps\ndescription: No deps\n---\n")
+
+	st := &customSlugConflictStore{}
+	seeder := NewSeeder("", "", st)
+	seeder.checkDeps([]seededSkill{{id: uuid.New(), slug: slug, baseDir: skillDir}}, nil)
+
+	if got := st.updates["status"]; got != "active" {
+		t.Fatalf("persisted status = %v, want active (recovery from archived)", got)
+	}
+	if st.bumps != 1 {
+		t.Fatalf("BumpVersion calls = %d, want 1", st.bumps)
+	}
+	var deps struct {
+		Missing []string `json:"missing"`
+	}
+	if err := json.Unmarshal([]byte(st.updates["deps"].(string)), &deps); err != nil || len(deps.Missing) != 0 {
+		t.Fatalf("atomic dependency recovery = %v, err=%v", st.updates, err)
+	}
+}
+
+func TestSeeder_CheckDepsLeavesArchivedSkillOnUnknown(t *testing.T) {
+	sleep := sleepPath(t)
+	writeFakeBin(t, "python3", "#!/bin/sh\nexec "+sleep+" 7\n")
+	t.Setenv("GOCLAW_DEP_CHECK_TIMEOUT", "1s")
+
+	slug := "slow-import"
+	skillDir := filepath.Join(t.TempDir(), slug)
+	writeSeederSkillFile(t, filepath.Join(skillDir, "SKILL.md"), "---\nname: slow-import\ndeps:\n  - pip:anthropic\n---\n")
+
+	st := &customSlugConflictStore{}
+	seeder := NewSeeder("", "", st)
+	seeder.checkDeps([]seededSkill{{id: uuid.New(), slug: slug, baseDir: skillDir}}, nil)
+
+	if st.updatedID != uuid.Nil {
+		t.Fatalf("unknown check updated status: %v", st.updates)
+	}
+	if st.updateAttempts != 0 {
+		t.Fatalf("unknown check attempted %d writes", st.updateAttempts)
+	}
+	if st.bumps != 0 {
+		t.Fatalf("BumpVersion calls = %d, want 0", st.bumps)
+	}
+}
+
+// TestSeeder_CheckDepsKeepsStateWhenMissingAndUnknownMix pins the mixed case:
+// one dependency is verified missing while another probe times out. The
+// missing list is incomplete, so the seeder keeps the stored state.
+func TestSeeder_CheckDepsKeepsStateWhenMissingAndUnknownMix(t *testing.T) {
+	sleep := sleepPath(t)
+	writeFakeBin(t, "python3", "#!/bin/sh\nexec "+sleep+" 7\n")
+	t.Setenv("GOCLAW_DEP_CHECK_TIMEOUT", "1s")
+
+	slug := "missing-and-slow"
+	skillDir := filepath.Join(t.TempDir(), slug)
+	writeSeederSkillFile(t, filepath.Join(skillDir, "SKILL.md"),
+		"---\nname: missing-and-slow\ndeps:\n  - system:missing_goclaw_test_binary_xyz\n  - pip:anthropic\n---\n")
+
+	result := CheckSkillDepsContext(context.Background(), ScanSkillDeps(skillDir))
+	if result.Status != DepCheckMissing || !result.Incomplete {
+		t.Fatalf("precondition: result = %+v, want Missing and Incomplete", result)
+	}
+
+	st := &customSlugConflictStore{}
+	seeder := NewSeeder("", "", st)
+	seeder.checkDeps([]seededSkill{{id: uuid.New(), slug: slug, baseDir: skillDir}}, nil)
+
+	if st.updateAttempts != 0 {
+		t.Fatalf("incomplete missing result attempted %d writes: %v", st.updateAttempts, st.updates)
+	}
+	if st.bumps != 0 {
+		t.Fatalf("BumpVersion calls = %d, want 0", st.bumps)
+	}
+}
+
 func writeSeederSkillFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
@@ -247,4 +328,30 @@ func writeSeederSkillFile(t *testing.T, path, content string) {
 
 func hashSeederContent(content string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(content)))
+}
+
+func TestSeeder_FailedDependencyStateWriteDoesNotPublishSuccess(t *testing.T) {
+	for _, tc := range []struct{ name, deps string }{
+		{"recover", ""},
+		{"archive", "deps:\n  - system:missing_goclaw_test_binary_xyz\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeSeederSkillFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: failure\n"+tc.deps+"---\n")
+			st := &customSlugConflictStore{updateErr: errors.New("dependency data write failed")}
+			events := []bus.Event{}
+			messages := bus.New()
+			messages.Subscribe("state-write-test", func(e bus.Event) { events = append(events, e) })
+			seeder := NewSeeder("", "", st)
+			seeder.checkDeps([]seededSkill{{id: uuid.New(), slug: "failure", baseDir: dir}}, messages)
+			if st.updateAttempts != 1 || st.updatedID != uuid.Nil || st.updates != nil || st.bumps != 0 {
+				t.Fatalf("failed write published local state: %+v", st)
+			}
+			for _, e := range events {
+				if e.Name == protocol.EventSkillDepsChecked {
+					t.Fatalf("published successful skill state after write failure: %+v", e)
+				}
+			}
+		})
+	}
 }

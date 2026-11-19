@@ -701,3 +701,21 @@ func seedSQLiteTenantAgent(t *testing.T, db *sql.DB) (uuid.UUID, uuid.UUID) {
 	}
 	return tenantID, agentID
 }
+
+func TestSQLiteSkillStore_DependencyStateUpdateIsAtomicOnWriteFailure(t *testing.T) {
+	ctx, s := newTestSQLiteSkillStore(t)
+	id, err := s.CreateSkillManaged(ctx, store.SkillCreateParams{Name: "Atomic", Slug: "atomic-deps", OwnerID: "owner", Visibility: "private", Status: "archived", MissingDeps: []string{"pip:old"}, FilePath: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`CREATE TRIGGER reject_dependency_update BEFORE UPDATE OF deps ON skills BEGIN SELECT RAISE(ABORT, 'injected dependency write failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateSkill(ctx, id, map[string]any{"status": "active", "deps": `{"missing":[]}`}); err == nil {
+		t.Fatal("injected write failure did not fail")
+	}
+	got, ok := s.GetSkillByID(ctx, id)
+	if !ok || got.Status != "archived" || !reflect.DeepEqual(got.MissingDeps, []string{"pip:old"}) {
+		t.Fatalf("failed statement partially changed dependency state: %+v", got)
+	}
+}

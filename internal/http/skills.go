@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -442,68 +443,41 @@ func (h *SkillsHandler) installableSkillDirs(ctx context.Context) map[string]str
 	return dirs
 }
 
+// depCheckPassTimeout bounds one full rescan pass. Per-probe timeouts still
+// apply, but this caps the total time an admin endpoint can spend so a host
+// that is slow on every probe does not make the request look hung.
+const depCheckPassTimeout = 2 * time.Minute
+
 // rescanAndUpdate re-checks enabled skills and updates their status + missing deps in DB.
+// The whole pass shares one deadline derived from ctx. A check that is cancelled
+// or times out is left unknown: the stored status and missing-deps list stay
+// untouched, because unknown is not evidence that a dependency is missing.
 func (h *SkillsHandler) rescanAndUpdate(ctx context.Context) (updated int, results []depResult) {
+	ctx, cancel := context.WithTimeout(ctx, depCheckPassTimeout)
+	defer cancel()
 	allSkills := h.skills.ListAllSkills(store.WithCrossTenant(ctx))
-
 	for _, sk := range allSkills {
-		manifest := h.scanWithFallback(sk)
-		updateCtx := skillTenantContext(ctx, sk)
-
-		id, err := uuid.Parse(sk.ID)
+		result := depResult{Slug: sk.Slug, Status: sk.Status, Missing: sk.MissingDeps}
+		if ctx.Err() != nil {
+			results = append(results, result)
+			continue
+		}
+		checked := checkSkillDepsContext(ctx, h.scanWithFallback(sk))
+		persisted, changed, err := h.persistSkillDependencyState(ctx, sk, checked)
 		if err != nil {
+			slog.Warn("rescan: dependency state not persisted", "slug", sk.Slug, "error", err)
+			results = append(results, result)
 			continue
-		}
-
-		if manifest == nil || manifest.IsEmpty() {
-			changed := false
-			// No deps needed — recover archived skills and clear stale persisted deps.
-			if len(sk.MissingDeps) > 0 {
-				_ = h.skills.StoreMissingDeps(updateCtx, id, nil)
-				changed = true
-			}
-			if sk.Status == "archived" {
-				_ = h.skills.UpdateSkill(updateCtx, id, map[string]any{"status": "active"})
-				results = append(results, depResult{Slug: sk.Slug, Status: "active"})
-				changed = true
-				slog.Debug("rescan: recovered archived skill (no deps)", "slug", sk.Slug)
-			} else {
-				results = append(results, depResult{Slug: sk.Slug, Status: "ok"})
-			}
-			if changed {
-				updated++
-			}
-			continue
-		}
-
-		ok, missing := skills.CheckSkillDeps(manifest)
-		changed := false
-		if !stringSlicesEqual(sk.MissingDeps, missing) {
-			_ = h.skills.StoreMissingDeps(updateCtx, id, missing)
-			changed = true
-		}
-
-		switch {
-		case ok && sk.Status == "archived":
-			_ = h.skills.UpdateSkill(updateCtx, id, map[string]any{"status": "active"})
-			results = append(results, depResult{Slug: sk.Slug, Status: "active"})
-			changed = true
-		case !ok && sk.Status == "active":
-			_ = h.skills.UpdateSkill(updateCtx, id, map[string]any{"status": "archived"})
-			results = append(results, depResult{Slug: sk.Slug, Status: "archived", Missing: missing})
-			changed = true
-		case !ok:
-			results = append(results, depResult{Slug: sk.Slug, Status: sk.Status, Missing: missing})
-		default:
-			results = append(results, depResult{Slug: sk.Slug, Status: "ok"})
 		}
 		if changed {
 			updated++
 		}
-
-		slog.Debug("rescan: checked skill", "slug", sk.Slug, "ok", ok, "missing", len(missing))
+		result.Status, result.Missing = persisted.Status, persisted.MissingDeps
+		if checked.Status == skills.DepCheckPresent && !checked.Incomplete && !changed {
+			result.Status = "ok"
+		}
+		results = append(results, result)
 	}
-
 	if updated > 0 {
 		h.skills.BumpVersion()
 	}
@@ -623,19 +597,13 @@ func (h *SkillsHandler) handleToggle(w http.ResponseWriter, r *http.Request) {
 		// Re-check deps for this skill so its status reflects reality after being re-enabled.
 		sk, ok := h.skills.GetSkillByID(r.Context(), id)
 		if ok {
-			manifest := h.scanWithFallback(sk)
-			if manifest != nil && !manifest.IsEmpty() {
-				depOk, missing := skills.CheckSkillDeps(manifest)
-				_ = h.skills.StoreMissingDeps(r.Context(), id, missing)
-				if depOk {
-					newStatus = "active"
-				} else {
-					newStatus = "archived"
-				}
-			} else {
-				newStatus = "active"
+			checked := checkSkillDepsContext(r.Context(), h.scanWithFallback(sk))
+			persisted, _, err := h.persistSkillDependencyState(r.Context(), sk, checked)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
 			}
-			_ = h.skills.UpdateSkill(r.Context(), id, map[string]any{"status": newStatus})
+			newStatus = persisted.Status
 		}
 	}
 
