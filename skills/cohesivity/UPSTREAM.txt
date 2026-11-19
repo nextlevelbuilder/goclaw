@@ -1,0 +1,6 @@
+upstream_repo: cohesivity-org/cohesivity-skill
+upstream_commit: 04243616951d7b3126a8307f6e190681f465b010
+upstream_file: cohesivity.skill.md
+adapted_at: 2026-11-04
+license: MIT
+changes: GoClaw tool names, MCP-only tenant setup, no installer
