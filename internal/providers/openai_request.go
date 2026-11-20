@@ -458,6 +458,11 @@ func openAIModelSupportsReasoningEffort(model string) bool {
 
 // reasoningEffortRejectedWithTools is true for models that return HTTP 400 when
 // a Chat Completions request has both reasoning_effort and function tools.
+// The flag lives on the model's entry in reasoningCapabilityEntries. Every
+// model there also passes openAIModelSupportsReasoningEffort, so setting the
+// flag is the only change needed for another model. buildRequestBody drops the field for any tools,
+// not just function tools: native tools with reasoning_effort are untested on
+// these models, and dropping the field there only loses the effort level.
 func reasoningEffortRejectedWithTools(model string) bool {
 	capability := LookupReasoningCapability(model)
 	return capability != nil && capability.ToolsIncompatibleWithReasoningEffort

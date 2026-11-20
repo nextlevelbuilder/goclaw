@@ -37,6 +37,8 @@ var reasoningCapabilityEntries = []reasoningCapabilityEntry{
 	{id: "gpt-6-astra", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "low"}},
 	{id: "gpt-6-sol", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "medium"}},
 	{id: "gpt-6-luna", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "medium"}},
+	// TODO: flag the other GPT-5.6/6.x entries too once their chat/completions
+	// endpoint is confirmed to reject reasoning_effort with function tools.
 	{id: "gpt-5.6-sol", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "low", ToolsIncompatibleWithReasoningEffort: true}},
 	{id: "gpt-5.6-terra", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "medium"}},
 	{id: "gpt-5.6-luna", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "medium"}},
