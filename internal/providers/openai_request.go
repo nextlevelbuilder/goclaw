@@ -294,7 +294,8 @@ func (p *OpenAIProvider) buildRequestBody(model string, req ChatRequest, stream 
 	if level, ok := req.Options[OptThinkingLevel].(string); ok && level != "" && level != "off" {
 		// MiniMax Flash is registered for runtime resolution, but its wire field
 		// remains native-endpoint-only and is handled by the guarded block below.
-		if !strings.EqualFold(capabilityModel, "minimax-m3.1-flash") && openAIModelSupportsReasoningEffort(model) {
+		if !strings.EqualFold(capabilityModel, "minimax-m3.1-flash") && openAIModelSupportsReasoningEffort(model) &&
+			(len(req.Tools) == 0 || !reasoningEffortRejectedWithTools(model)) {
 			body[OptReasoningEffort] = level
 		}
 	}
@@ -453,6 +454,18 @@ func openAIModelSupportsReasoningEffort(model string) bool {
 		}
 	}
 	return false
+}
+
+// reasoningEffortRejectedWithTools is true for models that return HTTP 400 when
+// a Chat Completions request has both reasoning_effort and function tools.
+// The flag lives on the model's entry in reasoningCapabilityEntries. Every
+// model there also passes openAIModelSupportsReasoningEffort, so setting the
+// flag is the only change needed for another model. buildRequestBody drops the field for any tools,
+// not just function tools: native tools with reasoning_effort are untested on
+// these models, and dropping the field there only loses the effort level.
+func reasoningEffortRejectedWithTools(model string) bool {
+	capability := LookupReasoningCapability(model)
+	return capability != nil && capability.ToolsIncompatibleWithReasoningEffort
 }
 
 // buildToolsPayload serializes tools for the OpenAI-compat tools array.

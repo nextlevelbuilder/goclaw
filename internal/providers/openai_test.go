@@ -180,6 +180,47 @@ func TestBuildRequestBody_ReasoningEffortOpenAIOnly(t *testing.T) {
 	})
 }
 
+// gpt-5.6-sol rejects reasoning_effort together with function tools on
+// /v1/chat/completions (HTTP 400), so the field is dropped only for that pair.
+func TestBuildRequestBody_ReasoningEffortWithTools(t *testing.T) {
+	p := NewOpenAIProvider("openai", "key", "https://api.openai.com/v1", "gpt-5.6-sol")
+	tools := []ToolDefinition{
+		{Type: "function", Function: &ToolFunctionSchema{Name: "read_file", Description: "read a file", Parameters: map[string]any{"type": "object"}}},
+	}
+
+	tests := []struct {
+		name   string
+		model  string
+		level  string
+		tools  []ToolDefinition
+		want   string
+		wantOK bool
+	}{
+		{name: "flagged model with tools omits it", model: "gpt-5.6-sol", level: "medium", tools: tools},
+		{name: "flagged model behind a prefix with tools omits it", model: "openai/gpt-5.6-sol", level: "medium", tools: tools},
+		{name: "flagged model without tools keeps it", model: "gpt-5.6-sol", level: "medium", want: "medium", wantOK: true},
+		{name: "gpt-5.5 with tools keeps it", model: "gpt-5.5", level: "medium", tools: tools, want: "medium", wantOK: true},
+		{name: "level off sends nothing", model: "gpt-5.6-sol", level: "off"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := ChatRequest{
+				Messages: []Message{{Role: "user", Content: "hi"}},
+				Tools:    tt.tools,
+				Options:  map[string]any{OptThinkingLevel: tt.level},
+			}
+			body := p.buildRequestBody(tt.model, req, false)
+			got, ok := body[OptReasoningEffort].(string)
+			if ok != tt.wantOK || got != tt.want {
+				t.Fatalf("reasoning_effort = %q (present=%v), want %q (present=%v)", got, ok, tt.want, tt.wantOK)
+			}
+			if len(tt.tools) > 0 && body["tools"] == nil {
+				t.Fatal("tools must still be sent")
+			}
+		})
+	}
+}
+
 func TestBuildRequestBody_TogetherOmitsStreamOptions(t *testing.T) {
 	together := NewOpenAIProvider("togetherai", "key", "https://api.together.xyz/v1", "")
 	openai := NewOpenAIProvider("openai", "key", "https://api.openai.com/v1", "gpt-4")

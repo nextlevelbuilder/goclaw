@@ -90,6 +90,12 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Fixed
 
+- **OpenAI `gpt-5.6-sol` agents with tools no longer fail with HTTP 400 (#1685)** — the
+  model rejects `reasoning_effort` together with function tools on
+  `/v1/chat/completions`. For that model the field is now left out when the
+  request carries tools; without tools it is still sent, and other models are
+  unchanged.
+
 - **Anthropic model picker lists every model, not only the first 20** — the
   models request used the API's default page size and never followed
   `has_more` / `after_id`. It now asks for 1000 per page and follows the cursor
