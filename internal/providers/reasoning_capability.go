@@ -10,6 +10,10 @@ import "strings"
 type ReasoningCapability struct {
 	Levels        []string `json:"levels,omitempty"`
 	DefaultEffort string   `json:"default_effort,omitempty"`
+	// ToolsIncompatibleWithReasoningEffort marks models whose
+	// /v1/chat/completions endpoint rejects reasoning_effort when the request
+	// also carries function tools (HTTP 400).
+	ToolsIncompatibleWithReasoningEffort bool `json:"-"`
 }
 
 func (c *ReasoningCapability) Supports(level string) bool {
@@ -33,7 +37,7 @@ var reasoningCapabilityEntries = []reasoningCapabilityEntry{
 	{id: "gpt-6-astra", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "low"}},
 	{id: "gpt-6-sol", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "medium"}},
 	{id: "gpt-6-luna", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "medium"}},
-	{id: "gpt-5.6-sol", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "low"}},
+	{id: "gpt-5.6-sol", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "low", ToolsIncompatibleWithReasoningEffort: true}},
 	{id: "gpt-5.6-terra", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "medium"}},
 	{id: "gpt-5.6-luna", capability: ReasoningCapability{Levels: []string{"low", "medium", "high", "xhigh"}, DefaultEffort: "medium"}},
 	{id: "gpt-5.5", capability: ReasoningCapability{Levels: []string{"none", "low", "medium", "high", "xhigh"}, DefaultEffort: "medium"}},
