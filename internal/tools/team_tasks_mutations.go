@@ -53,6 +53,14 @@ func (t *TeamTasksTool) executeComment(ctx context.Context, args map[string]any)
 	if commentType != "blocker" {
 		commentType = "note"
 	}
+	// A blocker escalation auto-fails the task and cancels the owner's run, so
+	// only the task owner may raise one. Other teammates' blockers are kept as
+	// plain notes so they cannot fail another agent's task (#1133).
+	blockerDowngraded := false
+	if commentType == "blocker" && (task.OwnerAgentID == nil || *task.OwnerAgentID != agentID) {
+		commentType = "note"
+		blockerDowngraded = true
+	}
 
 	if err := t.manager.Store().AddTaskComment(ctx, &store.TeamTaskCommentData{
 		TaskID:      taskID,
@@ -87,6 +95,9 @@ func (t *TeamTasksTool) executeComment(ctx context.Context, args map[string]any)
 
 	isLead := agentID == team.LeadAgentID
 	msg := fmt.Sprintf("Comment added to task #%d \"%s\" (id: %s).", task.TaskNumber, task.Subject, taskID)
+	if blockerDowngraded {
+		msg += " Only the task owner can escalate a blocker, so it was saved as a note."
+	}
 	switch {
 	case isLead && task.Status == store.TeamTaskStatusInProgress:
 		msg += " Note: the assignee is currently working and won't see this comment during execution. To redirect, wait for completion then use retry action with this task_id."

@@ -60,7 +60,7 @@ func (s *SQLiteTeamStore) AssignTask(ctx context.Context, taskID, agentID, teamI
 	return nil
 }
 
-func (s *SQLiteTeamStore) CompleteTask(ctx context.Context, taskID, teamID uuid.UUID, result string) error {
+func (s *SQLiteTeamStore) CompleteTask(ctx context.Context, taskID, teamID, ownerAgentID uuid.UUID, result string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -72,9 +72,9 @@ func (s *SQLiteTeamStore) CompleteTask(ctx context.Context, taskID, teamID uuid.
 		`UPDATE team_tasks SET status = ?, result = ?, locked_at = NULL, lock_expires_at = NULL,
 		 followup_at = NULL, followup_count = 0, followup_message = NULL, followup_channel = NULL, followup_chat_id = NULL,
 		 progress_percent = NULL, updated_at = ?
-		 WHERE id = ? AND status = ? AND team_id = ? AND tenant_id = ?`,
+		 WHERE id = ? AND status = ? AND team_id = ? AND tenant_id = ? AND owner_agent_id = ?`,
 		store.TeamTaskStatusCompleted, result, time.Now(),
-		taskID, store.TeamTaskStatusInProgress, teamID, tid,
+		taskID, store.TeamTaskStatusInProgress, teamID, tid, ownerAgentID,
 	)
 	if err != nil {
 		return err
@@ -84,7 +84,7 @@ func (s *SQLiteTeamStore) CompleteTask(ctx context.Context, taskID, teamID uuid.
 		return err
 	}
 	if n == 0 {
-		return fmt.Errorf("task not in progress or not found")
+		return fmt.Errorf("task not in progress, not found, or not owned by this agent")
 	}
 
 	if err := unblockDependentTasksSQLite(ctx, tx, taskID); err != nil {

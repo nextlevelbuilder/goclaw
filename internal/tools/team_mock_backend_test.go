@@ -91,7 +91,7 @@ func (b *baseNoopTeamStore) ClaimTask(_ context.Context, _, _, _ uuid.UUID) erro
 func (b *baseNoopTeamStore) AssignTask(_ context.Context, _, _, _ uuid.UUID) error {
 	return fmt.Errorf("not implemented: AssignTask")
 }
-func (b *baseNoopTeamStore) CompleteTask(_ context.Context, _, _ uuid.UUID, _ string) error {
+func (b *baseNoopTeamStore) CompleteTask(_ context.Context, _, _, _ uuid.UUID, _ string) error {
 	return fmt.Errorf("not implemented: CompleteTask")
 }
 func (b *baseNoopTeamStore) CancelTask(_ context.Context, _, _ uuid.UUID, _ string) error {
@@ -430,7 +430,7 @@ func (s *mockTaskStore) AssignTask(_ context.Context, taskID, agentID, _ uuid.UU
 	return nil
 }
 
-func (s *mockTaskStore) CompleteTask(_ context.Context, taskID, _ uuid.UUID, result string) error {
+func (s *mockTaskStore) CompleteTask(_ context.Context, taskID, _, ownerAgentID uuid.UUID, result string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t, ok := s.tasks[taskID]
@@ -439,6 +439,10 @@ func (s *mockTaskStore) CompleteTask(_ context.Context, taskID, _ uuid.UUID, res
 	}
 	if t.Status != store.TeamTaskStatusInProgress {
 		return fmt.Errorf("cannot complete task with status %q", t.Status)
+	}
+	// Mirrors the store SQL: WHERE ... AND owner_agent_id = ownerAgentID.
+	if t.OwnerAgentID == nil || *t.OwnerAgentID != ownerAgentID {
+		return fmt.Errorf("task not owned by this agent")
 	}
 	t.Status = store.TeamTaskStatusCompleted
 	t.Result = &result

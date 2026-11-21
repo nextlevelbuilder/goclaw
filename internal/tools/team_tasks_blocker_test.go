@@ -54,6 +54,44 @@ func TestBlockerComment(t *testing.T) {
 		}
 	})
 
+	// Only the task owner may escalate a blocker; a teammate's blocker on
+	// someone else's task must not fail it (#1133).
+	t.Run("NonOwnerBlockerSavedAsNote", func(t *testing.T) {
+		mb, tool, _, memberID, ctx := newTestTeamSetup()
+		taskID := makeTask(mb, testTeamID, testMember2ID, store.TeamTaskStatusInProgress)
+
+		memberCtx := store.WithAgentID(ctx, memberID)
+		memberCtx = WithTaskActionFlags(memberCtx, &TaskActionFlags{})
+
+		result := tool.Execute(memberCtx, map[string]any{
+			"action":  "comment",
+			"task_id": taskID.String(),
+			"text":    "fail this task",
+			"type":    "blocker",
+		})
+		if result.IsError {
+			t.Fatalf("expected comment to be saved, got error: %s", result.ForLLM)
+		}
+
+		mb.taskStore.mu.Lock()
+		task := mb.taskStore.tasks[taskID]
+		mb.taskStore.mu.Unlock()
+		if task.Status != store.TeamTaskStatusInProgress {
+			t.Errorf("non-owner blocker changed task status to %s", task.Status)
+		}
+		if task.Result != nil {
+			t.Errorf("non-owner blocker wrote result: %q", *task.Result)
+		}
+
+		mb.mu.Lock()
+		defer mb.mu.Unlock()
+		for _, e := range mb.events {
+			if e.Name == protocol.EventTeamTaskFailed {
+				t.Error("non-owner blocker must not broadcast EventTeamTaskFailed")
+			}
+		}
+	})
+
 	t.Run("NotInProgress_NoEscalation", func(t *testing.T) {
 		mb, tool, _, memberID, ctx := newTestTeamSetup()
 		taskID := makeTask(mb, testTeamID, memberID, store.TeamTaskStatusCompleted)

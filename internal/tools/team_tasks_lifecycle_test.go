@@ -145,6 +145,166 @@ func TestComplete(t *testing.T) {
 		}
 	})
 
+	// Regression for #1133: a teammate must not complete another agent's
+	// in_progress task or overwrite its result.
+	t.Run("NonOwnerRejected", func(t *testing.T) {
+		mb, tool, _, memberID, ctx := newTestTeamSetup()
+		taskID := uuid.New()
+		owner := testMember2ID
+		preloadTask(mb, &store.TeamTaskData{
+			BaseModel:    store.BaseModel{ID: taskID},
+			TeamID:       testTeamID,
+			Subject:      "member2's task",
+			Status:       store.TeamTaskStatusInProgress,
+			OwnerAgentID: &owner,
+		})
+
+		mCtx := store.WithAgentID(ctx, memberID)
+		mCtx = WithTaskActionFlags(mCtx, &TaskActionFlags{})
+		result := tool.Execute(mCtx, map[string]any{
+			"action":  "complete",
+			"task_id": taskID.String(),
+			"result":  "overwritten",
+		})
+
+		if !result.IsError {
+			t.Fatalf("expected error when completing another agent's task, got: %v", result.ForLLM)
+		}
+		task := readTask(mb, taskID)
+		if task.Status != store.TeamTaskStatusInProgress {
+			t.Errorf("expected in_progress, got %q", task.Status)
+		}
+		if task.Result != nil {
+			t.Errorf("result overwritten by non-owner: %q", *task.Result)
+		}
+		if task.OwnerAgentID == nil || *task.OwnerAgentID != owner {
+			t.Errorf("owner changed: %v", task.OwnerAgentID)
+		}
+	})
+
+	// A pending task with an owner (assigned at creation, or reset by stale
+	// recovery, which keeps owner_agent_id) must not be re-assigned to and
+	// completed by another teammate.
+	t.Run("StaleRecoveredNonOwnerRejected", func(t *testing.T) {
+		mb, tool, _, memberID, ctx := newTestTeamSetup()
+		taskID := uuid.New()
+		owner := testMember2ID
+		preloadTask(mb, &store.TeamTaskData{
+			BaseModel:    store.BaseModel{ID: taskID},
+			TeamID:       testTeamID,
+			Subject:      "member2's recovered task",
+			Status:       store.TeamTaskStatusPending,
+			OwnerAgentID: &owner,
+		})
+
+		mCtx := store.WithAgentID(ctx, memberID)
+		mCtx = WithTaskActionFlags(mCtx, &TaskActionFlags{})
+		result := tool.Execute(mCtx, map[string]any{
+			"action":  "complete",
+			"task_id": taskID.String(),
+			"result":  "hijack",
+		})
+
+		if !result.IsError {
+			t.Fatalf("expected error when completing another agent's recovered task, got: %v", result.ForLLM)
+		}
+		task := readTask(mb, taskID)
+		if task.Status != store.TeamTaskStatusPending {
+			t.Errorf("expected pending, got %q", task.Status)
+		}
+		if task.Result != nil {
+			t.Errorf("result written by non-owner: %q", *task.Result)
+		}
+		if task.OwnerAgentID == nil || *task.OwnerAgentID != owner {
+			t.Errorf("owner changed: %v", task.OwnerAgentID)
+		}
+	})
+
+	t.Run("StaleRecoveredOwnerCompletes", func(t *testing.T) {
+		mb, tool, _, memberID, ctx := newTestTeamSetup()
+		taskID := uuid.New()
+		owner := memberID
+		preloadTask(mb, &store.TeamTaskData{
+			BaseModel:    store.BaseModel{ID: taskID},
+			TeamID:       testTeamID,
+			Subject:      "own recovered task",
+			Status:       store.TeamTaskStatusPending,
+			OwnerAgentID: &owner,
+		})
+
+		mCtx := store.WithAgentID(ctx, memberID)
+		mCtx = WithTaskActionFlags(mCtx, &TaskActionFlags{})
+		result := tool.Execute(mCtx, map[string]any{
+			"action":  "complete",
+			"task_id": taskID.String(),
+			"result":  "done",
+		})
+
+		if result.IsError {
+			t.Fatalf("owner should complete its recovered task, got: %v", result.ForLLM)
+		}
+		if task := readTask(mb, taskID); task.Status != store.TeamTaskStatusCompleted {
+			t.Errorf("expected completed, got %q", task.Status)
+		}
+	})
+
+	// The team lead may still finish a member's task, as before #1133.
+	t.Run("LeadCompletesMemberInProgressTask", func(t *testing.T) {
+		mb, tool, _, memberID, ctx := newTestTeamSetup()
+		taskID := uuid.New()
+		owner := memberID
+		preloadTask(mb, &store.TeamTaskData{
+			BaseModel:    store.BaseModel{ID: taskID},
+			TeamID:       testTeamID,
+			Subject:      "member's task",
+			Status:       store.TeamTaskStatusInProgress,
+			OwnerAgentID: &owner,
+		})
+
+		result := tool.Execute(ctx, map[string]any{
+			"action":  "complete",
+			"task_id": taskID.String(),
+			"result":  "finished by lead",
+		})
+
+		if result.IsError {
+			t.Fatalf("lead should complete a member's task, got: %v", result.ForLLM)
+		}
+		task := readTask(mb, taskID)
+		if task.Status != store.TeamTaskStatusCompleted {
+			t.Errorf("expected completed, got %q", task.Status)
+		}
+		if task.Result == nil || *task.Result != "finished by lead" {
+			t.Errorf("unexpected result: %v", task.Result)
+		}
+	})
+
+	t.Run("LeadCompletesAssignedPendingTask", func(t *testing.T) {
+		mb, tool, _, memberID, ctx := newTestTeamSetup()
+		taskID := uuid.New()
+		owner := memberID
+		preloadTask(mb, &store.TeamTaskData{
+			BaseModel:    store.BaseModel{ID: taskID},
+			TeamID:       testTeamID,
+			Subject:      "assigned, not started",
+			Status:       store.TeamTaskStatusPending,
+			OwnerAgentID: &owner,
+		})
+
+		result := tool.Execute(ctx, map[string]any{
+			"action":  "complete",
+			"task_id": taskID.String(),
+			"result":  "done",
+		})
+
+		if result.IsError {
+			t.Fatalf("lead should complete an assigned pending task, got: %v", result.ForLLM)
+		}
+		if task := readTask(mb, taskID); task.Status != store.TeamTaskStatusCompleted {
+			t.Errorf("expected completed, got %q", task.Status)
+		}
+	})
+
 	t.Run("MissingResult", func(t *testing.T) {
 		_, tool, _, memberID, ctx := newTestTeamSetup()
 		mCtx := store.WithAgentID(ctx, memberID)

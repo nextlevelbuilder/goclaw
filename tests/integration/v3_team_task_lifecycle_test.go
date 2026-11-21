@@ -51,7 +51,7 @@ func TestStoreTask_ClaimAndComplete(t *testing.T) {
 	}
 
 	// Complete.
-	if err := ts.CompleteTask(ctx, task.ID, teamID, "all done"); err != nil {
+	if err := ts.CompleteTask(ctx, task.ID, teamID, memberID, "all done"); err != nil {
 		t.Fatalf("CompleteTask: %v", err)
 	}
 
@@ -193,7 +193,7 @@ func TestStoreTask_FixOrphanedBlocked(t *testing.T) {
 	if err := ts.ClaimTask(ctx, taskA.ID, memberID, teamID); err != nil {
 		t.Fatalf("ClaimTask A: %v", err)
 	}
-	if err := ts.CompleteTask(ctx, taskA.ID, teamID, "done"); err != nil {
+	if err := ts.CompleteTask(ctx, taskA.ID, teamID, memberID, "done"); err != nil {
 		t.Fatalf("CompleteTask A: %v", err)
 	}
 
@@ -412,7 +412,7 @@ func TestStoreTask_BlockedUnblockFlow(t *testing.T) {
 	if err := ts.ClaimTask(ctx, taskA.ID, memberID, teamID); err != nil {
 		t.Fatalf("ClaimTask A: %v", err)
 	}
-	if err := ts.CompleteTask(ctx, taskA.ID, teamID, "done"); err != nil {
+	if err := ts.CompleteTask(ctx, taskA.ID, teamID, memberID, "done"); err != nil {
 		t.Fatalf("CompleteTask A: %v", err)
 	}
 
@@ -509,5 +509,49 @@ func TestStoreTask_RaceToClaimSameTask(t *testing.T) {
 	}
 	if got.OwnerAgentID == nil {
 		t.Error("OwnerAgentID should be set after race claim")
+	}
+}
+
+// Regression for #1133: CompleteTask is conditioned on owner_agent_id, so an
+// agent that does not own an in_progress task cannot complete it or overwrite
+// its result.
+func TestStoreTask_CompleteRejectsNonOwner(t *testing.T) {
+	db := testDB(t)
+	pg.InitSqlx(db)
+	tenantID, otherAgentID := seedTenantAgent(t, db)
+	ctx := tenantCtx(tenantID)
+	ts := pg.NewPGTeamStore(db)
+
+	teamID, memberID := seedTeam(t, db, tenantID, otherAgentID)
+
+	task := makeTask(teamID, "owned by member", store.TeamTaskStatusPending)
+	if err := ts.CreateTask(ctx, task); err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	if err := ts.ClaimTask(ctx, task.ID, memberID, teamID); err != nil {
+		t.Fatalf("ClaimTask: %v", err)
+	}
+
+	if err := ts.CompleteTask(ctx, task.ID, teamID, otherAgentID, "overwritten"); err == nil {
+		t.Fatal("CompleteTask by non-owner should fail")
+	}
+
+	got, err := ts.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Status != store.TeamTaskStatusInProgress {
+		t.Errorf("Status: expected %q, got %q", store.TeamTaskStatusInProgress, got.Status)
+	}
+	if got.Result != nil {
+		t.Errorf("Result overwritten by non-owner: %q", *got.Result)
+	}
+	if got.OwnerAgentID == nil || *got.OwnerAgentID != memberID {
+		t.Errorf("OwnerAgentID changed: %v", got.OwnerAgentID)
+	}
+
+	// The owner can still complete it.
+	if err := ts.CompleteTask(ctx, task.ID, teamID, memberID, "done"); err != nil {
+		t.Fatalf("CompleteTask by owner: %v", err)
 	}
 }

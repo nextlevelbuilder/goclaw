@@ -131,7 +131,7 @@ func TestStoreTask_ListWithFilters(t *testing.T) {
 	}
 
 	// Complete the in-progress task so we can test completed filter.
-	if err := ts.CompleteTask(ctx, inprog.ID, teamID, "done"); err != nil {
+	if err := ts.CompleteTask(ctx, inprog.ID, teamID, memberID, "done"); err != nil {
 		t.Fatalf("CompleteTask: %v", err)
 	}
 
