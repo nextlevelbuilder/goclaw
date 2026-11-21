@@ -7,25 +7,48 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/nextlevelbuilder/goclaw/internal/permissions"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
 // V3FlagsHandler serves per-agent v3 feature flag get/toggle endpoints.
 type V3FlagsHandler struct {
-	agents store.AgentStore
+	agents  store.AgentStore
+	tenants store.TenantStore
 }
 
-func NewV3FlagsHandler(agents store.AgentStore) *V3FlagsHandler {
-	return &V3FlagsHandler{agents: agents}
+func NewV3FlagsHandler(agents store.AgentStore, tenants store.TenantStore) *V3FlagsHandler {
+	return &V3FlagsHandler{agents: agents, tenants: tenants}
 }
 
 func (h *V3FlagsHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/agents/{agentID}/v3-flags", h.auth(h.handleGetFlags))
-	mux.HandleFunc("PATCH /v1/agents/{agentID}/v3-flags", h.auth(h.handleToggleFlags))
+	mux.HandleFunc("PATCH /v1/agents/{agentID}/v3-flags", h.tenantAdmin(h.handleToggleFlags))
 }
 
 func (h *V3FlagsHandler) auth(next http.HandlerFunc) http.HandlerFunc {
 	return requireAuth("", next)
+}
+
+// tenantAdmin guards flag writes. v3 flags live in agents.other_config, an
+// admin-level agent setting (same tier as PUT /v1/agents/{id}), so callers
+// need RoleAdmin AND owner/admin membership in the agent's tenant. The role
+// check alone is not enough: a gateway-token caller is granted RoleAdmin
+// regardless of their tenant role (#1119).
+func (h *V3FlagsHandler) tenantAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return requireAuth(permissions.RoleAdmin, func(w http.ResponseWriter, r *http.Request) {
+		// Local/dev mode (no gateway token) has no per-user identity: every
+		// caller is the master-tenant admin. Same rule as storage.go and
+		// tts_config.go.
+		if pkgGatewayToken == "" && store.TenantIDFromContext(r.Context()) == store.MasterTenantID {
+			next(w, r)
+			return
+		}
+		if !requireTenantAdmin(w, r, h.tenants) {
+			return
+		}
+		next(w, r)
+	})
 }
 
 // handleGetFlags returns the current v3 feature flags for an agent.

@@ -311,7 +311,7 @@ func (d *gatewayDeps) wireHTTPHandlersOnServer(
 
 	// V3: Per-agent v3 feature flags API
 	if d.pgStores != nil && d.pgStores.Agents != nil {
-		d.server.SetV3FlagsHandler(httpapi.NewV3FlagsHandler(d.pgStores.Agents))
+		d.server.SetV3FlagsHandler(httpapi.NewV3FlagsHandler(d.pgStores.Agents, d.pgStores.Tenants))
 	}
 
 	// Workspace file serving endpoint — serves files by absolute path, auth-token protected.
