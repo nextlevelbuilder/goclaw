@@ -182,8 +182,9 @@ func TestComplete(t *testing.T) {
 		}
 	})
 
-	// Stale recovery resets a task to pending but keeps owner_agent_id. A
-	// teammate must not be able to re-assign it to itself and complete it.
+	// A pending task with an owner (assigned at creation, or reset by stale
+	// recovery, which keeps owner_agent_id) must not be re-assigned to and
+	// completed by another teammate.
 	t.Run("StaleRecoveredNonOwnerRejected", func(t *testing.T) {
 		mb, tool, _, memberID, ctx := newTestTeamSetup()
 		taskID := uuid.New()
@@ -241,6 +242,63 @@ func TestComplete(t *testing.T) {
 
 		if result.IsError {
 			t.Fatalf("owner should complete its recovered task, got: %v", result.ForLLM)
+		}
+		if task := readTask(mb, taskID); task.Status != store.TeamTaskStatusCompleted {
+			t.Errorf("expected completed, got %q", task.Status)
+		}
+	})
+
+	// The team lead may still finish a member's task, as before #1133.
+	t.Run("LeadCompletesMemberInProgressTask", func(t *testing.T) {
+		mb, tool, _, memberID, ctx := newTestTeamSetup()
+		taskID := uuid.New()
+		owner := memberID
+		preloadTask(mb, &store.TeamTaskData{
+			BaseModel:    store.BaseModel{ID: taskID},
+			TeamID:       testTeamID,
+			Subject:      "member's task",
+			Status:       store.TeamTaskStatusInProgress,
+			OwnerAgentID: &owner,
+		})
+
+		result := tool.Execute(ctx, map[string]any{
+			"action":  "complete",
+			"task_id": taskID.String(),
+			"result":  "finished by lead",
+		})
+
+		if result.IsError {
+			t.Fatalf("lead should complete a member's task, got: %v", result.ForLLM)
+		}
+		task := readTask(mb, taskID)
+		if task.Status != store.TeamTaskStatusCompleted {
+			t.Errorf("expected completed, got %q", task.Status)
+		}
+		if task.Result == nil || *task.Result != "finished by lead" {
+			t.Errorf("unexpected result: %v", task.Result)
+		}
+	})
+
+	t.Run("LeadCompletesAssignedPendingTask", func(t *testing.T) {
+		mb, tool, _, memberID, ctx := newTestTeamSetup()
+		taskID := uuid.New()
+		owner := memberID
+		preloadTask(mb, &store.TeamTaskData{
+			BaseModel:    store.BaseModel{ID: taskID},
+			TeamID:       testTeamID,
+			Subject:      "assigned, not started",
+			Status:       store.TeamTaskStatusPending,
+			OwnerAgentID: &owner,
+		})
+
+		result := tool.Execute(ctx, map[string]any{
+			"action":  "complete",
+			"task_id": taskID.String(),
+			"result":  "done",
+		})
+
+		if result.IsError {
+			t.Fatalf("lead should complete an assigned pending task, got: %v", result.ForLLM)
 		}
 		if task := readTask(mb, taskID); task.Status != store.TeamTaskStatusCompleted {
 			t.Errorf("expected completed, got %q", task.Status)
