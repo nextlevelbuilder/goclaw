@@ -21,6 +21,7 @@ func setupChannelStep() {
 		{"Telegram", "telegram"},
 		{"Discord", "discord"},
 		{"Slack", "slack"},
+		{"Mattermost", "mattermost"},
 	}
 	channelType, err := promptSelect("Channel type", typeOptions, 0)
 	if err != nil {
@@ -34,6 +35,7 @@ func setupChannelStep() {
 
 	// Credentials per type
 	creds := map[string]string{}
+	instanceCfg := map[string]any{}
 	switch channelType {
 	case "telegram":
 		token, err := promptPassword("Bot token", "from @BotFather")
@@ -58,6 +60,17 @@ func setupChannelStep() {
 			return
 		}
 		creds["signing_secret"] = secret
+	case "mattermost":
+		serverURL, err := promptString("Server URL", "e.g. https://chat.example.com", "")
+		if err != nil || serverURL == "" {
+			return
+		}
+		instanceCfg["server_url"] = serverURL
+		token, err := promptPassword("Bot token", "from Integrations → Bot Accounts")
+		if err != nil || token == "" {
+			return
+		}
+		creds["bot_token"] = token
 	}
 
 	// Bind to agent
@@ -85,6 +98,9 @@ func setupChannelStep() {
 		"agent_id":     agentID,
 		"enabled":      true,
 		"credentials":  creds,
+	}
+	if len(instanceCfg) > 0 {
+		body["config"] = instanceCfg
 	}
 
 	_, err = gatewayHTTPPost("/v1/channels/instances", body)

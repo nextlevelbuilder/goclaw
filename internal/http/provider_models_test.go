@@ -112,32 +112,39 @@ func TestProvidersHandlerListProviderModelsChatGPTOAuthIncludesReasoningMetadata
 		t.Fatalf("reasoning_defaults.effort = %q, want high", result.ReasoningDefaults.Effort)
 	}
 
-	assertModelIDsInOrder(t, result.Models, []string{
+	wantIDs := []string{
+		providers.DefaultCodexModel,
+		"gpt-6-astra",
+		"gpt-6.1-terra",
+		"gpt-6-sol",
+		"gpt-6-luna",
 		"gpt-5.6-sol",
 		"gpt-5.6-terra",
-		"gpt-5.5",
-	})
+		"gpt-5.6-luna",
+	}
+	if len(result.Models) != len(wantIDs) {
+		t.Fatalf("len(models) = %d, want %d: %#v", len(result.Models), len(wantIDs), result.Models)
+	}
+	assertModelIDsInOrder(t, result.Models, wantIDs)
 
-	for _, wantID := range []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.5"} {
-		var found bool
-		for _, model := range result.Models {
-			if model.ID != wantID {
-				continue
-			}
-			found = true
-			if model.Reasoning == nil {
-				t.Fatalf("%s reasoning = nil, want capability metadata", wantID)
-			}
-			if model.Reasoning.DefaultEffort != "medium" {
-				t.Fatalf("%s default_effort = %q, want medium", wantID, model.Reasoning.DefaultEffort)
-			}
-			if got := model.Reasoning.Levels; len(got) != 5 || got[4] != "xhigh" {
-				t.Fatalf("%s levels = %#v, want none..xhigh", wantID, got)
-			}
+	var found bool
+	for _, model := range result.Models {
+		if model.Reasoning == nil {
+			t.Fatalf("%s reasoning = nil, want capability metadata", model.ID)
 		}
-		if !found {
-			t.Fatalf("%s not found in ChatGPT OAuth model list", wantID)
+		if model.ID != "gpt-6.1-sol" {
+			continue
 		}
+		found = true
+		if model.Reasoning.DefaultEffort != "low" {
+			t.Fatalf("gpt-6.1-sol default_effort = %q, want low", model.Reasoning.DefaultEffort)
+		}
+		if got := model.Reasoning.Levels; len(got) != 4 || got[0] != "low" || got[3] != "xhigh" {
+			t.Fatalf("gpt-6.1-sol levels = %#v, want low..xhigh", got)
+		}
+	}
+	if !found {
+		t.Fatal("gpt-6.1-sol not found in ChatGPT OAuth model list")
 	}
 }
 
@@ -173,23 +180,20 @@ func TestProvidersHandlerListProviderModelsBailianIncludesQwen37Plus(t *testing.
 		t.Fatalf("Decode() error = %v", err)
 	}
 
+	found := make(map[string]ModelInfo, len(result.Models))
 	for _, model := range result.Models {
-		if model.ID != "qwen3.7-plus" {
-			continue
-		}
-		if model.Name != "Qwen 3.7 Plus" {
-			t.Fatalf("model name = %q, want Qwen 3.7 Plus", model.Name)
-		}
-		if model.Reasoning != nil {
-			t.Fatalf("model reasoning = %#v, want nil for Bailian OpenAI-compatible catalog entry", model.Reasoning)
-		}
-		return
+		found[model.ID] = model
 	}
-
-	t.Fatalf("qwen3.7-plus not found in Bailian model list: %#v", result.Models)
+	qwen, ok := found["qwen3.7-plus"]
+	if !ok || qwen.Name != "Qwen 3.7 Plus" || qwen.Reasoning != nil {
+		t.Fatalf("qwen3.7-plus entry = %#v, want unchanged Bailian catalog entry", qwen)
+	}
+	if minimax, ok := found["MiniMax-M2.5"]; !ok || minimax.Name != "MiniMax M2.5" {
+		t.Fatalf("MiniMax-M2.5 entry = %#v, want provider-owned Bailian model preserved", minimax)
+	}
 }
 
-func TestProvidersHandlerListProviderModelsMiniMaxIncludesM3AndLegacyModels(t *testing.T) {
+func TestProvidersHandlerListProviderModelsMiniMaxPrefersFlash(t *testing.T) {
 	token := setupProvidersAdminToken(t)
 	providerStore := newMockProviderStore()
 	provider := &store.LLMProviderData{
@@ -208,13 +212,23 @@ func TestProvidersHandlerListProviderModelsMiniMaxIncludesM3AndLegacyModels(t *t
 	handler.RegisterRoutes(mux)
 
 	result := providerModelsRequest(t, mux, provider.ID, token)
-	assertModelIDsInOrder(t, result.Models, []string{
-		"MiniMax-M3",
-		"MiniMax-M2.7",
-		"MiniMax-M2.5",
-		"MiniMax-M2.1",
-		"MiniMax-M2",
-	})
+	wantIDs := []string{
+		"MiniMax-M3.1-Flash", "MiniMax-M3",
+		"image-01", "MiniMax-Hailuo-2.3", "MiniMax-Hailuo-2", "T2V-01-Director",
+		"music-2.5+", "music-2.5", "speech-02-hd", "speech-02-turbo",
+	}
+	if len(result.Models) != len(wantIDs) {
+		t.Fatalf("models = %#v, want current text models and unchanged media", result.Models)
+	}
+	for i, want := range wantIDs {
+		if result.Models[i].ID != want {
+			t.Fatalf("models[%d] = %q, want %q", i, result.Models[i].ID, want)
+		}
+	}
+	capability := result.Models[0].Reasoning
+	if capability == nil || capability.DefaultEffort != "max" || !capability.Supports("max") || capability.Supports("none") {
+		t.Fatalf("Flash reasoning capability = %#v", capability)
+	}
 }
 
 func TestProvidersHandlerListProviderModelsZaiUsesLocalCatalog(t *testing.T) {

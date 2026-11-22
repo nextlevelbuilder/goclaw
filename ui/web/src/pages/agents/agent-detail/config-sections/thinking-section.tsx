@@ -260,6 +260,6 @@ export function ThinkingSection({
 function normalizeInheritedEffort(value: string | undefined): string {
   if (!value) return "off";
   return [
-    "off", "auto", "none", "minimal", "low", "medium", "high", "xhigh",
+    "off", "auto", "none", "minimal", "low", "medium", "high", "xhigh", "max",
   ].includes(value) ? value : "off";
 }

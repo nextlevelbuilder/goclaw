@@ -42,7 +42,7 @@ const (
 
 	// MiniMax defaults.
 	MiniMaxDefaultAPIBase = "https://api.minimax.io/v1"
-	MiniMaxDefaultModel   = "MiniMax-M3"
+	MiniMaxDefaultModel   = "MiniMax-M3.1-Flash"
 
 	// Z.AI defaults.
 	ZaiDefaultAPIBase       = "https://api.z.ai/api/paas/v4"

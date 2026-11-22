@@ -30,7 +30,7 @@ export const cronService = {
   },
 
   run(jobId: string): Promise<unknown> {
-    return getWsClient().call('cron.run', { jobId })
+    return getWsClient().call('cron.run', { jobId, mode: 'force' })
   },
 
   runs(jobId: string, limit = 20): Promise<{ runs: CronRunLog[] | null }> {

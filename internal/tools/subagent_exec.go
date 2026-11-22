@@ -70,6 +70,7 @@ func (sm *SubagentManager) announceTask(
 			// Direct publish (no batching)
 			roster := sm.RosterForParent(TaskScope{
 				TenantID: task.OriginTenantID, RootAgentID: task.RootAgentID, RootAgentKey: task.RootAgentKey,
+				Administrative: true,
 			})
 			announceContent := FormatBatchedAnnounce([]AnnounceQueueItem{item}, roster)
 

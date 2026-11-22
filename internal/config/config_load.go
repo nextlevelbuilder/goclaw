@@ -202,6 +202,8 @@ func (c *Config) applyEnvOverrides() {
 	envStr("GOCLAW_SLACK_BOT_TOKEN", &c.Channels.Slack.BotToken)
 	envStr("GOCLAW_SLACK_APP_TOKEN", &c.Channels.Slack.AppToken)
 	envStr("GOCLAW_SLACK_USER_TOKEN", &c.Channels.Slack.UserToken)
+	envStr("GOCLAW_MATTERMOST_SERVER_URL", &c.Channels.Mattermost.ServerURL)
+	envStr("GOCLAW_MATTERMOST_BOT_TOKEN", &c.Channels.Mattermost.BotToken)
 
 	// TTS secrets
 	envStr("GOCLAW_TTS_OPENAI_API_KEY", &c.Tts.OpenAI.APIKey)
@@ -225,6 +227,9 @@ func (c *Config) applyEnvOverrides() {
 	// WhatsApp is enabled via config or DB instances (no bridge_url needed).
 	if c.Channels.Slack.BotToken != "" && c.Channels.Slack.AppToken != "" {
 		c.Channels.Slack.Enabled = true
+	}
+	if c.Channels.Mattermost.ServerURL != "" && c.Channels.Mattermost.BotToken != "" {
+		c.Channels.Mattermost.Enabled = true
 	}
 
 	// Claude CLI provider

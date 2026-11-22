@@ -181,7 +181,7 @@ can override or inherit routing behavior while keeping the main `provider` field
 ```json
 {
   "provider": "openai-codex",
-  "model": "gpt-5.5",
+  "model": "gpt-6.1-sol",
   "chatgpt_oauth_routing": {
     "override_mode": "custom",
     "strategy": "round_robin"
@@ -247,7 +247,7 @@ Agents can now store capability-aware GPT-5/Codex reasoning intent under top-lev
 ```json
 {
   "provider": "openai-codex",
-  "model": "gpt-5.5",
+  "model": "gpt-6.1-sol",
   "reasoning_config": {
     "override_mode": "inherit"
   }
@@ -505,11 +505,11 @@ Example response:
 {
   "models": [
     {
-      "id": "gpt-5.5",
-      "name": "GPT-5.5",
+      "id": "gpt-6.1-sol",
+      "name": "GPT-6.1-Sol",
       "reasoning": {
-        "levels": ["none", "low", "medium", "high", "xhigh"],
-        "default_effort": "medium"
+        "levels": ["low", "medium", "high", "xhigh"],
+        "default_effort": "low"
       }
     },
     {
@@ -1182,7 +1182,7 @@ Writer test request:
 
 Response includes `allowed`, `reason`, `instance_id`, `agent_id`, `group_id`, `user_id`, and `writer_count`. Stable reasons: `writer`, `not_writer`, `no_writers_configured`, `invalid_group`.
 
-**Supported channels:** `telegram`, `discord`, `slack`, `whatsapp`, `zalo_oa`, `zalo_personal`, `feishu`
+**Supported channels:** `telegram`, `discord`, `slack`, `mattermost`, `whatsapp`, `zalo_oa`, `zalo_personal`, `feishu`
 
 Credentials are masked in HTTP responses.
 

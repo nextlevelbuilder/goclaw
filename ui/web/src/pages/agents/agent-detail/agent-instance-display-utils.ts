@@ -32,6 +32,7 @@ const CHANNEL_PREFIX_LABELS: Array<[string, string]> = [
   ["feishu", "Feishu"],
   ["lark", "Lark"],
   ["slack", "Slack"],
+  ["mattermost", "Mattermost"],
   ["zalo", "Zalo"],
 ];
 

@@ -894,6 +894,8 @@
       "highDesc": "~32K 토큰 예산",
       "xhigh": "최대",
       "xhighDesc": "지원되는 최대 추론 노력 사용",
+      "max": "Max",
+      "maxDesc": "Use the model's maximum reasoning effort",
       "downgrade": "다운그레이드",
       "downgradeDesc": "가장 가까운 지원 낮은 수준으로 정규화하거나, 필요 시 가장 낮은 지원 수준으로",
       "provider_default": "모델 기본값 사용",

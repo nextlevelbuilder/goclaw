@@ -244,8 +244,12 @@ func (s *toolLoopState) detectReadOnlyStreak() (level, message string) {
 // detectSameResult checks if the same tool returned identical results multiple
 // times with different arguments. This catches loops where the agent varies
 // args slightly but gets no new information.
-func (s *toolLoopState) detectSameResult(toolName, resultHash string) (level, message string) {
-	if resultHash == "" {
+//
+// A successful exec is exempt: commands such as API calls routinely return the
+// same static success body for different inputs, which is not a stuck loop.
+// Failing exec calls (isError) are still detected.
+func (s *toolLoopState) detectSameResult(toolName, resultHash string, isError bool) (level, message string) {
+	if resultHash == "" || (toolName == "exec" && !isError) {
 		return "", ""
 	}
 	var count int

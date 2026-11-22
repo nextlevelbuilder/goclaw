@@ -411,6 +411,23 @@ func TestOpenAIForwardCompatResolvePrefixMatch(t *testing.T) {
 	}
 }
 
+func TestOpenAIForwardCompatResolveGPT6(t *testing.T) {
+	registry := NewInMemoryRegistry()
+	registry.RegisterResolver("openai", &OpenAIForwardCompat{})
+
+	resolved := registry.Resolve("openai", "gpt-6.1-sol")
+
+	if resolved == nil {
+		t.Fatal("expected forward-compat resolution for gpt-6.1-sol, got nil")
+	}
+	if resolved.ContextWindow != 272_000 {
+		t.Errorf("expected ContextWindow=272000, got %d", resolved.ContextWindow)
+	}
+	if resolved.MaxTokens != 128_000 {
+		t.Errorf("expected MaxTokens=128000 from template, got %d", resolved.MaxTokens)
+	}
+}
+
 func TestOpenAIForwardCompatResolveNoMatch(t *testing.T) {
 	registry := NewInMemoryRegistry()
 	resolver := &OpenAIForwardCompat{}
