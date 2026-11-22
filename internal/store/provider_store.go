@@ -47,7 +47,7 @@ const (
 	// Z.AI defaults.
 	ZaiDefaultAPIBase       = "https://api.z.ai/api/paas/v4"
 	ZaiCodingDefaultAPIBase = "https://api.z.ai/api/coding/paas/v4"
-	ZaiDefaultModel         = "glm-5.2"
+	ZaiDefaultModel         = "glm-5.3-flash"
 
 	// Novita AI defaults.
 	NovitaDefaultAPIBase = "https://api.novita.ai/openai"

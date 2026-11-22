@@ -6,6 +6,12 @@ All notable changes to GoClaw are documented here. For full documentation, see [
 
 ### Changed
 
+- **Z.AI model catalog updated to the GLM-5.3 family** — the `zai` and `zai-coding`
+  model pickers now list `glm-5.3-flash`, `glm-5.3`, `glm-5.3-flashx` and
+  `glm-5.3-flashx-legal`, and new Z.AI providers default to `glm-5.3-flash` (accepts
+  image input; `glm-5.3` is text-only). Older GLM IDs can still be entered as a
+  custom model; existing saved models are unaffected.
+
 - **Bitrix24 channel migrated to imbot v2 messaging API** — outbound text now uses
   `imbot.v2.Chat.Message.send` (replacing `imbot.message.add`); bot verification/lookup
   uses `imbot.v2.Bot.list` (replacing `imbot.bot.list` + the legacy `imbot.list` fallback);

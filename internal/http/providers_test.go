@@ -170,7 +170,7 @@ func TestProvidersHandlerRegisterInMemoryMiniMaxUsesOpenAIChatCompletionsPath(t 
 	}
 }
 
-func TestProvidersHandlerRegisterInMemoryZaiUsesGLM52Default(t *testing.T) {
+func TestProvidersHandlerRegisterInMemoryZaiUsesGLM53FlashDefault(t *testing.T) {
 	for _, tt := range []struct {
 		providerType string
 		wantBase     string
@@ -196,8 +196,8 @@ func TestProvidersHandlerRegisterInMemoryZaiUsesGLM52Default(t *testing.T) {
 			if err != nil {
 				t.Fatalf("GetForTenant() error = %v", err)
 			}
-			if got := runtimeProvider.DefaultModel(); got != "glm-5.2" {
-				t.Fatalf("DefaultModel() = %q, want glm-5.2", got)
+			if got := runtimeProvider.DefaultModel(); got != "glm-5.3-flash" {
+				t.Fatalf("DefaultModel() = %q, want glm-5.3-flash", got)
 			}
 			openai, ok := runtimeProvider.(*providers.OpenAIProvider)
 			if !ok {
