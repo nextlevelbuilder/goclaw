@@ -77,6 +77,10 @@ const (
 	// can be set through api_base.
 	RequestyDefaultAPIBase = "https://router.requesty.ai/v1"
 	RequestyDefaultModel   = "openai/gpt-4o-mini"
+
+	// OpenRouter default. OpenRouter lists Anthropic models by undated slug
+	// (anthropic/claude-sonnet-4.6), not by Anthropic's dated API id.
+	OpenRouterDefaultModel = "anthropic/claude-sonnet-4.6"
 )
 
 // Vertex AI constants live in internal/providers/vertex.go to avoid a store→providers import cycle
