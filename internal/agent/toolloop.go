@@ -247,10 +247,19 @@ func (s *toolLoopState) detectReadOnlyStreak() (level, message string) {
 //
 // A successful exec is exempt: commands such as API calls routinely return the
 // same static success body for different inputs, which is not a stuck loop.
-// Failing exec calls (isError) are still detected.
+// Successful write_file/edit/edit_file calls are exempt too: their results only
+// echo the path and byte/replacement count, so legitimate iterative rewrites of
+// the same file produce identical results. Identical-args loops are still caught
+// by detect. Failing calls (isError) are still detected.
 func (s *toolLoopState) detectSameResult(toolName, resultHash string, isError bool) (level, message string) {
-	if resultHash == "" || (toolName == "exec" && !isError) {
+	if resultHash == "" {
 		return "", ""
+	}
+	switch toolName {
+	case "exec", "write_file", "edit", "edit_file":
+		if !isError {
+			return "", ""
+		}
 	}
 	var count int
 	for _, rec := range s.history {
