@@ -14,6 +14,20 @@ import (
 )
 
 // ---------------------------------------------------------------------------
+// Preview truncation
+// ---------------------------------------------------------------------------
+
+// truncateSpanPreview truncates subagent span preview fields the same way
+// the normal agent-loop tracing path does (tracing.TruncateMid), keeping
+// head/tail around an explicit marker. The legacy label helper `truncate`
+// can collapse to the bare 3-char "..." when the rune-boundary backoff
+// drives the limit to 0, which reads as ambiguous in the trace UI and
+// exports (issue #1130).
+func truncateSpanPreview(s string, maxLen int) string {
+	return tracing.TruncateMid(s, maxLen)
+}
+
+// ---------------------------------------------------------------------------
 // Two-phase subagent LLM span: start (running) + end (completed/error)
 // ---------------------------------------------------------------------------
 
@@ -49,7 +63,7 @@ func (sm *SubagentManager) emitLLMSpanStart(ctx context.Context, start time.Time
 	}
 	if collector.Verbose() && len(messages) > 0 {
 		if b, err := json.Marshal(messages); err == nil {
-			span.InputPreview = truncate(string(b), 100000)
+			span.InputPreview = truncateSpanPreview(string(b), 100000)
 		}
 	}
 	collector.EmitSpan(tracing.RedactSpan(ctx, span))
@@ -95,7 +109,7 @@ func (sm *SubagentManager) emitLLMSpanEnd(ctx context.Context, spanID uuid.UUID,
 		if collector.Verbose() {
 			previewLimit = 100000
 		}
-		updates["output_preview"] = truncate(resp.Content, previewLimit)
+		updates["output_preview"] = truncateSpanPreview(resp.Content, previewLimit)
 	}
 	collector.EmitSpanUpdate(spanID, traceID, tracing.RedactSpanUpdates(ctx, updates))
 }
@@ -126,7 +140,7 @@ func (sm *SubagentManager) emitToolSpanStart(ctx context.Context, start time.Tim
 		StartTime:    start,
 		ToolName:     toolName,
 		ToolCallID:   toolCallID,
-		InputPreview: truncate(input, previewLimit),
+		InputPreview: truncateSpanPreview(input, previewLimit),
 		Status:       store.SpanStatusRunning,
 		Level:        store.SpanLevelDefault,
 		CreatedAt:    start,
@@ -163,11 +177,11 @@ func (sm *SubagentManager) emitToolSpanEnd(ctx context.Context, spanID uuid.UUID
 		"end_time":       now,
 		"duration_ms":    int(now.Sub(start).Milliseconds()),
 		"status":         store.SpanStatusCompleted,
-		"output_preview": truncate(output, previewLimit),
+		"output_preview": truncateSpanPreview(output, previewLimit),
 	}
 	if isError {
 		updates["status"] = store.SpanStatusError
-		updates["error"] = truncate(output, 200)
+		updates["error"] = truncateSpanPreview(output, 200)
 	}
 	collector.EmitSpanUpdate(spanID, traceID, tracing.RedactSpanUpdates(ctx, updates))
 }
@@ -199,7 +213,7 @@ func (sm *SubagentManager) emitSubagentSpanStart(ctx context.Context, spanID uui
 		Level:        store.SpanLevelDefault,
 		Model:        model,
 		Provider:     providerName,
-		InputPreview: truncate(task.Task, previewLimit),
+		InputPreview: truncateSpanPreview(task.Task, previewLimit),
 		CreatedAt:    start,
 	}
 	if parentSpanID := tracing.ParentSpanIDFromContext(ctx); parentSpanID != uuid.Nil {
@@ -233,11 +247,11 @@ func (sm *SubagentManager) emitSubagentSpanEnd(ctx context.Context, spanID uuid.
 		"end_time":       now,
 		"duration_ms":    int(now.Sub(start).Milliseconds()),
 		"status":         store.SpanStatusCompleted,
-		"output_preview": truncate(output, previewLimit),
+		"output_preview": truncateSpanPreview(output, previewLimit),
 	}
 	if task.Status == TaskStatusFailed || task.Status == TaskStatusCancelled {
 		updates["status"] = store.SpanStatusError
-		updates["error"] = truncate(task.Result, 200)
+		updates["error"] = truncateSpanPreview(task.Result, 200)
 	}
 	collector.EmitSpanUpdate(spanID, traceID, tracing.RedactSpanUpdates(ctx, updates))
 }
