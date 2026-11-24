@@ -17,6 +17,10 @@ import (
 // Vertex AI constants. Kept in the providers package (not store) to avoid an
 // import cycle — store is imported by providers, so providers cannot import store.
 const (
+	// GeminiDefaultModel is the default model for the native Gemini API
+	// (OpenAI-compat endpoint). gemini-2.0-flash was shut down on 2026-06-01.
+	GeminiDefaultModel = "gemini-3.6-flash"
+
 	// VertexDefaultModel is the default Gemini model id (Vertex requires the "google/" prefix).
 	VertexDefaultModel = "google/gemini-2.0-flash-001"
 

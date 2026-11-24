@@ -95,7 +95,7 @@ func registerProviders(registry *providers.Registry, cfg *config.Config, modelRe
 	}
 
 	if cfg.Providers.Gemini.APIKey != "" {
-		registry.Register(providers.NewOpenAIProvider("gemini", cfg.Providers.Gemini.APIKey, "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.0-flash"))
+		registry.Register(providers.NewOpenAIProvider("gemini", cfg.Providers.Gemini.APIKey, "https://generativelanguage.googleapis.com/v1beta/openai", providers.GeminiDefaultModel))
 		slog.Info("registered provider", "name", "gemini")
 	}
 

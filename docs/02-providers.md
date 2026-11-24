@@ -102,7 +102,7 @@ Supported price units: input, output, cache read, cache write, reasoning, reques
 | requesty | `https://router.requesty.ai/v1` | `openai/gpt-4o-mini` | Requesty router; regional bases such as `https://router.eu.requesty.ai/v1` |
 | groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` | |
 | deepseek | `https://api.deepseek.com/v1` | `deepseek-chat` | |
-| gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.0-flash` | Skips empty content fields |
+| gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-3.6-flash` | Skips empty content fields |
 | mistral | `https://api.mistral.ai/v1` | `mistral-large-latest` | |
 | xai | `https://api.x.ai/v1` | `grok-3-mini` | |
 | minimax | `https://api.minimax.io/v1` | `MiniMax-M3.1-Flash` | Uses OpenAI-compatible chat completions; MiniMax M3 remains available. Flash uses adaptive reasoning with `low`, `medium`, `high`, `xhigh`, or `max` effort (default `max`); it does not accept `service_tier`. Saved model IDs remain unchanged. |
