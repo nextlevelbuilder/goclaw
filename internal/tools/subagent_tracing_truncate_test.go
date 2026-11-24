@@ -12,9 +12,9 @@ import (
 // collapse to the bare 3-char "..." — not even at limits far below the
 // multi-byte marker length, where the legacy label helper did exactly that
 // (its rune-boundary backoff could drive the effective limit to 0 for
-// non-empty input). truncatePreview delegates to tracing.TruncateMid, the
-// same helper the normal agent-loop tracing path uses, so the two paths
-// stay behaviourally consistent.
+// non-empty input). truncateSpanPreview delegates to tracing.TruncateMid,
+// the same helper the normal agent-loop tracing path uses, so the two
+// paths stay behaviourally consistent.
 func TestTruncateSpanPreviewNeverCollapsesToBareEllipsis(t *testing.T) {
 	// ~1280 bytes of multi-byte content, mirroring a normal LLM reply.
 	long := strings.Repeat("你好世界", 160)
@@ -26,7 +26,7 @@ func TestTruncateSpanPreviewNeverCollapsesToBareEllipsis(t *testing.T) {
 	}
 }
 
-// truncatePreview must produce the exact same result as the normal
+// truncateSpanPreview must produce the exact same result as the normal
 // agent-loop tracing path for identical inputs.
 func TestTruncateSpanPreviewMatchesAgentLoopTruncation(t *testing.T) {
 	cases := []struct {
@@ -64,7 +64,7 @@ func TestTruncateSpanPreviewValidUTF8AndLength(t *testing.T) {
 		}
 	}
 	// Verbose preview limit exceeds the input entirely: passthrough.
-	if got := truncatePreview(long, 100000); got != long {
+	if got := truncateSpanPreview(long, 100000); got != long {
 		t.Errorf("limit=100000: expected passthrough, got %d bytes", len(got))
 	}
 }

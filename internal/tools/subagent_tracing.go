@@ -17,8 +17,8 @@ import (
 // Preview truncation
 // ---------------------------------------------------------------------------
 
-// truncatePreview truncates subagent span preview fields the same way the
-// normal agent-loop tracing path does (tracing.TruncateMid), keeping
+// truncateSpanPreview truncates subagent span preview fields the same way
+// the normal agent-loop tracing path does (tracing.TruncateMid), keeping
 // head/tail around an explicit marker. The legacy label helper `truncate`
 // can collapse to the bare 3-char "..." when the rune-boundary backoff
 // drives the limit to 0, which reads as ambiguous in the trace UI and
