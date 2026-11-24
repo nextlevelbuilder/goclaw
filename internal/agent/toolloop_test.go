@@ -693,6 +693,23 @@ func TestSameResult_ExecErrorStillDetected(t *testing.T) {
 	}
 }
 
+func TestSameResult_WriteFileSuccessExempt(t *testing.T) {
+	for _, tool := range []string{"write_file", "edit", "edit_file"} {
+		var s toolLoopState
+		same := "File written: notes.md (42 bytes)"
+		for i := range sameResultCritical + 2 {
+			h := s.record(tool, map[string]any{"path": "notes.md", "content": string(rune('a' + i))})
+			s.recordResult(h, same)
+		}
+		if level, _ := s.detectSameResult(tool, hashResult(same), false); level != "" {
+			t.Fatalf("expected no detection for successful %s, got %q", tool, level)
+		}
+		if level, _ := s.detectSameResult(tool, hashResult(same), true); level != "critical" {
+			t.Fatalf("expected critical for repeated failing %s, got %q", tool, level)
+		}
+	}
+}
+
 func TestHashToolCall(t *testing.T) {
 	// Same input → same hash
 	h1 := hashToolCall("list_files", map[string]any{"path": "."})
