@@ -170,21 +170,25 @@ func (p *OllamaProvider) Chat(ctx context.Context, req ChatRequest) (*ChatRespon
 // ChatStream sends a streaming chat request to Ollama, calling onChunk for each
 // content delta, and returns the accumulated final response.
 func (p *OllamaProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (*ChatResponse, error) {
-	result := &ChatResponse{FinishReason: "stop"}
+	// Set when the stream fails after output already reached the caller.
+	var partialErr error
 
 	fn := func() (*ChatResponse, error) {
 		acc := &ChatResponse{FinishReason: "stop"}
+		emitted := false
 
 		streamFn := func(resp ollamaapi.ChatResponse) error {
 			delta := resp.Message.Content
 			if delta != "" {
 				acc.Content += delta
+				emitted = true
 				onChunk(StreamChunk{Content: delta})
 			}
 
 			thinking := resp.Message.Thinking
 			if thinking != "" {
 				acc.Thinking += thinking
+				emitted = true
 				onChunk(StreamChunk{Thinking: thinking})
 			}
 
@@ -220,13 +224,22 @@ func (p *OllamaProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 		}
 
 		if err := p.client.Chat(ctx, p.buildRequest(ctx, req, true), streamFn); err != nil {
-			return nil, fmt.Errorf("%s: chat stream: %w", p.name, err)
+			err = fmt.Errorf("%s: chat stream: %w", p.name, err)
+			// Replaying would duplicate the chunks already delivered, so
+			// hide the error from RetryDo and surface it below.
+			if emitted {
+				partialErr = err
+				return nil, nil
+			}
+			return nil, err
 		}
 		return acc, nil
 	}
 
-	var chatErr error
-	result, chatErr = RetryDo(ctx, p.retryConfig, fn)
+	result, chatErr := RetryDo(ctx, p.retryConfig, fn)
+	if partialErr != nil {
+		return nil, partialErr
+	}
 	return result, chatErr
 }
 

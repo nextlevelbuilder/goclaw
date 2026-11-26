@@ -5,7 +5,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -182,4 +184,32 @@ func TestOllamaBuildRequest_ToolSchemaPreserved(t *testing.T) {
 	_, ok = opts.Properties.Get("x")
 	assert.True(t, ok)
 	assert.Equal(t, []string{"x"}, opts.Required)
+}
+
+// A stream that breaks after output reached the caller must not be replayed,
+// otherwise the already delivered text is emitted a second time.
+func TestOllamaChatStream_NoRetryAfterChunkEmitted(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		_, _ = io.WriteString(w, `{"model":"m","message":{"role":"assistant","content":"Hel"},"done":false}`+"\n")
+		w.(http.Flusher).Flush()
+		panic(http.ErrAbortHandler) // cut the connection mid-stream
+	}))
+	defer srv.Close()
+
+	numCtx := 4096
+	p := NewOllamaProvider("ollama", srv.URL, "m", &numCtx, nil)
+	p.retryConfig = RetryConfig{Attempts: 3, MinDelay: time.Millisecond, MaxDelay: time.Millisecond}
+
+	var got string
+	_, err := p.ChatStream(context.Background(), ChatRequest{
+		Messages: []Message{{Role: "user", Content: "hi"}},
+		Options:  map[string]any{},
+	}, func(c StreamChunk) { got += c.Content })
+
+	require.Error(t, err)
+	assert.Equal(t, int32(1), calls.Load(), "chat requests")
+	assert.Equal(t, "Hel", got)
 }
