@@ -103,6 +103,12 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 			continue
 		}
 
+		// The HTTP status is already 200 once streaming starts, so upstream
+		// failures arrive as an "error" payload in the stream itself.
+		if msg := streamErrorMessage(chunk.Error); msg != "" {
+			return nil, fmt.Errorf("%s: stream error: %s", p.name, msg)
+		}
+
 		// Usage chunk often has empty choices — extract usage before skipping.
 		// When stream_options.include_usage is true, the final chunk contains
 		// usage data but choices is typically an empty array.

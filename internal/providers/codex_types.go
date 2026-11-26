@@ -1,5 +1,7 @@
 package providers
 
+import "encoding/json"
+
 // Wire types for the OpenAI Responses API (Codex flow).
 
 type codexAPIResponse struct {
@@ -73,6 +75,9 @@ type codexSSEEvent struct {
 	OutputFormat      string            `json:"output_format,omitempty"`       // response.image_generation_call.partial_image
 	PartialImageB64   string            `json:"partial_image_b64,omitempty"`   // response.image_generation_call.partial_image
 	PartialImageIndex int               `json:"partial_image_index,omitempty"` // response.image_generation_call.partial_image
+	Code              json.RawMessage   `json:"code,omitempty"`                // error
+	Message           string            `json:"message,omitempty"`             // error
+	Error             json.RawMessage   `json:"error,omitempty"`               // error (nested form)
 }
 
 type codexToolCallAcc struct {
