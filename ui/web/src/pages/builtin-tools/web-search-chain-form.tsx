@@ -25,7 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
-type ProviderKey = "exa" | "tavily" | "brave" | "parallel" | "serply" | "duckduckgo";
+type ProviderKey = "exa" | "tavily" | "brave" | "parallel" | "serply" | "specstream" | "duckduckgo";
 
 interface ProviderEntry {
   id: string;
@@ -44,9 +44,9 @@ interface Props {
   onCancel: () => void;
 }
 
-const SORTABLE_PROVIDERS: ProviderKey[] = ["exa", "tavily", "brave", "parallel", "serply"];
+const SORTABLE_PROVIDERS: ProviderKey[] = ["exa", "tavily", "brave", "parallel", "serply", "specstream"];
 const LOCKED_PROVIDER: ProviderKey = "duckduckgo";
-const DEFAULT_ORDER: ProviderKey[] = ["exa", "tavily", "brave", "parallel", "serply"];
+const DEFAULT_ORDER: ProviderKey[] = ["exa", "tavily", "brave", "parallel", "serply", "specstream"];
 
 const RAIL_COLOR: Record<ProviderKey, string> = {
   exa: "bg-blue-600",
@@ -54,6 +54,7 @@ const RAIL_COLOR: Record<ProviderKey, string> = {
   brave: "bg-orange-500",
   parallel: "bg-violet-500",
   serply: "bg-emerald-500",
+  specstream: "bg-indigo-500",
   duckduckgo: "bg-slate-500",
 };
 

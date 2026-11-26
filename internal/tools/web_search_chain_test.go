@@ -208,6 +208,27 @@ func TestBuildChainFromStorage(t *testing.T) {
 			wantLen:   1,
 		},
 		{
+			name:     "SpecStream key present → sits before DDG in the default order",
+			tenantID: uuid.New(),
+			override: "",
+			secrets: map[string]string{
+				"tools.web.specstream.api_key": "test-key-specstream",
+			},
+			wantNames: []string{"specstream", "duckduckgo"},
+			wantLen:   2,
+		},
+		{
+			name:     "SpecStream and Serply keys follow the default order",
+			tenantID: uuid.New(),
+			override: "",
+			secrets: map[string]string{
+				"tools.web.serply.api_key":     "test-key-serply",
+				"tools.web.specstream.api_key": "test-key-specstream",
+			},
+			wantNames: []string{"serply", "specstream", "duckduckgo"},
+			wantLen:   3,
+		},
+		{
 			name:      "explicitly disabled Parallel is skipped",
 			tenantID:  uuid.New(),
 			override:  `{"provider_order":["parallel"],"parallel":{"enabled":false}}`,

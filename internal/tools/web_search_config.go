@@ -23,6 +23,8 @@ func buildProviderByName(name, apiKey string, maxResults int) SearchProvider {
 		return newParallelSearchProvider(maxResults)
 	case searchProviderSerply:
 		return newSerplySearchProvider(apiKey, maxResults)
+	case searchProviderSpecStream:
+		return newSpecStreamSearchProvider(apiKey, maxResults)
 	case searchProviderDuckDuckGo:
 		return newDuckDuckGoSearchProvider(maxResults)
 	default:
