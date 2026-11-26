@@ -388,6 +388,16 @@ func (p *CodexProvider) processSSEEvent(event *codexSSEEvent, result *ChatRespon
 			}
 		}
 		return errors.New(errMsg)
+
+	case "error":
+		msg := streamErrorMessage(event.Error)
+		if msg == "" {
+			msg = event.Message
+		}
+		if msg == "" {
+			msg = string(event.Code)
+		}
+		return fmt.Errorf("codex: stream error: %s", msg)
 	}
 	return nil
 }

@@ -1,5 +1,7 @@
 package providers
 
+import "encoding/json"
+
 // OpenAI API response types (internal)
 
 type openAIResponse struct {
@@ -74,6 +76,7 @@ type openAIServerToolUse struct {
 type openAIStreamChunk struct {
 	Choices []openAIStreamChoice `json:"choices"`
 	Usage   *openAIUsage         `json:"usage,omitempty"`
+	Error   json.RawMessage      `json:"error,omitempty"` // mid-stream failure; object or string
 }
 
 type openAIStreamChoice struct {
