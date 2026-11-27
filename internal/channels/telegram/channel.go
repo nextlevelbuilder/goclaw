@@ -32,6 +32,7 @@ type Channel struct {
 	transport         *http.Transport
 	ipv4Once          sync.Once                   // guards enableIPv4Only to prevent data race
 	agentStore        store.AgentStore            // for agent key lookup (nil if not configured)
+	boundAgentValid   sync.Map                    // per-group/topic agent_id (raw config value) → resolved agent_key ("" = invalid); cached for channel lifetime
 	configPermStore   store.ConfigPermissionStore // for group file writer management (nil if not configured)
 	teamStore         store.TeamStore             // for /tasks, /task_detail commands (nil if not configured)
 	subagentTaskStore store.SubagentTaskStore     // for /subagents, /subagent commands (nil if not configured)

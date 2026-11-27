@@ -720,6 +720,20 @@ func (c *Channel) processResolvedMessage(ctx context.Context, rctx resolvedMessa
 		}
 	}
 
+	// Per-group/per-topic agent binding: an explicit agent_id on the group or
+	// topic config wins over both the voice agent and the channel default,
+	// so one bot can serve multiple agents across different groups/topics.
+	// resolveBoundAgentID validates the binding lazily (tenant-scoped) and
+	// returns "" to fall back to the channel default when the agent is unknown.
+	if rctx.isGroup && rctx.topicCfg.agentID != "" {
+		if bound := c.resolveBoundAgentID(ctx, rctx.topicCfg.agentID); bound != "" {
+			targetAgentID = bound
+			slog.Debug("telegram: routing inbound to group/topic-bound agent",
+				"agent_id", bound, "chat_id", rctx.chatIDStr, "topic_id", rctx.messageThreadID,
+			)
+		}
+	}
+
 	// Collect contact for processed messages (DM + group-mentioned).
 	if cc := c.ContactCollector(); cc != nil {
 		contactName := strings.TrimSpace(user.FirstName + " " + user.LastName)
