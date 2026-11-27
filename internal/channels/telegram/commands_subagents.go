@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -42,8 +43,9 @@ func formatTokenCount(n int64) string {
 }
 
 // handleSubagentsList handles /subagents — lists subagent tasks from DB.
-func (c *Channel) handleSubagentsList(ctx context.Context, chatID int64, isGroup bool, setThread func(*telego.SendMessageParams)) {
+func (c *Channel) handleSubagentsList(ctx context.Context, chatID int64, messageThreadID int, isGroup bool, setThread func(*telego.SendMessageParams)) {
 	chatIDObj := tu.ID(chatID)
+	chatIDStr := strconv.FormatInt(chatID, 10)
 
 	send := func(text string) {
 		msg := tu.Message(chatIDObj, text)
@@ -56,7 +58,7 @@ func (c *Channel) handleSubagentsList(ctx context.Context, chatID int64, isGroup
 		return
 	}
 
-	rootAgentID, err := c.resolveAgentUUID(ctx)
+	rootAgentID, err := c.effectiveAgentUUID(ctx, chatIDStr, messageThreadID, isGroup)
 	if err != nil {
 		slog.Warn("subagents command: resolve agent UUID failed", "error", err)
 		send("Subagent tasks are not available (agent could not be resolved).")
@@ -119,8 +121,9 @@ func (c *Channel) handleSubagentsList(ctx context.Context, chatID int64, isGroup
 }
 
 // handleSubagentDetail handles /subagent <id> — shows detail for a subagent task.
-func (c *Channel) handleSubagentDetail(ctx context.Context, chatID int64, text string, isGroup bool, setThread func(*telego.SendMessageParams)) {
+func (c *Channel) handleSubagentDetail(ctx context.Context, chatID int64, messageThreadID int, text string, isGroup bool, setThread func(*telego.SendMessageParams)) {
 	chatIDObj := tu.ID(chatID)
+	chatIDStr := strconv.FormatInt(chatID, 10)
 
 	send := func(t string) {
 		for _, chunk := range chunkPlainText(t, telegramMaxMessageLen) {
@@ -148,7 +151,7 @@ func (c *Channel) handleSubagentDetail(ctx context.Context, chatID int64, text s
 		return
 	}
 
-	rootAgentID, err := c.resolveAgentUUID(ctx)
+	rootAgentID, err := c.effectiveAgentUUID(ctx, chatIDStr, messageThreadID, isGroup)
 	if err != nil {
 		slog.Warn("subagent command: resolve agent UUID failed", "error", err)
 		send("Subagent tasks are not available (agent could not be resolved).")
@@ -178,6 +181,12 @@ func (c *Channel) handleSubagentCallback(ctx context.Context, query *telego.Call
 
 	chat := query.Message.GetChat()
 	chatIDObj := tu.ID(chat.ID)
+	chatIDStr := strconv.FormatInt(chat.ID, 10)
+	isGroup := chat.Type == "group" || chat.Type == "supergroup"
+	var messageThreadID int
+	if msg, ok := query.Message.(*telego.Message); ok && msg != nil {
+		messageThreadID = msg.MessageThreadID
+	}
 
 	send := func(text string) {
 		for _, chunk := range chunkPlainText(text, telegramMaxMessageLen) {
@@ -197,7 +206,7 @@ func (c *Channel) handleSubagentCallback(ctx context.Context, query *telego.Call
 		return
 	}
 
-	rootAgentID, err := c.resolveAgentUUID(ctx)
+	rootAgentID, err := c.effectiveAgentUUID(ctx, chatIDStr, messageThreadID, isGroup)
 	if err != nil {
 		slog.Warn("subagent callback: resolve agent UUID failed", "error", err)
 		send("Subagent tasks are not available (agent could not be resolved).")

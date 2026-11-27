@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 
 	"github.com/mymmrac/telego"
@@ -49,8 +50,9 @@ func taskUserID(channelName string, chatID int64, isGroup bool) string {
 }
 
 // handleTasksList handles the /tasks command — lists team tasks.
-func (c *Channel) handleTasksList(ctx context.Context, chatID int64, isGroup bool, setThread func(*telego.SendMessageParams)) {
+func (c *Channel) handleTasksList(ctx context.Context, chatID int64, messageThreadID int, isGroup bool, setThread func(*telego.SendMessageParams)) {
 	chatIDObj := tu.ID(chatID)
+	chatIDStr := strconv.FormatInt(chatID, 10)
 
 	send := func(text string) {
 		msg := tu.Message(chatIDObj, text)
@@ -63,7 +65,7 @@ func (c *Channel) handleTasksList(ctx context.Context, chatID int64, isGroup boo
 		return
 	}
 
-	agentID, err := c.resolveAgentUUID(ctx)
+	agentID, err := c.effectiveAgentUUID(ctx, chatIDStr, messageThreadID, isGroup)
 	if err != nil {
 		slog.Debug("tasks command: agent resolve failed", "error", err)
 		send("Team features are not available (no agent).")
@@ -131,8 +133,9 @@ func (c *Channel) handleTasksList(ctx context.Context, chatID int64, isGroup boo
 }
 
 // handleTaskDetail handles the /task_detail command — shows detail for a task.
-func (c *Channel) handleTaskDetail(ctx context.Context, chatID int64, text string, isGroup bool, setThread func(*telego.SendMessageParams)) {
+func (c *Channel) handleTaskDetail(ctx context.Context, chatID int64, messageThreadID int, text string, isGroup bool, setThread func(*telego.SendMessageParams)) {
 	chatIDObj := tu.ID(chatID)
+	chatIDStr := strconv.FormatInt(chatID, 10)
 
 	send := func(t string) {
 		for _, chunk := range chunkPlainText(t, telegramMaxMessageLen) {
@@ -155,7 +158,7 @@ func (c *Channel) handleTaskDetail(ctx context.Context, chatID int64, text strin
 		return
 	}
 
-	agentID, err := c.resolveAgentUUID(ctx)
+	agentID, err := c.effectiveAgentUUID(ctx, chatIDStr, messageThreadID, isGroup)
 	if err != nil {
 		slog.Debug("task_detail command: agent resolve failed", "error", err)
 		send("Team features are not available (no agent).")
@@ -218,7 +221,12 @@ func (c *Channel) handleCallbackQuery(ctx context.Context, query *telego.Callbac
 	chat := query.Message.GetChat()
 	chatID := chat.ID
 	chatIDObj := tu.ID(chatID)
+	chatIDStr := strconv.FormatInt(chatID, 10)
 	isGroup := chat.Type == "group" || chat.Type == "supergroup"
+	var messageThreadID int
+	if msg, ok := query.Message.(*telego.Message); ok && msg != nil {
+		messageThreadID = msg.MessageThreadID
+	}
 
 	send := func(text string) {
 		for _, chunk := range chunkPlainText(text, telegramMaxMessageLen) {
@@ -232,7 +240,7 @@ func (c *Channel) handleCallbackQuery(ctx context.Context, query *telego.Callbac
 		return
 	}
 
-	agentID, err := c.resolveAgentUUID(ctx)
+	agentID, err := c.effectiveAgentUUID(ctx, chatIDStr, messageThreadID, isGroup)
 	if err != nil {
 		send("Team features are not available (no agent).")
 		return

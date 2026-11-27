@@ -176,6 +176,69 @@ func TestEffectiveInboundAgentID(t *testing.T) {
 	}
 }
 
+func TestEffectiveAgentUUID(t *testing.T) {
+	defID, boundID := uuid.New(), uuid.New()
+	fake := &boundAgentFakeStore{
+		missingErr: errors.New("not found"),
+		byKey: map[string]*store.AgentData{
+			"default-agent": {BaseModel: store.BaseModel{ID: defID}, AgentKey: "default-agent"},
+			"agent-b":       {BaseModel: store.BaseModel{ID: boundID}, AgentKey: "agent-b"},
+		},
+	}
+	cfg := config.TelegramConfig{
+		Groups: map[string]*config.TelegramGroupConfig{
+			"-1001": {AgentID: "agent-b"},
+			"-1002": {AgentID: "ghost-agent"}, // unknown on purpose
+		},
+	}
+
+	tests := []struct {
+		name    string
+		isGroup bool
+		chat    string
+		want    uuid.UUID
+	}{
+		{"dm uses default agent uuid", false, "42", defID},
+		{"bound group uses bound agent uuid", true, "-1001", boundID},
+		{"unbound group uses default agent uuid", true, "-999", defID},
+		{"unknown binding falls back to default agent uuid", true, "-1002", defID},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := newBoundAgentChannel(fake, "default-agent")
+			c.config = cfg
+			got, err := c.effectiveAgentUUID(context.Background(), tc.chat, 0, tc.isGroup)
+			if err != nil {
+				t.Fatalf("effectiveAgentUUID error: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("effectiveAgentUUID = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestEffectiveAgentUUID_NoStore(t *testing.T) {
+	// Config-trust channel: a UUID literal stays usable for permission lookups,
+	// an agent_key cannot be resolved (callers skip the check rather than guess).
+	id := uuid.New()
+	c := newBoundAgentChannel(nil, "default-agent")
+	c.config = config.TelegramConfig{
+		Groups: map[string]*config.TelegramGroupConfig{
+			"-1001": {AgentID: id.String()},
+			"-1002": {AgentID: "agent-b"},
+		},
+	}
+
+	if got, err := c.effectiveAgentUUID(context.Background(), "-1001", 0, true); err != nil || got != id {
+		t.Errorf("uuid binding: got %s, err %v; want %s", got, err, id)
+	}
+	if _, err := c.effectiveAgentUUID(context.Background(), "-1002", 0, true); err == nil {
+		t.Error("agent_key binding without a store must not resolve to a UUID")
+	}
+}
+
 func TestEffectiveInboundAgentID_TopicOverridesGroup(t *testing.T) {
 	groupAgent := &store.AgentData{AgentKey: "agent-group"}
 	topicAgent := &store.AgentData{AgentKey: "agent-topic"}
