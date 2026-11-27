@@ -112,7 +112,20 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 			// Gate on the agent that actually handles this group/topic: in a
 			// bound group the conversation (and thus the reset target) belongs
 			// to the bound agent, so its writer list must be consulted.
+			ref := c.effectiveInboundAgent(ctx, chatIDStr, messageThreadID, isGroup)
 			agentID, err := c.effectiveAgentUUID(ctx, chatIDStr, messageThreadID, isGroup)
+			if err != nil && ref.key != c.AgentID() {
+				// Bound group whose agent cannot be resolved to a UUID (e.g. a
+				// config-trust channel without an agent store): the writer
+				// allowlist cannot be checked, so deny instead of letting any
+				// member reset the bound agent's conversation.
+				slog.Warn("security.reset_writer_unresolved_bound_agent",
+					"channel", c.Name(), "chat_id", chatIDStr, "agent", ref.key)
+				msg := tu.Message(chatIDObj, "Cannot reset: the group's bound agent could not be resolved.")
+				setThread(msg)
+				c.bot.SendMessage(ctx, msg)
+				return true
+			}
 			if err == nil {
 				groupID := fmt.Sprintf("group:%s:%s", c.Name(), chatIDStr)
 				senderNumericID := strings.SplitN(senderID, "|", 2)[0]
@@ -127,6 +140,8 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 					return true
 				}
 			}
+			// Unbound chat with an unresolvable default agent: keep the
+			// historical fail-open behavior (the gate never ran before either).
 		}
 
 		// Fix: use correct PeerKind so the gateway consumer builds the right session key.

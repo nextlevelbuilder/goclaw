@@ -3,11 +3,19 @@ package telegram
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
+
+// boundAgentNegativeTTL bounds how long an invalid or transiently-unresolvable
+// binding is cached. Valid bindings stay cached for the channel lifetime (a
+// config edit rebuilds the channel), but a DB blip on the first message or an
+// agent created afterwards must not pin the group to the channel default until
+// restart.
+const boundAgentNegativeTTL = 30 * time.Second
 
 // boundAgentRef is the resolved form of a per-group/per-topic agent_id binding
 // (or of the channel default agent when no binding applies).
@@ -16,24 +24,35 @@ type boundAgentRef struct {
 	id  uuid.UUID // agent UUID when resolvable; zero for config-trust channels
 }
 
+// boundAgentCacheEntry is one boundAgents value: the resolved reference plus
+// the time it was cached (used to expire negative results).
+type boundAgentCacheEntry struct {
+	ref boundAgentRef
+	at  time.Time
+}
+
 // resolveBoundAgent returns the resolved binding for a raw configured agent_id
 // (agent_key or UUID). An empty or unknown binding resolves to the zero value
 // so callers fall back to the channel default agent.
 //
 // Resolution is lazy and cached per channel: the first inbound message for a
-// distinct binding performs one tenant-scoped agent lookup; all subsequent
-// messages are served from boundAgents (raw config value → boundAgentRef,
-// empty key = invalid). This keeps the per-message hot path free of DB queries
-// (repo rule: DB query reuse).
+// distinct binding performs one tenant-scoped agent lookup. Valid results are
+// cached for the channel lifetime; invalid/transient ones expire after
+// boundAgentNegativeTTL so the next message retries. This keeps the per-message
+// hot path free of DB queries (repo rule: DB query reuse) without pinning a
+// group to the wrong agent after a store blip.
 func (c *Channel) resolveBoundAgent(ctx context.Context, agentID string) boundAgentRef {
 	if agentID == "" {
 		return boundAgentRef{}
 	}
 	if v, ok := c.boundAgents.Load(agentID); ok {
-		return v.(boundAgentRef)
+		entry := v.(boundAgentCacheEntry)
+		if entry.ref.key != "" || time.Since(entry.at) < boundAgentNegativeTTL {
+			return entry.ref
+		}
 	}
 	resolved := c.validateBoundAgent(ctx, agentID)
-	c.boundAgents.Store(agentID, resolved)
+	c.boundAgents.Store(agentID, boundAgentCacheEntry{ref: resolved, at: time.Now()})
 	return resolved
 }
 

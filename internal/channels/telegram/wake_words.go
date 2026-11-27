@@ -46,7 +46,9 @@ type triggerWordsEntry struct {
 // (the group/topic-bound agent, or the channel default), parsed from its
 // IDENTITY.md context file and cached per agent_key for triggerWordsTTL. One
 // channel instance can serve multiple agents via group/topic bindings, so the
-// cache is keyed by agent rather than holding a single set.
+// cache is keyed by agent rather than holding a single set. Entries are never
+// evicted; the map is bounded by the number of agents that serve this channel,
+// so growth is negligible and each entry refreshes on use.
 func (c *Channel) agentTriggerWords(ctx context.Context, ref boundAgentRef) map[string]struct{} {
 	c.triggerMu.Lock()
 	defer c.triggerMu.Unlock()

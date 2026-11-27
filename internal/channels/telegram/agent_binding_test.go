@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -112,6 +113,29 @@ func TestResolveBoundAgentID_UnknownAgent_FallsBackAndCaches(t *testing.T) {
 	// Invalid result is cached too: exactly one store lookup for three attempts.
 	if n := fake.lookups.Load(); n != 1 {
 		t.Errorf("store lookups = %d, want 1 (invalid binding must be cached)", n)
+	}
+}
+
+func TestResolveBoundAgentID_NegativeCacheExpires(t *testing.T) {
+	// A transient store failure (or an agent created after the first message)
+	// must not pin the group to the default agent for the channel lifetime:
+	// negative entries expire and the next message retries the lookup.
+	fake := &boundAgentFakeStore{missingErr: errors.New("not found")}
+	c := newBoundAgentChannel(fake, "default-agent")
+
+	if got := c.resolveBoundAgentID(context.Background(), "late-agent"); got != "" {
+		t.Fatalf("initial resolve = %q, want \"\" (agent does not exist yet)", got)
+	}
+
+	// The agent now exists; age the cached negative entry past the TTL.
+	id := uuid.New()
+	fake.byKey = map[string]*store.AgentData{
+		"late-agent": {BaseModel: store.BaseModel{ID: id}, AgentKey: "late-agent"},
+	}
+	c.boundAgents.Store("late-agent", boundAgentCacheEntry{at: time.Now().Add(-2 * boundAgentNegativeTTL)})
+
+	if got := c.resolveBoundAgentID(context.Background(), "late-agent"); got != "late-agent" {
+		t.Errorf("resolve after negative-TTL expiry = %q, want late-agent", got)
 	}
 }
 
