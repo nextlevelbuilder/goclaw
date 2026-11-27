@@ -10,6 +10,7 @@ import (
 	"github.com/mymmrac/telego"
 
 	"github.com/nextlevelbuilder/goclaw/internal/channels"
+	"github.com/nextlevelbuilder/goclaw/internal/config"
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
@@ -18,17 +19,25 @@ import (
 // GetAgentContextFiles mirrors the real store: it requires tenant scope in ctx.
 type triggerFakeStore struct {
 	store.AgentStore
-	agentID uuid.UUID
-	files   []store.AgentContextFileData
+	agentID uuid.UUID                                  // ID returned by GetByKey when byKey has no entry
+	byKey   map[string]*store.AgentData                // optional key → agent mapping
+	files   []store.AgentContextFileData               // used when byID has no entry
+	byID    map[uuid.UUID][]store.AgentContextFileData // optional per-agent context files
 }
 
 func (f *triggerFakeStore) GetByKey(ctx context.Context, key string) (*store.AgentData, error) {
+	if ag, ok := f.byKey[key]; ok {
+		return ag, nil
+	}
 	return &store.AgentData{BaseModel: store.BaseModel{ID: f.agentID}}, nil
 }
 
 func (f *triggerFakeStore) GetAgentContextFiles(ctx context.Context, id uuid.UUID) ([]store.AgentContextFileData, error) {
 	if store.TenantIDFromContext(ctx) == uuid.Nil {
 		return nil, fmt.Errorf("tenant_id required")
+	}
+	if files, ok := f.byID[id]; ok {
+		return files, nil
 	}
 	return f.files, nil
 }
@@ -47,7 +56,7 @@ func TestAgentTriggerWords_ScopesTenantAndLoadsIdentity(t *testing.T) {
 	c.SetAgentID("my-agent")
 	c.SetTenantID(uuid.New())
 
-	set := c.agentTriggerWords(context.Background())
+	set := c.agentTriggerWords(context.Background(), boundAgentRef{key: "my-agent", id: fake.agentID})
 	if len(set) != 2 {
 		t.Fatalf("expected 2 trigger words loaded, got %d: %v", len(set), set)
 	}
@@ -59,10 +68,12 @@ func TestAgentTriggerWords_ScopesTenantAndLoadsIdentity(t *testing.T) {
 // newTriggerChannel returns a Channel with a pre-warmed trigger-word cache so
 // matchesTriggerWords can be tested without a store.
 func newTriggerChannel(words ...string) *Channel {
-	return &Channel{
-		triggerWords:   normalizeWakeWords(words),
-		triggerWordsAt: time.Now(),
+	c := &Channel{BaseChannel: channels.NewBaseChannel(channels.TypeTelegram, nil, nil)}
+	c.SetAgentID("test-agent")
+	c.triggerWords = map[string]triggerWordsEntry{
+		"test-agent": {words: normalizeWakeWords(words), at: time.Now()},
 	}
+	return c
 }
 
 func TestChannelMatchesTriggerWords(t *testing.T) {
@@ -83,9 +94,50 @@ func TestChannelMatchesTriggerWords(t *testing.T) {
 	}
 
 	// nil agentStore + expired cache → fails open, never matches, never panics.
-	empty := &Channel{}
+	empty := &Channel{BaseChannel: channels.NewBaseChannel(channels.TypeTelegram, nil, nil)}
 	if empty.matchesTriggerWords(ctx, &telego.Message{Text: "Alice"}) {
 		t.Error("channel with no trigger words must never match")
+	}
+}
+
+// Bound groups must load trigger words for the bound agent, not the channel
+// default: one bot instance can serve several agents across groups/topics.
+func TestMatchesTriggerWords_UsesBoundGroupAgent(t *testing.T) {
+	aID, bID := uuid.New(), uuid.New()
+	fake := &triggerFakeStore{
+		byKey: map[string]*store.AgentData{
+			"agent-a": {BaseModel: store.BaseModel{ID: aID}, AgentKey: "agent-a"},
+			"agent-b": {BaseModel: store.BaseModel{ID: bID}, AgentKey: "agent-b"},
+		},
+		byID: map[uuid.UUID][]store.AgentContextFileData{
+			aID: {{FileName: "IDENTITY.md", Content: "Trigger words: Alice"}},
+			bID: {{FileName: "IDENTITY.md", Content: "Trigger words: Bob"}},
+		},
+	}
+	c := &Channel{BaseChannel: channels.NewBaseChannel(channels.TypeTelegram, nil, nil), agentStore: fake}
+	c.SetAgentID("agent-a")
+	c.SetTenantID(uuid.New())
+	c.config = config.TelegramConfig{
+		Groups: map[string]*config.TelegramGroupConfig{
+			"-100": {AgentID: "agent-b"},
+		},
+	}
+
+	ctx := context.Background()
+	bound := &telego.Message{Chat: telego.Chat{ID: -100, Type: "supergroup"}, Text: "hey Bob"}
+	if !c.matchesTriggerWords(ctx, bound) {
+		t.Error("bound agent's trigger word must match in the bound group")
+	}
+	if c.matchesTriggerWords(ctx, &telego.Message{Chat: telego.Chat{ID: -100, Type: "supergroup"}, Text: "hey Alice"}) {
+		t.Error("default agent's trigger word must not match in the bound group")
+	}
+
+	// A group without a binding still uses the channel default agent's set.
+	if !c.matchesTriggerWords(ctx, &telego.Message{Chat: telego.Chat{ID: -200, Type: "supergroup"}, Text: "hey Alice"}) {
+		t.Error("default agent's trigger word must match in an unbound group")
+	}
+	if c.matchesTriggerWords(ctx, &telego.Message{Chat: telego.Chat{ID: -200, Type: "supergroup"}, Text: "hey Bob"}) {
+		t.Error("bound agent's trigger word must not match in an unbound group")
 	}
 }
 

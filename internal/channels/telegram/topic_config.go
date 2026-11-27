@@ -19,6 +19,7 @@ type resolvedTopicConfig struct {
 	skills         []string // nil = inherit, non-nil = override (empty = no skills)
 	tools          []string // nil = inherit (all tools), non-nil = override (supports "group:xxx")
 	systemPrompt   string   // concatenated group + topic prompts
+	agentID        string   // group/topic-bound agent (agent_key or UUID); "" = channel default
 }
 
 // resolveTopicConfig resolves the effective config for a chat/topic by merging layers.
@@ -85,6 +86,9 @@ func mergeGroupInto(dst *resolvedTopicConfig, src *config.TelegramGroupConfig) {
 	if src.SystemPrompt != "" {
 		dst.systemPrompt = src.SystemPrompt
 	}
+	if src.AgentID != "" {
+		dst.agentID = src.AgentID
+	}
 }
 
 // mergeTopicInto applies topic config values, with special handling for systemPrompt
@@ -121,6 +125,10 @@ func mergeTopicInto(dst *resolvedTopicConfig, src *config.TelegramTopicConfig, g
 		}
 		parts = append(parts, strings.TrimSpace(src.SystemPrompt))
 		dst.systemPrompt = strings.Join(parts, "\n\n")
+	}
+	// AgentID: topic overrides group (firstDefined pattern).
+	if src.AgentID != "" {
+		dst.agentID = src.AgentID
 	}
 }
 

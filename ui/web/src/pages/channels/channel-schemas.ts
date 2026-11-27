@@ -337,6 +337,7 @@ export const groupOverrideSchema: FieldDef[] = [
   { key: "mention_mode", label: "Mention Mode", type: "tristate", options: mentionModeOptions },
   { key: "require_mention", label: "Require @mention", type: "tristate", disabledWhen: { key: "mention_mode", value: "yield", hint: "fieldConfig.require_mention.disabledHint" } },
   { key: "enabled", label: "Enabled", type: "tristate" },
+  { key: "agent_id", label: "Agent", type: "text", placeholder: "agent_key or UUID", help: "Route messages to a specific agent (agent_key or UUID). Leave empty for the channel default." },
   { key: "allow_from", label: "Allowed Users", type: "tags", placeholder: "User IDs, one per line", help: "Restrict which users can interact in this group" },
   { key: "skills", label: "Skills Filter", type: "skill-select", help: "Limit available skills for this group" },
   { key: "tools", label: "Tool Allowlist", type: "tool-select", help: "Restrict which tools the agent can use in this group" },

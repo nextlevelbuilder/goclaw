@@ -14,10 +14,10 @@ import (
 	"github.com/nextlevelbuilder/goclaw/internal/store"
 )
 
-// resolveAgentUUID looks up the agent UUID from the channel's agent key.
-// Returns uuid.Nil if the agent key is empty or not found.
-func (c *Channel) resolveAgentUUID(ctx context.Context) (uuid.UUID, error) {
-	key := c.AgentID()
+// resolveAgentUUIDForKey resolves an agent key (agent_key or UUID) to its UUID
+// within the channel's tenant. Returns an error when the key is empty, the
+// channel has no agent store, or the agent is not found.
+func (c *Channel) resolveAgentUUIDForKey(ctx context.Context, key string) (uuid.UUID, error) {
 	if key == "" {
 		return uuid.Nil, fmt.Errorf("no agent key configured")
 	}
@@ -25,6 +25,10 @@ func (c *Channel) resolveAgentUUID(ctx context.Context) (uuid.UUID, error) {
 	// Try direct UUID parse first (future-proofing).
 	if id, err := uuid.Parse(key); err == nil {
 		return id, nil
+	}
+
+	if c.agentStore == nil {
+		return uuid.Nil, fmt.Errorf("no agent store configured")
 	}
 
 	// Inject tenant scope so the store can filter by tenant_id.
@@ -105,7 +109,23 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 	case "/reset":
 		// In group chats, only file writers can reset conversation history.
 		if isGroup && c.configPermStore != nil {
-			agentID, err := c.resolveAgentUUID(ctx)
+			// Gate on the agent that actually handles this group/topic: in a
+			// bound group the conversation (and thus the reset target) belongs
+			// to the bound agent, so its writer list must be consulted.
+			ref := c.effectiveInboundAgent(ctx, chatIDStr, messageThreadID, isGroup)
+			agentID, err := c.effectiveAgentUUID(ctx, chatIDStr, messageThreadID, isGroup)
+			if err != nil && ref.key != c.AgentID() {
+				// Bound group whose agent cannot be resolved to a UUID (e.g. a
+				// config-trust channel without an agent store): the writer
+				// allowlist cannot be checked, so deny instead of letting any
+				// member reset the bound agent's conversation.
+				slog.Warn("security.reset_writer_unresolved_bound_agent",
+					"channel", c.Name(), "chat_id", chatIDStr, "agent", ref.key)
+				msg := tu.Message(chatIDObj, "Cannot reset: the group's bound agent could not be resolved.")
+				setThread(msg)
+				c.bot.SendMessage(ctx, msg)
+				return true
+			}
 			if err == nil {
 				groupID := fmt.Sprintf("group:%s:%s", c.Name(), chatIDStr)
 				senderNumericID := strings.SplitN(senderID, "|", 2)[0]
@@ -120,6 +140,8 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 					return true
 				}
 			}
+			// Unbound chat with an unresolvable default agent: keep the
+			// historical fail-open behavior (the gate never ran before either).
 		}
 
 		// Fix: use correct PeerKind so the gateway consumer builds the right session key.
@@ -133,7 +155,7 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 			ChatID:   chatIDStr,
 			Content:  "/reset",
 			PeerKind: peerKind,
-			AgentID:  c.AgentID(),
+			AgentID:  c.effectiveInboundAgentID(ctx, chatIDStr, messageThreadID, isGroup),
 			UserID:   strings.SplitN(senderID, "|", 2)[0],
 			TenantID: c.TenantID(),
 			Metadata: map[string]string{
@@ -159,7 +181,7 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 			ChatID:   chatIDStr,
 			Content:  "/stop",
 			PeerKind: peerKind,
-			AgentID:  c.AgentID(),
+			AgentID:  c.effectiveInboundAgentID(ctx, chatIDStr, messageThreadID, isGroup),
 			UserID:   strings.SplitN(senderID, "|", 2)[0],
 			TenantID: c.TenantID(),
 			Metadata: map[string]string{
@@ -183,7 +205,7 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 			ChatID:   chatIDStr,
 			Content:  "/stopall",
 			PeerKind: peerKind,
-			AgentID:  c.AgentID(),
+			AgentID:  c.effectiveInboundAgentID(ctx, chatIDStr, messageThreadID, isGroup),
 			UserID:   strings.SplitN(senderID, "|", 2)[0],
 			TenantID: c.TenantID(),
 			Metadata: map[string]string{
@@ -204,19 +226,19 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 		return true
 
 	case "/tasks":
-		c.handleTasksList(ctx, chatID, isGroup, setThread)
+		c.handleTasksList(ctx, chatID, messageThreadID, isGroup, setThread)
 		return true
 
 	case "/task_detail":
-		c.handleTaskDetail(ctx, chatID, text, isGroup, setThread)
+		c.handleTaskDetail(ctx, chatID, messageThreadID, text, isGroup, setThread)
 		return true
 
 	case "/subagents":
-		c.handleSubagentsList(ctx, chatID, isGroup, setThread)
+		c.handleSubagentsList(ctx, chatID, messageThreadID, isGroup, setThread)
 		return true
 
 	case "/subagent":
-		c.handleSubagentDetail(ctx, chatID, text, isGroup, setThread)
+		c.handleSubagentDetail(ctx, chatID, messageThreadID, text, isGroup, setThread)
 		return true
 
 	case "/addwriter":
@@ -228,7 +250,7 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 		return true
 
 	case "/writers":
-		c.handleListWriters(ctx, chatID, chatIDStr, isGroup, setThread)
+		c.handleListWriters(ctx, chatID, chatIDStr, messageThreadID, isGroup, setThread)
 		return true
 
 	case "/addcron":
@@ -240,7 +262,7 @@ func (c *Channel) handleBotCommand(ctx context.Context, message *telego.Message,
 		return true
 
 	case "/croners":
-		c.handleListCronPerm(ctx, chatID, chatIDStr, isGroup, setThread)
+		c.handleListCronPerm(ctx, chatID, chatIDStr, messageThreadID, isGroup, setThread)
 		return true
 
 	case "/reactions":

@@ -481,6 +481,10 @@
     "system_prompt": {
       "label": "Prompt hệ thống"
     },
+    "agent_id": {
+      "label": "Agent",
+      "help": "Chuyển tin nhắn đến một agent cụ thể (agent_key hoặc UUID). Để trống để dùng agent mặc định của kênh."
+    },
     "chat_behavior": {
       "enabled": {
         "label": "Hành vi gửi tin tự nhiên",

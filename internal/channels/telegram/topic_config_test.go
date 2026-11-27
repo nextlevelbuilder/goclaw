@@ -260,3 +260,48 @@ func TestResolveTopicConfig_EmptySkillsOverride(t *testing.T) {
 		t.Errorf("skills = %v, want empty slice", result.skills)
 	}
 }
+
+func TestResolveTopicConfig_AgentID(t *testing.T) {
+	cfg := config.TelegramConfig{
+		Groups: map[string]*config.TelegramGroupConfig{
+			"*": {AgentID: "wildcard-agent"},
+			"-100123": {
+				AgentID: "group-agent",
+				Topics: map[string]*config.TelegramTopicConfig{
+					"42": {AgentID: "topic-agent"},
+					"43": {}, // no agent binding at topic level
+				},
+			},
+		},
+	}
+
+	// No matching group and no wildcard → no binding (channel default applies).
+	plain := config.TelegramConfig{
+		Groups: map[string]*config.TelegramGroupConfig{
+			"-100123": {AgentID: "group-agent"},
+		},
+	}
+	if got := resolveTopicConfig(plain, "-999", 0).agentID; got != "" {
+		t.Errorf("unknown group agentID = %q, want \"\"", got)
+	}
+
+	// Wildcard group binding.
+	if got := resolveTopicConfig(cfg, "-555", 0).agentID; got != "wildcard-agent" {
+		t.Errorf("wildcard agentID = %q, want wildcard-agent", got)
+	}
+
+	// Specific group overrides wildcard.
+	if got := resolveTopicConfig(cfg, "-100123", 0).agentID; got != "group-agent" {
+		t.Errorf("group agentID = %q, want group-agent", got)
+	}
+
+	// Topic overrides group.
+	if got := resolveTopicConfig(cfg, "-100123", 42).agentID; got != "topic-agent" {
+		t.Errorf("topic agentID = %q, want topic-agent", got)
+	}
+
+	// Topic without binding inherits group.
+	if got := resolveTopicConfig(cfg, "-100123", 43).agentID; got != "group-agent" {
+		t.Errorf("topic (unbound) agentID = %q, want group-agent", got)
+	}
+}

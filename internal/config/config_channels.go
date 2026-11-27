@@ -129,6 +129,7 @@ type TelegramGroupConfig struct {
 	Skills         []string                        `json:"skills,omitempty"`          // skill whitelist (nil = all, [] = none)
 	Tools          []string                        `json:"tools,omitempty"`           // tool allow list (nil = all, supports "group:xxx")
 	SystemPrompt   string                          `json:"system_prompt,omitempty"`   // extra system prompt for this group
+	AgentID        string                          `json:"agent_id,omitempty"`        // route this group's inbound messages to the named agent (agent_key or UUID); "" = channel default
 	Topics         map[string]*TelegramTopicConfig `json:"topics,omitempty"`          // per-topic overrides (key: thread ID string)
 	Quota          *QuotaWindow                    `json:"quota,omitempty"`           // per-group quota override
 }
@@ -144,6 +145,7 @@ type TelegramTopicConfig struct {
 	Enabled        *bool               `json:"enabled,omitempty"`
 	AllowFrom      FlexibleStringSlice `json:"allow_from,omitempty"`
 	SystemPrompt   string              `json:"system_prompt,omitempty"`
+	AgentID        string              `json:"agent_id,omitempty"` // route this topic's inbound messages to the named agent (agent_key or UUID); "" = inherit group/channel default
 }
 
 type DiscordConfig struct {

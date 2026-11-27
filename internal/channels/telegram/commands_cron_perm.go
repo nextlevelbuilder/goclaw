@@ -42,7 +42,7 @@ func (c *Channel) handleCronPermCommand(ctx context.Context, message *telego.Mes
 		return
 	}
 
-	agentID, err := c.resolveAgentUUID(ctx)
+	agentID, err := c.effectiveAgentUUID(ctx, chatIDStr, message.MessageThreadID, isGroup)
 	if err != nil {
 		slog.Debug("cron-perm command: agent resolve failed", "error", err)
 		send("Cron permission management is not available (no agent).")
@@ -137,7 +137,7 @@ func (c *Channel) handleCronPermCommand(ctx context.Context, message *telego.Mes
 // handleListCronPerm handles the /croners command — lists users with explicit
 // cron grants in this group. Note: file_writers also have implicit cron access
 // via CheckCronPermission's fallback; this list shows ONLY explicit cron grants.
-func (c *Channel) handleListCronPerm(ctx context.Context, chatID int64, chatIDStr string, isGroup bool, setThread func(*telego.SendMessageParams)) {
+func (c *Channel) handleListCronPerm(ctx context.Context, chatID int64, chatIDStr string, messageThreadID int, isGroup bool, setThread func(*telego.SendMessageParams)) {
 	chatIDObj := tu.ID(chatID)
 
 	send := func(text string) {
@@ -156,7 +156,7 @@ func (c *Channel) handleListCronPerm(ctx context.Context, chatID int64, chatIDSt
 		return
 	}
 
-	agentID, err := c.resolveAgentUUID(ctx)
+	agentID, err := c.effectiveAgentUUID(ctx, chatIDStr, messageThreadID, isGroup)
 	if err != nil {
 		slog.Debug("list cron managers: agent resolve failed", "error", err)
 		send("Cron permission management is not available (no agent).")

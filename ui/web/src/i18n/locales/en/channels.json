@@ -482,6 +482,10 @@
     "system_prompt": {
       "label": "System Prompt"
     },
+    "agent_id": {
+      "label": "Agent",
+      "help": "Route messages to a specific agent (agent_key or UUID). Leave empty for the channel default."
+    },
     "chat_behavior": {
       "enabled": {
         "label": "Human-like Delivery",

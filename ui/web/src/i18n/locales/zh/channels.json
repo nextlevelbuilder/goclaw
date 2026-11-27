@@ -481,6 +481,10 @@
     "system_prompt": {
       "label": "系统提示词"
     },
+    "agent_id": {
+      "label": "Agent",
+      "help": "将消息路由到指定 agent（agent_key 或 UUID）。留空使用渠道默认 agent。"
+    },
     "chat_behavior": {
       "enabled": {
         "label": "自然投递行为",

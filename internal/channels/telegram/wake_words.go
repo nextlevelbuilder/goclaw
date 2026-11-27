@@ -3,10 +3,12 @@ package telegram
 import (
 	"context"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
 
+	"github.com/google/uuid"
 	"github.com/mymmrac/telego"
 
 	"github.com/nextlevelbuilder/goclaw/internal/bootstrap"
@@ -25,52 +27,74 @@ func (c *Channel) matchesTriggerWords(ctx context.Context, msg *telego.Message) 
 	if msg == nil {
 		return false
 	}
-	set := c.agentTriggerWords(ctx)
+	chatIDStr := strconv.FormatInt(msg.Chat.ID, 10)
+	isGroup := msg.Chat.Type == "group" || msg.Chat.Type == "supergroup"
+	set := c.agentTriggerWords(ctx, c.effectiveInboundAgent(ctx, chatIDStr, msg.MessageThreadID, isGroup))
 	if len(set) == 0 {
 		return false
 	}
 	return textHasWakeWord(msg.Text, set) || textHasWakeWord(msg.Caption, set)
 }
 
-// agentTriggerWords returns the normalized trigger-word set for this channel's
-// agent, parsed from its IDENTITY.md context file and cached for triggerWordsTTL.
-// One channel instance serves exactly one agent, so a single cached set suffices.
-func (c *Channel) agentTriggerWords(ctx context.Context) map[string]struct{} {
+// triggerWordsEntry caches one agent's normalized trigger-word set.
+type triggerWordsEntry struct {
+	words map[string]struct{}
+	at    time.Time
+}
+
+// agentTriggerWords returns the normalized trigger-word set for the given agent
+// (the group/topic-bound agent, or the channel default), parsed from its
+// IDENTITY.md context file and cached per agent_key for triggerWordsTTL. One
+// channel instance can serve multiple agents via group/topic bindings, so the
+// cache is keyed by agent rather than holding a single set. Entries are never
+// evicted; the map is bounded by the number of agents that serve this channel,
+// so growth is negligible and each entry refreshes on use.
+func (c *Channel) agentTriggerWords(ctx context.Context, ref boundAgentRef) map[string]struct{} {
 	c.triggerMu.Lock()
 	defer c.triggerMu.Unlock()
 
-	if !c.triggerWordsAt.IsZero() && time.Since(c.triggerWordsAt) < triggerWordsTTL {
-		return c.triggerWords
+	if c.triggerWords == nil {
+		c.triggerWords = make(map[string]triggerWordsEntry)
+	}
+	entry := c.triggerWords[ref.key]
+	if time.Since(entry.at) < triggerWordsTTL {
+		return entry.words
 	}
 	// Refresh timestamp up front: on error we keep the stale set but avoid
 	// hammering the store on every message.
-	c.triggerWordsAt = time.Now()
+	entry.at = time.Now()
+	defer func() { c.triggerWords[ref.key] = entry }()
 
-	if c.agentStore == nil {
-		c.triggerWords = nil
+	if ref.key == "" || c.agentStore == nil {
+		entry.words = nil
 		return nil
 	}
 	// The agent + context-file stores are tenant-scoped: without tenant in ctx
 	// they error with "tenant_id required" and trigger words would silently never
 	// load. Inject scope up front for both lookups.
 	ctx = store.WithTenantID(ctx, c.TenantID())
-	agentID, err := c.resolveAgentUUID(ctx)
-	if err != nil {
-		slog.Debug("telegram: trigger words — resolve agent failed", "channel", c.Name(), "error", err)
-		return c.triggerWords
+	agentID := ref.id
+	if agentID == uuid.Nil {
+		var err error
+		agentID, err = c.resolveAgentUUIDForKey(ctx, ref.key)
+		if err != nil {
+			slog.Debug("telegram: trigger words — resolve agent failed",
+				"channel", c.Name(), "agent", ref.key, "error", err)
+			return entry.words
+		}
 	}
 	files, err := c.agentStore.GetAgentContextFiles(ctx, agentID)
 	if err != nil {
 		slog.Debug("telegram: trigger words — load context files failed", "channel", c.Name(), "error", err)
-		return c.triggerWords
+		return entry.words
 	}
 	for _, f := range files {
 		if f.FileName == bootstrap.IdentityFile {
-			c.triggerWords = normalizeWakeWords(bootstrap.ParseTriggerWords(f.Content))
-			return c.triggerWords
+			entry.words = normalizeWakeWords(bootstrap.ParseTriggerWords(f.Content))
+			return entry.words
 		}
 	}
-	c.triggerWords = nil
+	entry.words = nil
 	return nil
 }
 

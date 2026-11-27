@@ -80,7 +80,7 @@ func (c *Channel) handleWriterCommand(ctx context.Context, message *telego.Messa
 		return
 	}
 
-	agentID, err := c.resolveAgentUUID(ctx)
+	agentID, err := c.effectiveAgentUUID(ctx, chatIDStr, message.MessageThreadID, isGroup)
 	if err != nil {
 		slog.Debug("writer command: agent resolve failed", "error", err)
 		send("File writer management is not available (no agent).")
@@ -162,7 +162,7 @@ func (c *Channel) handleWriterCommand(ctx context.Context, message *telego.Messa
 }
 
 // handleListWriters handles the /writers command.
-func (c *Channel) handleListWriters(ctx context.Context, chatID int64, chatIDStr string, isGroup bool, setThread func(*telego.SendMessageParams)) {
+func (c *Channel) handleListWriters(ctx context.Context, chatID int64, chatIDStr string, messageThreadID int, isGroup bool, setThread func(*telego.SendMessageParams)) {
 	chatIDObj := tu.ID(chatID)
 
 	send := func(text string) {
@@ -181,7 +181,7 @@ func (c *Channel) handleListWriters(ctx context.Context, chatID int64, chatIDStr
 		return
 	}
 
-	agentID, err := c.resolveAgentUUID(ctx)
+	agentID, err := c.effectiveAgentUUID(ctx, chatIDStr, messageThreadID, isGroup)
 	if err != nil {
 		slog.Debug("list writers: agent resolve failed", "error", err)
 		send("File writer management is not available (no agent).")

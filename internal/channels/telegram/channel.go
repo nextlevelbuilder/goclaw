@@ -32,6 +32,7 @@ type Channel struct {
 	transport         *http.Transport
 	ipv4Once          sync.Once                   // guards enableIPv4Only to prevent data race
 	agentStore        store.AgentStore            // for agent key lookup (nil if not configured)
+	boundAgents       sync.Map                    // per-group/topic agent_id (raw config value) → boundAgentCacheEntry; valid entries live for the channel lifetime, invalid ones expire after boundAgentNegativeTTL
 	configPermStore   store.ConfigPermissionStore // for group file writer management (nil if not configured)
 	teamStore         store.TeamStore             // for /tasks, /task_detail commands (nil if not configured)
 	subagentTaskStore store.SubagentTaskStore     // for /subagents, /subagent commands (nil if not configured)
@@ -41,9 +42,8 @@ type Channel struct {
 	reactions         sync.Map                    // localKey string → *StatusReactionController
 	threadIDs         sync.Map                    // localKey string → messageThreadID int (for forum topic routing)
 	mentionMode       string                      // "strict" (default) or "yield"
-	triggerWords      map[string]struct{}         // cached, normalized agent trigger-words from IDENTITY.md; whole-word, case-insensitive
-	triggerWordsAt    time.Time                   // when triggerWords was last refreshed
-	triggerMu         sync.Mutex                  // guards triggerWords/triggerWordsAt
+	triggerWords      map[string]triggerWordsEntry // cached, normalized trigger-words from IDENTITY.md per agent_key; whole-word, case-insensitive
+	triggerMu         sync.Mutex                   // guards triggerWords
 	botDisplayName    string                      // bot's first_name from GetMe (e.g. "ViệtBot"); captured once at Start
 	pollCtx           context.Context             // long-polling context (cancelled by pollCancel); promoted from Start-local so background helpers (e.g. albumAggregator) can derive from it
 	pollCancel        context.CancelFunc          // cancels the long polling context
