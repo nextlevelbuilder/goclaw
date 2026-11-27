@@ -23,6 +23,7 @@ func TestIsRetryableError(t *testing.T) {
 		{"http_502_bad_gateway", &HTTPError{Status: 502}, true},
 		{"http_503_unavailable", &HTTPError{Status: 503}, true},
 		{"http_504_timeout", &HTTPError{Status: 504}, true},
+		{"http_529_overloaded", &HTTPError{Status: 529}, true},
 		{"http_400_bad_request", &HTTPError{Status: 400}, false},
 		{"http_401_unauthorized", &HTTPError{Status: 401}, false},
 		{"http_403_forbidden", &HTTPError{Status: 403}, false},
